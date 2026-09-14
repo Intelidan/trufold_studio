@@ -1,0 +1,297 @@
+{
+  "format": "DANISH_SHEET_FOLD",
+  "version": "1.0",
+  "productType": "Formed Z-Bracket",
+  "itemName": "Imported Component",
+  "material": {
+    "thicknessMm": 1.5,
+    "materialGrade": "Pre-Galvanized Steel",
+    "materialType": "mildSteel",
+    "finish": "electroGalvanized",
+    "kFactor": 0.4,
+    "defaultBendRadius": 1.5,
+    "edgeChamferMm": 0.0
+  },
+  "outerContour": [
+    {
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "x": 200.0,
+      "y": 0.0
+    },
+    {
+      "x": 200.0,
+      "y": 100.0
+    },
+    {
+      "x": 0.0,
+      "y": 100.0
+    },
+    {
+      "x": 0.0,
+      "y": 0.0
+    }
+  ],
+  "outerContourLayer": "OUTLINE",
+  "bends": [
+    {
+      "id": "BEND_1",
+      "p1": {
+        "x": 35.56468503302723,
+        "y": 0.0
+      },
+      "p2": {
+        "x": 35.56468503302723,
+        "y": 100.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "layer": "BEND_UP",
+      "parentFaceId": "F_1",
+      "childFaceId": "F_2",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "BEND_2",
+      "p1": {
+        "x": 152.8355082970839,
+        "y": 3.0932817786370226
+      },
+      "p2": {
+        "x": 152.8355082970839,
+        "y": 103.09328177863705
+      },
+      "direction": "DOWN",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "layer": "BEND_DOWN",
+      "parentFaceId": "F_1",
+      "childFaceId": "F_0",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    }
+  ],
+  "faces": [
+    {
+      "id": "F_0",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 152.8355082970839,
+          "y": 0.0
+        },
+        {
+          "x": 200.0,
+          "y": 0.0
+        },
+        {
+          "x": 200.0,
+          "y": 100.0
+        },
+        {
+          "x": 152.8355082970839,
+          "y": 100.0
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_1",
+      "label": "Bottom Base Floor",
+      "vertices": [
+        {
+          "x": 152.8355082970839,
+          "y": 100.0
+        },
+        {
+          "x": 35.56468503302722,
+          "y": 100.0
+        },
+        {
+          "x": 35.56468503302723,
+          "y": 0.0
+        },
+        {
+          "x": 152.8355082970839,
+          "y": 0.0
+        }
+      ],
+      "role": "baseFloor",
+      "isBaseAnchor": true,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_2",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 35.56468503302722,
+          "y": 100.0
+        },
+        {
+          "x": 0.0,
+          "y": 100.0
+        },
+        {
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "x": 35.56468503302723,
+          "y": 0.0
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    }
+  ],
+  "punches": [
+    {
+      "id": "PUNCH_CIRC_1",
+      "type": "roundHole",
+      "center": {
+        "x": 120.55743515385855,
+        "y": 57.217657483486384
+      },
+      "widthMm": 7.0,
+      "lengthMm": 25.0,
+      "diameterMm": 12.0,
+      "rotationDeg": 0.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true
+    }
+  ],
+  "perforationPatterns": [],
+  "corners": [],
+  "cutLines": [],
+  "dimensions": [],
+  "constraints": [],
+  "layers": [
+    {
+      "name": "OUTLINE",
+      "colorHex": 4279179050,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 2.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "BEND_UP",
+      "colorHex": 4278355143,
+      "lineType": "DASHED",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "BEND_DOWN",
+      "colorHex": 4292441862,
+      "lineType": "DASHED",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "HOLES",
+      "colorHex": 4278556265,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "0",
+      "colorHex": 4284773515,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "EDGES",
+      "colorHex": 4292943176,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    }
+  ],
+  "baseFaceId": "F_1",
+  "edgeChamfers": {},
+  "parameters": {},
+  "metadata": {
+    "featureHistory": [
+      {
+        "step": 1,
+        "action": "drive_dimension",
+        "description": "Drive blank dimension / contour",
+        "timestamp": "2026-09-12T21:51:29.968162"
+      },
+      {
+        "step": 2,
+        "action": "update_punch",
+        "description": "Drag CAD Object",
+        "timestamp": "2026-09-12T21:51:33.208209",
+        "targetId": "PUNCH_CIRC_1"
+      },
+      {
+        "step": 3,
+        "action": "update_punch",
+        "description": "Drag CAD Object",
+        "timestamp": "2026-09-12T21:51:39.786642",
+        "targetId": "PUNCH_CIRC_1"
+      },
+      {
+        "step": 4,
+        "action": "update_bend",
+        "description": "Drag CAD Object",
+        "timestamp": "2026-09-12T21:51:42.205672",
+        "targetId": "BEND_1"
+      },
+      {
+        "step": 5,
+        "action": "update_bend",
+        "description": "Drag CAD Object",
+        "timestamp": "2026-09-12T21:51:43.557656",
+        "targetId": "BEND_1"
+      },
+      {
+        "step": 6,
+        "action": "update_punch",
+        "description": "Drag CAD Object",
+        "timestamp": "2026-09-12T21:51:46.597682",
+        "targetId": "PUNCH_CIRC_1"
+      },
+      {
+        "step": 7,
+        "action": "update_bend",
+        "description": "Drag CAD Object",
+        "timestamp": "2026-09-12T21:51:49.954651",
+        "targetId": "BEND_1"
+      }
+    ]
+  }
+}
