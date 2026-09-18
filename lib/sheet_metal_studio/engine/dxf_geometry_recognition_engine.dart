@@ -17,6 +17,7 @@ class DxfRecognitionResult {
   final List<CncPunchPrimitive> slotHoles;
   final List<PerforationPattern> recognizedPatterns;
   final List<CadLineSegment> interiorCuts;
+  final List<CadArc2D> recognizedArcs;
   final DsfDocument generatedDocument;
   final String summary;
 
@@ -27,6 +28,7 @@ class DxfRecognitionResult {
     required this.slotHoles,
     required this.recognizedPatterns,
     required this.interiorCuts,
+    this.recognizedArcs = const [],
     required this.generatedDocument,
     required this.summary,
   });
@@ -100,7 +102,39 @@ class DxfGeometryRecognitionEngine {
       interiorLoops: interiorLoops,
       startCounter: punchCounter,
     );
-    punchCounter += slotHoles.length;
+    // 3B. Recognize Standalone & Boundary Arcs as First-Class CAD Entities
+    final recognizedArcs = <CadArc2D>[];
+    int arcCounter = 1;
+    for (final a in arcs) {
+      if (_isArcPartOfSlot(a, slotHoles)) continue;
+
+      final sp = CadPoint2D(
+        a.center.x + a.radius * math.cos(a.startAngleDeg * math.pi / 180.0),
+        a.center.y + a.radius * math.sin(a.startAngleDeg * math.pi / 180.0),
+      );
+      final ep = CadPoint2D(
+        a.center.x + a.radius * math.cos(a.endAngleDeg * math.pi / 180.0),
+        a.center.y + a.radius * math.sin(a.endAngleDeg * math.pi / 180.0),
+      );
+
+      final isBnd = rawOuterContour.any((p) => p.distanceTo(sp) < 2.5) &&
+          rawOuterContour.any((p) => p.distanceTo(ep) < 2.5);
+
+      recognizedArcs.add(
+        CadArc2D(
+          id: isBnd ? 'ARC_BND_$arcCounter' : 'CUT_ARC_$arcCounter',
+          center: a.center,
+          radius: a.radius,
+          startAngleDeg: a.startAngleDeg,
+          endAngleDeg: a.endAngleDeg,
+          startPoint: sp,
+          endPoint: ep,
+          layer: a.layer.isNotEmpty ? a.layer : (isBnd ? 'OUTLINE' : 'CUT'),
+          isBoundary: isBnd,
+        ),
+      );
+      arcCounter++;
+    }
 
     // 4. Recognize Bend Candidates vs Interior Cuts
     final bendCandidates = <FoldBendLine>[];
@@ -185,6 +219,15 @@ class DxfGeometryRecognitionEngine {
           ),
         )
         .toList();
+    final normalizedArcs = recognizedArcs
+        .map(
+          (a) => a.copyWith(
+            center: norm(a.center),
+            startPoint: norm(a.startPoint),
+            endPoint: norm(a.endPoint),
+          ),
+        )
+        .toList();
     final normalizedPunches = remainingPunches
         .map((p) => p.copyWith(center: norm(p.center)))
         .toList();
@@ -248,12 +291,14 @@ class DxfGeometryRecognitionEngine {
       punches: normalizedPunches,
       perforationPatterns: normalizedPatterns,
       cutLines: normalizedCuts,
+      arcs: normalizedArcs,
       baseFaceId: decomp.baseFaceId,
       layers: dsfLayers,
     );
 
     final summary =
         'Recognized ${normalizedOuter.length} boundary points, '
+        '${normalizedArcs.length} arcs, '
         '${normalizedBends.length} bend lines, ${roundHoles.length} round holes, '
         '${slotHoles.length} slots, and ${recognizedPatterns.length} pattern arrays.';
 
@@ -268,9 +313,26 @@ class DxfGeometryRecognitionEngine {
           .toList(),
       recognizedPatterns: normalizedPatterns,
       interiorCuts: normalizedCuts,
+      recognizedArcs: normalizedArcs,
       generatedDocument: generatedDoc,
       summary: summary,
     );
+  }
+
+  static bool _isArcPartOfSlot(DxfRawArc arc, List<CncPunchPrimitive> slots) {
+    for (final s in slots) {
+      if (s.type != PunchType.obroundSlot) continue;
+      final halfW = s.diameterMm / 2.0;
+      if ((arc.radius - halfW).abs() > 1.5) continue;
+      final halfD = (s.lengthMm - s.diameterMm) / 2.0;
+      final rad = s.rotationDeg * math.pi / 180.0;
+      final c1 = CadPoint2D(s.center.x + halfD * math.cos(rad), s.center.y + halfD * math.sin(rad));
+      final c2 = CadPoint2D(s.center.x - halfD * math.cos(rad), s.center.y - halfD * math.sin(rad));
+      if (arc.center.distanceTo(c1) < 2.5 || arc.center.distanceTo(c2) < 2.5) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------------------
@@ -313,17 +375,22 @@ class DxfGeometryRecognitionEngine {
     }
 
     for (final a in arcs) {
-      final pts = _discretizeArc(a);
-      if (pts.length >= 2) {
-        segments.add(
-          _CurveSegment(
-            start: pts.first,
-            end: pts.last,
-            points: pts,
-            layer: a.layer,
-          ),
-        );
-      }
+      final sp = CadPoint2D(
+        a.center.x + a.radius * math.cos(a.startAngleDeg * math.pi / 180.0),
+        a.center.y + a.radius * math.sin(a.startAngleDeg * math.pi / 180.0),
+      );
+      final ep = CadPoint2D(
+        a.center.x + a.radius * math.cos(a.endAngleDeg * math.pi / 180.0),
+        a.center.y + a.radius * math.sin(a.endAngleDeg * math.pi / 180.0),
+      );
+      segments.add(
+        _CurveSegment(
+          start: sp,
+          end: ep,
+          points: [sp, ep],
+          layer: a.layer,
+        ),
+      );
     }
 
     for (final p in polylines) {
@@ -386,27 +453,6 @@ class DxfGeometryRecognitionEngine {
     return (outerContour: bestOuter, interiorLoops: interiorLoops);
   }
 
-  static List<CadPoint2D> _discretizeArc(
-    DxfRawArc a, {
-    double maxStepDeg = 15.0,
-  }) {
-    double startDeg = a.startAngleDeg;
-    double endDeg = a.endAngleDeg;
-    if (endDeg < startDeg) endDeg += 360.0;
-    final sweep = endDeg - startDeg;
-    final numSteps = math.max(2, (sweep / maxStepDeg).ceil());
-    final pts = <CadPoint2D>[];
-    for (int i = 0; i <= numSteps; i++) {
-      final rad = (startDeg + (sweep * i / numSteps)) * math.pi / 180.0;
-      pts.add(
-        CadPoint2D(
-          a.center.x + a.radius * math.cos(rad),
-          a.center.y + a.radius * math.sin(rad),
-        ),
-      );
-    }
-    return pts;
-  }
 
   static List<List<CadPoint2D>> _chainCurveSegments(
     List<_CurveSegment> segments, {

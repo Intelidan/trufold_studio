@@ -1,7 +1,7 @@
 // =============================================================================
 // studio_tab_bar.dart
 //
-// Multi-File Tab Bar for Danish FormMatrix Studio.
+// Multi-File Tab Bar for truFold Studio by Danish.
 // Allows managing multiple open files (.dsf, .dxf, .dds), switching active
 // workspaces, closing tabs, creating new blank parts, and saving project containers.
 // =============================================================================

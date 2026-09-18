@@ -1,7 +1,7 @@
 // =============================================================================
 // rotation_dial_widget.dart
 //
-// Interactive Rotation Dial for Danish FormMatrix Studio.
+// Interactive Rotation Dial for truFold Studio by Danish.
 // Allows intuitive circular dragging to rotate CNC perforation patterns and hole
 // features to any angle (0° to 360°), with tick marks, degree badge, and presets.
 // =============================================================================

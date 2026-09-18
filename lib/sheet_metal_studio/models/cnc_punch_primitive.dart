@@ -6,6 +6,7 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import 'cad_primitives.dart';
 
 enum PunchType {
@@ -70,16 +71,7 @@ class CncPunchPrimitive {
     String layer = 'HOLES',
     bool showLabel = true,
     bool isVisible = true,
-  }) =>
-      CncPunchPrimitive(
-        id: id,
-        type: PunchType.roundHole,
-        center: center,
-        diameterMm: diameterMm,
-        layer: layer,
-        showLabel: showLabel,
-        isVisible: isVisible,
-      );
+  }) => CncPunchPrimitive(id: id, type: PunchType.roundHole, center: center, diameterMm: diameterMm, layer: layer, showLabel: showLabel, isVisible: isVisible);
 
   /// Factory for standard Cable Tray Obround Slot (e.g. 7x25mm or 9x25mm)
   factory CncPunchPrimitive.obround({
@@ -91,18 +83,17 @@ class CncPunchPrimitive {
     String layer = 'HOLES',
     bool showLabel = true,
     bool isVisible = true,
-  }) =>
-      CncPunchPrimitive(
-        id: id,
-        type: PunchType.obroundSlot,
-        center: center,
-        widthMm: widthMm,
-        lengthMm: lengthMm,
-        rotationDeg: rotationDeg,
-        layer: layer,
-        showLabel: showLabel,
-        isVisible: isVisible,
-      );
+  }) => CncPunchPrimitive(
+    id: id,
+    type: PunchType.obroundSlot,
+    center: center,
+    widthMm: widthMm,
+    lengthMm: lengthMm,
+    rotationDeg: rotationDeg,
+    layer: layer,
+    showLabel: showLabel,
+    isVisible: isVisible,
+  );
 
   /// Factory for standard Ellipse punch hole (major axis lengthMm, minor axis widthMm)
   factory CncPunchPrimitive.ellipse({
@@ -114,21 +105,20 @@ class CncPunchPrimitive {
     String layer = 'HOLES',
     bool showLabel = true,
     bool isVisible = true,
-  }) =>
-      CncPunchPrimitive(
-        id: id,
-        type: PunchType.ellipse,
-        center: center,
-        lengthMm: lengthMm,
-        widthMm: widthMm,
-        rotationDeg: rotationDeg,
-        layer: layer,
-        showLabel: showLabel,
-        isVisible: isVisible,
-      );
+  }) => CncPunchPrimitive(
+    id: id,
+    type: PunchType.ellipse,
+    center: center,
+    lengthMm: lengthMm,
+    widthMm: widthMm,
+    rotationDeg: rotationDeg,
+    layer: layer,
+    showLabel: showLabel,
+    isVisible: isVisible,
+  );
 
   /// Generates the list of 2D polygon vertices forming this punch's boundary.
-  List<CadPoint2D> toPolygon({int circleSegments = 16}) {
+  List<CadPoint2D> toPolygon({int circleSegments = 32}) {
     if (customBoundary != null && customBoundary!.isNotEmpty) {
       return customBoundary!;
     }
@@ -138,10 +128,7 @@ class CncPunchPrimitive {
     final sinR = math.sin(rad);
 
     CadPoint2D rotate(double lx, double ly) {
-      return CadPoint2D(
-        center.x + (lx * cosR - ly * sinR),
-        center.y + (lx * sinR + ly * cosR),
-      );
+      return CadPoint2D(center.x + (lx * cosR - ly * sinR), center.y + (lx * sinR + ly * cosR));
     }
 
     switch (type) {
@@ -179,12 +166,7 @@ class CncPunchPrimitive {
       case PunchType.rectangle:
         final halfW = (type == PunchType.square ? diameterMm : widthMm) / 2.0;
         final halfH = (type == PunchType.square ? diameterMm : lengthMm) / 2.0;
-        return [
-          rotate(-halfW, -halfH),
-          rotate(halfW, -halfH),
-          rotate(halfW, halfH),
-          rotate(-halfW, halfH),
-        ];
+        return [rotate(-halfW, -halfH), rotate(halfW, -halfH), rotate(halfW, halfH), rotate(-halfW, halfH)];
       case PunchType.ellipse:
         final a = lengthMm / 2.0;
         final b = widthMm / 2.0;
@@ -209,8 +191,7 @@ class CncPunchPrimitive {
       double area = 0.0;
       for (int i = 0; i < customBoundary!.length; i++) {
         final j = (i + 1) % customBoundary!.length;
-        area += customBoundary![i].x * customBoundary![j].y -
-            customBoundary![j].x * customBoundary![i].y;
+        area += customBoundary![i].x * customBoundary![j].y - customBoundary![j].x * customBoundary![i].y;
       }
       return (area / 2.0).abs();
     }
@@ -288,44 +269,38 @@ class CncPunchPrimitive {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type.name,
-        'center': center.toJson(),
-        'widthMm': widthMm,
-        'lengthMm': lengthMm,
-        'diameterMm': diameterMm,
-        'rotationDeg': rotationDeg,
-        'spacingX': spacingX,
-        'spacingY': spacingY,
-        'countX': countX,
-        'countY': countY,
-        'layer': layer,
-        'showLabel': showLabel,
-        'isVisible': isVisible,
-        if (customBoundary != null)
-          'customBoundary': customBoundary!.map((p) => p.toJson()).toList(),
-      };
+    'id': id,
+    'type': type.name,
+    'center': center.toJson(),
+    'widthMm': widthMm,
+    'lengthMm': lengthMm,
+    'diameterMm': diameterMm,
+    'rotationDeg': rotationDeg,
+    'spacingX': spacingX,
+    'spacingY': spacingY,
+    'countX': countX,
+    'countY': countY,
+    'layer': layer,
+    'showLabel': showLabel,
+    'isVisible': isVisible,
+    if (customBoundary != null) 'customBoundary': customBoundary!.map((p) => p.toJson()).toList(),
+  };
 
   factory CncPunchPrimitive.fromJson(Map<String, dynamic> json) => CncPunchPrimitive(
-        id: json['id'] as String? ?? '',
-        type: PunchType.values.firstWhere(
-          (t) => t.name == json['type'],
-          orElse: () => PunchType.roundHole,
-        ),
-        center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
-        widthMm: (json['widthMm'] as num?)?.toDouble() ?? 7.0,
-        lengthMm: (json['lengthMm'] as num?)?.toDouble() ?? 25.0,
-        diameterMm: (json['diameterMm'] as num?)?.toDouble() ?? 8.0,
-        rotationDeg: (json['rotationDeg'] as num?)?.toDouble() ?? 0.0,
-        spacingX: (json['spacingX'] as num?)?.toDouble() ?? 0.0,
-        spacingY: (json['spacingY'] as num?)?.toDouble() ?? 0.0,
-        countX: json['countX'] as int? ?? 1,
-        countY: json['countY'] as int? ?? 1,
-        layer: json['layer'] as String? ?? 'HOLES',
-        showLabel: json['showLabel'] as bool? ?? true,
-        isVisible: json['isVisible'] as bool? ?? true,
-        customBoundary: (json['customBoundary'] as List<dynamic>?)
-            ?.map((e) => CadPoint2D.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+    id: json['id'] as String? ?? '',
+    type: PunchType.values.firstWhere((t) => t.name == json['type'], orElse: () => PunchType.roundHole),
+    center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
+    widthMm: (json['widthMm'] as num?)?.toDouble() ?? 7.0,
+    lengthMm: (json['lengthMm'] as num?)?.toDouble() ?? 25.0,
+    diameterMm: (json['diameterMm'] as num?)?.toDouble() ?? 8.0,
+    rotationDeg: (json['rotationDeg'] as num?)?.toDouble() ?? 0.0,
+    spacingX: (json['spacingX'] as num?)?.toDouble() ?? 0.0,
+    spacingY: (json['spacingY'] as num?)?.toDouble() ?? 0.0,
+    countX: json['countX'] as int? ?? 1,
+    countY: json['countY'] as int? ?? 1,
+    layer: json['layer'] as String? ?? 'HOLES',
+    showLabel: json['showLabel'] as bool? ?? true,
+    isVisible: json['isVisible'] as bool? ?? true,
+    customBoundary: (json['customBoundary'] as List<dynamic>?)?.map((e) => CadPoint2D.fromJson(e as Map<String, dynamic>)).toList(),
+  );
 }

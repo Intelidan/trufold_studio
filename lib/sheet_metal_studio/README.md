@@ -33,7 +33,7 @@ It operates with **ZERO external dependencies** beyond Flutter's core framework 
    - Toolbar toggle button to enable/disable magnetic snapping on demand.
 6. **CNC Turret Punch & Constraint Engine**:
    - Punch primitives: Round tooling holes, Obround slots, and Rectangles/Squares.
-   - Fusion 360-style live edge distance constraints ($X, Y$ distances to workpiece edges and nearest bend lines).
+   - CAD Studio style live edge distance constraints ($X, Y$ distances to workpiece edges and nearest bend lines).
    - Dynamic Obround end arc calculation: adjusting slot width and height automatically recalculates tangential end radiuses.
    - Immediate 3D hole rendering: punch holes cut into planar faces and appear immediately on folded 3D parts.
    - Corner contour treatments: 45° miter chamfers and cubic Bezier corner fillets.
@@ -160,4 +160,4 @@ The entire module is validated by 32 comprehensive unit and widget tests in `tes
 - `export_engine_test.dart`: Wavefront OBJ (mid-surface & solid thickness), ASCII STL mesh, AutoCAD DXF, DDS package bundles, and DSF JSON.
 - `kinematic_fold_engine_test.dart`: Rodrigues rotations, DAG kinematics, progressive folding ($0.0 \to 0.5 \to 1.0$).
 - `magnetic_snap_test.dart`: Corner, midpoint, bend endpoint, and continuous edge snapping.
-- `sheet_metal_studio_screen_test.dart`: Mouse wheel zooming, panning, deselect on empty canvas, immediate 3D hole rendering, Undo/Redo stack, single-step multi-frame drag recording, Fusion 360 edge constraints, 45° angle snapping, incomplete bend detection, endpoint drag-to-edge snapping, and laser cut lines.
+- `sheet_metal_studio_screen_test.dart`: Mouse wheel zooming, panning, deselect on empty canvas, immediate 3D hole rendering, Undo/Redo stack, single-step multi-frame drag recording, CAD Studio edge constraints, 45° angle snapping, incomplete bend detection, endpoint drag-to-edge snapping, and laser cut lines.

@@ -188,7 +188,7 @@ void main() {
         expect(find.byType(FoldProgressSlider), findsOneWidget);
 
         // Verify header texts and buttons
-        expect(find.text('DANISH FORMMATRIX STUDIO (DSF)'), findsOneWidget);
+        expect(find.text('truFold Studio by Danish'), findsOneWidget);
         expect(find.byTooltip('Undo (Ctrl+Z)'), findsOneWidget);
         expect(find.byTooltip('Redo (Ctrl+Y)'), findsOneWidget);
 
@@ -256,7 +256,7 @@ void main() {
       expect(restoredPunch.center.x, closeTo(50.0, 1e-4));
     });
 
-    test('9. Bend line dragging and Fusion 360 edge constraints', () {
+    test('9. Bend line dragging and edge constraints', () {
       final vm = SheetMetalStudioViewModel();
       // Select existing bend line B1
       expect(vm.document.bends.isNotEmpty, isTrue);
@@ -831,5 +831,105 @@ void main() {
         expect(stamped.diameterMm, equals(14.5));
       },
     );
+
+    test('30. 2D Zoom with focal-point precisely anchors canvas under cursor', () {
+      final vm = SheetMetalStudioViewModel();
+      const viewportSize = Size(800, 600);
+      const mousePos = Offset(300, 200);
+
+      // Compute drawing coordinate under mousePos before zoom:
+      // screen = center + pan + cad * zoom * yFlip
+      // cad.x = (mouse.dx - center.dx - pan.dx) / zoom
+      // cad.y = (center.dy + pan.dy - mouse.dy) / zoom
+      final center = viewportSize.center(Offset.zero);
+      final cadXBefore = (mousePos.dx - center.dx - vm.pan2D.dx) / vm.zoom2D;
+      final cadYBefore = (center.dy + vm.pan2D.dy - mousePos.dy) / vm.zoom2D;
+
+      // Zoom in by factor 1.5 anchored at mousePos
+      vm.zoom2DCanvas(1.5, focalPoint: mousePos, viewportSize: viewportSize);
+
+      final cadXAfter = (mousePos.dx - center.dx - vm.pan2D.dx) / vm.zoom2D;
+      final cadYAfter = (center.dy + vm.pan2D.dy - mousePos.dy) / vm.zoom2D;
+
+      expect(cadXAfter, closeTo(cadXBefore, 1e-4), reason: 'CAD X under mouse cursor must remain stationary');
+      expect(cadYAfter, closeTo(cadYBefore, 1e-4), reason: 'CAD Y under mouse cursor must remain stationary');
+
+      // Zoom out by factor 0.75 anchored at mousePos
+      vm.zoom2DCanvas(0.75, focalPoint: mousePos, viewportSize: viewportSize);
+
+      final cadXAfterOut = (mousePos.dx - center.dx - vm.pan2D.dx) / vm.zoom2D;
+      final cadYAfterOut = (center.dy + vm.pan2D.dy - mousePos.dy) / vm.zoom2D;
+
+      expect(cadXAfterOut, closeTo(cadXBefore, 1e-4), reason: 'CAD X under mouse cursor must remain stationary on zoom-out');
+      expect(cadYAfterOut, closeTo(cadYBefore, 1e-4), reason: 'CAD Y under mouse cursor must remain stationary on zoom-out');
+    });
+
+    test('31. Arc entity selection, updateArc with undo/redo, and deletion', () {
+      final vm = SheetMetalStudioViewModel();
+
+      // Add a test arc to document
+      final arc = CadArc2D(
+        id: 'ARC_TEST_1',
+        center: const CadPoint2D(100, 100),
+        radius: 25.0,
+        startAngleDeg: 0,
+        endAngleDeg: 90,
+        isClockwise: false,
+        layer: 'OUTLINE',
+      );
+      vm.setDocument(vm.document.copyWith(arcs: [...vm.document.arcs, arc]));
+
+      // Select the arc
+      vm.selectArc('ARC_TEST_1');
+      expect(vm.selectedArcId, equals('ARC_TEST_1'));
+      expect(vm.selectedArc, isNotNull);
+      expect(vm.selectedArc!.radius, equals(25.0));
+
+      // Modify arc properties
+      final updatedArc = vm.selectedArc!.copyWith(radius: 35.0, endAngleDeg: 180.0);
+      vm.updateArc(updatedArc);
+      expect(vm.selectedArc!.radius, equals(35.0));
+      expect(vm.selectedArc!.endAngleDeg, equals(180.0));
+
+      // Undo arc update (undo clears selection)
+      vm.undo();
+      final arcAfterUndo = vm.document.arcs.firstWhere((a) => a.id == 'ARC_TEST_1');
+      expect(arcAfterUndo.radius, equals(25.0));
+      expect(arcAfterUndo.endAngleDeg, equals(90.0));
+
+      // Redo arc update
+      vm.redo();
+      final arcAfterRedo = vm.document.arcs.firstWhere((a) => a.id == 'ARC_TEST_1');
+      expect(arcAfterRedo.radius, equals(35.0));
+      expect(arcAfterRedo.endAngleDeg, equals(180.0));
+
+      // Delete arc
+      vm.deleteArc('ARC_TEST_1');
+      expect(vm.selectedArcId, isNull);
+      expect(vm.document.arcs.any((a) => a.id == 'ARC_TEST_1'), isFalse);
+
+      // Undo deletion
+      vm.undo();
+      expect(vm.document.arcs.any((a) => a.id == 'ARC_TEST_1'), isTrue);
+    });
+
+    test('32. Global Curve Resolution setting configuration and updates', () {
+      final vm = SheetMetalStudioViewModel();
+
+      // Default resolution is 64
+      expect(vm.curveResolution, equals(64));
+
+      // Set to standard 32
+      vm.setCurveResolution(32);
+      expect(vm.curveResolution, equals(32));
+
+      // Set to ultra 128
+      vm.setCurveResolution(128);
+      expect(vm.curveResolution, equals(128));
+
+      // Invalid values clamped to minimum 12
+      vm.setCurveResolution(4);
+      expect(vm.curveResolution, equals(12));
+    });
   });
 }

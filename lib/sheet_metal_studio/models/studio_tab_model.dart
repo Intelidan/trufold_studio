@@ -1,7 +1,7 @@
 // =============================================================================
 // studio_tab_model.dart
 //
-// Represents an open document tab in Danish FormMatrix Studio.
+// Represents an open document tab in truFold Studio by Danish.
 // Each tab maintains its own independent ViewModel instance, complete with:
 // - Document geometry & parameters
 // - 2D and 3D camera pan, zoom, and orbit orientation

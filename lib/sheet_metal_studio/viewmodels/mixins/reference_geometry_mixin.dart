@@ -9,6 +9,8 @@
 // =============================================================================
 
 import 'package:flutter/foundation.dart';
+
+import '../../models/cad_primitives.dart';
 import '../../models/dsf_document.dart';
 import '../../models/constraints/reference_geometry.dart';
 import '../../engine/constraints/reference_geometry_engine.dart';
@@ -19,8 +21,7 @@ mixin ReferenceGeometryMixin on ChangeNotifier {
   final List<ReferenceGeometry> _customReferenceGeometries = [];
   bool _showConstructionGeometry = true;
 
-  List<ReferenceGeometry> get customReferenceGeometries =>
-      List.unmodifiable(_customReferenceGeometries);
+  List<ReferenceGeometry> get customReferenceGeometries => List.unmodifiable(_customReferenceGeometries);
 
   bool get showConstructionGeometry => _showConstructionGeometry;
 
@@ -37,8 +38,24 @@ mixin ReferenceGeometryMixin on ChangeNotifier {
     return [...standard, ..._customReferenceGeometries];
   }
 
+  bool _isConstructionModeActive = false;
+  bool get isConstructionModeActive => _isConstructionModeActive;
+
+  void toggleConstructionMode() {
+    _isConstructionModeActive = !_isConstructionModeActive;
+    notifyListeners();
+  }
+
   /// Adds a custom construction line or centerline
   void addReferenceGeometry(ReferenceGeometry ref) {
+    _customReferenceGeometries.add(ref);
+    notifyListeners();
+  }
+
+  /// Adds a standard dashed cyan construction line between two points
+  void addConstructionLine(CadPoint2D p1, CadPoint2D p2) {
+    final id = 'CONST_${DateTime.now().millisecondsSinceEpoch}';
+    final ref = ReferenceGeometry(id: id, name: 'Construction Line', type: ReferenceGeometryType.constructionLine, p1: p1, p2: p2, isInfinite: false);
     _customReferenceGeometries.add(ref);
     notifyListeners();
   }

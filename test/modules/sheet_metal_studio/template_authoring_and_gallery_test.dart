@@ -4,7 +4,7 @@
 // Widget and unit test suite for Step 4 (SET 13 & 23):
 // - TemplateAuthoringWizardDialog (4-step guided template authoring)
 // - TemplateLibraryGalleryDialog (Visual catalog card gallery and parametric inspector)
-// - FusionRibbonToolbar integration
+// - StudioRibbonToolbar integration
 // =============================================================================
 
 import 'package:flutter/material.dart';

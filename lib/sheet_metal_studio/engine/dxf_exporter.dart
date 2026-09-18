@@ -1,7 +1,7 @@
 // =============================================================================
 // dxf_exporter.dart
 //
-// Pure-Dart Industrial CAD/CAM DXF Exporter for Danish FormMatrix Studio.
+// Pure-Dart Industrial CAD/CAM DXF Exporter for truFold Studio by Danish.
 // Generates standard AutoCAD Release 12 / 2000 compliant ASCII DXF files
 // ready for CNC Laser, Plasma, Waterjet cutting and CNC Press Brake machines.
 // Layers:
@@ -114,6 +114,12 @@ class DxfExporter {
       );
     }
 
+    // 3C-3. Arcs
+    for (final arc in doc.arcs) {
+      final arcLayer = arc.layer.isNotEmpty ? arc.layer : outerLayer;
+      _writeArc(sb, arc, layer: arcLayer);
+    }
+
     // 3D. Titleblock Metadata Text
     final infoY = -25.0;
     _writeText(
@@ -125,7 +131,7 @@ class DxfExporter {
     );
     _writeText(
       sb,
-      'BLANK: ${doc.blankWidthMm.toStringAsFixed(1)}mm x ${doc.blankLengthMm.toStringAsFixed(1)}mm | DANISH FORMMATRIX STUDIO',
+      'BLANK: ${doc.blankWidthMm.toStringAsFixed(1)}mm x ${doc.blankLengthMm.toStringAsFixed(1)}mm | truFold Studio by Danish',
       CadPoint2D(0.0, infoY - 8.0),
       height: 3.5,
       layer: 'ANNOTATION',
@@ -231,6 +237,21 @@ class DxfExporter {
     sb.writeln('30\n0.0');
     sb.writeln('40\n${_f(height)}');
     sb.writeln('1\n$text');
+  }
+
+  static void _writeArc(
+    StringBuffer sb,
+    CadArc2D arc, {
+    required String layer,
+  }) {
+    sb.writeln('0\nARC');
+    sb.writeln('8\n$layer');
+    sb.writeln('10\n${_f(arc.center.x)}');
+    sb.writeln('20\n${_f(arc.center.y)}');
+    sb.writeln('30\n0.0');
+    sb.writeln('40\n${_f(arc.radius)}');
+    sb.writeln('50\n${_f(arc.startAngleDeg)}');
+    sb.writeln('60\n${_f(arc.endAngleDeg)}');
   }
 
   static String _f(double val) {

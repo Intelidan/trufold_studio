@@ -1,7 +1,7 @@
 // =============================================================================
 // layer_manager_sheet.dart
 //
-// Drawing Component Layer Manager for Danish FormMatrix Studio.
+// Drawing Component Layer Manager for truFold Studio by Danish.
 // Allows engineers to inspect CAD/CAM layers, toggle layer visibility,
 // customize stroke colors, select line types, and monitor entity counts.
 // =============================================================================

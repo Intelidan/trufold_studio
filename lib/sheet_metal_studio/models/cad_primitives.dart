@@ -10,6 +10,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+export 'cad_geometry.dart' show CadArc2D;
+
 /// 2D Coordinate Point (in mm)
 @immutable
 class CadPoint2D {

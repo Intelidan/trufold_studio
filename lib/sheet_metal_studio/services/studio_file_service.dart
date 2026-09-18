@@ -1,7 +1,7 @@
 // =============================================================================
 // studio_file_service.dart
 //
-// Cross-Platform File Service for Danish FormMatrix Studio.
+// Cross-Platform File Service for truFold Studio by Danish.
 // Supports picking, opening, and creating/saving 3 core file types across Windows & Web:
 // 1. .dsf (Danish Sheet Fold - individual part format)
 // 2. .dxf (AutoCAD ASCII DXF flat pattern geometry)

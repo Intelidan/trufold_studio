@@ -1,7 +1,7 @@
 // =============================================================================
 // studio_import_dialog.dart
 //
-// Interactive Import Modal Dialog for Danish FormMatrix Studio.
+// Interactive Import Modal Dialog for truFold Studio by Danish.
 // Allows users to:
 // 1. Pick and open .dsf, .dxf, or .dds files from Windows disk or browser
 // 2. Paste ASCII DXF or .dsf JSON strings to load custom geometry

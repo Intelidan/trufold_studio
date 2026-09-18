@@ -1,7 +1,7 @@
 // =============================================================================
 // viewport_3d_widget.dart
 //
-// High-Performance 3D Shaded Viewport for Danish FormMatrix Studio.
+// High-Performance 3D Shaded Viewport for truFold Studio by Danish.
 // Features:
 // - Light CAD Studio Theme with directional diffuse metallic shading
 // - Enforced ClipRect preventing any 3D drawing spillover
@@ -22,7 +22,7 @@ import 'package:flutter/services.dart';
 import '../../models/cad_primitives.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../../engine/kinematic_fold_engine.dart';
-import 'fusion/fusion_view_cube.dart';
+import 'studio/studio_view_cube.dart';
 
 class Viewport3dWidget extends StatelessWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -262,12 +262,15 @@ class Viewport3dWidget extends StatelessWidget {
               ),
             ),
 
-            // 3b. Autodesk Fusion 360 ViewCube (Top Right 3D Orientation Marker)
+            // 3b. Interactive 3D ViewCube (Top Right 3D Orientation Marker)
             Positioned(
               top: 12,
               right: 12,
-              child: FusionViewCube(
+              child: StudioViewCube(
+                azimuthDeg: viewModel.azimuthDeg,
+                elevationDeg: viewModel.elevationDeg,
                 onResetView: viewModel.resetCamera,
+                onOrbit: (dAz, dEl) => viewModel.orbit3D(dAz, dEl),
                 onSetView: (azimuth, elevation) {
                   viewModel.setPresetView(azimuth: azimuth, elevation: elevation);
                 },

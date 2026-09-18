@@ -18,6 +18,7 @@ import 'punch_property_sheet.dart';
 import 'pattern_property_sheet.dart';
 import 'face_property_sheet.dart';
 import 'line_property_sheet.dart';
+import 'arc_property_sheet.dart';
 import 'dimension_property_sheet.dart';
 import 'active_tool_property_sheet.dart';
 import 'template_parameter_sheet.dart';
@@ -82,6 +83,24 @@ class CadPropertyInspector extends StatelessWidget {
         return LinePropertySheet(
           viewModel: viewModel,
           line: cut,
+          isCollapsed: isCollapsed,
+          onToggleCollapse: onToggleCollapse,
+          onClose: onClose,
+          onDragStartHeader: onDragStartHeader,
+          onDragHeader: onDragHeader,
+        );
+      }
+    }
+
+    // 2b. Arc selected
+    if (viewModel.selectedArcId != null) {
+      final arc = viewModel.document.arcs
+          .where((a) => a.id == viewModel.selectedArcId)
+          .firstOrNull;
+      if (arc != null) {
+        return ArcPropertySheet(
+          viewModel: viewModel,
+          arc: arc,
           isCollapsed: isCollapsed,
           onToggleCollapse: onToggleCollapse,
           onClose: onClose,

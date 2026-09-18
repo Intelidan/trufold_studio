@@ -1,7 +1,7 @@
 // =============================================================================
 // studio_export_dialog.dart
 //
-// Interactive CAD/CAM Export & Download Dialog for Danish FormMatrix Studio.
+// Interactive CAD/CAM Export & Download Dialog for truFold Studio by Danish.
 // Supports instant preview, copy-to-clipboard, and export for:
 // - .dsf (Danish Sheet Fold - Full Kinematic 2D/3D JSON)
 // - .dxf (AutoCAD CNC Laser & Press Brake DXF with standard layers)

@@ -6,7 +6,7 @@
 // - Bend direction (UP/DOWN)
 // - Angle (30°, 45°, 90°, 135°, custom fine slider)
 // - Inside bend radius
-// - Fusion 360-style Edge Constraints (exact mm distance to Left, Bottom, Right, Top)
+// - Interactive CAD Edge Constraints (exact mm distance to Left, Bottom, Right, Top)
 // - Immediate real-time refolding
 // =============================================================================
 
@@ -510,7 +510,7 @@ class BendPropertySheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
 
-                // Fusion 360 Edge Constraints
+                // Sheet Metal Edge Constraints
                 if (constraints != null) ...[
                   const Text(
                     'EDGE CONSTRAINTS (MM)',

@@ -1,7 +1,7 @@
 // =============================================================================
 // export_engine_3d.dart
 //
-// 3D Mesh Exporters for Danish FormMatrix Studio (DSF Studio).
+// 3D Mesh Exporters for truFold Studio by Danish.
 // Exports folded sheet metal geometry to industry standard 3D formats:
 // 1. Wavefront OBJ (.obj) with vertex normals and triangular/quad faces.
 // 2. Stereolithography STL (.stl) in standard ASCII format for 3D printing & CAM.
@@ -11,17 +11,15 @@
 
 import '../models/cad_primitives.dart';
 
+typedef ExportEngine3D = ExportEngine3d;
+
 class ExportEngine3d {
   /// Exports a list of 3D folded polygons to standard Wavefront OBJ format.
   /// If [thicknessMm] > 0, extrudes the faces into a watertight solid sheet metal body.
-  static String exportWavefrontObj({
-    required List<CadFoldedPolygon3D> polygons,
-    double thicknessMm = 0.0,
-    String partName = 'DanishSheetMetalPart',
-  }) {
+  static String exportWavefrontObj({required List<CadFoldedPolygon3D> polygons, double thicknessMm = 0.0, String partName = 'DanishSheetMetalPart'}) {
     final sb = StringBuffer();
     sb.writeln('# -----------------------------------------------------------------------------');
-    sb.writeln('# Wavefront OBJ Exported from Danish FormMatrix Studio (DSF Studio)');
+    sb.writeln('# Wavefront OBJ Exported from truFold Studio by Danish');
     sb.writeln('# Part: $partName');
     sb.writeln('# Polygons: ${polygons.length}');
     sb.writeln('# Solid Thickness: ${thicknessMm > 0 ? '${thicknessMm}mm' : 'Mid-surface'}');
@@ -49,12 +47,7 @@ class ExportEngine3d {
 
         // Triangulate polygon (fan triangulation)
         for (int i = 1; i < poly.vertices.length - 1; i++) {
-          faceTriangles.add([
-            startVIdx,
-            startVIdx + i,
-            startVIdx + i + 1,
-            normalIdx,
-          ]);
+          faceTriangles.add([startVIdx, startVIdx + i, startVIdx + i + 1, normalIdx]);
         }
       } else {
         // Solid body extrusion: Top face, Bottom face, and Side walls
@@ -81,22 +74,12 @@ class ExportEngine3d {
 
         // Top triangles (CCW)
         for (int i = 1; i < nPts - 1; i++) {
-          faceTriangles.add([
-            topStartIdx,
-            topStartIdx + i,
-            topStartIdx + i + 1,
-            topNormIdx,
-          ]);
+          faceTriangles.add([topStartIdx, topStartIdx + i, topStartIdx + i + 1, topNormIdx]);
         }
 
         // Bottom triangles (CW for outward normal)
         for (int i = 1; i < nPts - 1; i++) {
-          faceTriangles.add([
-            botStartIdx,
-            botStartIdx + i + 1,
-            botStartIdx + i,
-            botNormIdx,
-          ]);
+          faceTriangles.add([botStartIdx, botStartIdx + i + 1, botStartIdx + i, botNormIdx]);
         }
 
         // Side wall quads (split into 2 triangles each)
@@ -147,11 +130,7 @@ class ExportEngine3d {
 
   /// Exports a list of 3D folded polygons to standard ASCII STL format.
   /// Widely compatible with slicers (Cura, PrusaSlicer), FreeCAD, Blender, and SolidWorks.
-  static String exportAsciiStl({
-    required List<CadFoldedPolygon3D> polygons,
-    double thicknessMm = 0.0,
-    String solidName = 'DanishSheetMetalPart',
-  }) {
+  static String exportAsciiStl({required List<CadFoldedPolygon3D> polygons, double thicknessMm = 0.0, String solidName = 'DanishSheetMetalPart'}) {
     final sb = StringBuffer();
     final cleanName = solidName.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
     sb.writeln('solid $cleanName');

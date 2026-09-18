@@ -11,7 +11,7 @@ It bridges the gap between **2D flat blank engineering** (laser profiling, CNC t
 2. Segment planar sheet blanks into interconnected panel networks using finite line segment slicing.
 3. Interactively fold the sheet metal in real-time from $0\%$ (completely flat blank) to $100\%$ (fully formed 3D product) using arbitrary 3D axis-angle Rodrigues rotations along press-brake bend vectors.
 4. Foreshorten 2D panels on the drawing board as folds occur, with faint dashed ghosted reference outlines of the original flat pattern.
-5. Stamp, position, and drag CNC Turret Punches (Round holes, Obround slots, Rectangles) with live Fusion 360-style edge and bend distance constraints.
+5. Stamp, position, and drag CNC Turret Punches (Round holes, Obround slots, Rectangles) with live CAD Studio style edge and bend distance constraints.
 6. Author bend lines and laser cuts with rubber-band cursor tracking, automatic 45°/orthogonal angle snapping, <kbd>Alt</kbd> continuous rotation bypass, open bend warnings, and endpoint drag-to-edge snapping.
 7. Export complete manufacturing packages to **.dsf**, **.dxf**, **.obj**, **.stl**, and **.dds**.
 
@@ -63,7 +63,7 @@ The module `lib/modules/sheet_metal_studio/` is built with **zero external packa
 
 ### 3.3 CNC Turret Punching & Edge Constraints
 - **Punch Types**: Round tooling holes, Obround slots, and Rectangular/Square punches.
-- **Fusion 360-Style Constraints**:
+- **CAD Studio Style Constraints**:
   - Live orthogonal leader lines with distance badges in millimeters from Left, Right, Top, Bottom edges, and the nearest bend line.
   - Editable constraint values: typing a distance immediately shifts the punch to that exact dimension.
 - **Dynamic Arc Curvature**: Changing Obround width/height automatically updates the tangential end arc radiuses.
@@ -98,7 +98,7 @@ The module `lib/modules/sheet_metal_studio/` is built with **zero external packa
 | **R2. Dual Viewport & Splitter** | Split screen with right 50% 3D viewer; draggable split ratio. | Built `split_pane_divider.dart` with hover glow, clamp boundaries, and double-tap 50/50 reset. |
 | **R3. Interactive 2D Foreshortening** | As fold slider moves, flat drawing changes interactively. | Implemented dynamic foreshortening in `unfolded_canvas_widget.dart` with ghosted reference outlines. |
 | **R4. Fresh Identity & Navigation** | Give modern technical name (TruFold Studio Studio / DSF Studio); jump from CAD datasheet screen and menu item. | Named DSF Studio; added navigation launcher in header and project schedule menu. |
-| **R5. CNC Turret Punches & Constraints** | Add holes/slots directly to unfolded flat; drag to place; Fusion 360-style constraints from edges; Obround auto-arcs. | Created `cnc_turret_engine.dart`, `cnc_punch_primitive.dart`, `punch_property_sheet.dart` with leader lines and constraint fields. |
+| **R5. CNC Turret Punches & Constraints** | Add holes/slots directly to unfolded flat; drag to place; CAD Studio style constraints from edges; Obround auto-arcs. | Created `cnc_turret_engine.dart`, `cnc_punch_primitive.dart`, `punch_property_sheet.dart` with leader lines and constraint fields. |
 | **R6. Viewport Improvements** | Wheel zoom in both sections; deselect on empty canvas; light theme; immediate 3D hole rendering; Undo/Redo. | Implemented wheel zoom in 2D & 3D, light `#F8FAFC` theme, canvas deselect, Boolean face hole rendering, and ViewModel history stack. |
 | **R7. Interaction Glitches Fix** | Zoom spilling over menu (canvas bleed); multi-frame drag flooding undo; middle-mouse 3D pan; draggable inspector sheets; bend line dragging & edge constraints. | Added `ClipRect` to both viewports, single-step drag session flags, middle-mouse panning, draggable floating sheets, and bend constraint solver. |
 | **R8. Rubber-Band 45° Snapping & Open Bends** | Click 1 starts line; rubber-band follows cursor; 45° snapping; Alt unlocks free rotation; open bend warnings; endpoint drag-to-edge snapping. | Added 45° angle snapping, `isAltPressed` bypass, finite line segment slicing in `PlanarFaceDecomposer`, amber warning badges, and draggable endpoint handles. |

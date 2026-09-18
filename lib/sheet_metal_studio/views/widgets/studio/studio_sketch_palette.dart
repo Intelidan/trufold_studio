@@ -1,58 +1,55 @@
 // =============================================================================
-// fusion_sketch_palette.dart
+// studio_sketch_palette.dart
 //
-// Autodesk Fusion 360 Floating SKETCH PALETTE for TruFold Studio 2D Viewport.
-// Matches Fusion 360's exact palette options:
+// Floating SKETCH PALETTE for truFold Studio 2D Viewport.
+// Palette options:
 // - Header: ⚙ SKETCH PALETTE ▸▸
 // - Linetype toggle (Construction vs Normal)
 // - Look At tool
 // - Checkboxes:
 //   * Sketch Grid
 //   * Snap
-//   * Slice
 //   * Profile (Soft translucent blue closed-profile fill)
 //   * Points (Vertex dot markers)
 //   * Dimensions (Driving & reference dimension lines)
 //   * Constraints (Constraint glyph badges)
-//   * Projected Geometries
 //   * Construction Geometries
-//   * 3D Sketch
 // - Finish Sketch action button
 // =============================================================================
 
 import 'package:flutter/material.dart';
 import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 
-class FusionSketchPalette extends StatefulWidget {
+class StudioSketchPalette extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
   final bool showProfileFill;
   final bool showPoints;
+  final bool showGrid;
   final ValueChanged<bool> onToggleProfileFill;
   final ValueChanged<bool> onTogglePoints;
+  final ValueChanged<bool> onToggleGrid;
   final VoidCallback onFinishSketch;
 
-  const FusionSketchPalette({
+  const StudioSketchPalette({
     super.key,
     required this.viewModel,
     required this.showProfileFill,
     required this.showPoints,
+    this.showGrid = true,
     required this.onToggleProfileFill,
     required this.onTogglePoints,
+    required this.onToggleGrid,
     required this.onFinishSketch,
   });
 
   @override
-  State<FusionSketchPalette> createState() => _FusionSketchPaletteState();
+  State<StudioSketchPalette> createState() => _StudioSketchPaletteState();
 }
 
-class _FusionSketchPaletteState extends State<FusionSketchPalette> {
+class _StudioSketchPaletteState extends State<StudioSketchPalette> {
   bool _isCollapsed = false;
   bool _isConstructionLinetype = false;
-  bool _sketchGrid = true;
   bool _snap = true;
-  bool _slice = false;
-  bool _projectedGeometries = true;
-  bool _threeDSketch = false;
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +59,7 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
       return InkWell(
         onTap: () => setState(() => _isCollapsed = false),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.95),
             borderRadius: BorderRadius.circular(6),
@@ -78,19 +75,19 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.tune, size: 14, color: Color(0xFF0F172A)),
-              SizedBox(width: 4),
+              Icon(Icons.tune, size: 15, color: Color(0xFF0F172A)),
+              SizedBox(width: 5),
               Text(
                 'SKETCH PALETTE',
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 11.5,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.6,
                   color: Color(0xFF0F172A),
                 ),
               ),
               SizedBox(width: 4),
-              Icon(Icons.chevron_left, size: 14, color: Color(0xFF64748B)),
+              Icon(Icons.chevron_left, size: 15, color: Color(0xFF64748B)),
             ],
           ),
         ),
@@ -98,7 +95,7 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
     }
 
     return Container(
-      width: 195,
+      width: 205,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.96),
         borderRadius: BorderRadius.circular(6),
@@ -117,7 +114,7 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
         children: [
           // 1. Header Bar: ⚙ SKETCH PALETTE ▸▸
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: const BoxDecoration(
               color: Color(0xFFF1F5F9),
               borderRadius: BorderRadius.only(
@@ -128,13 +125,13 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.settings_outlined, size: 12, color: Color(0xFF475569)),
-                const SizedBox(width: 5),
+                const Icon(Icons.settings_outlined, size: 13, color: Color(0xFF475569)),
+                const SizedBox(width: 6),
                 const Expanded(
                   child: Text(
                     'SKETCH PALETTE',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 11.0,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.7,
                       color: Color(0xFF1E293B),
@@ -143,7 +140,7 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
                 ),
                 InkWell(
                   onTap: () => setState(() => _isCollapsed = true),
-                  child: const Icon(Icons.fast_forward, size: 13, color: Color(0xFF64748B)),
+                  child: const Icon(Icons.fast_forward, size: 14, color: Color(0xFF64748B)),
                 ),
               ],
             ),
@@ -151,13 +148,13 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
 
           // 2. Options Header
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
             child: Row(
               children: const [
-                Icon(Icons.arrow_drop_down, size: 14, color: Color(0xFF64748B)),
+                Icon(Icons.arrow_drop_down, size: 15, color: Color(0xFF64748B)),
                 Text(
                   'Options',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
                 ),
               ],
             ),
@@ -165,11 +162,11 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
 
           // Linetype Toggle Row
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             child: Row(
               children: [
                 const Expanded(
-                  child: Text('Linetype', style: TextStyle(fontSize: 10, color: Color(0xFF334155))),
+                  child: Text('Linetype', style: TextStyle(fontSize: 11.5, color: Color(0xFF334155))),
                 ),
                 InkWell(
                   onTap: () {
@@ -177,7 +174,7 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
                     vm.toggleConstructionGeometry();
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                     decoration: BoxDecoration(
                       color: _isConstructionLinetype ? const Color(0xFFD97706).withValues(alpha: 0.2) : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(3),
@@ -188,7 +185,7 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
                     child: Text(
                       _isConstructionLinetype ? '---' : '──',
                       style: TextStyle(
-                        fontSize: 9,
+                        fontSize: 10,
                         fontWeight: FontWeight.bold,
                         color: _isConstructionLinetype ? const Color(0xFFD97706) : const Color(0xFF475569),
                       ),
@@ -201,15 +198,53 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
 
           // Look At Camera
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             child: Row(
               children: [
                 const Expanded(
-                  child: Text('Look At', style: TextStyle(fontSize: 10, color: Color(0xFF334155))),
+                  child: Text('Look At', style: TextStyle(fontSize: 11.5, color: Color(0xFF334155))),
                 ),
                 InkWell(
                   onTap: vm.reset2DCanvas,
-                  child: const Icon(Icons.remove_red_eye_outlined, size: 14, color: Color(0xFF0284C7)),
+                  child: const Icon(Icons.remove_red_eye_outlined, size: 15, color: Color(0xFF0284C7)),
+                ),
+              ],
+            ),
+          ),
+
+          // Input Mode indicator & explanation
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text('Input Mode', style: TextStyle(fontSize: 11.5, color: Color(0xFF334155))),
+                ),
+                Tooltip(
+                  message: 'Click & Drag Mode (Onshape CAD)\n• Click down, drag to shape, release to commit.\n• Or click-move-click for step-by-step points.',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFBFDBFE), width: 0.8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.gesture, size: 12, color: Color(0xFF2563EB)),
+                        SizedBox(width: 4),
+                        Text(
+                          'Click & Drag',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1D4ED8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -220,8 +255,8 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
           // Checkboxes
           _buildPaletteCheckbox(
             label: 'Sketch Grid',
-            value: _sketchGrid,
-            onChanged: (v) => setState(() => _sketchGrid = v ?? true),
+            value: widget.showGrid,
+            onChanged: (v) => widget.onToggleGrid(v ?? true),
           ),
           _buildPaletteCheckbox(
             label: 'Snap',
@@ -230,11 +265,6 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
               setState(() => _snap = v ?? true);
               if (vm.magneticSnapEnabled != _snap) vm.toggleMagneticSnap();
             },
-          ),
-          _buildPaletteCheckbox(
-            label: 'Slice',
-            value: _slice,
-            onChanged: (v) => setState(() => _slice = v ?? false),
           ),
           _buildPaletteCheckbox(
             label: 'Profile',
@@ -257,19 +287,9 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
             onChanged: (v) => vm.toggleConstraints(),
           ),
           _buildPaletteCheckbox(
-            label: 'Projected Geometries',
-            value: _projectedGeometries,
-            onChanged: (v) => setState(() => _projectedGeometries = v ?? true),
-          ),
-          _buildPaletteCheckbox(
             label: 'Construction Geometries',
             value: vm.showConstructionGeometry,
             onChanged: (v) => vm.toggleConstructionGeometry(),
-          ),
-          _buildPaletteCheckbox(
-            label: '3D Sketch',
-            value: _threeDSketch,
-            onChanged: (v) => setState(() => _threeDSketch = v ?? false),
           ),
 
           const SizedBox(height: 6),
@@ -280,14 +300,14 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
             child: OutlinedButton(
               onPressed: widget.onFinishSketch,
               style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.symmetric(vertical: 5),
                 side: const BorderSide(color: Color(0xFFCBD5E1)),
                 backgroundColor: const Color(0xFFF8FAFC),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
               ),
               child: const Text(
                 'Finish Sketch',
-                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
               ),
             ),
           ),
@@ -302,13 +322,13 @@ class _FusionSketchPaletteState extends State<FusionSketchPalette> {
     required ValueChanged<bool?> onChanged,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0.5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1.0),
       child: Row(
         children: [
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(fontSize: 10, color: Color(0xFF334155)),
+              style: const TextStyle(fontSize: 11.5, color: Color(0xFF334155), fontWeight: FontWeight.w500),
             ),
           ),
           SizedBox(

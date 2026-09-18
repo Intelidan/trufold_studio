@@ -73,6 +73,7 @@ class KinematicFoldEngine {
   static FoldedMeshResult foldDocument(
     DsfDocument doc, {
     double foldProgress = 1.0,
+    int curveResolution3D = 32,
   }) {
     final activeFaces = doc.faces.where((f) => f.isVisible).toList();
     if (activeFaces.isEmpty) {
@@ -113,6 +114,7 @@ class KinematicFoldEngine {
       thicknessMm: doc.material.thicknessMm,
       edgeChamfers: doc.edgeChamfers,
       defaultEdgeChamferMm: doc.material.edgeChamferMm,
+      curveResolution3D: curveResolution3D,
     );
 
     // 4. Compute bounding box and center
@@ -222,6 +224,7 @@ class KinematicFoldEngine {
     double thicknessMm = 0.0,
     Map<String, double> edgeChamfers = const {},
     double defaultEdgeChamferMm = 0.0,
+    int curveResolution3D = 32,
   }) {
     TransformMatrix4 currentTransform = parentTransform;
 
@@ -326,7 +329,7 @@ class KinematicFoldEngine {
             final intervalLen = (intervalEnd - intervalStart) * bendLen;
             if (intervalLen < 0.2) continue;
             final nLenSteps = (intervalLen / 35.0).ceil().clamp(1, 8);
-            const nSteps = 6;
+            final nSteps = (curveResolution3D / 5.0).round().clamp(4, 12);
 
             for (int lStep = 0; lStep < nLenSteps; lStep++) {
               final t1 =
@@ -493,7 +496,7 @@ class KinematicFoldEngine {
     final holes3D = <List<CadPoint3D>>[];
     final holePunchIds = <String>[];
     for (final punch in facePunches) {
-      final hole2D = punch.toPolygon();
+      final hole2D = punch.toPolygon(circleSegments: curveResolution3D);
       if (hole2D.length >= 3) {
         holes3D.add(
           hole2D
@@ -591,7 +594,7 @@ class KinematicFoldEngine {
       final holes3DBot = <List<CadPoint3D>>[];
       final holePunchIdsBot = <String>[];
       for (final punch in facePunches) {
-        final hole2D = punch.toPolygon();
+        final hole2D = punch.toPolygon(circleSegments: curveResolution3D);
         if (hole2D.length >= 3) {
           holes3DBot.add(
             hole2D.reversed
@@ -664,7 +667,7 @@ class KinematicFoldEngine {
       if (thicknessMm >= 1.0) {
         // SS2 Fix: Solid Pass-Through Hole Bore Walls with exact outside-punch segment clipping
         for (final punch in facePunches) {
-          final hole2D = punch.toPolygon();
+          final hole2D = punch.toPolygon(circleSegments: curveResolution3D);
           if (hole2D.length >= 3) {
             final punchMaxRad = math.max(
               punch.diameterMm / 2.0,
@@ -1081,6 +1084,7 @@ class KinematicFoldEngine {
         thicknessMm: thicknessMm,
         edgeChamfers: edgeChamfers,
         defaultEdgeChamferMm: defaultEdgeChamferMm,
+        curveResolution3D: curveResolution3D,
       );
     }
   }

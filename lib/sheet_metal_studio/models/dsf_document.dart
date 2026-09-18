@@ -39,6 +39,7 @@ class DsfDocument {
   final List<PerforationPattern> perforationPatterns;
   final List<CornerTreatment> corners;
   final List<CadLineSegment> cutLines;
+  final List<CadArc2D> arcs;
   final List<CadDimension> dimensions;
   final List<CadConstraint> constraints;
   final List<ConstraintDefinition> constraintDefinitions;
@@ -64,6 +65,7 @@ class DsfDocument {
     this.perforationPatterns = const [],
     this.corners = const [],
     this.cutLines = const [],
+    this.arcs = const [],
     this.dimensions = const [],
     this.constraints = const [],
     this.constraintDefinitions = const [],
@@ -300,6 +302,7 @@ class DsfDocument {
     List<PerforationPattern>? perforationPatterns,
     List<CornerTreatment>? corners,
     List<CadLineSegment>? cutLines,
+    List<CadArc2D>? arcs,
     List<CadDimension>? dimensions,
     List<CadConstraint>? constraints,
     List<ConstraintDefinition>? constraintDefinitions,
@@ -325,6 +328,7 @@ class DsfDocument {
       perforationPatterns: perforationPatterns ?? this.perforationPatterns,
       corners: corners ?? this.corners,
       cutLines: cutLines ?? this.cutLines,
+      arcs: arcs ?? this.arcs,
       dimensions: dimensions ?? this.dimensions,
       constraints: constraints ?? this.constraints,
       constraintDefinitions: constraintDefinitions ?? this.constraintDefinitions,
@@ -352,6 +356,7 @@ class DsfDocument {
     'perforationPatterns': perforationPatterns.map((p) => p.toJson()).toList(),
     'corners': corners.map((c) => c.toJson()).toList(),
     'cutLines': cutLines.map((c) => c.toJson()).toList(),
+    'arcs': arcs.map((a) => a.toJson()).toList(),
     'dimensions': dimensions.map((d) => d.toJson()).toList(),
     'constraints': constraints.map((c) => c.toJson()).toList(),
     'constraintDefinitions':
@@ -383,6 +388,7 @@ class DsfDocument {
     perforationPatterns: (json['perforationPatterns'] as List? ?? []).map((e) => PerforationPattern.fromJson(e as Map<String, dynamic>)).toList(),
     corners: (json['corners'] as List? ?? []).map((e) => CornerTreatment.fromJson(e as Map<String, dynamic>)).toList(),
     cutLines: (json['cutLines'] as List? ?? []).map((e) => CadLineSegment.fromJson(e as Map<String, dynamic>)).toList(),
+    arcs: (json['arcs'] as List? ?? []).map((e) => CadArc2D.fromJson(e as Map<String, dynamic>)).toList(),
     dimensions: (json['dimensions'] as List? ?? []).map((e) => CadDimension.fromJson(e as Map<String, dynamic>)).toList(),
     constraints: (json['constraints'] as List? ?? []).map((e) => CadConstraint.fromJson(e as Map<String, dynamic>)).toList(),
     constraintDefinitions: (json['constraintDefinitions'] as List? ?? [])

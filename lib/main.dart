@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'sheet_metal_studio/theme/studio_theme.dart';
 import 'sheet_metal_studio/views/sheet_metal_studio_screen.dart';
 
 void main() {
@@ -14,14 +16,7 @@ class TruFoldStudioApp extends StatelessWidget {
     return MaterialApp(
       title: 'TruFold Studio',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0284C7),
-          brightness: Brightness.light,
-        ),
-      ),
+      theme: createStudioTheme(),
       home: const SheetMetalStudioScreen(),
     );
   }

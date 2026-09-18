@@ -1,7 +1,7 @@
 // =============================================================================
 // sheet_metal_studio_screen.dart
 //
-// Dual-Viewport Side-by-Side Studio Screen for Danish FormMatrix Studio.
+// Dual-Viewport Side-by-Side Studio Screen for truFold Studio by Danish.
 // Inspired by SolidWorks / DraftSight sheet metal workflow:
 // - Left: 2D Unfolded Drawing Canvas (Dynamic fold projection, CAD layers)
 // - Middle: Interactive Draggable Split-Pane Divider
@@ -19,8 +19,8 @@ import 'widgets/unfolded_canvas_widget.dart';
 import 'widgets/viewport_3d_widget.dart';
 import 'widgets/split_pane_divider.dart';
 import 'widgets/fold_progress_slider.dart';
-import 'widgets/fusion/fusion_ribbon_toolbar.dart';
-import 'widgets/fusion/fusion_browser_panel.dart';
+import 'widgets/studio/studio_ribbon_toolbar.dart';
+import 'widgets/studio/studio_browser_panel.dart';
 import '../models/studio_tab_model.dart';
 import '../services/studio_file_service.dart';
 import '../services/studio_clipboard_service.dart';
@@ -51,6 +51,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
   final FocusNode _focusNode = FocusNode();
   bool _showPartsTree = true;
   double _browserWidth = 260.0;
+  Offset _browserPosition = const Offset(16, 16);
   Offset? _fittingInspectorOffset;
   Offset? _fittingInspectorDragStart;
 
@@ -358,8 +359,8 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
               builder: (context, _) {
                 return Column(
                   children: [
-                    // Autodesk Fusion 360 Ribbon Toolbar
-                    FusionRibbonToolbar(
+                    // truFold Studio Ribbon Toolbar
+                    StudioRibbonToolbar(
                       viewModel: _viewModel,
                       tabs: _tabs,
                       activeTabIndex: _activeTabIndex,
@@ -386,14 +387,14 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                       },
                     ),
 
-                    // 2. Main Workspace (Browser Tree + Draggable Split Dual-Viewport)
+                    // 2. Main Workspace (Draggable Dual-Viewport + Floating Glass Browser)
                     Expanded(
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final totalW = constraints.maxWidth;
-                          final treeW = _showPartsTree ? _browserWidth : 26.0;
+                          final totalH = constraints.maxHeight;
                           const dividerW = 14.0;
-                          final availableW = (totalW - treeW - dividerW).clamp(200.0, double.infinity);
+                          final availableW = (totalW - dividerW).clamp(200.0, double.infinity);
 
                           final leftW = (availableW * _viewModel.splitRatio).clamp(100.0, availableW - 100.0);
                           final rightW = availableW - leftW;
@@ -402,65 +403,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                             children: [
                               Row(
                                 children: [
-                                  // Leftmost: Autodesk Fusion 360 BROWSER Panel
-                                  if (_showPartsTree)
-                                    FusionBrowserPanel(
-                                      viewModel: _viewModel,
-                                      width: _browserWidth,
-                                      onWidthChanged: (delta) {
-                                        setState(() {
-                                          _browserWidth = (_browserWidth + delta).clamp(
-                                            180.0,
-                                            math.max(220.0, totalW * 0.45),
-                                          );
-                                        });
-                                      },
-                                      onClose: () => setState(() => _showPartsTree = false),
-                                      onEditThickness: () => _showThicknessDialog(context),
-                                      onEditMaterial: () => _showMaterialDialog(context),
-                                    )
-                                  else
-                                    InkWell(
-                                      onTap: () => setState(() => _showPartsTree = true),
-                                      child: Container(
-                                        width: 26.0,
-                                        height: double.infinity,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.78),
-                                          border: const Border(right: BorderSide(color: Color(0xFFCBD5E1), width: 1.0)),
-                                        ),
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.start,
-                                          children: [
-                                            const SizedBox(height: 12),
-                                            Container(
-                                              padding: const EdgeInsets.all(3),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFE0F2FE),
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: const Color(0xFFBAE6FD)),
-                                              ),
-                                              child: const Icon(Icons.chevron_right, size: 16, color: Color(0xFF0284C7)),
-                                            ),
-                                            const SizedBox(height: 14),
-                                            RotatedBox(
-                                              quarterTurns: 3,
-                                              child: const Text(
-                                                'BROWSER',
-                                                style: TextStyle(
-                                                  fontSize: 9.5,
-                                                  fontWeight: FontWeight.bold,
-                                                  letterSpacing: 1.2,
-                                                  color: Color(0xFF475569),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-
-                                  // Left Viewport: 2D Unfolded Flat Pattern (Fusion 360 Sketch View)
+                                  // Left Viewport: 2D Unfolded Flat Pattern (CAD Sketch View)
                                   SizedBox(
                                     width: leftW,
                                     child: ClipRect(
@@ -486,6 +429,79 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                   ),
                                 ],
                               ),
+
+                              // Floating Transparent Draggable BROWSER Panel
+                              if (_showPartsTree)
+                                Positioned(
+                                  left: _browserPosition.dx.clamp(8.0, math.max(8.0, totalW - _browserWidth - 10)),
+                                  top: _browserPosition.dy.clamp(8.0, math.max(8.0, totalH - 120.0)),
+                                  child: SizedBox(
+                                    height: math.min(totalH - 32.0, 540.0),
+                                    child: StudioBrowserPanel(
+                                      viewModel: _viewModel,
+                                      width: _browserWidth,
+                                      onWidthChanged: (delta) {
+                                        setState(() {
+                                          _browserWidth = (_browserWidth + delta).clamp(
+                                            200.0,
+                                            math.max(220.0, totalW * 0.45),
+                                          );
+                                        });
+                                      },
+                                      onPositionDelta: (delta) {
+                                        setState(() {
+                                          _browserPosition = Offset(
+                                            (_browserPosition.dx + delta.dx).clamp(0.0, math.max(0.0, totalW - _browserWidth)),
+                                            (_browserPosition.dy + delta.dy).clamp(0.0, math.max(0.0, totalH - 60)),
+                                          );
+                                        });
+                                      },
+                                      onClose: () => setState(() => _showPartsTree = false),
+                                      onEditThickness: () => _showThicknessDialog(context),
+                                      onEditMaterial: () => _showMaterialDialog(context),
+                                    ),
+                                  ),
+                                )
+                              else
+                                Positioned(
+                                  left: 12,
+                                  top: 12,
+                                  child: InkWell(
+                                    onTap: () => setState(() => _showPartsTree = true),
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.85),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFFCBD5E1), width: 1.0),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.08),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.folder_open, size: 14, color: Color(0xFF0284C7)),
+                                          SizedBox(width: 5),
+                                          Text(
+                                            'BROWSER',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.8,
+                                              color: Color(0xFF334155),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
 
                               // Draggable Floating DSF Fitting Parameter Inspector (Spans across both viewports)
                               if (_viewModel.isFittingInspectorOpen)

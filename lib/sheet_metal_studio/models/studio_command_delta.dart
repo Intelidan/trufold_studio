@@ -8,6 +8,7 @@
 // =============================================================================
 
 import 'package:flutter/foundation.dart';
+
 import 'cad_primitives.dart';
 import 'cnc_punch_primitive.dart';
 import 'fold_bend_line.dart';
@@ -39,6 +40,8 @@ class StudioCommandDelta {
   final List<CadPoint2D>? newOuterContour;
   final List<CadLineSegment>? oldCutLines;
   final List<CadLineSegment>? newCutLines;
+  final List<CadArc2D>? oldArcs;
+  final List<CadArc2D>? newArcs;
   final List<CadDimension>? oldDimensions;
   final List<CadDimension>? newDimensions;
   final List<CadConstraint>? oldConstraints;
@@ -76,6 +79,8 @@ class StudioCommandDelta {
     this.newOuterContour,
     this.oldCutLines,
     this.newCutLines,
+    this.oldArcs,
+    this.newArcs,
     this.oldDimensions,
     this.newDimensions,
     this.oldConstraints,
@@ -105,28 +110,19 @@ class StudioCommandDelta {
     String? targetId,
     Map<String, dynamic>? params,
   }) {
-    final punchesChanged = !identical(oldDoc.punches, newDoc.punches) &&
-        !listEquals(oldDoc.punches, newDoc.punches);
-    final bendsChanged = !identical(oldDoc.bends, newDoc.bends) &&
-        !listEquals(oldDoc.bends, newDoc.bends);
-    final facesChanged = !identical(oldDoc.faces, newDoc.faces) &&
-        !listEquals(oldDoc.faces, newDoc.faces);
-    final patternsChanged = !identical(oldDoc.perforationPatterns, newDoc.perforationPatterns) &&
-        !listEquals(oldDoc.perforationPatterns, newDoc.perforationPatterns);
-    final outerContourChanged = !identical(oldDoc.outerContour, newDoc.outerContour) &&
-        !listEquals(oldDoc.outerContour, newDoc.outerContour);
-    final cutLinesChanged = !identical(oldDoc.cutLines, newDoc.cutLines) &&
-        !listEquals(oldDoc.cutLines, newDoc.cutLines);
-    final dimensionsChanged = !identical(oldDoc.dimensions, newDoc.dimensions) &&
-        !listEquals(oldDoc.dimensions, newDoc.dimensions);
-    final constraintsChanged = !identical(oldDoc.constraints, newDoc.constraints) &&
-        !listEquals(oldDoc.constraints, newDoc.constraints);
-    final cornersChanged = !identical(oldDoc.corners, newDoc.corners) &&
-        !listEquals(oldDoc.corners, newDoc.corners);
-    final edgeChamfersChanged = !identical(oldDoc.edgeChamfers, newDoc.edgeChamfers) &&
-        !mapEquals(oldDoc.edgeChamfers, newDoc.edgeChamfers);
-    final parametersChanged = !identical(oldDoc.parameters, newDoc.parameters) &&
-        !mapEquals(oldDoc.parameters, newDoc.parameters);
+    final punchesChanged = !identical(oldDoc.punches, newDoc.punches) && !listEquals(oldDoc.punches, newDoc.punches);
+    final bendsChanged = !identical(oldDoc.bends, newDoc.bends) && !listEquals(oldDoc.bends, newDoc.bends);
+    final facesChanged = !identical(oldDoc.faces, newDoc.faces) && !listEquals(oldDoc.faces, newDoc.faces);
+    final patternsChanged =
+        !identical(oldDoc.perforationPatterns, newDoc.perforationPatterns) && !listEquals(oldDoc.perforationPatterns, newDoc.perforationPatterns);
+    final outerContourChanged = !identical(oldDoc.outerContour, newDoc.outerContour) && !listEquals(oldDoc.outerContour, newDoc.outerContour);
+    final cutLinesChanged = !identical(oldDoc.cutLines, newDoc.cutLines) && !listEquals(oldDoc.cutLines, newDoc.cutLines);
+    final arcsChanged = !identical(oldDoc.arcs, newDoc.arcs) && !listEquals(oldDoc.arcs, newDoc.arcs);
+    final dimensionsChanged = !identical(oldDoc.dimensions, newDoc.dimensions) && !listEquals(oldDoc.dimensions, newDoc.dimensions);
+    final constraintsChanged = !identical(oldDoc.constraints, newDoc.constraints) && !listEquals(oldDoc.constraints, newDoc.constraints);
+    final cornersChanged = !identical(oldDoc.corners, newDoc.corners) && !listEquals(oldDoc.corners, newDoc.corners);
+    final edgeChamfersChanged = !identical(oldDoc.edgeChamfers, newDoc.edgeChamfers) && !mapEquals(oldDoc.edgeChamfers, newDoc.edgeChamfers);
+    final parametersChanged = !identical(oldDoc.parameters, newDoc.parameters) && !mapEquals(oldDoc.parameters, newDoc.parameters);
     final materialChanged = oldDoc.material != newDoc.material;
     final baseFaceIdChanged = oldDoc.baseFaceId != newDoc.baseFaceId;
     final itemNameChanged = oldDoc.itemName != newDoc.itemName;
@@ -147,18 +143,12 @@ class StudioCommandDelta {
         inferredTargetId ??= added.id;
         inferredDescription = description ?? 'Add ${added.type.name} punch (${added.id})';
       } else if (newDoc.punches.length < oldDoc.punches.length) {
-        final removed = oldDoc.punches.firstWhere(
-          (p) => !newDoc.punches.any((np) => np.id == p.id),
-          orElse: () => oldDoc.punches.last,
-        );
+        final removed = oldDoc.punches.firstWhere((p) => !newDoc.punches.any((np) => np.id == p.id), orElse: () => oldDoc.punches.last);
         inferredAction = actionType ?? 'delete_punch';
         inferredTargetId ??= removed.id;
         inferredDescription = description ?? 'Delete punch (${removed.id})';
       } else {
-        final changed = newDoc.punches.firstWhere(
-          (np) => oldDoc.punches.any((op) => op.id == np.id && op != np),
-          orElse: () => newDoc.punches.first,
-        );
+        final changed = newDoc.punches.firstWhere((np) => oldDoc.punches.any((op) => op.id == np.id && op != np), orElse: () => newDoc.punches.first);
         inferredAction = actionType ?? 'update_punch';
         inferredTargetId ??= changed.id;
         inferredDescription = description ?? 'Update punch (${changed.id})';
@@ -170,21 +160,32 @@ class StudioCommandDelta {
         inferredTargetId ??= added.id;
         inferredDescription = description ?? 'Add bend line (${added.id})';
       } else if (newDoc.bends.length < oldDoc.bends.length) {
-        final removed = oldDoc.bends.firstWhere(
-          (b) => !newDoc.bends.any((nb) => nb.id == b.id),
-          orElse: () => oldDoc.bends.last,
-        );
+        final removed = oldDoc.bends.firstWhere((b) => !newDoc.bends.any((nb) => nb.id == b.id), orElse: () => oldDoc.bends.last);
         inferredAction = actionType ?? 'delete_bend';
         inferredTargetId ??= removed.id;
         inferredDescription = description ?? 'Delete bend line (${removed.id})';
       } else {
-        final changed = newDoc.bends.firstWhere(
-          (nb) => oldDoc.bends.any((ob) => ob.id == nb.id && ob != nb),
-          orElse: () => newDoc.bends.first,
-        );
+        final changed = newDoc.bends.firstWhere((nb) => oldDoc.bends.any((ob) => ob.id == nb.id && ob != nb), orElse: () => newDoc.bends.first);
         inferredAction = actionType ?? 'update_bend';
         inferredTargetId ??= changed.id;
         inferredDescription = description ?? 'Update bend (${changed.id})';
+      }
+    } else if (arcsChanged) {
+      if (newDoc.arcs.length > oldDoc.arcs.length) {
+        final added = newDoc.arcs.last;
+        inferredAction = actionType ?? 'add_arc';
+        inferredTargetId ??= added.id;
+        inferredDescription = description ?? 'Add CAD arc (${added.id})';
+      } else if (newDoc.arcs.length < oldDoc.arcs.length) {
+        final removed = oldDoc.arcs.firstWhere((a) => !newDoc.arcs.any((na) => na.id == a.id), orElse: () => oldDoc.arcs.last);
+        inferredAction = actionType ?? 'delete_arc';
+        inferredTargetId ??= removed.id;
+        inferredDescription = description ?? 'Delete CAD arc (${removed.id})';
+      } else {
+        final changed = newDoc.arcs.firstWhere((na) => oldDoc.arcs.any((oa) => oa.id == na.id && oa != na), orElse: () => oldDoc.arcs.first);
+        inferredAction = actionType ?? 'update_arc';
+        inferredTargetId ??= changed.id;
+        inferredDescription = description ?? 'Update CAD arc (${changed.id})';
       }
     } else if (patternsChanged) {
       if (newDoc.perforationPatterns.length > oldDoc.perforationPatterns.length) {
@@ -203,7 +204,7 @@ class StudioCommandDelta {
       } else {
         final changed = newDoc.perforationPatterns.firstWhere(
           (np) => oldDoc.perforationPatterns.any((op) => op.id == np.id && op != np),
-          orElse: () => newDoc.perforationPatterns.first,
+          orElse: () => oldDoc.perforationPatterns.first,
         );
         inferredAction = actionType ?? 'update_pattern';
         inferredTargetId ??= changed.id;
@@ -237,6 +238,8 @@ class StudioCommandDelta {
       newOuterContour: outerContourChanged ? newDoc.outerContour : null,
       oldCutLines: cutLinesChanged ? oldDoc.cutLines : null,
       newCutLines: cutLinesChanged ? newDoc.cutLines : null,
+      oldArcs: arcsChanged ? oldDoc.arcs : null,
+      newArcs: arcsChanged ? newDoc.arcs : null,
       oldDimensions: dimensionsChanged ? oldDoc.dimensions : null,
       newDimensions: dimensionsChanged ? newDoc.dimensions : null,
       oldConstraints: constraintsChanged ? oldDoc.constraints : null,
@@ -267,6 +270,7 @@ class StudioCommandDelta {
         oldPatterns != null ||
         oldOuterContour != null ||
         oldCutLines != null ||
+        oldArcs != null ||
         oldDimensions != null ||
         oldConstraints != null ||
         oldCorners != null ||
@@ -283,6 +287,7 @@ class StudioCommandDelta {
         perforationPatterns: oldPatterns ?? current.perforationPatterns,
         outerContour: oldOuterContour ?? current.outerContour,
         cutLines: oldCutLines ?? current.cutLines,
+        arcs: oldArcs ?? current.arcs,
         dimensions: oldDimensions ?? current.dimensions,
         constraints: oldConstraints ?? current.constraints,
         corners: oldCorners ?? current.corners,
@@ -298,21 +303,16 @@ class StudioCommandDelta {
     // Fallback for legacy history entries without explicit snapshots
     if (targetId != null) {
       if (actionType == 'add_punch') {
-        return current.copyWith(
-          punches: current.punches.where((p) => p.id != targetId).toList(),
-        );
+        return current.copyWith(punches: current.punches.where((p) => p.id != targetId).toList());
       }
       if (actionType == 'add_bend') {
-        return current.copyWith(
-          bends: current.bends.where((b) => b.id != targetId).toList(),
-        );
+        return current.copyWith(bends: current.bends.where((b) => b.id != targetId).toList());
       }
       if (actionType == 'add_pattern') {
-        return current.copyWith(
-          perforationPatterns: current.perforationPatterns
-              .where((p) => p.id != targetId)
-              .toList(),
-        );
+        return current.copyWith(perforationPatterns: current.perforationPatterns.where((p) => p.id != targetId).toList());
+      }
+      if (actionType == 'add_arc') {
+        return current.copyWith(arcs: current.arcs.where((a) => a.id != targetId).toList());
       }
     }
 
@@ -328,6 +328,7 @@ class StudioCommandDelta {
       perforationPatterns: newPatterns ?? current.perforationPatterns,
       outerContour: newOuterContour ?? current.outerContour,
       cutLines: newCutLines ?? current.cutLines,
+      arcs: newArcs ?? current.arcs,
       dimensions: newDimensions ?? current.dimensions,
       constraints: newConstraints ?? current.constraints,
       corners: newCorners ?? current.corners,
@@ -360,38 +361,26 @@ class StudioCommandDelta {
     'timestamp': timestamp.toIso8601String(),
     if (targetId != null) 'targetId': targetId,
     if (params.isNotEmpty) 'params': params,
-    if (oldPunches != null)
-      'oldPunches': oldPunches!.map((p) => p.toJson()).toList(),
-    if (newPunches != null)
-      'newPunches': newPunches!.map((p) => p.toJson()).toList(),
+    if (oldPunches != null) 'oldPunches': oldPunches!.map((p) => p.toJson()).toList(),
+    if (newPunches != null) 'newPunches': newPunches!.map((p) => p.toJson()).toList(),
     if (oldBends != null) 'oldBends': oldBends!.map((b) => b.toJson()).toList(),
     if (newBends != null) 'newBends': newBends!.map((b) => b.toJson()).toList(),
     if (oldFaces != null) 'oldFaces': oldFaces!.map((f) => f.toJson()).toList(),
     if (newFaces != null) 'newFaces': newFaces!.map((f) => f.toJson()).toList(),
-    if (oldPatterns != null)
-      'oldPatterns': oldPatterns!.map((p) => p.toJson()).toList(),
-    if (newPatterns != null)
-      'newPatterns': newPatterns!.map((p) => p.toJson()).toList(),
-    if (oldOuterContour != null)
-      'oldOuterContour': oldOuterContour!.map((p) => p.toJson()).toList(),
-    if (newOuterContour != null)
-      'newOuterContour': newOuterContour!.map((p) => p.toJson()).toList(),
-    if (oldCutLines != null)
-      'oldCutLines': oldCutLines!.map((c) => c.toJson()).toList(),
-    if (newCutLines != null)
-      'newCutLines': newCutLines!.map((c) => c.toJson()).toList(),
-    if (oldDimensions != null)
-      'oldDimensions': oldDimensions!.map((d) => d.toJson()).toList(),
-    if (newDimensions != null)
-      'newDimensions': newDimensions!.map((d) => d.toJson()).toList(),
-    if (oldConstraints != null)
-      'oldConstraints': oldConstraints!.map((c) => c.toJson()).toList(),
-    if (newConstraints != null)
-      'newConstraints': newConstraints!.map((c) => c.toJson()).toList(),
-    if (oldCorners != null)
-      'oldCorners': oldCorners!.map((c) => c.toJson()).toList(),
-    if (newCorners != null)
-      'newCorners': newCorners!.map((c) => c.toJson()).toList(),
+    if (oldPatterns != null) 'oldPatterns': oldPatterns!.map((p) => p.toJson()).toList(),
+    if (newPatterns != null) 'newPatterns': newPatterns!.map((p) => p.toJson()).toList(),
+    if (oldOuterContour != null) 'oldOuterContour': oldOuterContour!.map((p) => p.toJson()).toList(),
+    if (newOuterContour != null) 'newOuterContour': newOuterContour!.map((p) => p.toJson()).toList(),
+    if (oldCutLines != null) 'oldCutLines': oldCutLines!.map((c) => c.toJson()).toList(),
+    if (newCutLines != null) 'newCutLines': newCutLines!.map((c) => c.toJson()).toList(),
+    if (oldArcs != null) 'oldArcs': oldArcs!.map((a) => a.toJson()).toList(),
+    if (newArcs != null) 'newArcs': newArcs!.map((a) => a.toJson()).toList(),
+    if (oldDimensions != null) 'oldDimensions': oldDimensions!.map((d) => d.toJson()).toList(),
+    if (newDimensions != null) 'newDimensions': newDimensions!.map((d) => d.toJson()).toList(),
+    if (oldConstraints != null) 'oldConstraints': oldConstraints!.map((c) => c.toJson()).toList(),
+    if (newConstraints != null) 'newConstraints': newConstraints!.map((c) => c.toJson()).toList(),
+    if (oldCorners != null) 'oldCorners': oldCorners!.map((c) => c.toJson()).toList(),
+    if (newCorners != null) 'newCorners': newCorners!.map((c) => c.toJson()).toList(),
     if (oldEdgeChamfers != null) 'oldEdgeChamfers': oldEdgeChamfers,
     if (newEdgeChamfers != null) 'newEdgeChamfers': newEdgeChamfers,
     if (oldParameters != null) 'oldParameters': oldParameters,
@@ -412,82 +401,34 @@ class StudioCommandDelta {
       description: json['description'] as String? ?? 'Command',
       actionType: json['actionType'] as String? ?? 'modify',
       targetId: json['targetId'] as String?,
-      timestamp: json['timestamp'] != null
-          ? DateTime.tryParse(json['timestamp'] as String) ?? DateTime.now()
-          : DateTime.now(),
+      timestamp: json['timestamp'] != null ? DateTime.tryParse(json['timestamp'] as String) ?? DateTime.now() : DateTime.now(),
       params: (json['params'] as Map<String, dynamic>?) ?? const {},
-      oldPunches: (json['oldPunches'] as List?)
-          ?.map((e) => CncPunchPrimitive.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      newPunches: (json['newPunches'] as List?)
-          ?.map((e) => CncPunchPrimitive.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      oldBends: (json['oldBends'] as List?)
-          ?.map((e) => FoldBendLine.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      newBends: (json['newBends'] as List?)
-          ?.map((e) => FoldBendLine.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      oldFaces: (json['oldFaces'] as List?)
-          ?.map((e) => PlanarSheetFace.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      newFaces: (json['newFaces'] as List?)
-          ?.map((e) => PlanarSheetFace.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      oldPatterns: (json['oldPatterns'] as List?)
-          ?.map((e) => PerforationPattern.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      newPatterns: (json['newPatterns'] as List?)
-          ?.map((e) => PerforationPattern.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      oldOuterContour: (json['oldOuterContour'] as List?)
-          ?.map((e) => CadPoint2D.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      newOuterContour: (json['newOuterContour'] as List?)
-          ?.map((e) => CadPoint2D.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      oldCutLines: (json['oldCutLines'] as List?)
-          ?.map((e) => CadLineSegment.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      newCutLines: (json['newCutLines'] as List?)
-          ?.map((e) => CadLineSegment.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      oldDimensions: (json['oldDimensions'] as List?)
-          ?.map((e) => CadDimension.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      newDimensions: (json['newDimensions'] as List?)
-          ?.map((e) => CadDimension.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      oldConstraints: (json['oldConstraints'] as List?)
-          ?.map((e) => CadConstraint.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      newConstraints: (json['newConstraints'] as List?)
-          ?.map((e) => CadConstraint.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      oldCorners: (json['oldCorners'] as List?)
-          ?.map((e) => CornerTreatment.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      newCorners: (json['newCorners'] as List?)
-          ?.map((e) => CornerTreatment.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      oldEdgeChamfers: (json['oldEdgeChamfers'] as Map<String, dynamic>?)
-          ?.map((k, v) => MapEntry(k, (v as num).toDouble())),
-      newEdgeChamfers: (json['newEdgeChamfers'] as Map<String, dynamic>?)
-          ?.map((k, v) => MapEntry(k, (v as num).toDouble())),
-      oldParameters: (json['oldParameters'] as Map<String, dynamic>?)
-          ?.map((k, v) => MapEntry(k, (v as num).toDouble())),
-      newParameters: (json['newParameters'] as Map<String, dynamic>?)
-          ?.map((k, v) => MapEntry(k, (v as num).toDouble())),
-      oldMaterial: json['oldMaterial'] != null
-          ? SheetMetalMaterial.fromJson(
-              json['oldMaterial'] as Map<String, dynamic>,
-            )
-          : null,
-      newMaterial: json['newMaterial'] != null
-          ? SheetMetalMaterial.fromJson(
-              json['newMaterial'] as Map<String, dynamic>,
-            )
-          : null,
+      oldPunches: (json['oldPunches'] as List?)?.map((e) => CncPunchPrimitive.fromJson(e as Map<String, dynamic>)).toList(),
+      newPunches: (json['newPunches'] as List?)?.map((e) => CncPunchPrimitive.fromJson(e as Map<String, dynamic>)).toList(),
+      oldBends: (json['oldBends'] as List?)?.map((e) => FoldBendLine.fromJson(e as Map<String, dynamic>)).toList(),
+      newBends: (json['newBends'] as List?)?.map((e) => FoldBendLine.fromJson(e as Map<String, dynamic>)).toList(),
+      oldFaces: (json['oldFaces'] as List?)?.map((e) => PlanarSheetFace.fromJson(e as Map<String, dynamic>)).toList(),
+      newFaces: (json['newFaces'] as List?)?.map((e) => PlanarSheetFace.fromJson(e as Map<String, dynamic>)).toList(),
+      oldPatterns: (json['oldPatterns'] as List?)?.map((e) => PerforationPattern.fromJson(e as Map<String, dynamic>)).toList(),
+      newPatterns: (json['newPatterns'] as List?)?.map((e) => PerforationPattern.fromJson(e as Map<String, dynamic>)).toList(),
+      oldOuterContour: (json['oldOuterContour'] as List?)?.map((e) => CadPoint2D.fromJson(e as Map<String, dynamic>)).toList(),
+      newOuterContour: (json['newOuterContour'] as List?)?.map((e) => CadPoint2D.fromJson(e as Map<String, dynamic>)).toList(),
+      oldCutLines: (json['oldCutLines'] as List?)?.map((e) => CadLineSegment.fromJson(e as Map<String, dynamic>)).toList(),
+      newCutLines: (json['newCutLines'] as List?)?.map((e) => CadLineSegment.fromJson(e as Map<String, dynamic>)).toList(),
+      oldArcs: (json['oldArcs'] as List?)?.map((e) => CadArc2D.fromJson(e as Map<String, dynamic>)).toList(),
+      newArcs: (json['newArcs'] as List?)?.map((e) => CadArc2D.fromJson(e as Map<String, dynamic>)).toList(),
+      oldDimensions: (json['oldDimensions'] as List?)?.map((e) => CadDimension.fromJson(e as Map<String, dynamic>)).toList(),
+      newDimensions: (json['newDimensions'] as List?)?.map((e) => CadDimension.fromJson(e as Map<String, dynamic>)).toList(),
+      oldConstraints: (json['oldConstraints'] as List?)?.map((e) => CadConstraint.fromJson(e as Map<String, dynamic>)).toList(),
+      newConstraints: (json['newConstraints'] as List?)?.map((e) => CadConstraint.fromJson(e as Map<String, dynamic>)).toList(),
+      oldCorners: (json['oldCorners'] as List?)?.map((e) => CornerTreatment.fromJson(e as Map<String, dynamic>)).toList(),
+      newCorners: (json['newCorners'] as List?)?.map((e) => CornerTreatment.fromJson(e as Map<String, dynamic>)).toList(),
+      oldEdgeChamfers: (json['oldEdgeChamfers'] as Map<String, dynamic>?)?.map((k, v) => MapEntry(k, (v as num).toDouble())),
+      newEdgeChamfers: (json['newEdgeChamfers'] as Map<String, dynamic>?)?.map((k, v) => MapEntry(k, (v as num).toDouble())),
+      oldParameters: (json['oldParameters'] as Map<String, dynamic>?)?.map((k, v) => MapEntry(k, (v as num).toDouble())),
+      newParameters: (json['newParameters'] as Map<String, dynamic>?)?.map((k, v) => MapEntry(k, (v as num).toDouble())),
+      oldMaterial: json['oldMaterial'] != null ? SheetMetalMaterial.fromJson(json['oldMaterial'] as Map<String, dynamic>) : null,
+      newMaterial: json['newMaterial'] != null ? SheetMetalMaterial.fromJson(json['newMaterial'] as Map<String, dynamic>) : null,
       oldBaseFaceId: json['oldBaseFaceId'] as String?,
       newBaseFaceId: json['newBaseFaceId'] as String?,
       oldItemName: json['oldItemName'] as String?,
@@ -498,23 +439,13 @@ class StudioCommandDelta {
   }
 
   /// Reconstructs a StudioCommandDelta from a legacy featureHistory audit log entry
-  factory StudioCommandDelta.fromLegacyHistoryEntry(
-    Map<String, dynamic> entry,
-  ) {
+  factory StudioCommandDelta.fromLegacyHistoryEntry(Map<String, dynamic> entry) {
     final action = entry['action'] as String? ?? 'modify';
     final desc = entry['description'] as String? ?? 'Historical Action';
     final targetId = entry['targetId'] as String?;
-    final timestamp = entry['timestamp'] != null
-        ? DateTime.tryParse(entry['timestamp'] as String)
-        : null;
+    final timestamp = entry['timestamp'] != null ? DateTime.tryParse(entry['timestamp'] as String) : null;
     final params = (entry['params'] as Map<String, dynamic>?) ?? const {};
 
-    return StudioCommandDelta(
-      description: desc,
-      actionType: action,
-      targetId: targetId,
-      timestamp: timestamp,
-      params: params,
-    );
+    return StudioCommandDelta(description: desc, actionType: action, targetId: targetId, timestamp: timestamp, params: params);
   }
 }

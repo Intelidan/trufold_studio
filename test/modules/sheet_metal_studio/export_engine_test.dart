@@ -112,7 +112,7 @@ void main() {
       expect(dxf.contains('LINE'), isTrue);
       expect(dxf.contains('CIRCLE'), isTrue); // Punch H1
       expect(dxf.contains('UP 90.0°'), isTrue); // Bend annotation text
-      expect(dxf.contains('DANISH FORMMATRIX STUDIO'), isTrue);
+      expect(dxf.contains('truFold Studio by Danish'), isTrue);
       expect(dxf.trim().endsWith('EOF'), isTrue);
     });
 

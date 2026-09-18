@@ -1,8 +1,8 @@
 // =============================================================================
-// fusion_bottom_bar.dart
+// studio_bottom_bar.dart
 //
-// Autodesk Fusion 360 Navigation Toolbar & TEXT COMMANDS Prompt for TruFold Studio.
-// Matches Fusion 360's bottom layout:
+// Interactive Navigation Toolbar & TEXT COMMANDS Prompt for truFold Studio.
+// Layout:
 // - Floating navigation toolstrip (Pan, Zoom, Fit, Display, Grid)
 // - Collapsible TEXT COMMANDS prompt reporting under-constrained geometry
 // =============================================================================
@@ -10,16 +10,16 @@
 import 'package:flutter/material.dart';
 import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 
-class FusionBottomBar extends StatefulWidget {
+class StudioBottomBar extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
 
-  const FusionBottomBar({super.key, required this.viewModel});
+  const StudioBottomBar({super.key, required this.viewModel});
 
   @override
-  State<FusionBottomBar> createState() => _FusionBottomBarState();
+  State<StudioBottomBar> createState() => _StudioBottomBarState();
 }
 
-class _FusionBottomBarState extends State<FusionBottomBar> {
+class _StudioBottomBarState extends State<StudioBottomBar> {
   bool _isConsoleExpanded = false;
   final TextEditingController _textCmdCtrl = TextEditingController();
 
@@ -55,9 +55,12 @@ class _FusionBottomBarState extends State<FusionBottomBar> {
                 ),
               ],
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 _buildNavTool(
                   icon: Icons.pan_tool_outlined,
                   tooltip: 'Pan (Middle Mouse / Space)',
@@ -87,6 +90,146 @@ class _FusionBottomBarState extends State<FusionBottomBar> {
                   onTap: () {},
                 ),
                 Container(width: 1, height: 16, color: const Color(0xFFCBD5E1), margin: const EdgeInsets.symmetric(horizontal: 4)),
+                PopupMenuButton<String>(
+                  tooltip: 'Curve & Mesh Quality (2D: ${vm.curveResolution2D} seg, 3D: ${vm.curveResolution3D} seg)',
+                  onSelected: (val) {
+                    if (val.startsWith('2d_')) {
+                      vm.setCurveResolution2D(int.parse(val.substring(3)));
+                    } else if (val.startsWith('3d_')) {
+                      vm.setCurveResolution3D(int.parse(val.substring(3)));
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem<String>(
+                      enabled: false,
+                      height: 24,
+                      child: Text('2D CURVE RESOLUTION (CANVAS / DXF)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                    ),
+                    PopupMenuItem(
+                      value: '2d_16',
+                      child: Row(
+                        children: [
+                          const Text('Draft (16 seg)', style: TextStyle(fontSize: 11)),
+                          const Spacer(),
+                          if (vm.curveResolution2D == 16) const Icon(Icons.check, size: 14, color: Color(0xFF0284C7)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: '2d_32',
+                      child: Row(
+                        children: [
+                          const Text('Standard (32 seg)', style: TextStyle(fontSize: 11)),
+                          const Spacer(),
+                          if (vm.curveResolution2D == 32) const Icon(Icons.check, size: 14, color: Color(0xFF0284C7)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: '2d_64',
+                      child: Row(
+                        children: [
+                          const Text('Smooth CAD (64 seg)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          const Spacer(),
+                          if (vm.curveResolution2D == 64) const Icon(Icons.check, size: 14, color: Color(0xFF0284C7)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: '2d_128',
+                      child: Row(
+                        children: [
+                          const Text('Ultra 4K (128 seg)', style: TextStyle(fontSize: 11)),
+                          const Spacer(),
+                          if (vm.curveResolution2D == 128) const Icon(Icons.check, size: 14, color: Color(0xFF0284C7)),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem<String>(
+                      enabled: false,
+                      height: 24,
+                      child: Text('3D MODEL MESH QUALITY (FOLDING / FILLETS)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                    ),
+                    PopupMenuItem(
+                      value: '3d_16',
+                      child: Row(
+                        children: [
+                          const Text('Fast / Performance (16 seg)', style: TextStyle(fontSize: 11)),
+                          const Spacer(),
+                          if (vm.curveResolution3D == 16) const Icon(Icons.check, size: 14, color: Color(0xFF0284C7)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: '3d_32',
+                      child: Row(
+                        children: [
+                          const Text('Balanced / Default (32 seg)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          const Spacer(),
+                          if (vm.curveResolution3D == 32) const Icon(Icons.check, size: 14, color: Color(0xFF0284C7)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: '3d_64',
+                      child: Row(
+                        children: [
+                          const Text('High Fidelity (64 seg)', style: TextStyle(fontSize: 11)),
+                          const Spacer(),
+                          if (vm.curveResolution3D == 64) const Icon(Icons.check, size: 14, color: Color(0xFF0284C7)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.blur_linear, size: 12, color: Color(0xFF0284C7)),
+                        const SizedBox(width: 4),
+                        Text(
+                          '2D: ${vm.curveResolution2D} | 3D: ${vm.curveResolution3D}',
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(width: 1, height: 16, color: const Color(0xFFCBD5E1), margin: const EdgeInsets.symmetric(horizontal: 4)),
+                Tooltip(
+                  message: 'Drawing Mode: Click & Drag (Release to Commit) or Click-Move-Click',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFBFDBFE), width: 0.8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.gesture, size: 11, color: Color(0xFF2563EB)),
+                        SizedBox(width: 3),
+                        Text(
+                          'Click & Drag',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1D4ED8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(width: 1, height: 16, color: const Color(0xFFCBD5E1), margin: const EdgeInsets.symmetric(horizontal: 4)),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: Text(
@@ -105,8 +248,9 @@ class _FusionBottomBarState extends State<FusionBottomBar> {
             ),
           ),
         ),
+      ),
 
-        // 2. Fusion 360 TEXT COMMANDS Console Bar
+        // 2. TEXT COMMANDS Console Bar
         Container(
           decoration: const BoxDecoration(
             color: Color(0xFFE2E8F0),

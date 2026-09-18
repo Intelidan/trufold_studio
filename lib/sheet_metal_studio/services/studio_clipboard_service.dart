@@ -1,7 +1,7 @@
 // =============================================================================
 // studio_clipboard_service.dart
 //
-// Inter-File & Multi-Tab Clipboard Service for Danish FormMatrix Studio.
+// Inter-File & Multi-Tab Clipboard Service for truFold Studio by Danish.
 // Allows copying and pasting CAD features between open files:
 // - CNC Punches (Round, Obround, Rectangle)
 // - Perforation Array Patterns

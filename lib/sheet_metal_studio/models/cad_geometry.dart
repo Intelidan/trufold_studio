@@ -7,6 +7,7 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import 'cad_primitives.dart';
 
 /// 2D Axis-Aligned Bounding Box in mm
@@ -16,26 +17,15 @@ class CadBoundingBox2D {
   final double maxX;
   final double maxY;
 
-  const CadBoundingBox2D({
-    required this.minX,
-    required this.minY,
-    required this.maxX,
-    required this.maxY,
-  });
+  const CadBoundingBox2D({required this.minX, required this.minY, required this.maxX, required this.maxY});
 
   double get width => maxX - minX;
   double get height => maxY - minY;
-  CadPoint2D get center =>
-      CadPoint2D((minX + maxX) / 2.0, (minY + maxY) / 2.0);
+  CadPoint2D get center => CadPoint2D((minX + maxX) / 2.0, (minY + maxY) / 2.0);
 
-  bool contains(CadPoint2D p) =>
-      p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
+  bool contains(CadPoint2D p) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
 
-  bool intersects(CadBoundingBox2D other) =>
-      !(other.minX > maxX ||
-          other.maxX < minX ||
-          other.minY > maxY ||
-          other.maxY < minY);
+  bool intersects(CadBoundingBox2D other) => !(other.minX > maxX || other.maxX < minX || other.minY > maxY || other.maxY < minY);
 
   CadBoundingBox2D expand(CadBoundingBox2D other) {
     return CadBoundingBox2D(
@@ -66,20 +56,15 @@ class CadBoundingBox2D {
 
 /// Helper math routines for 2D geometry transformations
 class CadTransformMath {
-  static CadPoint2D rotatePoint(
-      CadPoint2D pt, CadPoint2D origin, double angleRad) {
+  static CadPoint2D rotatePoint(CadPoint2D pt, CadPoint2D origin, double angleRad) {
     final cosA = math.cos(angleRad);
     final sinA = math.sin(angleRad);
     final dx = pt.x - origin.x;
     final dy = pt.y - origin.y;
-    return CadPoint2D(
-      origin.x + dx * cosA - dy * sinA,
-      origin.y + dx * sinA + dy * cosA,
-    );
+    return CadPoint2D(origin.x + dx * cosA - dy * sinA, origin.y + dx * sinA + dy * cosA);
   }
 
-  static CadPoint2D mirrorPoint(
-      CadPoint2D pt, CadPoint2D axisP1, CadPoint2D axisP2) {
+  static CadPoint2D mirrorPoint(CadPoint2D pt, CadPoint2D axisP1, CadPoint2D axisP2) {
     final dx = axisP2.x - axisP1.x;
     final dy = axisP2.y - axisP1.y;
     final lenSq = dx * dx + dy * dy;
@@ -100,12 +85,8 @@ class CadTransformMath {
     return CadPoint2D(2.0 * projX - pt.x, 2.0 * projY - pt.y);
   }
 
-  static CadPoint2D scalePoint(
-      CadPoint2D pt, CadPoint2D origin, double factorX, double factorY) {
-    return CadPoint2D(
-      origin.x + (pt.x - origin.x) * factorX,
-      origin.y + (pt.y - origin.y) * factorY,
-    );
+  static CadPoint2D scalePoint(CadPoint2D pt, CadPoint2D origin, double factorX, double factorY) {
+    return CadPoint2D(origin.x + (pt.x - origin.x) * factorX, origin.y + (pt.y - origin.y) * factorY);
   }
 }
 
@@ -116,12 +97,7 @@ abstract class CadGeometry {
   final bool isVisible;
   final bool isConstruction;
 
-  const CadGeometry({
-    required this.id,
-    this.layer = '0',
-    this.isVisible = true,
-    this.isConstruction = false,
-  });
+  const CadGeometry({required this.id, this.layer = '0', this.isVisible = true, this.isConstruction = false});
 
   CadGeometry translate(double dx, double dy);
   CadGeometry rotate(CadPoint2D origin, double angleRad);
@@ -160,51 +136,24 @@ abstract class CadGeometry {
 class CadPointEntity2D extends CadGeometry {
   final CadPoint2D point;
 
-  const CadPointEntity2D({
-    required super.id,
-    required this.point,
-    super.layer,
-    super.isVisible,
-    super.isConstruction,
-  });
+  const CadPointEntity2D({required super.id, required this.point, super.layer, super.isVisible, super.isConstruction});
 
   @override
-  CadPointEntity2D translate(double dx, double dy) => copyWith(
-        point: CadPoint2D(point.x + dx, point.y + dy),
-      );
+  CadPointEntity2D translate(double dx, double dy) => copyWith(point: CadPoint2D(point.x + dx, point.y + dy));
 
   @override
-  CadPointEntity2D rotate(CadPoint2D origin, double angleRad) => copyWith(
-        point: CadTransformMath.rotatePoint(point, origin, angleRad),
-      );
+  CadPointEntity2D rotate(CadPoint2D origin, double angleRad) => copyWith(point: CadTransformMath.rotatePoint(point, origin, angleRad));
 
   @override
-  CadPointEntity2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) => copyWith(
-        point: CadTransformMath.mirrorPoint(point, axisP1, axisP2),
-      );
+  CadPointEntity2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) => copyWith(point: CadTransformMath.mirrorPoint(point, axisP1, axisP2));
 
   @override
-  CadPointEntity2D scale(
-          CadPoint2D origin, double factorX, double factorY) =>
-      copyWith(
-        point: CadTransformMath.scalePoint(point, origin, factorX, factorY),
-      );
+  CadPointEntity2D scale(CadPoint2D origin, double factorX, double factorY) => copyWith(point: CadTransformMath.scalePoint(point, origin, factorX, factorY));
 
   @override
-  CadBoundingBox2D get boundingBox => CadBoundingBox2D(
-        minX: point.x,
-        minY: point.y,
-        maxX: point.x,
-        maxY: point.y,
-      );
+  CadBoundingBox2D get boundingBox => CadBoundingBox2D(minX: point.x, minY: point.y, maxX: point.x, maxY: point.y);
 
-  CadPointEntity2D copyWith({
-    String? id,
-    CadPoint2D? point,
-    String? layer,
-    bool? isVisible,
-    bool? isConstruction,
-  }) {
+  CadPointEntity2D copyWith({String? id, CadPoint2D? point, String? layer, bool? isVisible, bool? isConstruction}) {
     return CadPointEntity2D(
       id: id ?? this.id,
       point: point ?? this.point,
@@ -216,22 +165,21 @@ class CadPointEntity2D extends CadGeometry {
 
   @override
   Map<String, dynamic> toJson() => {
-        'type': 'point',
-        'id': id,
-        'layer': layer,
-        'isVisible': isVisible,
-        'isConstruction': isConstruction,
-        'point': point.toJson(),
-      };
+    'type': 'point',
+    'id': id,
+    'layer': layer,
+    'isVisible': isVisible,
+    'isConstruction': isConstruction,
+    'point': point.toJson(),
+  };
 
-  factory CadPointEntity2D.fromJson(Map<String, dynamic> json) =>
-      CadPointEntity2D(
-        id: json['id'] as String,
-        point: CadPoint2D.fromJson(json['point'] as Map<String, dynamic>),
-        layer: json['layer'] as String? ?? '0',
-        isVisible: json['isVisible'] as bool? ?? true,
-        isConstruction: json['isConstruction'] as bool? ?? false,
-      );
+  factory CadPointEntity2D.fromJson(Map<String, dynamic> json) => CadPointEntity2D(
+    id: json['id'] as String,
+    point: CadPoint2D.fromJson(json['point'] as Map<String, dynamic>),
+    layer: json['layer'] as String? ?? '0',
+    isVisible: json['isVisible'] as bool? ?? true,
+    isConstruction: json['isConstruction'] as bool? ?? false,
+  );
 }
 
 /// 2D Line Segment
@@ -239,50 +187,31 @@ class CadLine2D extends CadGeometry {
   final CadPoint2D p1;
   final CadPoint2D p2;
 
-  const CadLine2D({
-    required super.id,
-    required this.p1,
-    required this.p2,
-    super.layer,
-    super.isVisible,
-    super.isConstruction,
-  });
+  const CadLine2D({required super.id, required this.p1, required this.p2, super.layer, super.isVisible, super.isConstruction});
 
   double get length => p1.distanceTo(p2);
   double get angleRad => math.atan2(p2.y - p1.y, p2.x - p1.x);
   double get angleDeg => angleRad * 180.0 / math.pi;
 
-  CadPoint2D get midpoint =>
-      CadPoint2D((p1.x + p2.x) / 2.0, (p1.y + p2.y) / 2.0);
+  CadPoint2D get midpoint => CadPoint2D((p1.x + p2.x) / 2.0, (p1.y + p2.y) / 2.0);
 
   @override
-  CadLine2D translate(double dx, double dy) => copyWith(
-        p1: CadPoint2D(p1.x + dx, p1.y + dy),
-        p2: CadPoint2D(p2.x + dx, p2.y + dy),
-      );
+  CadLine2D translate(double dx, double dy) => copyWith(p1: CadPoint2D(p1.x + dx, p1.y + dy), p2: CadPoint2D(p2.x + dx, p2.y + dy));
 
   @override
-  CadLine2D rotate(CadPoint2D origin, double angleRad) => copyWith(
-        p1: CadTransformMath.rotatePoint(p1, origin, angleRad),
-        p2: CadTransformMath.rotatePoint(p2, origin, angleRad),
-      );
+  CadLine2D rotate(CadPoint2D origin, double angleRad) =>
+      copyWith(p1: CadTransformMath.rotatePoint(p1, origin, angleRad), p2: CadTransformMath.rotatePoint(p2, origin, angleRad));
 
   @override
-  CadLine2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) => copyWith(
-        p1: CadTransformMath.mirrorPoint(p1, axisP1, axisP2),
-        p2: CadTransformMath.mirrorPoint(p2, axisP1, axisP2),
-      );
+  CadLine2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) =>
+      copyWith(p1: CadTransformMath.mirrorPoint(p1, axisP1, axisP2), p2: CadTransformMath.mirrorPoint(p2, axisP1, axisP2));
 
   @override
   CadLine2D scale(CadPoint2D origin, double factorX, double factorY) =>
-      copyWith(
-        p1: CadTransformMath.scalePoint(p1, origin, factorX, factorY),
-        p2: CadTransformMath.scalePoint(p2, origin, factorX, factorY),
-      );
+      copyWith(p1: CadTransformMath.scalePoint(p1, origin, factorX, factorY), p2: CadTransformMath.scalePoint(p2, origin, factorX, factorY));
 
   @override
-  CadBoundingBox2D get boundingBox =>
-      CadBoundingBox2D.fromPoints([p1, p2]);
+  CadBoundingBox2D get boundingBox => CadBoundingBox2D.fromPoints([p1, p2]);
 
   /// Generates a parallel offset line at specified distance.
   CadLine2D offset(double distance, {bool sidePositive = true}) {
@@ -295,10 +224,7 @@ class CadLine2D extends CadGeometry {
     final ny = dx / len;
     final factor = sidePositive ? distance : -distance;
     final off = CadPoint2D(nx * factor, ny * factor);
-    return copyWith(
-      p1: p1 + off,
-      p2: p2 + off,
-    );
+    return copyWith(p1: p1 + off, p2: p2 + off);
   }
 
   /// Finds intersection point with another 2D line segment or infinite line
@@ -341,14 +267,7 @@ class CadLine2D extends CadGeometry {
     return pt.distanceTo(proj);
   }
 
-  CadLine2D copyWith({
-    String? id,
-    CadPoint2D? p1,
-    CadPoint2D? p2,
-    String? layer,
-    bool? isVisible,
-    bool? isConstruction,
-  }) {
+  CadLine2D copyWith({String? id, CadPoint2D? p1, CadPoint2D? p2, String? layer, bool? isVisible, bool? isConstruction}) {
     return CadLine2D(
       id: id ?? this.id,
       p1: p1 ?? this.p1,
@@ -361,23 +280,23 @@ class CadLine2D extends CadGeometry {
 
   @override
   Map<String, dynamic> toJson() => {
-        'type': 'line',
-        'id': id,
-        'layer': layer,
-        'isVisible': isVisible,
-        'isConstruction': isConstruction,
-        'p1': p1.toJson(),
-        'p2': p2.toJson(),
-      };
+    'type': 'line',
+    'id': id,
+    'layer': layer,
+    'isVisible': isVisible,
+    'isConstruction': isConstruction,
+    'p1': p1.toJson(),
+    'p2': p2.toJson(),
+  };
 
   factory CadLine2D.fromJson(Map<String, dynamic> json) => CadLine2D(
-        id: json['id'] as String,
-        p1: CadPoint2D.fromJson(json['p1'] as Map<String, dynamic>),
-        p2: CadPoint2D.fromJson(json['p2'] as Map<String, dynamic>),
-        layer: json['layer'] as String? ?? '0',
-        isVisible: json['isVisible'] as bool? ?? true,
-        isConstruction: json['isConstruction'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    p1: CadPoint2D.fromJson(json['p1'] as Map<String, dynamic>),
+    p2: CadPoint2D.fromJson(json['p2'] as Map<String, dynamic>),
+    layer: json['layer'] as String? ?? '0',
+    isVisible: json['isVisible'] as bool? ?? true,
+    isConstruction: json['isConstruction'] as bool? ?? false,
+  );
 }
 
 /// 2D Polyline (Sequence of vertices)
@@ -385,14 +304,7 @@ class CadPolyline2D extends CadGeometry {
   final List<CadPoint2D> vertices;
   final bool isClosed;
 
-  const CadPolyline2D({
-    required super.id,
-    required this.vertices,
-    this.isClosed = false,
-    super.layer,
-    super.isVisible,
-    super.isConstruction,
-  });
+  const CadPolyline2D({required super.id, required this.vertices, this.isClosed = false, super.layer, super.isVisible, super.isConstruction});
 
   double get totalLength {
     if (vertices.length < 2) return 0.0;
@@ -410,69 +322,33 @@ class CadPolyline2D extends CadGeometry {
     if (vertices.length < 2) return const [];
     final segs = <CadLine2D>[];
     for (int i = 0; i < vertices.length - 1; i++) {
-      segs.add(CadLine2D(
-        id: '${id}_seg_$i',
-        p1: vertices[i],
-        p2: vertices[i + 1],
-        layer: layer,
-        isVisible: isVisible,
-        isConstruction: isConstruction,
-      ));
+      segs.add(CadLine2D(id: '${id}_seg_$i', p1: vertices[i], p2: vertices[i + 1], layer: layer, isVisible: isVisible, isConstruction: isConstruction));
     }
     if (isClosed && vertices.length > 2) {
-      segs.add(CadLine2D(
-        id: '${id}_seg_close',
-        p1: vertices.last,
-        p2: vertices.first,
-        layer: layer,
-        isVisible: isVisible,
-        isConstruction: isConstruction,
-      ));
+      segs.add(CadLine2D(id: '${id}_seg_close', p1: vertices.last, p2: vertices.first, layer: layer, isVisible: isVisible, isConstruction: isConstruction));
     }
     return segs;
   }
 
   @override
-  CadPolyline2D translate(double dx, double dy) => copyWith(
-        vertices:
-            vertices.map((v) => CadPoint2D(v.x + dx, v.y + dy)).toList(),
-      );
+  CadPolyline2D translate(double dx, double dy) => copyWith(vertices: vertices.map((v) => CadPoint2D(v.x + dx, v.y + dy)).toList());
 
   @override
-  CadPolyline2D rotate(CadPoint2D origin, double angleRad) => copyWith(
-        vertices: vertices
-            .map((v) => CadTransformMath.rotatePoint(v, origin, angleRad))
-            .toList(),
-      );
+  CadPolyline2D rotate(CadPoint2D origin, double angleRad) =>
+      copyWith(vertices: vertices.map((v) => CadTransformMath.rotatePoint(v, origin, angleRad)).toList());
 
   @override
-  CadPolyline2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) => copyWith(
-        vertices: vertices
-            .map((v) => CadTransformMath.mirrorPoint(v, axisP1, axisP2))
-            .toList(),
-      );
+  CadPolyline2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) =>
+      copyWith(vertices: vertices.map((v) => CadTransformMath.mirrorPoint(v, axisP1, axisP2)).toList());
 
   @override
   CadPolyline2D scale(CadPoint2D origin, double factorX, double factorY) =>
-      copyWith(
-        vertices: vertices
-            .map((v) =>
-                CadTransformMath.scalePoint(v, origin, factorX, factorY))
-            .toList(),
-      );
+      copyWith(vertices: vertices.map((v) => CadTransformMath.scalePoint(v, origin, factorX, factorY)).toList());
 
   @override
-  CadBoundingBox2D get boundingBox =>
-      CadBoundingBox2D.fromPoints(vertices);
+  CadBoundingBox2D get boundingBox => CadBoundingBox2D.fromPoints(vertices);
 
-  CadPolyline2D copyWith({
-    String? id,
-    List<CadPoint2D>? vertices,
-    bool? isClosed,
-    String? layer,
-    bool? isVisible,
-    bool? isConstruction,
-  }) {
+  CadPolyline2D copyWith({String? id, List<CadPoint2D>? vertices, bool? isClosed, String? layer, bool? isVisible, bool? isConstruction}) {
     return CadPolyline2D(
       id: id ?? this.id,
       vertices: vertices ?? this.vertices,
@@ -485,25 +361,23 @@ class CadPolyline2D extends CadGeometry {
 
   @override
   Map<String, dynamic> toJson() => {
-        'type': 'polyline',
-        'id': id,
-        'layer': layer,
-        'isVisible': isVisible,
-        'isConstruction': isConstruction,
-        'vertices': vertices.map((v) => v.toJson()).toList(),
-        'isClosed': isClosed,
-      };
+    'type': 'polyline',
+    'id': id,
+    'layer': layer,
+    'isVisible': isVisible,
+    'isConstruction': isConstruction,
+    'vertices': vertices.map((v) => v.toJson()).toList(),
+    'isClosed': isClosed,
+  };
 
   factory CadPolyline2D.fromJson(Map<String, dynamic> json) => CadPolyline2D(
-        id: json['id'] as String,
-        vertices: (json['vertices'] as List<dynamic>)
-            .map((v) => CadPoint2D.fromJson(v as Map<String, dynamic>))
-            .toList(),
-        isClosed: json['isClosed'] as bool? ?? false,
-        layer: json['layer'] as String? ?? '0',
-        isVisible: json['isVisible'] as bool? ?? true,
-        isConstruction: json['isConstruction'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    vertices: (json['vertices'] as List<dynamic>).map((v) => CadPoint2D.fromJson(v as Map<String, dynamic>)).toList(),
+    isClosed: json['isClosed'] as bool? ?? false,
+    layer: json['layer'] as String? ?? '0',
+    isVisible: json['isVisible'] as bool? ?? true,
+    isConstruction: json['isConstruction'] as bool? ?? false,
+  );
 }
 
 /// 2D Circular Arc
@@ -512,34 +386,99 @@ class CadArc2D extends CadGeometry {
   final double radius;
   final double startAngleRad;
   final double sweepAngleRad;
+  final bool isBoundary;
 
-  const CadArc2D({
+  CadArc2D({
     required super.id,
     required this.center,
     required this.radius,
-    required this.startAngleRad,
-    required this.sweepAngleRad,
+    double? startAngleRad,
+    double? sweepAngleRad,
+    double? startAngleDeg,
+    double? endAngleDeg,
+    CadPoint2D? startPoint,
+    CadPoint2D? endPoint,
+    bool isClockwise = false,
+    this.isBoundary = true,
     super.layer,
     super.isVisible,
     super.isConstruction,
-  });
+  }) : startAngleRad = startAngleRad ?? ((startAngleDeg ?? 0.0) * math.pi / 180.0),
+       sweepAngleRad = sweepAngleRad ?? _calcSweepRad(startAngleDeg, endAngleDeg, isClockwise);
+
+  static double _calcSweepRad(double? startDeg, double? endDeg, bool isClockwise) {
+    if (startDeg == null || endDeg == null) return math.pi;
+    double sweepDeg;
+    if (isClockwise) {
+      sweepDeg = endDeg <= startDeg ? (endDeg - startDeg) : (endDeg - startDeg - 360.0);
+    } else {
+      sweepDeg = endDeg >= startDeg ? (endDeg - startDeg) : (endDeg - startDeg + 360.0);
+    }
+    return sweepDeg * math.pi / 180.0;
+  }
+
+  double get startAngleDeg => startAngleRad * 180.0 / math.pi;
+  double get sweepAngleDeg => sweepAngleRad * 180.0 / math.pi;
+  double get endAngleDeg => (startAngleRad + sweepAngleRad) * 180.0 / math.pi;
+  double get arcLength => length;
+  bool get isClockwise => sweepAngleRad < 0;
+
+  double distanceTo(CadPoint2D pt) {
+    final dCenter = center.distanceTo(pt);
+    final radialDist = (dCenter - radius).abs();
+    final ang = math.atan2(pt.y - center.y, pt.x - center.x);
+
+    double normalize(double a) {
+      double res = a % (2.0 * math.pi);
+      if (res < 0) res += 2.0 * math.pi;
+      return res;
+    }
+
+    final start = normalize(startAngleRad);
+    final end = normalize(startAngleRad + sweepAngleRad);
+    final pAng = normalize(ang);
+
+    bool isBetween;
+    if (sweepAngleRad >= 0) {
+      if (start <= end) {
+        isBetween = pAng >= start && pAng <= end;
+      } else {
+        isBetween = pAng >= start || pAng <= end;
+      }
+    } else {
+      if (end <= start) {
+        isBetween = pAng >= end && pAng <= start;
+      } else {
+        isBetween = pAng >= end || pAng <= start;
+      }
+    }
+
+    if (isBetween) {
+      return radialDist;
+    }
+    return math.min(startPoint.distanceTo(pt), endPoint.distanceTo(pt));
+  }
+
+  List<CadPoint2D> toPolygon({double maxStepDeg = 5.0}) {
+    final sweep = sweepAngleDeg;
+    final numSteps = math.max(2, (sweep.abs() / maxStepDeg).ceil());
+    final pts = <CadPoint2D>[];
+    for (int i = 0; i <= numSteps; i++) {
+      final angRad = (startAngleDeg + (sweep * i / numSteps)) * math.pi / 180.0;
+      pts.add(CadPoint2D(center.x + radius * math.cos(angRad), center.y + radius * math.sin(angRad)));
+    }
+    return pts;
+  }
 
   double get length => radius * sweepAngleRad.abs();
 
-  CadPoint2D get startPoint => CadPoint2D(
-        center.x + radius * math.cos(startAngleRad),
-        center.y + radius * math.sin(startAngleRad),
-      );
+  CadPoint2D get startPoint => CadPoint2D(center.x + radius * math.cos(startAngleRad), center.y + radius * math.sin(startAngleRad));
 
-  CadPoint2D get endPoint => CadPoint2D(
-        center.x + radius * math.cos(startAngleRad + sweepAngleRad),
-        center.y + radius * math.sin(startAngleRad + sweepAngleRad),
-      );
+  CadPoint2D get endPoint =>
+      CadPoint2D(center.x + radius * math.cos(startAngleRad + sweepAngleRad), center.y + radius * math.sin(startAngleRad + sweepAngleRad));
 
-  CadPoint2D get midpoint => CadPoint2D(
-        center.x + radius * math.cos(startAngleRad + sweepAngleRad / 2.0),
-        center.y + radius * math.sin(startAngleRad + sweepAngleRad / 2.0),
-      );
+  CadPoint2D get midpoint =>
+      CadPoint2D(center.x + radius * math.cos(startAngleRad + sweepAngleRad / 2.0), center.y + radius * math.sin(startAngleRad + sweepAngleRad / 2.0));
 
   /// Constructs an arc through 3 points (start p1, intermediate p2, end p3)
   factory CadArc2D.from3Points({
@@ -571,14 +510,8 @@ class CadArc2D extends CadGeometry {
       );
     }
 
-    final ux = ((x1 * x1 + y1 * y1) * (y2 - y3) +
-            (x2 * x2 + y2 * y2) * (y3 - y1) +
-            (x3 * x3 + y3 * y3) * (y1 - y2)) /
-        d;
-    final uy = ((x1 * x1 + y1 * y1) * (x3 - x2) +
-            (x2 * x2 + y2 * y2) * (x1 - x3) +
-            (x3 * x3 + y3 * y3) * (x2 - x1)) /
-        d;
+    final ux = ((x1 * x1 + y1 * y1) * (y2 - y3) + (x2 * x2 + y2 * y2) * (y3 - y1) + (x3 * x3 + y3 * y3) * (y1 - y2)) / d;
+    final uy = ((x1 * x1 + y1 * y1) * (x3 - x2) + (x2 * x2 + y2 * y2) * (x1 - x3) + (x3 * x3 + y3 * y3) * (x2 - x1)) / d;
     final center = CadPoint2D(ux, uy);
     final radius = center.distanceTo(p1);
 
@@ -617,61 +550,41 @@ class CadArc2D extends CadGeometry {
     for (int i = 0; i <= count; i++) {
       final t = i / count;
       final angle = startAngleRad + t * sweepAngleRad;
-      pts.add(CadPoint2D(
-        center.x + radius * math.cos(angle),
-        center.y + radius * math.sin(angle),
-      ));
+      pts.add(CadPoint2D(center.x + radius * math.cos(angle), center.y + radius * math.sin(angle)));
     }
     return pts;
   }
 
   @override
-  CadArc2D translate(double dx, double dy) => copyWith(
-        center: CadPoint2D(center.x + dx, center.y + dy),
-      );
+  CadArc2D translate(double dx, double dy) => copyWith(center: CadPoint2D(center.x + dx, center.y + dy));
 
   @override
-  CadArc2D rotate(CadPoint2D origin, double angleRad) => copyWith(
-        center: CadTransformMath.rotatePoint(center, origin, angleRad),
-        startAngleRad: startAngleRad + angleRad,
-      );
+  CadArc2D rotate(CadPoint2D origin, double angleRad) =>
+      copyWith(center: CadTransformMath.rotatePoint(center, origin, angleRad), startAngleRad: startAngleRad + angleRad);
 
   @override
   CadArc2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) {
-    final mirroredCenter =
-        CadTransformMath.mirrorPoint(center, axisP1, axisP2);
-    final mirroredStart =
-        CadTransformMath.mirrorPoint(startPoint, axisP1, axisP2);
-    final mirroredEnd =
-        CadTransformMath.mirrorPoint(endPoint, axisP1, axisP2);
-    final newStartAngle = math.atan2(
-        mirroredStart.y - mirroredCenter.y, mirroredStart.x - mirroredCenter.x);
-    final newEndAngle = math.atan2(
-        mirroredEnd.y - mirroredCenter.y, mirroredEnd.x - mirroredCenter.x);
+    final mirroredCenter = CadTransformMath.mirrorPoint(center, axisP1, axisP2);
+    final mirroredStart = CadTransformMath.mirrorPoint(startPoint, axisP1, axisP2);
+    final mirroredEnd = CadTransformMath.mirrorPoint(endPoint, axisP1, axisP2);
+    final newStartAngle = math.atan2(mirroredStart.y - mirroredCenter.y, mirroredStart.x - mirroredCenter.x);
+    final newEndAngle = math.atan2(mirroredEnd.y - mirroredCenter.y, mirroredEnd.x - mirroredCenter.x);
     var sweep = (newEndAngle - newStartAngle) % (2.0 * math.pi);
     // Mirroring flips chirality
     if (sweepAngleRad > 0) {
       sweep = sweep - 2.0 * math.pi;
     }
-    return copyWith(
-      center: mirroredCenter,
-      startAngleRad: newStartAngle,
-      sweepAngleRad: sweep == 0.0 ? -2.0 * math.pi : sweep,
-    );
+    return copyWith(center: mirroredCenter, startAngleRad: newStartAngle, sweepAngleRad: sweep == 0.0 ? -2.0 * math.pi : sweep);
   }
 
   @override
   CadArc2D scale(CadPoint2D origin, double factorX, double factorY) {
     final avgFactor = (factorX.abs() + factorY.abs()) / 2.0;
-    return copyWith(
-      center: CadTransformMath.scalePoint(center, origin, factorX, factorY),
-      radius: radius * avgFactor,
-    );
+    return copyWith(center: CadTransformMath.scalePoint(center, origin, factorX, factorY), radius: radius * avgFactor);
   }
 
   @override
-  CadBoundingBox2D get boundingBox =>
-      CadBoundingBox2D.fromPoints(samplePoints(16));
+  CadBoundingBox2D get boundingBox => CadBoundingBox2D.fromPoints(samplePoints(16));
 
   CadArc2D copyWith({
     String? id,
@@ -679,17 +592,37 @@ class CadArc2D extends CadGeometry {
     double? radius,
     double? startAngleRad,
     double? sweepAngleRad,
+    double? startAngleDeg,
+    double? endAngleDeg,
+    CadPoint2D? startPoint,
+    CadPoint2D? endPoint,
+    bool? isClockwise,
     String? layer,
+    bool? isBoundary,
     bool? isVisible,
     bool? isConstruction,
   }) {
+    final effectiveStartRad = startAngleRad ?? (startAngleDeg != null ? startAngleDeg * math.pi / 180.0 : this.startAngleRad);
+    double effectiveSweepRad;
+    if (sweepAngleRad != null) {
+      effectiveSweepRad = sweepAngleRad;
+    } else if (endAngleDeg != null || startAngleDeg != null || isClockwise != null) {
+      final sDeg = startAngleDeg ?? (startAngleRad != null ? startAngleRad * 180.0 / math.pi : this.startAngleDeg);
+      final eDeg = endAngleDeg ?? this.endAngleDeg;
+      final cw = isClockwise ?? this.isClockwise;
+      effectiveSweepRad = _calcSweepRad(sDeg, eDeg, cw);
+    } else {
+      effectiveSweepRad = this.sweepAngleRad;
+    }
+
     return CadArc2D(
       id: id ?? this.id,
       center: center ?? this.center,
       radius: radius ?? this.radius,
-      startAngleRad: startAngleRad ?? this.startAngleRad,
-      sweepAngleRad: sweepAngleRad ?? this.sweepAngleRad,
+      startAngleRad: effectiveStartRad,
+      sweepAngleRad: effectiveSweepRad,
       layer: layer ?? this.layer,
+      isBoundary: isBoundary ?? this.isBoundary,
       isVisible: isVisible ?? this.isVisible,
       isConstruction: isConstruction ?? this.isConstruction,
     );
@@ -697,27 +630,27 @@ class CadArc2D extends CadGeometry {
 
   @override
   Map<String, dynamic> toJson() => {
-        'type': 'arc',
-        'id': id,
-        'layer': layer,
-        'isVisible': isVisible,
-        'isConstruction': isConstruction,
-        'center': center.toJson(),
-        'radius': radius,
-        'startAngleRad': startAngleRad,
-        'sweepAngleRad': sweepAngleRad,
-      };
+    'type': 'arc',
+    'id': id,
+    'layer': layer,
+    'isVisible': isVisible,
+    'isConstruction': isConstruction,
+    'center': center.toJson(),
+    'radius': radius,
+    'startAngleRad': startAngleRad,
+    'sweepAngleRad': sweepAngleRad,
+  };
 
   factory CadArc2D.fromJson(Map<String, dynamic> json) => CadArc2D(
-        id: json['id'] as String,
-        center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
-        radius: (json['radius'] as num).toDouble(),
-        startAngleRad: (json['startAngleRad'] as num).toDouble(),
-        sweepAngleRad: (json['sweepAngleRad'] as num).toDouble(),
-        layer: json['layer'] as String? ?? '0',
-        isVisible: json['isVisible'] as bool? ?? true,
-        isConstruction: json['isConstruction'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
+    radius: (json['radius'] as num).toDouble(),
+    startAngleRad: (json['startAngleRad'] as num).toDouble(),
+    sweepAngleRad: (json['sweepAngleRad'] as num).toDouble(),
+    layer: json['layer'] as String? ?? '0',
+    isVisible: json['isVisible'] as bool? ?? true,
+    isConstruction: json['isConstruction'] as bool? ?? false,
+  );
 }
 
 /// 2D Circle
@@ -725,14 +658,7 @@ class CadCircle2D extends CadGeometry {
   final CadPoint2D center;
   final double radius;
 
-  const CadCircle2D({
-    required super.id,
-    required this.center,
-    required this.radius,
-    super.layer,
-    super.isVisible,
-    super.isConstruction,
-  });
+  const CadCircle2D({required super.id, required this.center, required this.radius, super.layer, super.isVisible, super.isConstruction});
 
   double get diameter => radius * 2.0;
   double get circumference => 2.0 * math.pi * radius;
@@ -747,14 +673,7 @@ class CadCircle2D extends CadGeometry {
     bool isConstruction = false,
   }) {
     final center = CadPoint2D((p1.x + p2.x) / 2.0, (p1.y + p2.y) / 2.0);
-    return CadCircle2D(
-      id: id,
-      center: center,
-      radius: p1.distanceTo(p2) / 2.0,
-      layer: layer,
-      isVisible: isVisible,
-      isConstruction: isConstruction,
-    );
+    return CadCircle2D(id: id, center: center, radius: p1.distanceTo(p2) / 2.0, layer: layer, isVisible: isVisible, isConstruction: isConstruction);
   }
 
   factory CadCircle2D.from3Points({
@@ -766,91 +685,44 @@ class CadCircle2D extends CadGeometry {
     bool isVisible = true,
     bool isConstruction = false,
   }) {
-    final d = 2.0 *
-        (p1.x * (p2.y - p3.y) +
-            p2.x * (p3.y - p1.y) +
-            p3.x * (p1.y - p2.y));
+    final d = 2.0 * (p1.x * (p2.y - p3.y) + p2.x * (p3.y - p1.y) + p3.x * (p1.y - p2.y));
     if (d.abs() < 1e-6) {
-      return CadCircle2D.from2Points(
-        id: id,
-        p1: p1,
-        p2: p3,
-        layer: layer,
-        isVisible: isVisible,
-        isConstruction: isConstruction,
-      );
+      return CadCircle2D.from2Points(id: id, p1: p1, p2: p3, layer: layer, isVisible: isVisible, isConstruction: isConstruction);
     }
-    final ux = ((p1.x * p1.x + p1.y * p1.y) * (p2.y - p3.y) +
-            (p2.x * p2.x + p2.y * p2.y) * (p3.y - p1.y) +
-            (p3.x * p3.x + p3.y * p3.y) * (p1.y - p2.y)) /
-        d;
-    final uy = ((p1.x * p1.x + p1.y * p1.y) * (p3.x - p2.x) +
-            (p2.x * p2.x + p2.y * p2.y) * (p1.x - p3.x) +
-            (p3.x * p3.x + p3.y * p3.y) * (p2.x - p1.x)) /
-        d;
+    final ux = ((p1.x * p1.x + p1.y * p1.y) * (p2.y - p3.y) + (p2.x * p2.x + p2.y * p2.y) * (p3.y - p1.y) + (p3.x * p3.x + p3.y * p3.y) * (p1.y - p2.y)) / d;
+    final uy = ((p1.x * p1.x + p1.y * p1.y) * (p3.x - p2.x) + (p2.x * p2.x + p2.y * p2.y) * (p1.x - p3.x) + (p3.x * p3.x + p3.y * p3.y) * (p2.x - p1.x)) / d;
     final center = CadPoint2D(ux, uy);
-    return CadCircle2D(
-      id: id,
-      center: center,
-      radius: center.distanceTo(p1),
-      layer: layer,
-      isVisible: isVisible,
-      isConstruction: isConstruction,
-    );
+    return CadCircle2D(id: id, center: center, radius: center.distanceTo(p1), layer: layer, isVisible: isVisible, isConstruction: isConstruction);
   }
 
   List<CadPoint2D> samplePoints([int count = 32]) {
     final pts = <CadPoint2D>[];
     for (int i = 0; i < count; i++) {
       final a = (i / count) * 2.0 * math.pi;
-      pts.add(CadPoint2D(
-        center.x + radius * math.cos(a),
-        center.y + radius * math.sin(a),
-      ));
+      pts.add(CadPoint2D(center.x + radius * math.cos(a), center.y + radius * math.sin(a)));
     }
     return pts;
   }
 
   @override
-  CadCircle2D translate(double dx, double dy) => copyWith(
-        center: CadPoint2D(center.x + dx, center.y + dy),
-      );
+  CadCircle2D translate(double dx, double dy) => copyWith(center: CadPoint2D(center.x + dx, center.y + dy));
 
   @override
-  CadCircle2D rotate(CadPoint2D origin, double angleRad) => copyWith(
-        center: CadTransformMath.rotatePoint(center, origin, angleRad),
-      );
+  CadCircle2D rotate(CadPoint2D origin, double angleRad) => copyWith(center: CadTransformMath.rotatePoint(center, origin, angleRad));
 
   @override
-  CadCircle2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) => copyWith(
-        center: CadTransformMath.mirrorPoint(center, axisP1, axisP2),
-      );
+  CadCircle2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) => copyWith(center: CadTransformMath.mirrorPoint(center, axisP1, axisP2));
 
   @override
   CadCircle2D scale(CadPoint2D origin, double factorX, double factorY) {
     final avgFactor = (factorX.abs() + factorY.abs()) / 2.0;
-    return copyWith(
-      center: CadTransformMath.scalePoint(center, origin, factorX, factorY),
-      radius: radius * avgFactor,
-    );
+    return copyWith(center: CadTransformMath.scalePoint(center, origin, factorX, factorY), radius: radius * avgFactor);
   }
 
   @override
-  CadBoundingBox2D get boundingBox => CadBoundingBox2D(
-        minX: center.x - radius,
-        minY: center.y - radius,
-        maxX: center.x + radius,
-        maxY: center.y + radius,
-      );
+  CadBoundingBox2D get boundingBox => CadBoundingBox2D(minX: center.x - radius, minY: center.y - radius, maxX: center.x + radius, maxY: center.y + radius);
 
-  CadCircle2D copyWith({
-    String? id,
-    CadPoint2D? center,
-    double? radius,
-    String? layer,
-    bool? isVisible,
-    bool? isConstruction,
-  }) {
+  CadCircle2D copyWith({String? id, CadPoint2D? center, double? radius, String? layer, bool? isVisible, bool? isConstruction}) {
     return CadCircle2D(
       id: id ?? this.id,
       center: center ?? this.center,
@@ -863,23 +735,23 @@ class CadCircle2D extends CadGeometry {
 
   @override
   Map<String, dynamic> toJson() => {
-        'type': 'circle',
-        'id': id,
-        'layer': layer,
-        'isVisible': isVisible,
-        'isConstruction': isConstruction,
-        'center': center.toJson(),
-        'radius': radius,
-      };
+    'type': 'circle',
+    'id': id,
+    'layer': layer,
+    'isVisible': isVisible,
+    'isConstruction': isConstruction,
+    'center': center.toJson(),
+    'radius': radius,
+  };
 
   factory CadCircle2D.fromJson(Map<String, dynamic> json) => CadCircle2D(
-        id: json['id'] as String,
-        center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
-        radius: (json['radius'] as num).toDouble(),
-        layer: json['layer'] as String? ?? '0',
-        isVisible: json['isVisible'] as bool? ?? true,
-        isConstruction: json['isConstruction'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
+    radius: (json['radius'] as num).toDouble(),
+    layer: json['layer'] as String? ?? '0',
+    isVisible: json['isVisible'] as bool? ?? true,
+    isConstruction: json['isConstruction'] as bool? ?? false,
+  );
 }
 
 /// 2D Ellipse
@@ -920,18 +792,13 @@ class CadEllipse2D extends CadGeometry {
       final a = (i / count) * 2.0 * math.pi;
       final ex = radiusX * math.cos(a);
       final ey = radiusY * math.sin(a);
-      pts.add(CadPoint2D(
-        center.x + ex * cosR - ey * sinR,
-        center.y + ex * sinR + ey * cosR,
-      ));
+      pts.add(CadPoint2D(center.x + ex * cosR - ey * sinR, center.y + ex * sinR + ey * cosR));
     }
     return pts;
   }
 
   @override
-  CadEllipse2D translate(double dx, double dy) => copyWith(
-        center: CadPoint2D(center.x + dx, center.y + dy),
-      );
+  CadEllipse2D translate(double dx, double dy) => copyWith(center: CadPoint2D(center.x + dx, center.y + dy));
 
   @override
   CadEllipse2D rotate(CadPoint2D origin, double angleRad) {
@@ -942,26 +809,19 @@ class CadEllipse2D extends CadGeometry {
 
   @override
   CadEllipse2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) {
-    final newCenter =
-        CadTransformMath.mirrorPoint(center, axisP1, axisP2);
-    final axisAngleDeg =
-        math.atan2(axisP2.y - axisP1.y, axisP2.x - axisP1.x) * 180.0 / math.pi;
+    final newCenter = CadTransformMath.mirrorPoint(center, axisP1, axisP2);
+    final axisAngleDeg = math.atan2(axisP2.y - axisP1.y, axisP2.x - axisP1.x) * 180.0 / math.pi;
     final newRot = (2.0 * axisAngleDeg - rotationDeg) % 360.0;
     return copyWith(center: newCenter, rotationDeg: newRot);
   }
 
   @override
   CadEllipse2D scale(CadPoint2D origin, double factorX, double factorY) {
-    return copyWith(
-      center: CadTransformMath.scalePoint(center, origin, factorX, factorY),
-      radiusX: radiusX * factorX.abs(),
-      radiusY: radiusY * factorY.abs(),
-    );
+    return copyWith(center: CadTransformMath.scalePoint(center, origin, factorX, factorY), radiusX: radiusX * factorX.abs(), radiusY: radiusY * factorY.abs());
   }
 
   @override
-  CadBoundingBox2D get boundingBox =>
-      CadBoundingBox2D.fromPoints(samplePoints(32));
+  CadBoundingBox2D get boundingBox => CadBoundingBox2D.fromPoints(samplePoints(32));
 
   CadEllipse2D copyWith({
     String? id,
@@ -987,27 +847,27 @@ class CadEllipse2D extends CadGeometry {
 
   @override
   Map<String, dynamic> toJson() => {
-        'type': 'ellipse',
-        'id': id,
-        'layer': layer,
-        'isVisible': isVisible,
-        'isConstruction': isConstruction,
-        'center': center.toJson(),
-        'radiusX': radiusX,
-        'radiusY': radiusY,
-        'rotationDeg': rotationDeg,
-      };
+    'type': 'ellipse',
+    'id': id,
+    'layer': layer,
+    'isVisible': isVisible,
+    'isConstruction': isConstruction,
+    'center': center.toJson(),
+    'radiusX': radiusX,
+    'radiusY': radiusY,
+    'rotationDeg': rotationDeg,
+  };
 
   factory CadEllipse2D.fromJson(Map<String, dynamic> json) => CadEllipse2D(
-        id: json['id'] as String,
-        center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
-        radiusX: (json['radiusX'] as num).toDouble(),
-        radiusY: (json['radiusY'] as num).toDouble(),
-        rotationDeg: (json['rotationDeg'] as num?)?.toDouble() ?? 0.0,
-        layer: json['layer'] as String? ?? '0',
-        isVisible: json['isVisible'] as bool? ?? true,
-        isConstruction: json['isConstruction'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
+    radiusX: (json['radiusX'] as num).toDouble(),
+    radiusY: (json['radiusY'] as num).toDouble(),
+    rotationDeg: (json['rotationDeg'] as num?)?.toDouble() ?? 0.0,
+    layer: json['layer'] as String? ?? '0',
+    isVisible: json['isVisible'] as bool? ?? true,
+    isConstruction: json['isConstruction'] as bool? ?? false,
+  );
 }
 
 /// 2D Semantic Rectangle
@@ -1039,10 +899,7 @@ class CadRectangle2D extends CadGeometry {
     bool isVisible = true,
     bool isConstruction = false,
   }) {
-    final center = CadPoint2D(
-      (corner1.x + corner2.x) / 2.0,
-      (corner1.y + corner2.y) / 2.0,
-    );
+    final center = CadPoint2D((corner1.x + corner2.x) / 2.0, (corner1.y + corner2.y) / 2.0);
     return CadRectangle2D(
       id: id,
       center: center,
@@ -1067,24 +924,14 @@ class CadRectangle2D extends CadGeometry {
     ];
     if (rotationDeg == 0.0) return unrotated;
     final rotRad = rotationDeg * math.pi / 180.0;
-    return unrotated
-        .map((p) => CadTransformMath.rotatePoint(p, center, rotRad))
-        .toList();
+    return unrotated.map((p) => CadTransformMath.rotatePoint(p, center, rotRad)).toList();
   }
 
-  CadPolyline2D toPolyline() => CadPolyline2D(
-        id: '${id}_poly',
-        vertices: toBoundaryPoints(),
-        isClosed: true,
-        layer: layer,
-        isVisible: isVisible,
-        isConstruction: isConstruction,
-      );
+  CadPolyline2D toPolyline() =>
+      CadPolyline2D(id: '${id}_poly', vertices: toBoundaryPoints(), isClosed: true, layer: layer, isVisible: isVisible, isConstruction: isConstruction);
 
   @override
-  CadRectangle2D translate(double dx, double dy) => copyWith(
-        center: CadPoint2D(center.x + dx, center.y + dy),
-      );
+  CadRectangle2D translate(double dx, double dy) => copyWith(center: CadPoint2D(center.x + dx, center.y + dy));
 
   @override
   CadRectangle2D rotate(CadPoint2D origin, double angleRad) {
@@ -1095,10 +942,8 @@ class CadRectangle2D extends CadGeometry {
 
   @override
   CadRectangle2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) {
-    final newCenter =
-        CadTransformMath.mirrorPoint(center, axisP1, axisP2);
-    final axisAngleDeg =
-        math.atan2(axisP2.y - axisP1.y, axisP2.x - axisP1.x) * 180.0 / math.pi;
+    final newCenter = CadTransformMath.mirrorPoint(center, axisP1, axisP2);
+    final axisAngleDeg = math.atan2(axisP2.y - axisP1.y, axisP2.x - axisP1.x) * 180.0 / math.pi;
     final newRot = (2.0 * axisAngleDeg - rotationDeg) % 360.0;
     return copyWith(center: newCenter, rotationDeg: newRot);
   }
@@ -1113,8 +958,7 @@ class CadRectangle2D extends CadGeometry {
   }
 
   @override
-  CadBoundingBox2D get boundingBox =>
-      CadBoundingBox2D.fromPoints(toBoundaryPoints());
+  CadBoundingBox2D get boundingBox => CadBoundingBox2D.fromPoints(toBoundaryPoints());
 
   CadRectangle2D copyWith({
     String? id,
@@ -1140,27 +984,27 @@ class CadRectangle2D extends CadGeometry {
 
   @override
   Map<String, dynamic> toJson() => {
-        'type': 'rectangle',
-        'id': id,
-        'layer': layer,
-        'isVisible': isVisible,
-        'isConstruction': isConstruction,
-        'center': center.toJson(),
-        'widthMm': widthMm,
-        'heightMm': heightMm,
-        'rotationDeg': rotationDeg,
-      };
+    'type': 'rectangle',
+    'id': id,
+    'layer': layer,
+    'isVisible': isVisible,
+    'isConstruction': isConstruction,
+    'center': center.toJson(),
+    'widthMm': widthMm,
+    'heightMm': heightMm,
+    'rotationDeg': rotationDeg,
+  };
 
   factory CadRectangle2D.fromJson(Map<String, dynamic> json) => CadRectangle2D(
-        id: json['id'] as String,
-        center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
-        widthMm: (json['widthMm'] as num).toDouble(),
-        heightMm: (json['heightMm'] as num).toDouble(),
-        rotationDeg: (json['rotationDeg'] as num?)?.toDouble() ?? 0.0,
-        layer: json['layer'] as String? ?? '0',
-        isVisible: json['isVisible'] as bool? ?? true,
-        isConstruction: json['isConstruction'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
+    widthMm: (json['widthMm'] as num).toDouble(),
+    heightMm: (json['heightMm'] as num).toDouble(),
+    rotationDeg: (json['rotationDeg'] as num?)?.toDouble() ?? 0.0,
+    layer: json['layer'] as String? ?? '0',
+    isVisible: json['isVisible'] as bool? ?? true,
+    isConstruction: json['isConstruction'] as bool? ?? false,
+  );
 }
 
 /// 2D Obround Slot (Standard CNC Turret Punch slot)
@@ -1228,15 +1072,11 @@ class CadSlot2D extends CadGeometry {
     }
 
     final rotRad = rotationDeg * math.pi / 180.0;
-    return pts
-        .map((p) => CadTransformMath.rotatePoint(p + center, center, rotRad))
-        .toList();
+    return pts.map((p) => CadTransformMath.rotatePoint(p + center, center, rotRad)).toList();
   }
 
   @override
-  CadSlot2D translate(double dx, double dy) => copyWith(
-        center: CadPoint2D(center.x + dx, center.y + dy),
-      );
+  CadSlot2D translate(double dx, double dy) => copyWith(center: CadPoint2D(center.x + dx, center.y + dy));
 
   @override
   CadSlot2D rotate(CadPoint2D origin, double angleRad) {
@@ -1247,10 +1087,8 @@ class CadSlot2D extends CadGeometry {
 
   @override
   CadSlot2D mirror(CadPoint2D axisP1, CadPoint2D axisP2) {
-    final newCenter =
-        CadTransformMath.mirrorPoint(center, axisP1, axisP2);
-    final axisAngleDeg =
-        math.atan2(axisP2.y - axisP1.y, axisP2.x - axisP1.x) * 180.0 / math.pi;
+    final newCenter = CadTransformMath.mirrorPoint(center, axisP1, axisP2);
+    final axisAngleDeg = math.atan2(axisP2.y - axisP1.y, axisP2.x - axisP1.x) * 180.0 / math.pi;
     final newRot = (2.0 * axisAngleDeg - rotationDeg) % 360.0;
     return copyWith(center: newCenter, rotationDeg: newRot);
   }
@@ -1258,16 +1096,11 @@ class CadSlot2D extends CadGeometry {
   @override
   CadSlot2D scale(CadPoint2D origin, double factorX, double factorY) {
     final avgFactor = (factorX.abs() + factorY.abs()) / 2.0;
-    return copyWith(
-      center: CadTransformMath.scalePoint(center, origin, factorX, factorY),
-      lengthMm: lengthMm * factorX.abs(),
-      widthMm: widthMm * avgFactor,
-    );
+    return copyWith(center: CadTransformMath.scalePoint(center, origin, factorX, factorY), lengthMm: lengthMm * factorX.abs(), widthMm: widthMm * avgFactor);
   }
 
   @override
-  CadBoundingBox2D get boundingBox =>
-      CadBoundingBox2D.fromPoints(toBoundaryPoints());
+  CadBoundingBox2D get boundingBox => CadBoundingBox2D.fromPoints(toBoundaryPoints());
 
   CadSlot2D copyWith({
     String? id,
@@ -1293,25 +1126,25 @@ class CadSlot2D extends CadGeometry {
 
   @override
   Map<String, dynamic> toJson() => {
-        'type': 'slot',
-        'id': id,
-        'layer': layer,
-        'isVisible': isVisible,
-        'isConstruction': isConstruction,
-        'center': center.toJson(),
-        'lengthMm': lengthMm,
-        'widthMm': widthMm,
-        'rotationDeg': rotationDeg,
-      };
+    'type': 'slot',
+    'id': id,
+    'layer': layer,
+    'isVisible': isVisible,
+    'isConstruction': isConstruction,
+    'center': center.toJson(),
+    'lengthMm': lengthMm,
+    'widthMm': widthMm,
+    'rotationDeg': rotationDeg,
+  };
 
   factory CadSlot2D.fromJson(Map<String, dynamic> json) => CadSlot2D(
-        id: json['id'] as String,
-        center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
-        lengthMm: (json['lengthMm'] as num).toDouble(),
-        widthMm: (json['widthMm'] as num).toDouble(),
-        rotationDeg: (json['rotationDeg'] as num?)?.toDouble() ?? 0.0,
-        layer: json['layer'] as String? ?? 'HOLES',
-        isVisible: json['isVisible'] as bool? ?? true,
-        isConstruction: json['isConstruction'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    center: CadPoint2D.fromJson(json['center'] as Map<String, dynamic>),
+    lengthMm: (json['lengthMm'] as num).toDouble(),
+    widthMm: (json['widthMm'] as num).toDouble(),
+    rotationDeg: (json['rotationDeg'] as num?)?.toDouble() ?? 0.0,
+    layer: json['layer'] as String? ?? 'HOLES',
+    isVisible: json['isVisible'] as bool? ?? true,
+    isConstruction: json['isConstruction'] as bool? ?? false,
+  );
 }
