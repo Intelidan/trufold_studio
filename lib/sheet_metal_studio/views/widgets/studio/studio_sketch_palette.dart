@@ -29,6 +29,7 @@ class StudioSketchPalette extends StatefulWidget {
   final ValueChanged<bool> onTogglePoints;
   final ValueChanged<bool> onToggleGrid;
   final VoidCallback onFinishSketch;
+  final VoidCallback? onClose;
 
   const StudioSketchPalette({
     super.key,
@@ -40,6 +41,7 @@ class StudioSketchPalette extends StatefulWidget {
     required this.onTogglePoints,
     required this.onToggleGrid,
     required this.onFinishSketch,
+    this.onClose,
   });
 
   @override
@@ -72,12 +74,12 @@ class _StudioSketchPaletteState extends State<StudioSketchPalette> {
               ),
             ],
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.tune, size: 15, color: Color(0xFF0F172A)),
-              SizedBox(width: 5),
-              Text(
+              const Icon(Icons.tune, size: 15, color: Color(0xFF0F172A)),
+              const SizedBox(width: 5),
+              const Text(
                 'SKETCH PALETTE',
                 style: TextStyle(
                   fontSize: 11.5,
@@ -86,8 +88,15 @@ class _StudioSketchPaletteState extends State<StudioSketchPalette> {
                   color: Color(0xFF0F172A),
                 ),
               ),
-              SizedBox(width: 4),
-              Icon(Icons.chevron_left, size: 15, color: Color(0xFF64748B)),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_left, size: 15, color: Color(0xFF64748B)),
+              if (widget.onClose != null) ...[
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: widget.onClose,
+                  child: const Icon(Icons.close, size: 14, color: Color(0xFF64748B)),
+                ),
+              ],
             ],
           ),
         ),
@@ -142,6 +151,13 @@ class _StudioSketchPaletteState extends State<StudioSketchPalette> {
                   onTap: () => setState(() => _isCollapsed = true),
                   child: const Icon(Icons.fast_forward, size: 14, color: Color(0xFF64748B)),
                 ),
+                if (widget.onClose != null) ...[
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: widget.onClose,
+                    child: const Icon(Icons.close, size: 14, color: Color(0xFF64748B)),
+                  ),
+                ],
               ],
             ),
           ),
@@ -285,6 +301,11 @@ class _StudioSketchPaletteState extends State<StudioSketchPalette> {
             label: 'Constraints',
             value: vm.showConstraints,
             onChanged: (v) => vm.toggleConstraints(),
+          ),
+          _buildPaletteCheckbox(
+            label: 'DOF Colors (Blue/Black)',
+            value: vm.showDofDiagnostics,
+            onChanged: (v) => vm.setShowDofDiagnostics(v ?? false),
           ),
           _buildPaletteCheckbox(
             label: 'Construction Geometries',

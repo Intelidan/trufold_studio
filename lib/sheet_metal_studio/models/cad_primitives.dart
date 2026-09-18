@@ -130,12 +130,14 @@ class CadLineSegment {
   final CadPoint2D p1;
   final CadPoint2D p2;
   final String layer;
+  final bool showLabel;
 
   const CadLineSegment({
     required this.id,
     required this.p1,
     required this.p2,
     this.layer = 'CUT',
+    this.showLabel = true,
   });
 
   double get x1 => p1.x;
@@ -155,12 +157,14 @@ class CadLineSegment {
     CadPoint2D? p1,
     CadPoint2D? p2,
     String? layer,
+    bool? showLabel,
   }) {
     return CadLineSegment(
       id: id ?? this.id,
       p1: p1 ?? this.p1,
       p2: p2 ?? this.p2,
       layer: layer ?? this.layer,
+      showLabel: showLabel ?? this.showLabel,
     );
   }
 
@@ -169,6 +173,7 @@ class CadLineSegment {
     'p1': p1.toJson(),
     'p2': p2.toJson(),
     'layer': layer,
+    'showLabel': showLabel,
   };
 
   factory CadLineSegment.fromJson(Map<String, dynamic> json) => CadLineSegment(
@@ -176,8 +181,9 @@ class CadLineSegment {
     p1: CadPoint2D.fromJson(json['p1'] as Map<String, dynamic>),
     p2: CadPoint2D.fromJson(json['p2'] as Map<String, dynamic>),
     layer: json['layer'] as String? ?? 'CUT',
+    showLabel: json['showLabel'] as bool? ?? true,
   );
 
   @override
-  String toString() => 'CadLineSegment($id, p1: $p1, p2: $p2, layer: $layer)';
+  String toString() => 'CadLineSegment($id, p1: $p1, p2: $p2, layer: $layer, showLabel: $showLabel)';
 }

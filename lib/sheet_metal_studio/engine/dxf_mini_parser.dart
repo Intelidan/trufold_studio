@@ -142,6 +142,13 @@ class DxfMiniParser {
             layers.add(poly.layer);
           }
           idx = nextIdx;
+        } else if (entType == 'POLYLINE') {
+          final (poly, nextIdx) = _parsePolyline(lines, idx);
+          if (poly != null) {
+            entities.add(poly);
+            layers.add(poly.layer);
+          }
+          idx = nextIdx;
         } else if (entType == 'CIRCLE') {
           final (circle, nextIdx) = _parseCircle(lines, idx);
           if (circle != null) {
@@ -252,6 +259,81 @@ class DxfMiniParser {
             curX = null;
           }
           break;
+      }
+    }
+
+    if (vertices.isEmpty) return (null, idx);
+    return (
+      DxfRawPolyline(
+        vertices: vertices,
+        isClosed: isClosed,
+        layer: layer,
+        colorIndex: color,
+      ),
+      idx
+    );
+  }
+
+  static (DxfRawPolyline?, int) _parsePolyline(List<String> lines, int startIdx) {
+    int idx = startIdx;
+    final vertices = <CadPoint2D>[];
+    String layer = '0';
+    int color = 7;
+    bool isClosed = false;
+
+    // Read POLYLINE header tags
+    while (idx < lines.length - 1) {
+      final code = int.tryParse(lines[idx].trim()) ?? -1;
+      final val = lines[idx + 1].trim();
+
+      if (code == 0) break; // Next entity (typically VERTEX)
+      idx += 2;
+
+      switch (code) {
+        case 8:
+          layer = val;
+          break;
+        case 62:
+          color = int.tryParse(val) ?? 7;
+          break;
+        case 70:
+          final flags = int.tryParse(val) ?? 0;
+          isClosed = (flags & 1) == 1;
+          break;
+      }
+    }
+
+    // Read following VERTEX entities until SEQEND or next entity
+    while (idx < lines.length - 1) {
+      final code = int.tryParse(lines[idx].trim()) ?? -1;
+      final val = lines[idx + 1].trim().toUpperCase();
+
+      if (code == 0) {
+        if (val == 'VERTEX') {
+          idx += 2;
+          double vx = 0.0, vy = 0.0;
+          while (idx < lines.length - 1) {
+            final vCode = int.tryParse(lines[idx].trim()) ?? -1;
+            final vVal = lines[idx + 1].trim();
+            if (vCode == 0) break;
+            idx += 2;
+            if (vCode == 10) vx = double.tryParse(vVal) ?? 0.0;
+            if (vCode == 20) vy = double.tryParse(vVal) ?? 0.0;
+          }
+          vertices.add(CadPoint2D(vx, vy));
+        } else if (val == 'SEQEND') {
+          idx += 2;
+          while (idx < lines.length - 1) {
+            final sCode = int.tryParse(lines[idx].trim()) ?? -1;
+            if (sCode == 0) break;
+            idx += 2;
+          }
+          break;
+        } else {
+          break;
+        }
+      } else {
+        idx += 2;
       }
     }
 

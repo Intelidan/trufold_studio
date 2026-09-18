@@ -129,6 +129,7 @@ class DxfFittingMetadata {
   final Map<String, String>? portAssignments;
   final Map<String, Map<String, dynamic>>? manualPortEdges;
   final Map<String, List<double>>? portBadgeOffsets;
+  final Map<String, Map<String, dynamic>>? semanticPorts;
 
   const DxfFittingMetadata({
     this.category = FittingCategory.none,
@@ -140,6 +141,7 @@ class DxfFittingMetadata {
     this.portAssignments,
     this.manualPortEdges,
     this.portBadgeOffsets,
+    this.semanticPorts,
   });
 
   bool get isAssigned =>
@@ -319,6 +321,7 @@ class DxfFittingMetadata {
     Map<String, String>? portAssignments,
     Map<String, Map<String, dynamic>>? manualPortEdges,
     Map<String, List<double>>? portBadgeOffsets,
+    Map<String, Map<String, dynamic>>? semanticPorts,
   }) {
     return DxfFittingMetadata(
       category: category ?? this.category,
@@ -330,6 +333,7 @@ class DxfFittingMetadata {
       portAssignments: portAssignments ?? (this.portAssignments != null ? Map.from(this.portAssignments!) : null),
       manualPortEdges: manualPortEdges ?? (this.manualPortEdges != null ? Map.from(this.manualPortEdges!) : null),
       portBadgeOffsets: portBadgeOffsets ?? (this.portBadgeOffsets != null ? Map.from(this.portBadgeOffsets!) : null),
+      semanticPorts: semanticPorts ?? (this.semanticPorts != null ? Map.from(this.semanticPorts!) : null),
     );
   }
 
@@ -343,6 +347,7 @@ class DxfFittingMetadata {
         if (portAssignments != null) 'portAssignments': portAssignments,
         if (manualPortEdges != null) 'manualPortEdges': manualPortEdges,
         if (portBadgeOffsets != null) 'portBadgeOffsets': portBadgeOffsets,
+        if (semanticPorts != null) 'semanticPorts': semanticPorts,
       };
 
   factory DxfFittingMetadata.fromJson(Map<String, dynamic> json) {
@@ -366,6 +371,16 @@ class DxfFittingMetadata {
       });
     }
 
+    Map<String, Map<String, dynamic>>? semantic;
+    if (json['semanticPorts'] is Map) {
+      semantic = {};
+      (json['semanticPorts'] as Map).forEach((k, v) {
+        if (v is Map) {
+          semantic![k.toString()] = Map<String, dynamic>.from(v);
+        }
+      });
+    }
+
     return DxfFittingMetadata(
       category: json['category'] as String? ?? FittingCategory.none,
       product: json['product'] as String? ?? FittingProductType.none,
@@ -381,6 +396,7 @@ class DxfFittingMetadata {
       ),
       manualPortEdges: manualEdges,
       portBadgeOffsets: badgeOffsets,
+      semanticPorts: semantic,
     );
   }
 

@@ -9,6 +9,7 @@
 // =============================================================================
 
 import 'dart:convert';
+import 'dart:io' as io;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -126,8 +127,26 @@ class StudioFileService {
     }
   }
 
-  /// Saves content to disk or triggers browser download for .dsf, .dxf, or .dds.
-  static Future<bool> saveFile({
+  /// Direct overwrite save to an existing file on disk.
+  static Future<bool> saveFileDirect({
+    required String filePath,
+    required String content,
+  }) async {
+    try {
+      if (!kIsWeb) {
+        final file = io.File(filePath);
+        await file.writeAsString(content, flush: true);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error direct-saving file in StudioFileService: $e');
+      return false;
+    }
+  }
+
+  /// Prompts user with a Save As dialog, writes content, and returns the saved file path.
+  static Future<String?> saveFileAs({
     required String fileName,
     required String content,
     String? dialogTitle,
@@ -144,11 +163,34 @@ class StudioFileService {
         type: FileType.custom,
         allowedExtensions: [ext],
       );
-      return uri != null;
+      if (uri == null) return null;
+      String filePath;
+      try {
+        filePath = uri.toFilePath();
+      } catch (_) {
+        filePath = uri.path;
+      }
+      if (!kIsWeb) {
+        try {
+          final file = io.File(filePath);
+          await file.writeAsString(content, flush: true);
+        } catch (_) {}
+      }
+      return filePath;
     } catch (e) {
-      debugPrint('Error saving file in StudioFileService: $e');
-      return false;
+      debugPrint('Error in saveFileAs in StudioFileService: $e');
+      return null;
     }
+  }
+
+  /// Saves content to disk or triggers browser download for .dsf, .dxf, or .dds.
+  static Future<bool> saveFile({
+    required String fileName,
+    required String content,
+    String? dialogTitle,
+  }) async {
+    final res = await saveFileAs(fileName: fileName, content: content, dialogTitle: dialogTitle);
+    return res != null;
   }
 
   /// Parses file content (.dsf, .dxf, or .dds) into one or more DsfDocuments.

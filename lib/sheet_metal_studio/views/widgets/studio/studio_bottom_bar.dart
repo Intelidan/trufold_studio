@@ -74,7 +74,7 @@ class _StudioBottomBarState extends State<StudioBottomBar> {
                 ),
                 _buildNavTool(
                   icon: Icons.fit_screen_outlined,
-                  tooltip: 'Zoom to Fit (F)',
+                  tooltip: 'Zoom to Fit',
                   onTap: vm.reset2DCanvas,
                 ),
                 Container(width: 1, height: 16, color: const Color(0xFFCBD5E1), margin: const EdgeInsets.symmetric(horizontal: 4)),

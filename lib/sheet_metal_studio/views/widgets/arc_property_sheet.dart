@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/cad_primitives.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
+import 'cad_number_spinner.dart';
 
 class ArcPropertySheet extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -122,17 +123,8 @@ class _ArcPropertySheetState extends State<ArcPropertySheet> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8.0),
-        border: Border.all(
-          color: themeColor.withValues(alpha: 0.5),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 16.0,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: themeColor.withValues(alpha: 0.5), width: 1.5),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16.0, offset: const Offset(0, 4))],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -150,31 +142,19 @@ class _ArcPropertySheetState extends State<ArcPropertySheet> {
                 Container(
                   width: 10,
                   height: 10,
-                  decoration: const BoxDecoration(
-                    color: themeColor,
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: const BoxDecoration(color: themeColor, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     '${widget.arc.id} (CAD ARC)',
-                    style: const TextStyle(
-                      color: Color(0xFF0F172A),
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.6,
-                    ),
+                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.6),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 InkWell(
                   onTap: widget.onToggleCollapse,
-                  child: Icon(
-                    widget.isCollapsed ? Icons.expand_more : Icons.expand_less,
-                    size: 16,
-                    color: const Color(0xFF64748B),
-                  ),
+                  child: Icon(widget.isCollapsed ? Icons.expand_more : Icons.expand_less, size: 16, color: const Color(0xFF64748B)),
                 ),
                 const SizedBox(width: 4),
                 InkWell(
@@ -195,34 +175,22 @@ class _ArcPropertySheetState extends State<ArcPropertySheet> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: widget.arc.isBoundary
-                        ? const Color(0xFFEFF6FF)
-                        : const Color(0xFFF1F5F9),
+                    color: widget.arc.isBoundary ? const Color(0xFFEFF6FF) : const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: widget.arc.isBoundary
-                          ? const Color(0xFF93C5FD)
-                          : const Color(0xFFCBD5E1),
-                    ),
+                    border: Border.all(color: widget.arc.isBoundary ? const Color(0xFF93C5FD) : const Color(0xFFCBD5E1)),
                   ),
                   child: Text(
                     widget.arc.isBoundary ? 'BOUNDARY ARC' : 'CUT ARC',
                     style: TextStyle(
                       fontSize: 9.5,
                       fontWeight: FontWeight.bold,
-                      color: widget.arc.isBoundary
-                          ? const Color(0xFF1D4ED8)
-                          : const Color(0xFF475569),
+                      color: widget.arc.isBoundary ? const Color(0xFF1D4ED8) : const Color(0xFF475569),
                     ),
                   ),
                 ),
                 Text(
                   'L: ${widget.arc.arcLength.toStringAsFixed(1)} mm',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF0F172A),
-                  ),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
                 ),
               ],
             ),
@@ -232,20 +200,30 @@ class _ArcPropertySheetState extends State<ArcPropertySheet> {
             Row(
               children: [
                 Expanded(
-                  child: _numInput(
+                  child: CadNumberSpinner(
                     label: 'Center X',
-                    controller: _cxCtrl,
+                    value: widget.arc.center.x,
+                    step: 1.0,
+                    decimals: 2,
                     suffix: 'mm',
-                    onSubmitted: _applyChanges,
+                    onChanged: (val) {
+                      _cxCtrl.text = val.toStringAsFixed(2);
+                      _applyChanges();
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _numInput(
+                  child: CadNumberSpinner(
                     label: 'Center Y',
-                    controller: _cyCtrl,
+                    value: widget.arc.center.y,
+                    step: 1.0,
+                    decimals: 2,
                     suffix: 'mm',
-                    onSubmitted: _applyChanges,
+                    onChanged: (val) {
+                      _cyCtrl.text = val.toStringAsFixed(2);
+                      _applyChanges();
+                    },
                   ),
                 ),
               ],
@@ -253,11 +231,18 @@ class _ArcPropertySheetState extends State<ArcPropertySheet> {
             const SizedBox(height: 6),
 
             // Radius
-            _numInput(
+            CadNumberSpinner(
               label: 'Radius (R)',
-              controller: _radiusCtrl,
+              value: widget.arc.radius,
+              min: 0.5,
+              max: 5000.0,
+              step: 1.0,
+              decimals: 2,
               suffix: 'mm',
-              onSubmitted: _applyChanges,
+              onChanged: (val) {
+                _radiusCtrl.text = val.toStringAsFixed(2);
+                _applyChanges();
+              },
             ),
             const SizedBox(height: 6),
 
@@ -265,20 +250,30 @@ class _ArcPropertySheetState extends State<ArcPropertySheet> {
             Row(
               children: [
                 Expanded(
-                  child: _numInput(
+                  child: CadNumberSpinner(
                     label: 'Start ∠',
-                    controller: _startAngleCtrl,
+                    value: widget.arc.startAngleDeg,
+                    step: 5.0,
+                    decimals: 1,
                     suffix: '°',
-                    onSubmitted: _applyChanges,
+                    onChanged: (val) {
+                      _startAngleCtrl.text = val.toStringAsFixed(1);
+                      _applyChanges();
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _numInput(
+                  child: CadNumberSpinner(
                     label: 'End ∠',
-                    controller: _endAngleCtrl,
+                    value: widget.arc.endAngleDeg,
+                    step: 5.0,
+                    decimals: 1,
                     suffix: '°',
-                    onSubmitted: _applyChanges,
+                    onChanged: (val) {
+                      _endAngleCtrl.text = val.toStringAsFixed(1);
+                      _applyChanges();
+                    },
                   ),
                 ),
               ],
@@ -304,7 +299,34 @@ class _ArcPropertySheetState extends State<ArcPropertySheet> {
                 ],
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
+
+            // Size Dimension Toggle
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Size Dimension:',
+                    style: TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    widget.arc.showLabel ? Icons.visibility : Icons.visibility_off,
+                    size: 16,
+                    color: widget.arc.showLabel ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                  splashRadius: 14,
+                  tooltip: widget.arc.showLabel ? 'Hide Size Dimension' : 'Show Size Dimension',
+                  onPressed: () => widget.viewModel.toggleArcLabel(widget.arc.id),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
 
             // Action Buttons
             Row(
@@ -342,51 +364,6 @@ class _ArcPropertySheetState extends State<ArcPropertySheet> {
           ],
         ],
       ),
-    );
-  }
-
-  Widget _numInput({
-    required String label,
-    required TextEditingController controller,
-    required String suffix,
-    required VoidCallback onSubmitted,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 9.5,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF64748B),
-          ),
-        ),
-        const SizedBox(height: 2),
-        SizedBox(
-          height: 28,
-          child: TextField(
-            controller: controller,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-              suffixText: suffix,
-              suffixStyle: const TextStyle(fontSize: 9.5, color: Color(0xFF94A3B8)),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: Color(0xFF0284C7), width: 1.5),
-              ),
-            ),
-            onSubmitted: (_) => onSubmitted(),
-          ),
-        ),
-      ],
     );
   }
 }

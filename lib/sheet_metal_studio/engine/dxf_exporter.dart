@@ -5,42 +5,111 @@
 // Generates standard AutoCAD Release 12 / 2000 compliant ASCII DXF files
 // ready for CNC Laser, Plasma, Waterjet cutting and CNC Press Brake machines.
 // Layers:
-// - CUT (Color 7 - White): Outer blank boundary & contour
+// - CUT / OUTLINE (Color 7 - White): Outer blank boundary & contour
 // - BEND_UP (Color 4 - Cyan): Positive press brake fold lines
 // - BEND_DOWN (Color 2 - Yellow): Negative press brake fold lines
 // - HOLES (Color 3 - Green): Tooling holes, obrounds, and slots
-// - ANNOTATION (Color 5 - Blue): Bend angles, radii, and part metadata
+// - ANNOTATION (Color 5 - Blue): Bend angles, radii, dimensions, and metadata
 // Designed with ZERO external dependencies for 100% standalone portability.
 // =============================================================================
 
+import 'dart:math' as math;
 import '../models/cad_primitives.dart';
 import '../models/cnc_punch_primitive.dart';
 import '../models/fold_bend_line.dart';
 import '../models/dsf_document.dart';
+import '../models/dsf_layer.dart';
+import 'associative_dimension_engine.dart';
 
 class DxfExporter {
   /// Generates a complete standard AutoCAD ASCII DXF string from a [DsfDocument].
   static String exportDxf(DsfDocument doc) {
     final sb = StringBuffer();
 
+    // Compute true bounding box of the entire workpiece to avoid text/geometry collisions
+    double minX = 0.0, maxX = 0.0, minY = 0.0, maxY = 0.0;
+    bool hasBounds = false;
+
+    void updateBounds(double x, double y) {
+      if (!hasBounds) {
+        minX = maxX = x;
+        minY = maxY = y;
+        hasBounds = true;
+      } else {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+
+    for (final p in doc.outerContour) {
+      updateBounds(p.x, p.y);
+    }
+    for (final b in doc.bends) {
+      updateBounds(b.p1.x, b.p1.y);
+      updateBounds(b.p2.x, b.p2.y);
+    }
+    for (final c in doc.cutLines) {
+      updateBounds(c.p1.x, c.p1.y);
+      updateBounds(c.p2.x, c.p2.y);
+    }
+    for (final a in doc.arcs) {
+      updateBounds(a.center.x - a.radius, a.center.y - a.radius);
+      updateBounds(a.center.x + a.radius, a.center.y + a.radius);
+    }
+    for (final p in doc.allPunches) {
+      updateBounds(p.center.x - 10.0, p.center.y - 10.0);
+      updateBounds(p.center.x + 10.0, p.center.y + 10.0);
+    }
+    for (final f in doc.faces) {
+      for (final v in f.vertices) {
+        updateBounds(v.x, v.y);
+      }
+    }
+
+    final extMinX = hasBounds ? minX : 0.0;
+    final extMinY = hasBounds ? minY : 0.0;
+    final extMaxX = hasBounds ? maxX : 100.0;
+    final extMaxY = hasBounds ? maxY : 100.0;
+
     // 1. HEADER SECTION
     sb.writeln('0\nSECTION');
     sb.writeln('2\nHEADER');
-    sb.writeln(
-      '9\n\$ACADVER\n1\nAC1009',
-    ); // AutoCAD Release 12 for universal CAM compatibility
+    sb.writeln('9\n\$ACADVER\n1\nAC1009'); // AutoCAD Release 12 for universal CAM compatibility
+    sb.writeln('9\n\$MEASUREMENT\n70\n1'); // 1 = Metric (millimeters)
     sb.writeln('9\n\$INSUNITS\n70\n4'); // 4 = Millimeters
+    sb.writeln('9\n\$EXTMIN\n10\n${_f(extMinX)}\n20\n${_f(extMinY)}\n30\n0.0');
+    sb.writeln('9\n\$EXTMAX\n10\n${_f(extMaxX)}\n20\n${_f(extMaxY)}\n30\n0.0');
     sb.writeln('0\nENDSEC');
 
     // 2. TABLES SECTION (Define all document layers with matching ACI colors)
-    final layers = doc.effectiveLayers;
+    final registeredLayers = <String, DsfLayer>{};
+    for (final layer in doc.effectiveLayers) {
+      registeredLayers[layer.name.toUpperCase()] = layer;
+    }
+
+    void ensureLayer(String name, int colorHex, [String lineType = 'CONTINUOUS']) {
+      final up = name.toUpperCase();
+      if (!registeredLayers.containsKey(up)) {
+        registeredLayers[up] = DsfLayer(name: name, colorHex: colorHex, lineType: lineType);
+      }
+    }
+
+    ensureLayer('CUT', 0xFFFFFFFF);
+    ensureLayer('OUTLINE', 0xFF0F172A);
+    ensureLayer('BEND_UP', 0xFF00FFFF, 'DASHED');
+    ensureLayer('BEND_DOWN', 0xFFFFFF00, 'DASHED');
+    ensureLayer('HOLES', 0xFF00FF00);
+    ensureLayer('ANNOTATION', 0xFF0000FF);
+
     sb.writeln('0\nSECTION');
     sb.writeln('2\nTABLES');
     sb.writeln('0\nTABLE');
     sb.writeln('2\nLAYER');
-    sb.writeln('70\n${layers.length}');
+    sb.writeln('70\n${registeredLayers.length}');
 
-    for (final layer in layers) {
+    for (final layer in registeredLayers.values) {
       _writeLayerDef(
         sb,
         layer.name,
@@ -62,6 +131,13 @@ class DxfExporter {
         : 'CUT';
     if (doc.outerContour.length >= 3) {
       _writePolyline(sb, doc.outerContour, layer: outerLayer, closed: true);
+    } else if (doc.faces.isNotEmpty) {
+      // Fallback: Export face perimeter polygons if outerContour was omitted
+      for (final face in doc.faces) {
+        if (face.vertices.length >= 3) {
+          _writePolyline(sb, face.vertices, layer: outerLayer, closed: true);
+        }
+      }
     }
 
     // 3B. Press Brake Bend Lines
@@ -120,19 +196,53 @@ class DxfExporter {
       _writeArc(sb, arc, layer: arcLayer);
     }
 
-    // 3D. Titleblock Metadata Text
-    final infoY = -25.0;
+    // 3D. Persistent Dimensions
+    for (final dim in doc.dimensions) {
+      if (!dim.isVisible) continue;
+      final assoc = AssociativeDimensionEngine.resolveAssociation(dim, doc);
+      final pA = assoc.pA;
+      final pB = assoc.pB;
+      final offset = dim.dimensionLineOffset;
+
+      final dx = pB.x - pA.x;
+      final dy = pB.y - pA.y;
+      final len = math.sqrt(dx * dx + dy * dy);
+      if (len < 0.1) continue;
+
+      final nx = -dy / len * offset;
+      final ny = dx / len * offset;
+
+      final dimA = CadPoint2D(pA.x + nx, pA.y + ny);
+      final dimB = CadPoint2D(pB.x + nx, pB.y + ny);
+
+      // Extension witness lines
+      _writeLine(sb, pA, CadPoint2D(dimA.x + nx * 0.15, dimA.y + ny * 0.15), layer: 'ANNOTATION');
+      _writeLine(sb, pB, CadPoint2D(dimB.x + nx * 0.15, dimB.y + ny * 0.15), layer: 'ANNOTATION');
+
+      // Main dimension line
+      _writeLine(sb, dimA, dimB, layer: 'ANNOTATION');
+
+      // Measurement tag
+      final midX = (dimA.x + dimB.x) / 2.0;
+      final midY = (dimA.y + dimB.y) / 2.0;
+      _writeText(sb, dim.displayedText, CadPoint2D(midX + 2.0, midY + 2.0), height: 3.0, layer: 'ANNOTATION');
+    }
+
+    // 3E. Titleblock Metadata Text (Safely placed strictly below part boundary)
+    final titleX = hasBounds ? minX : 0.0;
+    final titleY = hasBounds ? (minY - 15.0) : -25.0;
+
     _writeText(
       sb,
       'PART: ${doc.partNumber} | ${doc.productTypeName} | THK: ${doc.material.thicknessMm}mm (${doc.material.name})',
-      CadPoint2D(0.0, infoY),
+      CadPoint2D(titleX, titleY),
       height: 4.5,
       layer: 'ANNOTATION',
     );
     _writeText(
       sb,
       'BLANK: ${doc.blankWidthMm.toStringAsFixed(1)}mm x ${doc.blankLengthMm.toStringAsFixed(1)}mm | truFold Studio by Danish',
-      CadPoint2D(0.0, infoY - 8.0),
+      CadPoint2D(titleX, titleY - 8.0),
       height: 3.5,
       layer: 'ANNOTATION',
     );
@@ -206,13 +316,30 @@ class DxfExporter {
     required String layer,
     bool closed = true,
   }) {
+    if (pts.isEmpty) return;
+
+    // Sanitize points: remove duplicate consecutive points
+    final cleanPts = <CadPoint2D>[pts.first];
+    for (int i = 1; i < pts.length; i++) {
+      if (pts[i].distanceTo(cleanPts.last) >= 1e-4) {
+        cleanPts.add(pts[i]);
+      }
+    }
+
+    // If closed and last point is identical to first, drop redundant last point to prevent 0-length seam edge
+    if (closed && cleanPts.length >= 2 && cleanPts.first.distanceTo(cleanPts.last) < 1e-4) {
+      cleanPts.removeLast();
+    }
+
+    if (cleanPts.length < 2) return;
+
     sb.writeln('0\nPOLYLINE');
     sb.writeln('8\n$layer');
     sb.writeln('66\n1'); // Vertices follow
     sb.writeln('70\n${closed ? 1 : 0}'); // 1 = Closed polyline
     sb.writeln('10\n0.0\n20\n0.0\n30\n0.0');
 
-    for (final pt in pts) {
+    for (final pt in cleanPts) {
       sb.writeln('0\nVERTEX');
       sb.writeln('8\n$layer');
       sb.writeln('10\n${_f(pt.x)}');
@@ -221,6 +348,7 @@ class DxfExporter {
     }
 
     sb.writeln('0\nSEQEND');
+    sb.writeln('8\n$layer');
   }
 
   static void _writeText(
@@ -251,7 +379,7 @@ class DxfExporter {
     sb.writeln('30\n0.0');
     sb.writeln('40\n${_f(arc.radius)}');
     sb.writeln('50\n${_f(arc.startAngleDeg)}');
-    sb.writeln('60\n${_f(arc.endAngleDeg)}');
+    sb.writeln('51\n${_f(arc.endAngleDeg)}'); // Group 51 is End Angle in standard DXF spec! (Group 60 was entity visibility)
   }
 
   static String _f(double val) {

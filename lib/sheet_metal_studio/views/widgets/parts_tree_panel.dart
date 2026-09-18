@@ -15,6 +15,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../engine/bend_sequence_engine.dart';
@@ -527,7 +528,8 @@ class _PartsTreePanelState extends State<PartsTreePanel> {
         for (final b in doc.bends)
           _buildTreeRow(
             id: b.id,
-            isSelected: widget.viewModel.selectedBendId == b.id,
+            isSelected: widget.viewModel.selectedBendId == b.id ||
+                widget.viewModel.selectedEntityIds.contains(b.id),
             icon: b.isFlange ? Icons.border_top : Icons.change_history,
             iconColor: b.isFlange
                 ? const Color(0xFF8B5CF6)
@@ -541,7 +543,10 @@ class _PartsTreePanelState extends State<PartsTreePanel> {
             onVisibilityToggle: () =>
                 widget.viewModel.toggleBendVisibility(b.id),
             onDelete: () => widget.viewModel.deleteBendLine(b.id),
-            onTap: () => widget.viewModel.selectBend(b.id),
+            onTap: () => widget.viewModel.selectBend(
+              b.id,
+              multiSelect: HardwareKeyboard.instance.isShiftPressed,
+            ),
             onDoubleTap: () {
               widget.viewModel.selectBend(b.id);
               widget.viewModel.setPropertyInspectorOpen(true);
@@ -570,8 +575,9 @@ class _PartsTreePanelState extends State<PartsTreePanel> {
   Widget _buildPatternGroupRow(PerforationPattern pat) {
     final isExpanded = _expandedPatternIds.contains(pat.id);
     final isSelected =
-        widget.viewModel.selectedPatternId == pat.id &&
-        widget.viewModel.selectedPatternHoleIndex == null;
+        (widget.viewModel.selectedPatternId == pat.id &&
+            widget.viewModel.selectedPatternHoleIndex == null) ||
+        widget.viewModel.selectedEntityIds.contains(pat.id);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 2),
@@ -615,7 +621,11 @@ class _PartsTreePanelState extends State<PartsTreePanel> {
                   child: InkWell(
                     onTap: () => _handleItemClick(
                       key: 'pattern_${pat.id}',
-                      onTap: () => widget.viewModel.selectPattern(pat.id),
+                      onTap: () => widget.viewModel.selectPattern(
+                        pat.id,
+                        null,
+                        HardwareKeyboard.instance.isShiftPressed,
+                      ),
                       onDoubleTap: () {
                         widget.viewModel.selectPattern(pat.id);
                         widget.viewModel.setPropertyInspectorOpen(true);
@@ -783,7 +793,8 @@ class _PartsTreePanelState extends State<PartsTreePanel> {
         for (final p in doc.punches)
           _buildTreeRow(
             id: p.id,
-            isSelected: widget.viewModel.selectedPunchId == p.id,
+            isSelected: widget.viewModel.selectedPunchId == p.id ||
+                widget.viewModel.selectedEntityIds.contains(p.id),
             icon: p.type == PunchType.roundHole
                 ? Icons.circle_outlined
                 : (p.type == PunchType.ellipse
@@ -797,7 +808,10 @@ class _PartsTreePanelState extends State<PartsTreePanel> {
             onVisibilityToggle: () =>
                 widget.viewModel.togglePunchVisibility(p.id),
             onDelete: () => widget.viewModel.deletePunch(p.id),
-            onTap: () => widget.viewModel.selectPunch(p.id),
+            onTap: () => widget.viewModel.selectPunch(
+              p.id,
+              multiSelect: HardwareKeyboard.instance.isShiftPressed,
+            ),
             onDoubleTap: () {
               widget.viewModel.selectPunch(p.id);
               widget.viewModel.setPropertyInspectorOpen(true);
@@ -819,13 +833,17 @@ class _PartsTreePanelState extends State<PartsTreePanel> {
         for (final c in doc.cutLines)
           _buildTreeRow(
             id: c.id,
-            isSelected: widget.viewModel.selectedCutId == c.id,
+            isSelected: widget.viewModel.selectedCutId == c.id ||
+                widget.viewModel.selectedEntityIds.contains(c.id),
             icon: Icons.horizontal_rule,
             iconColor: const Color(0xFFE11D48),
             title: '${c.id}: Cut Slit',
             subtitle: 'L: ${c.length.toStringAsFixed(0)}mm',
             onDelete: () => widget.viewModel.deleteCutLine(c.id),
-            onTap: () => widget.viewModel.selectCut(c.id),
+            onTap: () => widget.viewModel.selectCut(
+              c.id,
+              multiSelect: HardwareKeyboard.instance.isShiftPressed,
+            ),
             onDoubleTap: () {
               widget.viewModel.selectCut(c.id);
               widget.viewModel.setPropertyInspectorOpen(true);

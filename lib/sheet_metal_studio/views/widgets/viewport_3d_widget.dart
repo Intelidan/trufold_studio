@@ -20,9 +20,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/cad_primitives.dart';
+import '../../models/cms/cms_physical_port.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../../engine/kinematic_fold_engine.dart';
 import 'studio/studio_view_cube.dart';
+import 'guided_cms/cms_3d_opening_callout.dart';
 
 class Viewport3dWidget extends StatelessWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -32,16 +34,19 @@ class Viewport3dWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRect(
-      child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFF8FAFC), Color(0xFFE2E8F0)],
-          ),
-        ),
-        child: Stack(
-          children: [
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = Size(constraints.maxWidth, constraints.maxHeight);
+          return Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFF8FAFC), Color(0xFFE2E8F0)],
+              ),
+            ),
+            child: Stack(
+              children: [
             // 1. Interactive Orbit, Middle-Mouse Pan & Wheel Zoom Surface
             Listener(
               onPointerSignal: (pointerSignal) {
@@ -90,6 +95,7 @@ class Viewport3dWidget extends StatelessWidget {
                       hoveredPunchId: viewModel.hoveredPunchId,
                       hoveredBendId: viewModel.hoveredBendId,
                       hoveredFaceId: viewModel.hoveredFaceId,
+                      activePorts: viewModel.activeCmsPorts,
                     ),
                   ),
                 ),
@@ -226,6 +232,14 @@ class Viewport3dWidget extends StatelessWidget {
                                     'Toggle Glass / X-Ray Mode (See Back Part)',
                                 onTap: viewModel.toggleGlassMode,
                               ),
+                              if (viewModel.activeCmsPorts.isNotEmpty)
+                                _modeButton(
+                                  label: 'PORTS',
+                                  isActive: viewModel.showCmsPortHighlights,
+                                  icon: Icons.tag,
+                                  tooltip: 'Toggle 3D Channel Port Callouts & Highlights',
+                                  onTap: viewModel.toggleCmsPortHighlights,
+                                ),
                               IconButton(
                                 icon: Icon(
                                   viewModel.showWireframe
@@ -305,9 +319,60 @@ class Viewport3dWidget extends StatelessWidget {
                 ),
               ),
             ),
+
+            // 5. 3D Opening Callouts for Discovered & Verified CMS Ports
+            AnimatedBuilder(
+              animation: Listenable.merge([viewModel, viewModel.cmsGuidedController]),
+              builder: (context, _) {
+                final ports = viewModel.activeCmsPorts;
+                final mesh = viewModel.currentMesh;
+                if (ports.isEmpty || size.width <= 0 || size.height <= 0 || mesh.polygons.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
+                final cx = size.width / 2.0 + viewModel.pan3D.dx;
+                final cy = size.height / 2.0 + viewModel.pan3D.dy;
+                final azRad = viewModel.azimuthDeg * math.pi / 180.0;
+                final elRad = viewModel.elevationDeg * math.pi / 180.0;
+                final cosAz = math.cos(azRad);
+                final sinAz = math.sin(azRad);
+                final cosEl = math.cos(elRad);
+                final sinEl = math.sin(elRad);
+                final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+                final fitDim = maxDim > 0 ? maxDim : 200.0;
+                final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
+                final scale = baseScale * viewModel.cameraZoom;
+                final pivot = mesh.center;
+
+                return Stack(
+                  children: ports.map((port) {
+                    final anchor = port.calloutAnchor ?? port.center;
+                    final rx = anchor.x - pivot.x;
+                    final ry = anchor.y - pivot.y;
+                    final rz = anchor.z - pivot.z;
+                    final x1 = rx * cosAz - ry * sinAz;
+                    final y1 = rx * sinAz + ry * cosAz;
+                    final z1 = rz;
+                    final x2 = x1;
+                    final y2 = y1 * cosEl - z1 * sinEl;
+                    final sx = cx + x2 * scale;
+                    final sy = cy - y2 * scale;
+                    final isFocused = port.id == viewModel.cmsGuidedController.state.focus.activePortId;
+
+                    return Cms3DOpeningCallout(
+                      port: port,
+                      anchorScreenPosition: Offset(sx, sy),
+                      isFocused: isFocused,
+                    );
+                  }).toList(),
+                );
+              },
+            ),
           ],
         ),
-      ),
+      );
+    },
+    ),
     );
   }
 
@@ -514,6 +579,7 @@ class _Viewport3dPainter extends CustomPainter {
   final String? hoveredPunchId;
   final String? hoveredBendId;
   final String? hoveredFaceId;
+  final List<CmsPhysicalPort> activePorts;
 
   _Viewport3dPainter({
     required this.mesh,
@@ -529,6 +595,7 @@ class _Viewport3dPainter extends CustomPainter {
     this.hoveredPunchId,
     this.hoveredBendId,
     this.hoveredFaceId,
+    this.activePorts = const [],
   });
 
   @override
@@ -992,6 +1059,45 @@ class _Viewport3dPainter extends CustomPainter {
         }
       }
     }
+
+    // PASS 3: Render 3D Channel Mouth Aperture Perimeter Highlight Loops
+    for (final port in activePorts) {
+      if (port.derivedMouthCorners.length >= 4) {
+        final p0 = project(port.derivedMouthCorners[0]).pt;
+        final p1 = project(port.derivedMouthCorners[1]).pt;
+        final p2 = project(port.derivedMouthCorners[2]).pt;
+        final p3 = project(port.derivedMouthCorners[3]).pt;
+
+        final mouthPath = Path()
+          ..moveTo(p0.dx, p0.dy)
+          ..lineTo(p1.dx, p1.dy)
+          ..lineTo(p2.dx, p2.dy)
+          ..lineTo(p3.dx, p3.dy)
+          ..close();
+
+        // High-visibility cyan aperture wash
+        final fillPaint = Paint()
+          ..style = PaintingStyle.fill
+          ..color = const Color(0xFF00E5FF).withValues(alpha: 0.18);
+        canvas.drawPath(mouthPath, fillPaint);
+
+        // Vibrant glowing border line loop (P1 -> P3 -> P4 -> P2 -> P1)
+        final borderPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.4
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = const Color(0xFF00E5FF);
+        canvas.drawPath(mouthPath, borderPaint);
+
+        // Floor threshold marker line (P1 -> P2)
+        final floorThresholdPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0
+          ..color = const Color(0xFF0284C7);
+        canvas.drawLine(p0, p3, floorThresholdPaint);
+      }
+    }
   }
 
   /// Face-type priority: determines draw order within the same depth band.
@@ -1066,6 +1172,7 @@ class _Viewport3dPainter extends CustomPainter {
         oldDelegate.selectedFaceId != selectedFaceId ||
         oldDelegate.hoveredPunchId != hoveredPunchId ||
         oldDelegate.hoveredBendId != hoveredBendId ||
-        oldDelegate.hoveredFaceId != hoveredFaceId;
+        oldDelegate.hoveredFaceId != hoveredFaceId ||
+        oldDelegate.activePorts != activePorts;
   }
 }

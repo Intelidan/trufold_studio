@@ -19,6 +19,7 @@ import '../../models/planar_sheet_face.dart';
 import '../../engine/cnc_turret_engine.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import 'rotation_dial_widget.dart';
+import 'cad_number_spinner.dart';
 
 class ActiveToolPropertySheet extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -237,8 +238,6 @@ class _ActiveToolPropertySheetState extends State<ActiveToolPropertySheet> {
     final mode = widget.viewModel.toolMode;
     if (mode == StudioToolMode.select ||
         mode == StudioToolMode.pan ||
-        mode == StudioToolMode.addBend ||
-        mode == StudioToolMode.addFlange ||
         mode == StudioToolMode.addCut ||
         mode == StudioToolMode.setBaseAnchor) {
       return const SizedBox.shrink();
@@ -253,7 +252,8 @@ class _ActiveToolPropertySheetState extends State<ActiveToolPropertySheet> {
 
     switch (mode) {
       case StudioToolMode.addPunchRound:
-        title = 'ROUND HOLE';
+      case StudioToolMode.drawCircle:
+        title = 'CIRCLE / HOLE PUNCH';
         icon = Icons.radio_button_unchecked;
         body = _buildRoundHoleBody(cfg);
         break;
@@ -263,9 +263,16 @@ class _ActiveToolPropertySheetState extends State<ActiveToolPropertySheet> {
         body = _buildObroundSlotBody(cfg);
         break;
       case StudioToolMode.addPunchSquare:
-        title = 'SQUARE CUTOUT';
+      case StudioToolMode.drawRectangle:
+        title = 'RECTANGLE / SQUARE CUTOUT';
         icon = Icons.crop_square;
         body = _buildSquareBody(cfg);
+        break;
+      case StudioToolMode.addBend:
+      case StudioToolMode.addFlange:
+        title = mode == StudioToolMode.addFlange ? 'RETURN FLANGE' : 'BEND LINE';
+        icon = mode == StudioToolMode.addFlange ? Icons.border_outer : Icons.alt_route;
+        body = _buildBendFlangeBody();
         break;
       case StudioToolMode.perforationPattern:
         title = 'PERFORATION TOOLING';
@@ -281,7 +288,7 @@ class _ActiveToolPropertySheetState extends State<ActiveToolPropertySheet> {
         return const SizedBox.shrink();
     }
 
-    final panelWidth = mode == StudioToolMode.perforationPattern ? 285.0 : 220.0;
+    final panelWidth = mode == StudioToolMode.perforationPattern ? 285.0 : 240.0;
     final maxPanelHeight = (MediaQuery.of(context).size.height - 120.0).clamp(260.0, 700.0);
 
     return Container(
@@ -1291,8 +1298,83 @@ class _ActiveToolPropertySheetState extends State<ActiveToolPropertySheet> {
   }
 
   // ---------------------------------------------------------------------------
-  // Other Tool Bodies (Round, Obround, Square, Chamfer)
+  // Other Tool Bodies (Bend/Flange, Round, Obround, Square, Chamfer)
   // ---------------------------------------------------------------------------
+  Widget _buildBendFlangeBody() {
+    final vm = widget.viewModel;
+    final isFlange = vm.toolMode == StudioToolMode.addFlange;
+    final isAuto = vm.autoBendPlacementEnabled;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: isAuto ? const Color(0xFFF0FDF4) : const Color(0xFFFFFBEB),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(
+              color: isAuto ? const Color(0xFF86EFAC) : const Color(0xFFFDE68A),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      isAuto ? Icons.auto_awesome : Icons.edit_note,
+                      size: 15,
+                      color: isAuto ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isAuto ? 'Automatic Snapping: ON' : 'Manual Drawing: ON',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isAuto ? const Color(0xFF166534) : const Color(0xFF92400E),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const Text(
+                            'Press [Ctrl] key once to toggle',
+                            style: TextStyle(fontSize: 8.5, color: Color(0xFF64748B)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Transform.scale(
+                scale: 0.75,
+                child: Switch(
+                  value: isAuto,
+                  activeThumbColor: const Color(0xFF16A34A),
+                  onChanged: (val) => vm.toggleAutoBendPlacement(enabled: val),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          isFlange
+              ? '• Click near boundary to auto-project return flange.\n• Or click-and-drag 2 points for custom orientation.'
+              : '• Click near notch/edge to auto-detect fold bend line.\n• Or click-and-drag 2 points for custom bend line.',
+          style: const TextStyle(fontSize: 9, color: Color(0xFF475569), height: 1.3),
+        ),
+      ],
+    );
+  }
+
   Widget _buildRoundHoleBody(ActiveToolConfig cfg) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1300,22 +1382,73 @@ class _ActiveToolPropertySheetState extends State<ActiveToolPropertySheet> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('DIAMETER', style: TextStyle(color: Color(0xFF64748B), fontSize: 8, fontWeight: FontWeight.bold)),
-            Text('${cfg.roundHoleDiameter.toStringAsFixed(1)} mm',
-                style: const TextStyle(color: Color(0xFF0284C7), fontSize: 10, fontWeight: FontWeight.bold)),
+            const Text(
+              'HOLE DIAMETER',
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 8.5, fontWeight: FontWeight.bold),
+            ),
+            CadNumberSpinner(
+              value: cfg.roundHoleDiameter,
+              min: 1.0,
+              max: 250.0,
+              step: 0.5,
+              decimals: 1,
+              suffix: 'mm',
+              width: 95,
+              onChanged: (val) {
+                cfg.roundHoleDiameter = val;
+                widget.viewModel.updateToolConfig();
+              },
+            ),
           ],
         ),
-        const SizedBox(height: 4),
-        Row(
-          children: [6.5, 8.5, 10.5, 13.0].map((d) {
-            final active = (cfg.roundHoleDiameter - d).abs() < 0.1;
-            return Expanded(
-              child: _chip('ø$d', active, () {
-                cfg.roundHoleDiameter = d;
-                widget.viewModel.updateToolConfig();
-              }),
-            );
-          }).toList(),
+        const SizedBox(height: 6),
+        const Text(
+          'STANDARD CLEARANCE PUNCHES',
+          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 7.5, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 3),
+        Wrap(
+          spacing: 3,
+          runSpacing: 3,
+          children: [
+            _chip('M3 (3.4)', (cfg.roundHoleDiameter - 3.4).abs() < 0.1, () {
+              cfg.roundHoleDiameter = 3.4;
+              widget.viewModel.updateToolConfig();
+            }),
+            _chip('M4 (4.5)', (cfg.roundHoleDiameter - 4.5).abs() < 0.1, () {
+              cfg.roundHoleDiameter = 4.5;
+              widget.viewModel.updateToolConfig();
+            }),
+            _chip('M5 (5.5)', (cfg.roundHoleDiameter - 5.5).abs() < 0.1, () {
+              cfg.roundHoleDiameter = 5.5;
+              widget.viewModel.updateToolConfig();
+            }),
+            _chip('M6 (6.6)', (cfg.roundHoleDiameter - 6.6).abs() < 0.1, () {
+              cfg.roundHoleDiameter = 6.6;
+              widget.viewModel.updateToolConfig();
+            }),
+            _chip('M8 (9.0)', (cfg.roundHoleDiameter - 9.0).abs() < 0.1, () {
+              cfg.roundHoleDiameter = 9.0;
+              widget.viewModel.updateToolConfig();
+            }),
+            _chip('M10 (11.0)', (cfg.roundHoleDiameter - 11.0).abs() < 0.1, () {
+              cfg.roundHoleDiameter = 11.0;
+              widget.viewModel.updateToolConfig();
+            }),
+            _chip('1/4" (6.4)', (cfg.roundHoleDiameter - 6.35).abs() < 0.15, () {
+              cfg.roundHoleDiameter = 6.35;
+              widget.viewModel.updateToolConfig();
+            }),
+            _chip('1/2" (12.7)', (cfg.roundHoleDiameter - 12.7).abs() < 0.15, () {
+              cfg.roundHoleDiameter = 12.7;
+              widget.viewModel.updateToolConfig();
+            }),
+          ],
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Single click stamps preset. Drag draws custom diameter.',
+          style: TextStyle(color: Color(0xFF64748B), fontSize: 8),
         ),
       ],
     );
@@ -1370,22 +1503,111 @@ class _ActiveToolPropertySheetState extends State<ActiveToolPropertySheet> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('CUTOUT SIZE', style: TextStyle(color: Color(0xFF64748B), fontSize: 8, fontWeight: FontWeight.bold)),
-            Text('${cfg.squareSize.round()} × ${cfg.squareSize.round()} mm',
-                style: const TextStyle(color: Color(0xFF0284C7), fontSize: 10, fontWeight: FontWeight.bold)),
+            const Text(
+              'SIZE MODIFIER',
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 8.5, fontWeight: FontWeight.bold),
+            ),
+            Row(
+              children: [
+                const Text('1:1 Square', style: TextStyle(fontSize: 8, color: Color(0xFF64748B))),
+                const SizedBox(width: 2),
+                InkWell(
+                  onTap: () {
+                    cfg.squareAspectLocked = !cfg.squareAspectLocked;
+                    if (cfg.squareAspectLocked) {
+                      cfg.rectHeight = cfg.squareSize;
+                      cfg.rectWidth = cfg.squareSize;
+                    }
+                    widget.viewModel.updateToolConfig();
+                  },
+                  child: Icon(
+                    cfg.squareAspectLocked ? Icons.lock_outline : Icons.lock_open_outlined,
+                    size: 13,
+                    color: cfg.squareAspectLocked ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         const SizedBox(height: 4),
-        Row(
-          children: [10.0, 15.0, 20.0, 25.0].map((s) {
-            final active = (cfg.squareSize - s).abs() < 0.1;
-            return Expanded(
-              child: _chip('${s.round()}', active, () {
-                cfg.squareSize = s;
-                widget.viewModel.updateToolConfig();
-              }),
-            );
+        if (cfg.squareAspectLocked) ...[
+          CadNumberSpinner(
+            label: 'Square Size (W = H)',
+            value: cfg.squareSize,
+            min: 2.0,
+            max: 500.0,
+            step: 1.0,
+            decimals: 1,
+            suffix: 'mm',
+            onChanged: (val) {
+              cfg.squareSize = val;
+              cfg.rectWidth = val;
+              cfg.rectHeight = val;
+              widget.viewModel.updateToolConfig();
+            },
+          ),
+        ] else ...[
+          Row(
+            children: [
+              Expanded(
+                child: CadNumberSpinner(
+                  label: 'Width',
+                  value: cfg.rectWidth,
+                  min: 2.0,
+                  max: 500.0,
+                  step: 1.0,
+                  decimals: 1,
+                  suffix: 'mm',
+                  onChanged: (val) {
+                    cfg.rectWidth = val;
+                    widget.viewModel.updateToolConfig();
+                  },
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: CadNumberSpinner(
+                  label: 'Height',
+                  value: cfg.rectHeight,
+                  min: 2.0,
+                  max: 500.0,
+                  step: 1.0,
+                  decimals: 1,
+                  suffix: 'mm',
+                  onChanged: (val) {
+                    cfg.rectHeight = val;
+                    widget.viewModel.updateToolConfig();
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 6),
+        const Text(
+          'STANDARD SQUARE PUNCHES',
+          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 7.5, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 3),
+        Wrap(
+          spacing: 3,
+          runSpacing: 3,
+          children: [10.0, 15.0, 20.0, 25.0, 30.0, 50.0].map((s) {
+            final active = cfg.squareAspectLocked && (cfg.squareSize - s).abs() < 0.1;
+            return _chip('${s.round()}×${s.round()}', active, () {
+              cfg.squareSize = s;
+              cfg.rectWidth = s;
+              cfg.rectHeight = s;
+              cfg.squareAspectLocked = true;
+              widget.viewModel.updateToolConfig();
+            });
           }).toList(),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Single click stamps preset. Drag draws custom rectangle.',
+          style: TextStyle(color: Color(0xFF64748B), fontSize: 8),
         ),
       ],
     );

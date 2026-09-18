@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // topological_zone_morpher.dart
 //
 // Topological Zone Morphing Engine for Sheet Metal Studio (Master Guide #36-#48, P19-P22).
@@ -6,6 +6,7 @@
 // invariant corner relief miters, bend notches, or standard tooling hole clusters.
 // =============================================================================
 
+import 'dart:math' as math;
 import '../models/cad_primitives.dart';
 import '../models/cnc_punch_primitive.dart';
 import '../models/fold_bend_line.dart';
@@ -26,18 +27,27 @@ class TopologicalZoneMorpher {
   }) {
     switch (template.templateId) {
       case 'tray_tee':
+      case 'equal_tee':
         return _morphTee(baselineDocument, template, targetParameters);
       case 'tray_bend_90':
+      case '90_deg_bend':
         return _morphBend90(baselineDocument, template, targetParameters);
       case 'tray_bend_45':
+      case '45_deg_bend':
         return _morphBend45(baselineDocument, template, targetParameters);
       case 'tray_reducer':
         return _morphReducer(baselineDocument, template, targetParameters);
       case 'tray_cross':
         return _morphCross(baselineDocument, template, targetParameters);
       case 'tray_straight':
+      case 'straight_tray':
         return _morphStraight(baselineDocument, template, targetParameters);
       default:
+        // Check document product type or metadata
+        final prod = baselineDocument.productType.toLowerCase();
+        if (prod.contains('45') && prod.contains('bend')) {
+          return _morphBend45(baselineDocument, template, targetParameters);
+        }
         return _morphGeneric(baselineDocument, template, targetParameters);
     }
   }
@@ -240,27 +250,316 @@ class TopologicalZoneMorpher {
   }
 
   // ===========================================================================
-  // 3. Cable Tray 45Â° Flat Bend Morpher
+  // 3. Cable Tray 45° Flat Bend Morpher (Intelligent Bend & Flange Driven)
   // ===========================================================================
   static DsfDocument _morphBend45(
     DsfDocument baseline,
     TemplateParameterDefinition template,
     Map<String, double> targetParams,
   ) {
-    final origW = template.baselineParameters['width'] ?? 100.0;
-    final origH = template.baselineParameters['height'] ?? 50.0;
+    final origW = template.baselineParameters['width'] ??
+        (baseline.metadata['fittingWidthMm'] as num?)?.toDouble() ??
+        100.0;
+    final origH = template.baselineParameters['height'] ??
+        (baseline.metadata['fittingHeightMm'] as num?)?.toDouble() ??
+        50.0;
+    final origFlange = template.baselineParameters['flangeWidth'] ??
+        template.baselineParameters['flange'] ??
+        (baseline.metadata['fittingFlangeMm'] as num?)?.toDouble() ??
+        15.0;
+
     final newW = targetParams['width'] ?? origW;
     final newH = targetParams['height'] ?? origH;
+    final newFlange = targetParams['flangeWidth'] ?? targetParams['flange'] ?? origFlange;
+
     final dW = newW - origW;
+    final dH = newH - origH;
+    final dFL = newFlange - origFlange;
 
     final bounds = _computeBounds(baseline.outerContour);
-    final midX = (bounds.minX + bounds.maxX) / 2.0;
+    final xCenter = (bounds.minX + bounds.maxX) / 2.0;
 
+    // Detect if baseline has bend lines (e.g. B1-B5, FL1-FL3)
+    if (baseline.bends.isNotEmpty) {
+      // pre-computed trig constants for α = 22.5°
+      const sinA = 0.3826834323650898;
+      const cosA = 0.9238795325112867;
+
+      // -----------------------------------------------------------------------
+      // PHASE 1: Extract semantic anchors from DSF bend line data.
+      // No hardcoded coordinates — all references are derived from the baseline.
+      // -----------------------------------------------------------------------
+
+      // B1 anchor: outer spine fold line (horizontal crease between
+      // outer sidewall and miter floor web).
+      double yB1 = bounds.minY + (bounds.maxY - bounds.minY) * 0.35;
+      for (final b in baseline.bends) {
+        if (b.role == BendLineRole.bend && (b.p1.y - b.p2.y).abs() < 2.0) {
+          yB1 = (b.p1.y + b.p2.y) / 2.0;
+          break;
+        }
+      }
+
+      // FL1 anchor: outer sidewall return flange fold line.
+      double yFL1 = yB1 - (yB1 - bounds.minY) * 0.85;
+      for (final b in baseline.bends) {
+        if (b.role == BendLineRole.flange &&
+            b.p1.y < yB1 - 2.0 &&
+            b.p2.y < yB1 - 2.0) {
+          yFL1 = (b.p1.y + b.p2.y) / 2.0;
+          break;
+        }
+      }
+
+      // Apex anchor: where B2 and B3 meet on symmetry axis
+      double yApex = bounds.minY + (bounds.maxY - bounds.minY) * 0.65;
+      for (final b in baseline.bends) {
+        if ((b.p1.x - xCenter).abs() < 5.0 && b.p1.y > yB1 + 20.0) {
+          yApex = b.p1.y;
+          break;
+        }
+        if ((b.p2.x - xCenter).abs() < 5.0 && b.p2.y > yB1 + 20.0) {
+          yApex = b.p2.y;
+          break;
+        }
+      }
+
+      // Arm base anchors: B3 non-apex (left) and B2 non-apex (right)
+      CadPoint2D leftArmBase =
+          CadPoint2D(bounds.minX + 30.0, yB1 + 80.0);
+      CadPoint2D rightArmBase =
+          CadPoint2D(bounds.maxX - 30.0, yB1 + 80.0);
+      for (final b in baseline.bends) {
+        if (b.role != BendLineRole.bend) continue;
+        if ((b.p1.x - xCenter).abs() < 5.0 && b.p1.y > yB1 + 20.0) {
+          if (b.p2.x < xCenter) {
+            leftArmBase = b.p2;
+          } else {
+            rightArmBase = b.p2;
+          }
+        } else if ((b.p2.x - xCenter).abs() < 5.0 && b.p2.y > yB1 + 20.0) {
+          if (b.p1.x < xCenter) {
+            leftArmBase = b.p1;
+          } else {
+            rightArmBase = b.p1;
+          }
+        }
+      }
+
+      // Direction vectors along B3 (leftArmBase -> apex) and B2 (rightArmBase -> apex)
+      final leftArmVecX = xCenter - leftArmBase.x;
+      final leftArmVecY = yApex - leftArmBase.y;
+      final leftArmLen =
+          math.sqrt(leftArmVecX * leftArmVecX + leftArmVecY * leftArmVecY);
+      final leftArmDirX = leftArmLen > 0 ? leftArmVecX / leftArmLen : 0.98606;
+      final leftArmDirY = leftArmLen > 0 ? leftArmVecY / leftArmLen : 0.16631;
+
+      final rightArmVecX = xCenter - rightArmBase.x;
+      final rightArmVecY = yApex - rightArmBase.y;
+      final rightArmLen =
+          math.sqrt(rightArmVecX * rightArmVecX + rightArmVecY * rightArmVecY);
+      final rightArmDirX = rightArmLen > 0 ? rightArmVecX / rightArmLen : -0.98606;
+      final rightArmDirY = rightArmLen > 0 ? rightArmVecY / rightArmLen : 0.16631;
+
+      // Outward normal vectors perpendicular to B3 and B2 (pointing into the walls)
+      final nB3X = -leftArmDirY;
+      final nB3Y = leftArmDirX;
+
+      final nB2X = rightArmDirY;
+      final nB2Y = -rightArmDirX;
+
+      // Apex Y factor when Width increases (miter geometry):
+      final slope = leftArmVecX.abs() > 1e-3 ? leftArmVecY / leftArmVecX.abs() : 0.16866;
+      final dyApexFactor = cosA + sinA * slope;
+
+      // Flange-root reference distances (from B3/B2 to FL3/FL2 endpoints)
+      double distFlangeRootLeft1 = 95.5;
+      double distFlangeRootLeft2 = 110.5;
+      double distFlangeRootRight1 = 95.5;
+      double distFlangeRootRight2 = 110.5;
+      for (final b in baseline.bends) {
+        if (b.role != BendLineRole.flange) continue;
+        final bMidY = (b.p1.y + b.p2.y) / 2.0;
+        if (bMidY > yB1 + 20.0) {
+          final midX = (b.p1.x + b.p2.x) / 2.0;
+          if (midX < xCenter) {
+            final d1 = (b.p1.x - leftArmBase.x) * nB3X + (b.p1.y - leftArmBase.y) * nB3Y;
+            final d2 = (b.p2.x - leftArmBase.x) * nB3X + (b.p2.y - leftArmBase.y) * nB3Y;
+            distFlangeRootLeft1 = math.min(d1, d2);
+            distFlangeRootLeft2 = math.max(d1, d2);
+          } else {
+            final d1 = (b.p1.x - rightArmBase.x) * nB2X + (b.p1.y - rightArmBase.y) * nB2Y;
+            final d2 = (b.p2.x - rightArmBase.x) * nB2X + (b.p2.y - rightArmBase.y) * nB2Y;
+            distFlangeRootRight1 = math.min(d1, d2);
+            distFlangeRootRight2 = math.max(d1, d2);
+          }
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // PHASE 2: 3D-driven semantic zone transform function.
+      // -----------------------------------------------------------------------
+
+      CadPoint2D morphPoint(CadPoint2D pt) {
+        final px = pt.x;
+        final py = pt.y;
+
+        // --- Zone 1: Outer Wall (py <= yB1 + 1.0) ---
+        // Width  → spine length is preserved (no elongation of drawing length!).
+        // Height → extends downwards along -Y away from B1 by dH * tInlet.
+        // Flange → distal lip (py <= yFL1) extends downward by extra dFL.
+        if (py <= yB1 + 1.0) {
+          double nx = px;
+          double ny = py;
+          if (py < yB1 - 1.0) {
+            final tInlet = ((yB1 - py) / (yB1 - yFL1)).clamp(0.0, 1.0);
+            ny -= dH * tInlet;
+            if (py <= yFL1 + 1.0) {
+              ny -= dFL;
+            }
+          }
+          return CadPoint2D(nx, ny);
+        }
+
+        // --- Zone 2: Apex & Symmetry Axis ((px - xCenter).abs() < 2.0) ---
+        // Width  → apex shifts upward by dW * dyApexFactor (miter geometry).
+        // Height → floor apex is stationary (Z = 0 floor anchor).
+        // Flange → 0.
+        if ((px - xCenter).abs() < 2.0 && py > yB1 + 20.0) {
+          return CadPoint2D(xCenter, py + dW * dyApexFactor);
+        }
+
+        // --- Zone 3: Left Arm (px < xCenter - 1.0) ---
+        if (px < xCenter - 1.0) {
+          final relX = px - leftArmBase.x;
+          final relY = py - leftArmBase.y;
+
+          // Projection parameter s along B3: s=0 at leftArmBase, s=1 at apex
+          final sRaw = (relX * leftArmDirX + relY * leftArmDirY) / leftArmLen;
+          final s = sRaw.clamp(0.0, 1.0);
+
+          // Perpendicular distance outward from B3 line into the wall
+          final distFromB3 = relX * nB3X + relY * nB3Y;
+
+          // 1. Width shift: Port 1 floor edge expands by dW along (-sinA, cosA).
+          // At s=0 (leftArmBase): shift = (-dW*sinA, dW*cosA).
+          // At s=1 (apex): shift = (0, dW*dyApexFactor).
+          final wShiftX = (1.0 - s) * (-dW * sinA);
+          final wShiftY = (1.0 - s) * (dW * cosA) + s * (dW * dyApexFactor);
+
+          // 2. Height shift: wall extends outward along nB3 by dH * tH.
+          // Points on B3 (distFromB3 <= 0) stay anchored to the floor web!
+          // Points at FL3 shift fully by dH * nB3.
+          final distFL = (1.0 - s) * distFlangeRootLeft1 + s * distFlangeRootLeft2;
+          double hShiftX = 0.0;
+          double hShiftY = 0.0;
+          if (distFromB3 > 1.0) {
+            final tH = (distFromB3 / (distFL - 1.0)).clamp(0.0, 1.0);
+            hShiftX += dH * tH * nB3X;
+            hShiftY += dH * tH * nB3Y;
+
+            // 3. Flange shift: distal flange lip beyond FL3 fold line extends by dFL
+            if (distFromB3 > distFL + 1.0) {
+              hShiftX += dFL * nB3X;
+              hShiftY += dFL * nB3Y;
+            }
+          }
+
+          return CadPoint2D(px + wShiftX + hShiftX, py + wShiftY + hShiftY);
+        }
+
+        // --- Zone 4: Right Arm (px > xCenter + 1.0) ---
+        if (px > xCenter + 1.0) {
+          final relX = px - rightArmBase.x;
+          final relY = py - rightArmBase.y;
+
+          final sRaw = (relX * rightArmDirX + relY * rightArmDirY) / rightArmLen;
+          final s = sRaw.clamp(0.0, 1.0);
+
+          final distFromB2 = relX * nB2X + relY * nB2Y;
+
+          // 1. Width shift: Port 2 floor edge expands by dW along (+sinA, cosA).
+          // At s=0 (rightArmBase): shift = (+dW*sinA, dW*cosA).
+          // At s=1 (apex): shift = (0, dW*dyApexFactor).
+          final wShiftX = (1.0 - s) * (dW * sinA);
+          final wShiftY = (1.0 - s) * (dW * cosA) + s * (dW * dyApexFactor);
+
+          // 2. Height shift: wall extends outward along nB2 by dH * tH.
+          final distFL = (1.0 - s) * distFlangeRootRight1 + s * distFlangeRootRight2;
+          double hShiftX = 0.0;
+          double hShiftY = 0.0;
+          if (distFromB2 > 1.0) {
+            final tH = (distFromB2 / (distFL - 1.0)).clamp(0.0, 1.0);
+            hShiftX += dH * tH * nB2X;
+            hShiftY += dH * tH * nB2Y;
+
+            // 3. Flange shift
+            if (distFromB2 > distFL + 1.0) {
+              hShiftX += dFL * nB2X;
+              hShiftY += dFL * nB2Y;
+            }
+          }
+
+          return CadPoint2D(px + wShiftX + hShiftX, py + wShiftY + hShiftY);
+        }
+
+        // --- Zone 5: Fallback (on-axis points above inlet, not the apex) ---
+        return CadPoint2D(xCenter, py + dW * dyApexFactor);
+      }
+
+      final morphedContour = baseline.outerContour.map(morphPoint).toList();
+      final morphedBends = baseline.bends.map((b) => b.copyWith(
+        p1: morphPoint(b.p1),
+        p2: morphPoint(b.p2),
+      )).toList();
+
+      // Guard rigid coupler punches: dimensions unchanged, translate center only
+      final morphedPunches = baseline.punches.map((p) {
+        final newCenter = morphPoint(p.center);
+        return p.copyWith(
+          center: newCenter,
+          widthMm: p.widthMm,
+          lengthMm: p.lengthMm,
+          diameterMm: p.diameterMm,
+          rotationDeg: p.rotationDeg,
+          role: p.type == PunchType.obroundSlot || p.isCoupler
+              ? CncPunchRole.coupler
+              : p.role,
+        );
+      }).toList();
+
+      final morphedFaces = baseline.faces.map((f) => f.copyWith(
+        vertices: f.vertices.map(morphPoint).toList(),
+      )).toList();
+
+      final newMetadata = Map<String, dynamic>.from(baseline.metadata);
+      newMetadata['appliedTemplate'] = template.templateId;
+      newMetadata['templateParameters'] = {
+        'width': newW,
+        'height': newH,
+        'flangeWidth': newFlange,
+      };
+
+      return baseline.copyWith(
+        itemName: 'Bend45_${newW.toInt()}x${newH.toInt()}',
+        outerContour: morphedContour,
+        bends: morphedBends,
+        punches: morphedPunches,
+        faces: morphedFaces,
+        metadata: newMetadata,
+        parameters: {
+          'width': newW,
+          'height': newH,
+          'flangeWidth': newFlange,
+        },
+      );
+    }
+
+    // Fallback for simple 2D raw perimeter without bends
     CadPoint2D morphPoint(CadPoint2D pt) {
       double x = pt.x;
       double y = pt.y;
-      if (x > midX) {
-        // Shift angled 45Â° arm along vector (cos 45Â°, sin 45Â°)
+      if (x > xCenter) {
         x += dW * 0.7071;
         y += dW * 0.7071;
       }
@@ -994,6 +1293,130 @@ class TopologicalZoneMorpher {
     );
   }
 
+  /// Generates a clean baseline DSF for a 4-Way Cable Tray Cross
+  static DsfDocument createBaselineCross({
+    double widthMain = 100.0,
+    double widthBranch = 100.0,
+    double height = 50.0,
+    double thickness = 1.5,
+  }) {
+    final armLead = 100.0;
+    final x1 = -widthBranch / 2.0 - armLead;
+    final x2 = -widthBranch / 2.0;
+    final x3 = widthBranch / 2.0;
+    final x4 = widthBranch / 2.0 + armLead;
+
+    final y1 = -widthMain / 2.0 - armLead;
+    final y2 = -widthMain / 2.0;
+    final y3 = widthMain / 2.0;
+    final y4 = widthMain / 2.0 + armLead;
+
+    final contour = <CadPoint2D>[
+      CadPoint2D(x1, y2),
+      CadPoint2D(x2, y2),
+      CadPoint2D(x2, y1),
+      CadPoint2D(x3, y1),
+      CadPoint2D(x3, y2),
+      CadPoint2D(x4, y2),
+      CadPoint2D(x4, y3),
+      CadPoint2D(x3, y3),
+      CadPoint2D(x3, y4),
+      CadPoint2D(x2, y4),
+      CadPoint2D(x2, y3),
+      CadPoint2D(x1, y3),
+    ];
+
+    final bends = <FoldBendLine>[
+      FoldBendLine(
+        id: 'BEND_CROSS_WEST',
+        p1: CadPoint2D(x2, y2),
+        p2: CadPoint2D(x2, y3),
+        targetAngleDeg: 90.0,
+        radiusMm: thickness,
+        direction: BendDirection.up,
+      ),
+      FoldBendLine(
+        id: 'BEND_CROSS_EAST',
+        p1: CadPoint2D(x3, y2),
+        p2: CadPoint2D(x3, y3),
+        targetAngleDeg: 90.0,
+        radiusMm: thickness,
+        direction: BendDirection.up,
+      ),
+      FoldBendLine(
+        id: 'BEND_CROSS_NORTH',
+        p1: CadPoint2D(x2, y3),
+        p2: CadPoint2D(x3, y3),
+        targetAngleDeg: 90.0,
+        radiusMm: thickness,
+        direction: BendDirection.up,
+      ),
+      FoldBendLine(
+        id: 'BEND_CROSS_SOUTH',
+        p1: CadPoint2D(x2, y2),
+        p2: CadPoint2D(x3, y2),
+        targetAngleDeg: 90.0,
+        radiusMm: thickness,
+        direction: BendDirection.up,
+      ),
+    ];
+
+    final punches = <CncPunchPrimitive>[
+      CncPunchPrimitive.obround(
+        id: 'PUNCH_CROSS_W',
+        center: CadPoint2D(x1 + 25.0, 0.0),
+        widthMm: 30.0,
+        lengthMm: 7.0,
+      ),
+      CncPunchPrimitive.obround(
+        id: 'PUNCH_CROSS_E',
+        center: CadPoint2D(x4 - 25.0, 0.0),
+        widthMm: 30.0,
+        lengthMm: 7.0,
+      ),
+      CncPunchPrimitive.obround(
+        id: 'PUNCH_CROSS_N',
+        center: CadPoint2D(0.0, y4 - 25.0),
+        widthMm: 7.0,
+        lengthMm: 30.0,
+        rotationDeg: 90.0,
+      ),
+      CncPunchPrimitive.obround(
+        id: 'PUNCH_CROSS_S',
+        center: CadPoint2D(0.0, y1 + 25.0),
+        widthMm: 7.0,
+        lengthMm: 30.0,
+        rotationDeg: 90.0,
+      ),
+    ];
+
+    final decomposed = PlanarFaceDecomposer.decompose(
+      outerContour: contour,
+      bends: bends,
+    );
+
+    return DsfDocument(
+      productType: 'Cable Tray Cross',
+      itemName: 'Cross_${widthMain.toInt()}x${height.toInt()}x${widthBranch.toInt()}',
+      material: SheetMetalMaterial(thicknessMm: thickness),
+      outerContour: contour,
+      bends: bends,
+      punches: punches,
+      faces: decomposed.faces,
+      baseFaceId: decomposed.baseFaceId,
+      metadata: {
+        'appliedTemplate': 'tray_cross',
+        'templateParameters': {
+          'widthMain': widthMain,
+          'widthBranch': widthBranch,
+          'width': widthMain,
+          'branchWidth': widthBranch,
+          'height': height,
+        },
+      },
+    );
+  }
+
   /// Automatically generates the appropriate baseline DSF for any registered template definition
   static DsfDocument createBaselineForTemplate(TemplateParameterDefinition template) {
     switch (template.templateId) {
@@ -1023,9 +1446,9 @@ class TopologicalZoneMorpher {
           length: template.baselineParameters['length'] ?? 150.0,
         );
       case 'tray_cross':
-        return createBaselineTee(
-          width: template.baselineParameters['width'] ?? 100.0,
-          branchWidth: template.baselineParameters['branchWidth'] ?? 100.0,
+        return createBaselineCross(
+          widthMain: template.baselineParameters['widthMain'] ?? template.baselineParameters['width'] ?? 100.0,
+          widthBranch: template.baselineParameters['widthBranch'] ?? template.baselineParameters['branchWidth'] ?? 100.0,
           height: template.baselineParameters['height'] ?? 50.0,
         );
       case 'tray_straight':

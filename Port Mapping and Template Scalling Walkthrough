@@ -1,0 +1,447 @@
+# Intelligent Bend/Flange-Driven Template System & Scaling Engine — Walkthrough
+
+## 1. Overview & Architecture Realization
+
+Per the breakthrough vision in `INTELLIGENT_BEND_LINES_TEMPLATE_WALKTHROUGH.md`, TruFold Studio has transitioned from guessing parameters and ports on raw 2D boundary polygons to an **Intelligent Bend/Flange-Driven Semantic Template & Scaling Pipeline**:
+
+```
+ ┌──────────────────────┐       ┌──────────────────────┐
+ │   DXF Flat Pattern   │   +   │   DSF Sheet Data     │
+ └──────────┬───────────┘       └──────────┬───────────┘
+            │                              │
+            ▼                              ▼
+     Keep Clean DXF              Bends, Flanges, Coupler Tags,
+     Entities in Memory          Constraints in Memory
+            │                              │
+            └──────────────┬───────────────┘
+                           ▼
+            KinematicFoldEngine (3D Fold)
+                           │
+                           ▼
+            StructuralTopologyAnalyzer
+            ├── Floor Face (F_7)
+            ├── Sidewalls (F_8, F_6, F_4)
+            ├── Return Flanges (F_0, F_5, F_1)
+            ├── Physical Channel Ports (Port 1 Inlet, Port 2 Outlet)
+            ├── Coupler Fastener Clusters (8 Rigid Obround Slots)
+            └── ProductVariationContract Matching (Score ≥ 0.90)
+                           │
+                           ▼
+            TopologicalZoneMorpher & GeometricConstraintSolver
+            ├── Sidewall Bend Lines Translated by ΔW, ΔH
+            ├── Flange Lines Offset by ΔFL
+            └── Coupler Punch Profiles Rigidly Protected (L, W, R unchanged)
+                           │
+                           ▼
+            Regenerated 2D Flat + Kinematic 3D Fold
+```
+
+---
+
+## 2. Key Accomplishments
+
+### A. Semantic Punch Classification & Invariant Punch Profiles
+- **File**: [cnc_punch_primitive.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/models/cnc_punch_primitive.dart)
+- Introduced `enum CncPunchRole { general, coupler, perforation, manufacturing, reference }`.
+- Added `role`, `parentFaceId`, and `associatedPortId` to [CncPunchPrimitive](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/models/cnc_punch_primitive.dart).
+- Added `isCoupler` and `isPerforation` getters. Backward-compatible JSON serialization.
+
+### B. Catalog Variation Contracts
+- **File**: [template_parameter_definition.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/models/template_parameter_definition.dart)
+- Defined `ProductVariationContract` with standard catalog specifications:
+  - `45_deg_bend`: 2 ports (180° and 135°), 5 bends, 3 flanges, 8 coupler slots.
+  - `90_deg_bend`: 2 ports (180° and 90°), 2 sidewall bends, return flanges.
+  - `equal_tee`: 3 ports (0°, 90°, 180°).
+  - `straight_tray`: 2 ports (0°, 180°).
+- Provides contract lookup by product type and variant name.
+
+### C. 3D Folded Structural Topology Analyzer
+- **File**: [structural_topology_analyzer.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/structural_topology_analyzer.dart)
+- Leverages [KinematicFoldEngine](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/kinematic_fold_engine.dart) 3D forward kinematics.
+- Accurately classifies:
+  - `floorFace`: Automatically discovers true base floor web (`F_7`).
+  - `sidewallFaces`: Identified from 90° structural bends (`F_8`, `F_6`, `F_4`).
+  - `flangeFaces`: Identified from `BendLineRole.flange` (`F_0`, `F_5`, `F_1`).
+  - `detectedPorts`: Port 1 (Inlet, width 50 mm, height 98 mm), Port 2 (Outlet, 45° miter).
+  - `couplerPunches`: Tags all 8 obround slots as `CncPunchRole.coupler` linked to their nearest port.
+  - Generates topology confidence score (matches contract with confidence $\ge 0.90$).
+
+### D. Bend & Flange-Driven Scaling Engine with Rigid Coupler Protection
+- **Files**:
+  - [topological_zone_morpher.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/topological_zone_morpher.dart)
+  - [geometric_constraint_solver.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/constraints/geometric_constraint_solver.dart)
+- Translates sidewall bend lines ($B2$, $B3$) and flange lines ($FL1$, $FL2$, $FL3$) directly based on $\Delta W, \Delta H, \Delta FL$.
+- Preserves the central miter apex along the symmetry axis ($y_{\text{apex\_new}} = y_{\text{apex}} + \tan(22.5^\circ) \cdot \frac{\Delta W}{2}$).
+- **Rigid Coupler Preservation**: Fastener mounting punch slots maintain exact length ($12.0$ mm), width ($8.0$ mm), and diameter without stretching or distortion while translating rigidly with host faces.
+
+### E. Memory Architecture & Saving Rules (User Constraint Satisfied)
+- **File**: [sheet_metal_studio_screen.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/sheet_metal_studio_screen.dart)
+- Clean DXF flat entities remain preserved in memory.
+- `Ctrl + S` strictly saves / overwrites **only the `.dsf` file**.
+- DXF export / save is only triggered when the user explicitly clicks Save/Export as DXF.
+
+### F. UI Inspector & Dialog Enhancements
+- **File**: [dxf_fitting_parameter_dialog.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/dxf_fitting_parameter_dialog.dart)
+- Analyzed banner displays 3D Folded Topology status, detected Width, Height, Flange.
+- Displays Coupler Hole count (Rigid) and Perforation count.
+- Added quick tagging buttons: `Mark Selection as Coupler 🔩`, `Mark as Perf ⚬`, and `Auto-Classify Holes ⚙`.
+
+---
+
+## 3. Part 2: Intent-First CMS Template Authoring & Guided Demarcation
+
+Per `INTELLIGENT_BEND_LINES_TEMPLATE_WALKTHROUGH Part2.md` and the user's architectural axioms, the authoring pipeline follows an **Intent-First** paradigm:
+
+```
+┌────────────────────────────────────────────────────────┐
+│                   1. PRODUCT INTENT                    │
+│  "Is this a CMS Part Drawing?"                         │
+│  Category ➔ Product Type ➔ Variation                   │
+│  (e.g., Trunking Accessories ➔ Tee ➔ Unequal Tee)      │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│         2. DYNAMIC PORT & BRANCH DIMENSIONS            │
+│  Stage A: Identify Physical Ports (W x H, Side)        │
+│  Stage B: Suggest Optional Semantic Roles (Main/Inlet) │
+│  + Live Fitting Miniature Schematic (Dynamic 2D Tags)  │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│    3. GUIDED DEMARCATION & LEVEL 3 AUTO-COLLAPSE       │
+│  • Compares Product Contract against DSF/3D Topology   │
+│  • Already valid features auto-collapse as COMPLETED   │
+│  • Floating HUD directs user to remaining tasks        │
+│  • "Why am I doing this?" context & Smart Defaults     │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│        4. "WHAT THE APP LEARNED" & READINESS           │
+│  • Scorecard of captured ports, bends, flanges, slots  │
+│  • Readiness Checklist: Physical, Kinematic, Fastener  │
+│  • Real-Time Interactive Scaling Scrubbing Slider      │
+│  • Strict Save: Overwrites ONLY .dsf (DXF is clean)    │
+└────────────────────────────────────────────────────────┘
+```
+
+### Key Components & Axioms Implemented
+
+#### Axiom 1: Physical Topology vs. Semantic Flow-Role Separation
+- **Stage A (Physical Ports)**: Discovers actual ports from product geometry and 3D topology (`PORT_1`, `PORT_2`, `PORT_3`), with physical dimensions ($W \times H$) and side directions. Flow-direction semantics are never forced.
+- **Stage B (Semantic Flow Roles)**: Suggests optional roles (`Main`, `Inlet`, `Outlet`, `Branch`, `Unassigned / Bidirectional`) accompanied by human-readable rationales (e.g. *"Largest width (300mm) is standard candidate for Main/Inlet"*).
+- For symmetrical fittings like an Equal Tee, collinear ports remain neutral `main` with unassigned flow direction without arbitrary guesses.
+
+#### Axiom 2: Progressive Dynamic Port Form & Live Miniature
+- **File**: [cms_product_intent_dialog.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_authoring/cms_product_intent_dialog.dart)
+- Displays dynamic port cards for each physical opening.
+- Independent flow-role selector pills (`Inlet`, `Outlet`, `Main`, `Branch`, `Unassigned`) with confidence badges (`HIGH`, `MEDIUM`, `LOW`).
+- Live miniature preview canvas ([CmsFittingMiniaturePainter](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_authoring/cms_product_intent_dialog.dart)) drawing real-time 2D CAD schematics of Tees, Bends, Reducers, and Crosses with live dimension badges.
+
+#### Axiom 3: Guided Demarcation Sequence & Level 3 Automation
+- **File**: [cms_guided_hud_overlay.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_authoring/cms_guided_hud_overlay.dart)
+- When starting demarcation, the workflow checks the existing DSF bend graph and 3D folded mesh.
+- Features matching the contract (e.g., sidewall bends $B1$–$B8$ or coupler punches) are **auto-collapsed** (`isAutoCollapsed: true`, `isCompleted: true`), skipping redundant steps.
+- Floating HUD features:
+  - Step counter and progress bar (`Step X of Y`).
+  - Expandable *"Why am I doing this?"* card explaining structural impact, geometric dependencies, and failure consequences.
+  - *"Use Smart Default"* button for instantaneous single-click completion.
+  - Collapsible manufacturing checklist drawer showing auto-collapsed items.
+
+#### Axiom 4: Checkpoints, Undo, and Actionable Errors
+- Every transition saves a `CmsWorkflowCheckpoint` with a complete snapshot of port inputs, current step, and DSF document.
+- Users can step backward (`previousGuidanceStep()`) or undo (`undoLastGuidanceStep()`) without corrupting geometry.
+- If an entity causes a violation (e.g. invalid bend angle or misplaced flange), the HUD displays a `CmsActionableError` with a 1-click `fixCallback`.
+
+#### Axiom 5: "What the App Learned" Scorecard & Template Readiness
+- **File**: [cms_review_and_readiness_dialog.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_authoring/cms_review_and_readiness_dialog.dart)
+- Presents a high-tech engineering scorecard summarizing:
+  - Verified physical ports ($W \times H$, roles, and sources).
+  - Verified bend lines & sidewall heights.
+  - Return flanges with bend angles and deduction formulas.
+  - Coupler slot fasteners preserved as rigid invariants.
+- Template Readiness Checklist verifies:
+  - ✓ Physical Port Topology Valid
+  - ✓ Bend Kinematics Consistent (Watertight Fold)
+  - ✓ Invariant Features Protected (Coupler Slots Invariant)
+  - ✓ Parametric Scaling Continuity Verified
+- Interactive live test scaling slider scrubbed from $100$ mm to $600$ mm with real-time feedback.
+- Strict `.dsf` commit: `Ctrl + S` and the final template commit strictly write only to `.dsf`. Raw flat DXF geometry is preserved in memory.
+
+---
+
+## 4. Verification & Quality Assurance
+
+### Automated Test Suite: [cms_authoring_workflow_test.dart](file:///d:/FlutterProjects/trufold_studio/test/modules/sheet_metal_studio/cms_authoring_workflow_test.dart)
+1. **Physical Port vs Semantic Flow Role Separation**: Verifies independent physical dimensions and Stage B optional role suggestions with confidence rationales on an Unequal Tee.
+2. **Catalog Variation Disambiguation**: Verifies exact matching without substring false positives between `Equal Tee` and `Unequal Tee`.
+3. **Level 3 Automation Auto-Collapse**: Verifies pre-existing valid features in `45_deg_bend_100x100.dsf` auto-collapse to completed status.
+4. **Checkpoint Snapshots and Undo**: Verifies non-destructive rollbacks to earlier steps.
+5. **App Learned Scorecard Generation**: Verifies the structured review report accurately captures all physical ports, bends, and rigid coupler fasteners.
+6. **Smart Default Application**: Verifies 1-click resolution of pending demarcation steps.
+7. **Actionable Error Propagation**: Verifies descriptive engineering diagnostics with executable remediation actions.
+
+### Summary Metrics
+| Test Suite | Total Tests | Passed | Failed |
+|---|---|---|---|
+| Structural Topology Analyzer | 4 | 4 | 0 |
+| Bend-Driven Scaling Engine | 3 | 3 | 0 |
+| CMS Authoring Workflow | 7 | 7 | 0 |
+| CMS 3D Opening Discovery | 1 | 1 | 0 |
+| CMS Port Matching & Reconciliation | 3 | 3 | 0 |
+| CMS Coupler Classification | 1 | 1 | 0 |
+| CMS Guided UX Controller | 1 | 1 | 0 |
+| **Full Project Test Suite** | **185** | **185** | **0** |
+
+- **Static Analysis**: `flutter analyze` runs clean with **0 warnings and 0 errors**.
+
+---
+
+## 5. Part 3: Clean CMS Architecture Reset & 3D-First Port Discovery
+
+### A. Architectural Paradigm Shift
+Per user alignment and [TRUFOLD_LEGACY_ISOLATION_CLEAN_CMS_ARCHITECTURE.md](file:///d:/FlutterProjects/trufold_studio/TRUFOLD_LEGACY_ISOLATION_CLEAN_CMS_ARCHITECTURE.md), the failed 2D manual port-edge picking prototype has been completely isolated:
+- **The Core Breakthrough**: Instead of forcing the user to manually click 2D flat drawing edges before any bends exist, the engine forward-kinematically folds the part into a true 3D mesh via `KinematicFoldEngine.foldDocument(doc, foldProgress: 1.0)`.
+- **Natural 3D Port Emergence**: An opening in 3D sheet metal is an open boundary loop of the channel where no standing sidewall exists.
+- **Robust Floor Web Identification**: Replaced blind reliance on `doc.baseFaceId` with structural connectivity ranking. On `45_deg_bend_100x100.dsf`, the central web (`F_5`) connects to 3 structural $90^\circ$ sidewall bends ($B1, B2, B3$) and has horizontal normal $(0, 0, -1)$, effortlessly detecting both terminal channel mouths with exact $100\text{ mm}$ width.
+
+### B. Clean Domain Engines in `lib/sheet_metal_studio/engine/cms/`
+1. **[cms_3d_opening_detector.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/cms/cms_3d_opening_detector.dart)**:
+   - Scans the folded 3D mesh for open terminal edges of the floor web that have no bend lines attached.
+   - Traces 3D boundary loops and computes outward horizontal normal vectors pointing away from the fitting center.
+2. **[cms_opening_plane_analyzer.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/cms/cms_opening_plane_analyzer.dart)**:
+   - Measures true physical width, vertical sidewall height, flange lip, and local orthogonal frame $(\vec{u}_{\text{width}}, \vec{u}_{\text{height}}, \vec{n}_{\text{normal}})$.
+3. **[cms_port_matcher.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/cms/cms_port_matcher.dart)**:
+   - Matches measured openings against catalog contracts ([CmsProductContract](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/models/cms/cms_product_contract.dart)).
+   - Assigns stable physical port IDs (`PORT_1`, `PORT_2`) and proposes symmetrical/bidirectional or main/branch role suggestions.
+   - Raises ambiguity exceptions only when geometry contradicts expected contracts.
+4. **[cms_port_reconciler.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/cms/cms_port_reconciler.dart)**:
+   - Maintains stable physical port IDs across parametric scaling and re-folding operations via normal vector alignment.
+5. **[cms_coupler_classifier.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/cms/cms_coupler_classifier.dart)**:
+   - Automatically identifies standard $8 \times 12\text{ mm}$ obround coupler slots.
+   - Distinguishes rigid structural fastener slots from ventilating perforations.
+   - Associates 4 coupler slots per port on `45_deg_bend_100x100.dsf` and locks them as rigid invariants to prevent distortion during scaling.
+6. **[cms_guided_ux_controller.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/cms/cms_guided_ux_controller.dart)**:
+   - Autonomous, observable state machine managing stages: `folding` $\to$ `detectingOpenings` $\to$ `matchingPorts` $\to$ `verifyingBends` $\to$ `classifyingCouplers` $\to$ `complete`.
+   - Records progressive narrative milestones for the live "What TruFold Learned" card.
+
+### C. 100% Light CAD Theme UI Suite in `views/widgets/guided_cms/`
+- **[cms_guided_stage_card.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_cms/cms_guided_stage_card.dart)**: Floating status card displaying active phase, progress bar, and stage controls.
+- **[cms_live_learned_card.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_cms/cms_live_learned_card.dart)**: Progressive milestone checklist tracking verified features.
+- **[cms_ambiguity_resolver_dialog.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_cms/cms_ambiguity_resolver_dialog.dart)**: Focused visual exception candidate picker.
+- **[cms_2d_overlay_painter.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_cms/cms_2d_overlay_painter.dart)**: 2D canvas port pill badges and active focus halos.
+- **[cms_3d_opening_callout.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_cms/cms_3d_opening_callout.dart)**: 3D billboard callout displaying port ID and measured $W \times H$ dimensions at the opening mouth.### D. Legacy Purge & Full Viewport/Canvas Linking
+1. **Complete Removal of Legacy Files**:
+   - Safely deleted `lib/sheet_metal_studio/views/widgets/guided_authoring/` (all 4 legacy wizard screens: `cms_guided_hud_overlay.dart`, `cms_product_intent_dialog.dart`, `cms_review_and_readiness_dialog.dart`, `cms_dxf_inspector_prompt_dialog.dart`).
+   - Removed `CmsAuthoringMixin` and deleted `lib/sheet_metal_studio/viewmodels/mixins/cms_authoring_mixin.dart`.
+   - Deleted `lib/sheet_metal_studio/models/cms_authoring_workflow_state.dart`.
+   - Deleted obsolete unit test `test/modules/sheet_metal_studio/cms_authoring_workflow_test.dart`.
+2. **Immediate Tab Switch on DXF Open**:
+   - In `sheet_metal_studio_screen.dart`, when opening a DXF, the newly added tab is immediately set as active via `setState(() { _tabs.add(tab); _activeTabIndex = _tabs.length - 1; });` so the user instantly sees their drawing and 3D folded geometry.
+   - `CmsDxfInspectorDialog.show` opens over the active part, triggering autonomous 3D discovery directly on the current tab.
+3. **2D Canvas & 3D Viewport Synchronized Badges**:
+   - Integrated `Cms2DOverlayPainter` directly into `unfolded_canvas_widget.dart` to draw emerald/cyan port badges over the flat pattern.
+   - Integrated `Cms3DOpeningCallout` directly into `viewport_3d_widget.dart` via perspective camera projection to render floating 3D dimension badges over the channel opening mouths.
+4. **Validation**:
+   - `flutter analyze`: **0 issues found**.
+   - `flutter test`: **179 / 179 tests passed (100%)**.
+
+---
+
+## 6. Part 4: 7-Stage Architecture Realization & User-Authorized Bend Authority
+
+### A. Root Cause: Why Did Opening a Raw 45° DXF Show "19 Openings"?
+When opening a raw blank (`45_deg_bend_100x100.dxf`), the file has $0$ bend lines.
+The previous code immediately attempted to fold the document and discover 3D ports. Folding a sheet with $0$ bends yields $1$ flat polygon (unfolded). The 3D opening detector looks for edges of the base floor with no bend lines attached. Because there were $0$ bends anywhere on the workpiece, **all 19 outer boundary edges** had no bend lines attached, so the algorithm falsely reported $19$ channel openings and triggered the ambiguity resolver dialog before authoring had even begun!
+
+### B. Foundational Axiom
+> *"A flat DXF has no physical ports. Ports are semantic physical openings of the folded part. Therefore, CMS port discovery is strictly prohibited until the user-authorized bend structure has produced a valid folded 3D topology."*
+
+### C. The 7-Stage Authoring Pipeline
+```
+Stage 1: Product Intent
+   │  Catalog contract loaded (e.g. 45° Bend expects 2 ports, 3 structural bends, 2 flanges)
+   ▼
+Stage 2: Bend Structure (User-Authorized)
+   │  Analyze flat blank ➔ Suggest candidate bend & flange lines
+   │  PAUSE: Render dashed cyan/teal suggestions with terminal dots & badges on 2D canvas
+   │  User clicks [Use Suggested Bends] or draws manually (B)
+   ▼
+Stage 3: 3D Channel Fold
+   │  Forward kinematics folds upright channel (0° flat ➔ 90° upright)
+   │  HARD GUARD: Prohibit 3D port discovery if folded mesh has <= 1 face
+   ▼
+Stage 4: Physical Ports
+   │  Scan terminal open loops of the 3D channel
+   │  Automatic correlation with contract (PORT_1, PORT_2 matched automatically without ambiguity)
+   ▼
+Stage 5: Feature Protection
+   │  Lock rigid 8×12mm coupler slots to sidewalls as scale invariants
+   ▼
+Stage 6: Smart Scaling
+   │  Establish topological constraints between ports, sidewalls, and flanges
+   ▼
+Stage 7: Template Complete
+   │  Verified CMS template ready for parametric scaling and catalog storage
+```
+
+### D. Key Implementation Details
+1. **User Authority**:
+   - The system never silently converts candidate lines into real bends.
+   - UI button explicitly states: `[Use Suggested Bends]`, signifying: *"Use these highlighted lines as my bend definitions"*.
+2. **Contract-Driven Bend Validation**:
+   - `document.bends.isNotEmpty` is no longer blindly trusted. Bends are validated against `contract.expectedStructuralBends`.
+   - If insufficient or uncertain, the controller transitions to `CmsUxPhase.confirmingBends`.
+3. **2D Canvas Overlay Enhancements**:
+   - [cms_2d_overlay_painter.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_cms/cms_2d_overlay_painter.dart) renders dashed lines with terminal anchor dots, outer halos, and midpoint badges (`FLANGE 90° UP`, `BEND 90° UP`) during Stage 2 suggestions.
+4. **Hard Guards**:
+   - [cms_guided_ux_controller.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/cms/cms_guided_ux_controller.dart) enforces that if `foldResult.polygons.length <= 1`, execution halts with `CmsUxPhase.error`, completely preventing false opening scans on flat blanks.
+
+### E. Verification Results
+- **Static Analysis**: `flutter analyze` runs clean with **0 issues found** across the entire repository.
+- **Automated Tests**:
+  - `cms_guided_ux_controller_test.dart`:
+    1. Pre-bent `.dsf` runs full end-to-end automatic discovery across all 7 stages.
+    2. ViewModel runs `startCleanCmsDiscovery` end-to-end on `.dsf`.
+    3. **Raw 45° bend DXF pauses at Stage 2 `suggestingBends`**, displays candidate suggestions, does **not** fold or detect 3D ports, and user authorization via `applyUserBends()` successfully advances through folding, discovering PORT_1 and PORT_2 without any ambiguity dialog!
+  - **Full Module Test Suite**: **180 / 180 tests passed (100% pass rate)**.
+
+---
+
+## 7. Part 5: Phase 1 Polish — Accurate 3D Anchors, Perimeter Borders & Fitting Inspector Modernization
+
+Based on interactive testing and user feedback:
+
+### A. Pegged 3D Opening Mouth Anchors (Eliminating the Floating Bug)
+- **Problem**: Previously, [CmsOpeningPlaneAnalyzer](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/cms/cms_opening_plane_analyzer.dart) added $+H/2$ blindly to the floor face $Z$ level ($100.0\text{ mm}$), causing port callouts to float at $Z = 162.1\text{ mm}$ high up in empty space above inverted channels.
+- **Solution**:
+  1. Detects actual sidewall vertex $Z$ levels from the folded mesh (finding true $lipZ = 0.5\text{ mm}$ for inverted $100\text{ mm}$ standing channel models).
+  2. Computes the 4 exact 3D corners of the channel opening mouth:
+     - Floor threshold corners: $P1, P2$
+     - Top lip corners: $P3 = (P1.x, P1.y, lipZ)$, $P4 = (P2.x, P2.y, lipZ)$
+  3. Calculates the mouth centroid at $((P1+P2)/2, (P1.z+lipZ)/2) \approx Z = 50.3\text{ mm}$.
+  4. Anchors the callout badge directly to the mouth top-rim edge $((P1+P2)/2, lipZ)$ with a pinned 3D leader peg:
+     - Badge displays anchored above the mouth with a vertical leader line connecting directly to an anchor dot on the rim.
+
+### B. High-Visibility 3D Aperture Fill & Glowing Perimeter Highlight Loop
+- **File**: [viewport_3d_widget.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/viewport_3d_widget.dart)
+- In `_Viewport3dPainter`, implemented Pass 3 for CMS port aperture rendering:
+  - Semi-transparent cyan aperture fill covering the channel opening polygon.
+  - Border highlight loop tracing $P1 \to P3 \to P4 \to P2 \to P1$ with a glowing 2.5px cyan stroke.
+  - Distinct floor threshold base line for visual clarity.
+
+### C. Persistent Port Demarcations & Header Ribbon Toggle
+- **Problem**: Closing the Stage 7 card previously dismissed all port identification tags.
+- **Solution**:
+  - `activeCmsPorts` is backed by `_persistentCmsPorts`, hydrated directly from `document.metadata['cmsTemplate']['ports']`.
+  - Added a dedicated `PORTS` toggle button in the top 3D ribbon bar allowing users to toggle port aperture overlays on or off at any time without reopening the wizard.
+  - Both 2D flat drawing and 3D folded viewport reference `viewModel.activeCmsPorts`.
+
+### D. Fitting Inspector Modernization
+- **File**: [dxf_fitting_parameter_dialog.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/dxf_fitting_parameter_dialog.dart)
+- Replaced legacy manual picking buttons (`Auto-Detect from Opening Edge 🎯` and `Select W Edge 📏`) with clean, modern CMS badges when verified 3D channel ports exist:
+  - Displays: `✓ Verified via 3D Channel Model`
+  - Dimensions: `100.0 × 100.0 mm (3D Opening Mouth)`
+  - Parameter row badge: `✓ Linked to 3D physical port (auto-synced)`.
+
+### E. Clean Finalization on Stage 7
+- **File**: [cms_guided_stage_card.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_cms/cms_guided_stage_card.dart)
+- Stage 7 provides two clean direct actions:
+  - `[Finalize & Save]`: Persists baseline template without nag dialogs and closes card.
+  - `[Teach Scaling (Phase 2) →]`: Directly opens Phase 2 Intelligent Template Scaling mode.
+
+---
+
+## 8. Part 6: Phase 2 — Intelligent Template Scaling ("Teach Scaling")
+
+Following `TRUFOLD_PHASE_1_2_TEMPLATE_SCALING_WORKFLOW.md` and the user's architectural axiom:
+
+### A. The Canonical 2D Geometry Rule
+> **The 2D sheet-metal geometry (`DsfDocument`) is the single source of truth.**
+>
+> 3D geometry is never directly deformed or arbitrarily interpolated. When modifying a parameter (e.g. Width from $100\text{ mm}$ to $150\text{ mm}$):
+> 1. Compute parameter delta: $\Delta W = W(t) - W_{\text{baseline}}$.
+> 2. Apply parametric behaviors to the canonical 2D flat blank (`outerContour`, `bends`, `faces`, `punches`, `cutLines`).
+> 3. Validate 2D geometry (contour closure, bend consistency).
+> 4. Fold the exact 2D state using [KinematicFoldEngine](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/kinematic_fold_engine.dart).
+> 5. Recalculate derived 3D physical ports from the newly generated 3D mesh.
+
+```
+       Change Width (e.g. 100 ➔ 150 mm)
+                     │
+                     ▼
+       Modify Canonical 2D Geometry
+                     │
+                     ▼
+               Validate 2D
+                     │
+                     ▼
+         Fold That Exact 2D State
+         (KinematicFoldEngine)
+                     │
+                     ▼
+                Generate 3D
+                     │
+                     ▼
+       Recalculate Derived Port Geometry
+```
+
+### B. Pure Parametric Scaling Model
+- **File**: [cms_scaling_model.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/models/cms/cms_scaling_model.dart)
+- Models the 4 core geometric behaviors:
+  1. `STRETCH`: Floor web expands along transverse bend axis.
+  2. `TRANSLATE`: Sidewall faces and locked flanges shift rigidly outward.
+  3. `RIGID`: Coupler fastener slots maintain exact geometry ($12.0\text{ mm} \times 8.0\text{ mm}$) and reference edge mounting distance.
+  4. `DERIVED`: 3D port mouths automatically recalculate from the folded 3D state.
+- Supports progressive teaching states: `untaught`, `learning`, `learned`.
+- Dynamic rigid feature group naming: `Coupler Slots (${punches.length})` (never a hardcoded count).
+
+### C. Scaling Controller & Morph Engine
+- **File**: [cms_scaling_controller.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/engine/cms/cms_scaling_controller.dart)
+- `evaluateMorph(value)`:
+  - Scales canonical 2D flat blank for width/height.
+  - Folds updated document into 3D.
+  - Re-measures opening apertures and confirms zero punch distortion.
+- `acceptScalingModel()`:
+  - Marks parameters as `learned`.
+  - Persists the validated `CmsScalingModel` into the DSF document metadata (`metadata['cmsTemplate']['scalingModel']`).
+
+### D. Interactive "Teach Scaling" UI Overlay
+- **File**: [cms_teach_scaling_overlay.dart](file:///d:/FlutterProjects/trufold_studio/lib/sheet_metal_studio/views/widgets/guided_cms/cms_teach_scaling_overlay.dart)
+- Displays:
+  - Header with product name, variation, and active parameter selector.
+  - "What Moves?" semantic diagram mapping:
+    - `STRETCH`: Floor Web ($F\_7$)
+    - `TRANSLATE`: Sidewalls ($F\_8, F\_6, F\_4$) & Locked Flanges
+    - `RIGID`: Coupler Slots (8 slots, $12 \times 8\text{ mm}$)
+    - `DERIVED`: Port 1 & Port 2 (Mouth Apertures)
+  - Live Morph Scrubber ($100\text{ mm} \dots 150\text{ mm}$) evaluating 2D & 3D at each slider tick.
+  - `[Accept Scaling Model]` and `[Cancel]` buttons.
+
+---
+
+## 9. Comprehensive Verification
+
+1. **Static Analysis**:
+   ```bash
+   flutter analyze lib/sheet_metal_studio/ test/modules/sheet_metal_studio/
+   # Result: No issues found! (0 warnings, 0 errors)
+   ```
+
+2. **Unit & Integration Test Suite**:
+   ```bash
+   flutter test test/modules/sheet_metal_studio/
+   # Result: 183 / 183 tests passed (100% pass rate)
+   ```
+   - `cms_scaling_controller_test.dart`:
+     - Initialized scaling model with dynamic rigid groups and untaught parameters: **PASS**.
+     - Morph scrubber strictly modified 2D sheet blank and regenerated 3D: **PASS**.
+     - Accepting scaling model marked parameter as learned and persisted into DSF metadata: **PASS**.
+   - `cms_port_matching_and_reconciliation_test.dart`:
+     - Matched openings against contract with high confidence: **PASS**.
+     - Ambiguity resolution handling: **PASS**.
+     - Preserved stable port identities across scaling: **PASS**.
+   - `sheet_metal_studio_screen_test.dart`:
+     - All 32 UI and interaction tests: **PASS**.

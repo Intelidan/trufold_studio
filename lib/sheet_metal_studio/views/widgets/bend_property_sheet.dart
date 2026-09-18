@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import '../../models/fold_bend_line.dart';
 import '../../models/sheet_metal_definition.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
+import 'cad_number_spinner.dart';
 
 class BendPropertySheet extends StatelessWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -464,12 +465,16 @@ class BendPropertySheet extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      '${bend.targetAngleDeg.toStringAsFixed(1)}°',
-                      style: TextStyle(
-                        color: themeColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                    CadNumberSpinner(
+                      value: bend.targetAngleDeg,
+                      min: 0.0,
+                      max: 180.0,
+                      step: 1.0,
+                      decimals: 1,
+                      suffix: '°',
+                      width: 95,
+                      onChanged: (val) => viewModel.updateBend(
+                        bend.copyWith(targetAngleDeg: val),
                       ),
                     ),
                   ],
@@ -575,72 +580,29 @@ class BendPropertySheet extends StatelessWidget {
                   const SizedBox(height: 6),
                 ],
 
-                // Inside Bend Radius - Compact Stepper (No bulky chip matrix)
+                // Inside Bend Radius - CadNumberSpinner
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Expanded(
-                      child: Text(
-                        'INSIDE RADIUS',
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                    const Text(
+                      'INSIDE RADIUS',
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        InkWell(
-                          onTap: bend.radiusMm > 0.5
-                              ? () => viewModel.updateBend(
-                                  bend.copyWith(
-                                    radiusMm: (bend.radiusMm - 0.5).clamp(
-                                      0.5,
-                                      30.0,
-                                    ),
-                                  ),
-                                )
-                              : null,
-                          borderRadius: BorderRadius.circular(4),
-                          child: const Padding(
-                            padding: EdgeInsets.all(2.0),
-                            child: Icon(
-                              Icons.remove_circle_outline,
-                              size: 14,
-                              color: Color(0xFF64748B),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${bend.radiusMm.toStringAsFixed(1)} mm',
-                          style: const TextStyle(
-                            color: Color(0xFF334155),
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        InkWell(
-                          onTap: () => viewModel.updateBend(
-                            bend.copyWith(
-                              radiusMm: (bend.radiusMm + 0.5).clamp(0.5, 30.0),
-                            ),
-                          ),
-                          borderRadius: BorderRadius.circular(4),
-                          child: const Padding(
-                            padding: EdgeInsets.all(2.0),
-                            child: Icon(
-                              Icons.add_circle_outline,
-                              size: 14,
-                              color: Color(0xFF0284C7),
-                            ),
-                          ),
-                        ),
-                      ],
+                    CadNumberSpinner(
+                      value: bend.radiusMm,
+                      min: 0.1,
+                      max: 50.0,
+                      step: 0.5,
+                      decimals: 1,
+                      suffix: 'mm',
+                      width: 105,
+                      onChanged: (val) => viewModel.updateBend(
+                        bend.copyWith(radiusMm: val),
+                      ),
                     ),
                   ],
                 ),
@@ -658,13 +620,15 @@ class BendPropertySheet extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      (bend.kFactor ?? viewModel.document.material.kFactor)
-                          .toStringAsFixed(2),
-                      style: TextStyle(
-                        color: themeColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                    CadNumberSpinner(
+                      value: bend.kFactor ?? viewModel.document.material.kFactor,
+                      min: 0.10,
+                      max: 0.90,
+                      step: 0.01,
+                      decimals: 2,
+                      width: 95,
+                      onChanged: (val) => viewModel.updateBend(
+                        bend.copyWith(kFactor: val),
                       ),
                     ),
                   ],
@@ -849,7 +813,7 @@ class BendPropertySheet extends StatelessWidget {
                   children: [
                     const Expanded(
                       child: Text(
-                        'Dimension Label:',
+                        'Size Dimension:',
                         style: TextStyle(
                           color: Color(0xFF64748B),
                           fontSize: 10,
@@ -875,8 +839,8 @@ class BendPropertySheet extends StatelessWidget {
                       ),
                       splashRadius: 14,
                       tooltip: bend.showLabel
-                          ? 'Hide Dimension Label'
-                          : 'Show Dimension Label',
+                          ? 'Hide Size Dimension'
+                          : 'Show Size Dimension',
                       onPressed: () => viewModel.toggleBendLabel(bend.id),
                     ),
                   ],

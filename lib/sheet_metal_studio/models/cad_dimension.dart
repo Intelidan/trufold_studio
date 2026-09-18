@@ -53,7 +53,7 @@ class CadDimension {
     this.referenceBId,
     this.pointA,
     this.pointB,
-    this.dimensionLineOffset = 25.0,
+    this.dimensionLineOffset = 8.0,
     this.extensionLineOvershoot = 4.0,
     required this.measuredValue,
     this.userOffset = Offset.zero,
@@ -186,7 +186,7 @@ class CadDimension {
               )
             : null,
         dimensionLineOffset:
-            (json['dimensionLineOffset'] as num?)?.toDouble() ?? 25.0,
+            (json['dimensionLineOffset'] as num?)?.toDouble() ?? 8.0,
         extensionLineOvershoot:
             (json['extensionLineOvershoot'] as num?)?.toDouble() ?? 4.0,
         measuredValue: (json['measuredValue'] as num).toDouble(),

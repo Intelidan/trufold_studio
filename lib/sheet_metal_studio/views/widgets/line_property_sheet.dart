@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import '../../models/cad_primitives.dart';
 import '../../models/cad_constraint.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
+import 'cad_number_spinner.dart';
 
 class LinePropertySheet extends StatelessWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -363,6 +364,39 @@ class LinePropertySheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
+
+            // Size Dimension Toggle
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Size Dimension:',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    line.showLabel ? Icons.visibility : Icons.visibility_off,
+                    size: 16,
+                    color: line.showLabel
+                        ? const Color(0xFF6366F1)
+                        : const Color(0xFF94A3B8),
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                  splashRadius: 14,
+                  tooltip: line.showLabel ? 'Hide Size Dimension' : 'Show Size Dimension',
+                  onPressed: () => viewModel.toggleCutLabel(line.id),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             const Divider(height: 1, color: Color(0xFFE2E8F0)),
             const SizedBox(height: 8),
 
@@ -499,48 +533,13 @@ class LinePropertySheet extends StatelessWidget {
     required double value,
     required ValueChanged<double> onSubmitted,
   }) {
-    return Container(
-      height: 24,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 0.8),
-      ),
-      child: Row(
-        children: [
-          Text(
-            '$label: ',
-            style: const TextStyle(
-              fontSize: 9,
-              color: Color(0xFF94A3B8),
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Expanded(
-            child: TextField(
-              controller: TextEditingController(text: value.toStringAsFixed(1)),
-              style: const TextStyle(
-                fontSize: 10,
-                color: Color(0xFF0F172A),
-                fontWeight: FontWeight.w600,
-              ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-                border: InputBorder.none,
-              ),
-              onSubmitted: (s) {
-                final d = double.tryParse(s.trim());
-                if (d != null) onSubmitted(d);
-              },
-            ),
-          ),
-        ],
-      ),
+    return CadNumberSpinner(
+      label: label,
+      value: value,
+      step: 1.0,
+      decimals: 1,
+      suffix: 'mm',
+      onChanged: onSubmitted,
     );
   }
 
@@ -549,50 +548,13 @@ class LinePropertySheet extends StatelessWidget {
     required double value,
     required ValueChanged<double> onSubmitted,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 9,
-            color: Color(0xFF64748B),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Container(
-          height: 24,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: const Color(0xFFE2E8F0), width: 0.8),
-          ),
-          child: Center(
-            child: TextField(
-              controller: TextEditingController(text: value.toStringAsFixed(1)),
-              style: const TextStyle(
-                fontSize: 10,
-                color: Color(0xFF0F172A),
-                fontWeight: FontWeight.w600,
-              ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-                border: InputBorder.none,
-              ),
-              onSubmitted: (s) {
-                final d = double.tryParse(s.trim());
-                if (d != null) onSubmitted(d);
-              },
-            ),
-          ),
-        ),
-      ],
+    return CadNumberSpinner(
+      label: label,
+      value: value,
+      step: 1.0,
+      decimals: 1,
+      suffix: label.contains('Angle') ? '°' : 'mm',
+      onChanged: onSubmitted,
     );
   }
 

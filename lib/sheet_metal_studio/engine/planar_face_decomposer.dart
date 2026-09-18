@@ -141,19 +141,26 @@ class PlanarFaceDecomposer {
     }
 
     // 4. Determine the Base Anchor Face (Root of DAG)
-    // Select face with largest 2D area (standard CAD convention for base sheet)
+    // Select face with most structural bends (floor web connecting sidewalls) or largest 2D area
     String baseId = preferredBaseFaceId ?? '';
     if (baseId.isEmpty || !faces.any((f) => f.id == baseId)) {
-      PlanarSheetFace largest = faces.first;
-      double maxArea = -1.0;
+      PlanarSheetFace best = faces.first;
+      double bestScore = -1.0;
       for (final f in faces) {
+        int structuralBends = 0;
+        for (final b in updatedBends) {
+          if (b.role != BendLineRole.flange && (b.parentFaceId == f.id || b.childFaceId == f.id)) {
+            structuralBends++;
+          }
+        }
         final a = _computePolygonArea(f.vertices).abs();
-        if (a > maxArea) {
-          maxArea = a;
-          largest = f;
+        final score = structuralBends * 10000.0 + a;
+        if (score > bestScore) {
+          bestScore = score;
+          best = f;
         }
       }
-      baseId = largest.id;
+      baseId = best.id;
     }
 
     // 5. Direct the bend connections from Base Face outward (Parent -> Child DAG)

@@ -48,7 +48,7 @@ class ContourTopologyClassifier {
         return ContourTopologyType.rectangular;
       }
 
-      final name = ' '.toLowerCase();
+      final name = '${document.productType} ${document.itemName}'.toLowerCase();
       if (name.contains('tee')) return ContourTopologyType.tBranch;
       if (name.contains('reducer')) return ContourTopologyType.taperedReducer;
       if (name.contains('cross')) return ContourTopologyType.crossBranch;

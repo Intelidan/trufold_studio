@@ -21,6 +21,16 @@ enum PunchType {
   String get name => toString().split('.').last;
 }
 
+enum CncPunchRole {
+  general,
+  coupler,
+  perforation,
+  manufacturing,
+  reference;
+
+  String get name => toString().split('.').last;
+}
+
 class CncPunchPrimitive {
   final String id;
   final PunchType type;
@@ -38,6 +48,9 @@ class CncPunchPrimitive {
   final List<CadPoint2D>? customBoundary;
   final bool showLabel;
   final bool isVisible;
+  final CncPunchRole role;
+  final String? parentFaceId;
+  final String? associatedPortId;
 
   const CncPunchPrimitive({
     required this.id,
@@ -55,11 +68,16 @@ class CncPunchPrimitive {
     this.customBoundary,
     this.showLabel = true,
     this.isVisible = true,
+    this.role = CncPunchRole.general,
+    this.parentFaceId,
+    this.associatedPortId,
   });
 
   bool get isRound => type == PunchType.roundHole;
   bool get isSlot => type == PunchType.obroundSlot;
   bool get isEllipse => type == PunchType.ellipse;
+  bool get isCoupler => role == CncPunchRole.coupler;
+  bool get isPerforation => role == CncPunchRole.perforation;
   double get angleDeg => rotationDeg;
   PunchType get shape => type;
 
@@ -164,8 +182,10 @@ class CncPunchPrimitive {
 
       case PunchType.square:
       case PunchType.rectangle:
-        final halfW = (type == PunchType.square ? diameterMm : widthMm) / 2.0;
-        final halfH = (type == PunchType.square ? diameterMm : lengthMm) / 2.0;
+        final effW = (type == PunchType.square ? (widthMm > 0 ? widthMm : diameterMm) : widthMm);
+        final effH = (type == PunchType.square ? (lengthMm > 0 ? lengthMm : (widthMm > 0 ? widthMm : diameterMm)) : lengthMm);
+        final halfW = effW / 2.0;
+        final halfH = effH / 2.0;
         return [rotate(-halfW, -halfH), rotate(halfW, -halfH), rotate(halfW, halfH), rotate(-halfW, halfH)];
       case PunchType.ellipse:
         final a = lengthMm / 2.0;
@@ -238,6 +258,9 @@ class CncPunchPrimitive {
     List<CadPoint2D>? customBoundary,
     bool? showLabel,
     bool? isVisible,
+    CncPunchRole? role,
+    String? parentFaceId,
+    String? associatedPortId,
   }) {
     return CncPunchPrimitive(
       id: id ?? this.id,
@@ -255,6 +278,9 @@ class CncPunchPrimitive {
       customBoundary: customBoundary ?? this.customBoundary,
       showLabel: showLabel ?? this.showLabel,
       isVisible: isVisible ?? this.isVisible,
+      role: role ?? this.role,
+      parentFaceId: parentFaceId ?? this.parentFaceId,
+      associatedPortId: associatedPortId ?? this.associatedPortId,
     );
   }
 
@@ -283,6 +309,9 @@ class CncPunchPrimitive {
     'layer': layer,
     'showLabel': showLabel,
     'isVisible': isVisible,
+    'role': role.name,
+    if (parentFaceId != null) 'parentFaceId': parentFaceId,
+    if (associatedPortId != null) 'associatedPortId': associatedPortId,
     if (customBoundary != null) 'customBoundary': customBoundary!.map((p) => p.toJson()).toList(),
   };
 
@@ -301,6 +330,11 @@ class CncPunchPrimitive {
     layer: json['layer'] as String? ?? 'HOLES',
     showLabel: json['showLabel'] as bool? ?? true,
     isVisible: json['isVisible'] as bool? ?? true,
+    role: json['role'] != null
+        ? CncPunchRole.values.firstWhere((r) => r.name == json['role'], orElse: () => CncPunchRole.general)
+        : CncPunchRole.general,
+    parentFaceId: json['parentFaceId'] as String?,
+    associatedPortId: json['associatedPortId'] as String?,
     customBoundary: (json['customBoundary'] as List<dynamic>?)?.map((e) => CadPoint2D.fromJson(e as Map<String, dynamic>)).toList(),
   );
 }

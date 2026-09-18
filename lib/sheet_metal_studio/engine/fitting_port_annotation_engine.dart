@@ -51,28 +51,43 @@ class ProductPortOpening {
   final String id; // e.g. 'port1', 'port2', 'port3', 'entry', 'exit'
   final String label; // e.g. 'PORT 1: MAIN IN', 'ENTRY', 'BRANCH'
   final double widthMm; // Nominal or entered width
-  final double heightMm; // Nominal or entered height
+  final double heightMm; // Primary/fallback height
+  final double heightAMm; // Sidewall A height
+  final double heightBMm; // Sidewall B height
   final CadPoint2D edgeP1; // Opening boundary edge start
   final CadPoint2D edgeP2; // Opening boundary edge end
   final CadPoint2D center; // Center point of opening edge
-  final CadPoint2D normal; // Unit outward normal vector (pointing out from part)
+  final CadPoint2D normal; // Unit outward connection normal vector (pointing out from part)
   final double measuredLengthMm; // Actual physical length on CAD drawing
   final PortSide side; // Cardinal direction
+  final CadLineSegment? edgeA; // Sidewall A boundary segment
+  final CadLineSegment? edgeB; // Sidewall B boundary segment
+  final List<String> associatedFeatureIds;
 
   const ProductPortOpening({
     required this.id,
     required this.label,
     required this.widthMm,
     required this.heightMm,
+    double? heightAMm,
+    double? heightBMm,
     required this.edgeP1,
     required this.edgeP2,
     required this.center,
     required this.normal,
     required this.measuredLengthMm,
     required this.side,
-  });
+    this.edgeA,
+    this.edgeB,
+    this.associatedFeatureIds = const [],
+  })  : heightAMm = heightAMm ?? heightMm,
+        heightBMm = heightBMm ?? heightMm;
 
-  String get dimensionText => '${widthMm.toStringAsFixed(0)} × ${heightMm.toStringAsFixed(0)} mm';
+  bool get isSymmetric => (heightAMm - heightBMm).abs() < 1e-3;
+
+  String get dimensionText => isSymmetric
+      ? '${widthMm.toStringAsFixed(0)} × ${heightAMm.toStringAsFixed(0)} mm'
+      : '${widthMm.toStringAsFixed(0)} × ${heightAMm.toStringAsFixed(0)}/${heightBMm.toStringAsFixed(0)} mm';
 }
 
 /// Candidate opening edge discovered on outer contour

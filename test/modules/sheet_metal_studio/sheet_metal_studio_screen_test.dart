@@ -314,10 +314,10 @@ void main() {
       vm.handleCanvasClick(const CadPoint2D(50.0, 500.0));
       expect(vm.pendingBendStart, equals(const CadPoint2D(50.0, 500.0)));
 
-      // Simulate cursor at 42° angle: (50 + 100 * cos(42°), 500 + 100 * sin(42°))
-      // 42° should automatically snap to 45°
+      // Simulate cursor at 44° angle (within 2.5° of 45° major axis)
+      // 44° should automatically snap to 45°
       final snapped = vm.resolveEffectivePoint(
-        const CadPoint2D(124.31, 566.91),
+        CadPoint2D(50.0 + 100.0 * math.cos(44.0 * math.pi / 180.0), 500.0 + 100.0 * math.sin(44.0 * math.pi / 180.0)),
       );
       final dx = snapped.x - 50.0;
       final dy = snapped.y - 500.0;

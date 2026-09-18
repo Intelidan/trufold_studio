@@ -107,6 +107,39 @@ class GeometricConstraintSolver {
             parameterId: 'length',
           ));
         }
+      } else if (topology == ContourTopologyType.crossBranch) {
+        final wMain = parameterOverrides['widthMain'] ?? parameterOverrides['width'];
+        if (wMain != null &&
+            !activeConstraints.any((c) => c.parameterId?.toLowerCase() == 'widthmain' || c.parameterId?.toLowerCase() == 'width')) {
+          activeConstraints.add(ConstraintDefinition(
+            id: 'DRIVE_CROSS_MAIN_WIDTH',
+            type: CadConstraintType.distance,
+            references: [EntityRef.edgeBottom, EntityRef.edgeTop],
+            targetValue: wMain,
+            parameterId: 'widthMain',
+          ));
+        }
+        final wBranch = parameterOverrides['widthBranch'] ?? parameterOverrides['branchWidth'];
+        if (wBranch != null &&
+            !activeConstraints.any((c) => c.parameterId?.toLowerCase() == 'widthbranch' || c.parameterId?.toLowerCase() == 'branchwidth')) {
+          activeConstraints.add(ConstraintDefinition(
+            id: 'DRIVE_CROSS_BRANCH_WIDTH',
+            type: CadConstraintType.distance,
+            references: [const EntityRef(entityId: 'EDGE_BRANCH_LEFT'), const EntityRef(entityId: 'EDGE_BRANCH_RIGHT')],
+            targetValue: wBranch,
+            parameterId: 'widthBranch',
+          ));
+        }
+        if (parameterOverrides.containsKey('height') &&
+            !activeConstraints.any((c) => c.parameterId?.toLowerCase() == 'height')) {
+          activeConstraints.add(ConstraintDefinition(
+            id: 'DRIVE_CROSS_HEIGHT',
+            type: CadConstraintType.distance,
+            references: [EntityRef.edgeBottom, const EntityRef(entityId: 'BEND_BOT')],
+            targetValue: parameterOverrides['height'],
+            parameterId: 'height',
+          ));
+        }
       } else if (topology == ContourTopologyType.taperedReducer) {
         final win = parameterOverrides['widthIn'] ?? parameterOverrides['width_a'];
         if (win != null && !activeConstraints.any((c) => c.parameterId?.toLowerCase() == 'widthin')) {
@@ -136,6 +169,68 @@ class GeometricConstraintSolver {
             references: [EntityRef.edgeLeft, EntityRef.edgeRight],
             targetValue: parameterOverrides['length'],
             parameterId: 'length',
+          ));
+        }
+      } else if (topology == ContourTopologyType.lBend) {
+        if (parameterOverrides.containsKey('width') &&
+            !activeConstraints.any((c) => c.parameterId?.toLowerCase() == 'width')) {
+          activeConstraints.add(ConstraintDefinition(
+            id: 'DRIVE_BEND_WIDTH',
+            type: CadConstraintType.distance,
+            references: [const EntityRef(entityId: 'EDGE_INLET_LEFT'), const EntityRef(entityId: 'EDGE_INLET_RIGHT')],
+            targetValue: parameterOverrides['width'],
+            parameterId: 'width',
+          ));
+        }
+        if (parameterOverrides.containsKey('radius') &&
+            !activeConstraints.any((c) => c.parameterId?.toLowerCase() == 'radius')) {
+          activeConstraints.add(ConstraintDefinition(
+            id: 'DRIVE_BEND_RADIUS',
+            type: CadConstraintType.distance,
+            references: [const EntityRef(entityId: 'CORNER_INNER'), const EntityRef(entityId: 'CORNER_OUTER')],
+            targetValue: parameterOverrides['radius'],
+            parameterId: 'radius',
+          ));
+        }
+        if (parameterOverrides.containsKey('height') &&
+            !activeConstraints.any((c) => c.parameterId?.toLowerCase() == 'height')) {
+          activeConstraints.add(ConstraintDefinition(
+            id: 'DRIVE_BEND_HEIGHT',
+            type: CadConstraintType.distance,
+            references: [const EntityRef(entityId: 'BEND_B90_INNER'), const EntityRef(entityId: 'EDGE_LEFT')],
+            targetValue: parameterOverrides['height'],
+            parameterId: 'height',
+          ));
+        }
+      } else if (topology == ContourTopologyType.rectangular) {
+        if (parameterOverrides.containsKey('width') &&
+            !activeConstraints.any((c) => c.parameterId?.toLowerCase() == 'width')) {
+          activeConstraints.add(ConstraintDefinition(
+            id: 'DRIVE_TRAY_WIDTH',
+            type: CadConstraintType.distance,
+            references: [EntityRef.edgeBottom, EntityRef.edgeTop],
+            targetValue: parameterOverrides['width'],
+            parameterId: 'width',
+          ));
+        }
+        if (parameterOverrides.containsKey('length') &&
+            !activeConstraints.any((c) => c.parameterId?.toLowerCase() == 'length')) {
+          activeConstraints.add(ConstraintDefinition(
+            id: 'DRIVE_TRAY_LENGTH',
+            type: CadConstraintType.distance,
+            references: [EntityRef.edgeLeft, EntityRef.edgeRight],
+            targetValue: parameterOverrides['length'],
+            parameterId: 'length',
+          ));
+        }
+        if (parameterOverrides.containsKey('height') &&
+            !activeConstraints.any((c) => c.parameterId?.toLowerCase() == 'height')) {
+          activeConstraints.add(ConstraintDefinition(
+            id: 'DRIVE_TRAY_HEIGHT',
+            type: CadConstraintType.distance,
+            references: [EntityRef.edgeBottom, const EntityRef(entityId: 'BEND_BOT')],
+            targetValue: parameterOverrides['height'],
+            parameterId: 'height',
           ));
         }
       }
@@ -389,8 +484,44 @@ class GeometricConstraintSolver {
         parameters: parameters ?? {},
       );
       if (handled) return true;
+    } else if (topology == ContourTopologyType.crossBranch) {
+      final handled = _applyDistanceCross(
+        c,
+        targetValue: targetValue,
+        workingContour: workingContour,
+        workingBends: workingBends,
+        workingPunches: workingPunches,
+        fixedIds: fixedIds,
+        document: document,
+        parameters: parameters ?? {},
+      );
+      if (handled) return true;
     } else if (topology == ContourTopologyType.taperedReducer) {
       final handled = _applyDistanceReducer(
+        c,
+        targetValue: targetValue,
+        workingContour: workingContour,
+        workingBends: workingBends,
+        workingPunches: workingPunches,
+        fixedIds: fixedIds,
+        document: document,
+        parameters: parameters ?? {},
+      );
+      if (handled) return true;
+    } else if (topology == ContourTopologyType.lBend) {
+      final handled = _applyDistanceBend90(
+        c,
+        targetValue: targetValue,
+        workingContour: workingContour,
+        workingBends: workingBends,
+        workingPunches: workingPunches,
+        fixedIds: fixedIds,
+        document: document,
+        parameters: parameters ?? {},
+      );
+      if (handled) return true;
+    } else if (topology == ContourTopologyType.rectangular) {
+      final handled = _applyDistanceStraight(
         c,
         targetValue: targetValue,
         workingContour: workingContour,
@@ -816,6 +947,192 @@ class GeometricConstraintSolver {
   }
 
   // ===========================================================================
+  // 1.1b Cross (4-Way) Morphing (SET 8)
+  // ===========================================================================
+  static bool _applyDistanceCross(
+    ConstraintDefinition c, {
+    required double targetValue,
+    required List<CadPoint2D> workingContour,
+    required List<FoldBendLine> workingBends,
+    required List<CncPunchPrimitive> workingPunches,
+    required Set<String> fixedIds,
+    required DsfDocument document,
+    required Map<String, double> parameters,
+  }) {
+    if (targetValue <= 0.0) return false;
+
+    final paramId = (c.parameterId ?? '').toLowerCase();
+    final refA = c.references[0];
+    final refB = c.references[1];
+    final idA = refA.entityId.toUpperCase();
+    final idB = refB.entityId.toUpperCase();
+
+    final isCrossBranchWidth = paramId == 'widthbranch' ||
+        paramId == 'branchwidth' ||
+        paramId == 'width_branch' ||
+        paramId == 'branch_width' ||
+        idA.contains('BRANCH') ||
+        idB.contains('BRANCH');
+
+    final isCrossMainWidth = paramId == 'widthmain' ||
+        paramId == 'mainwidth' ||
+        paramId == 'width_main' ||
+        paramId == 'main_width' ||
+        paramId == 'width' ||
+        ((idA == 'EDGE_BOTTOM' && idB == 'EDGE_TOP') || (idA == 'EDGE_TOP' && idB == 'EDGE_BOTTOM')) ||
+        idA.contains('MAIN') ||
+        idB.contains('MAIN');
+
+    final isHeight = paramId == 'height' || paramId == 'flange_height';
+
+    if (!isCrossBranchWidth && !isCrossMainWidth && !isHeight) {
+      return false;
+    }
+
+    final bounds = _contourBounds(workingContour);
+    final midX = (bounds.minX + bounds.maxX) / 2.0;
+    final midY = (bounds.minY + bounds.maxY) / 2.0;
+
+    double currentBranchW = parameters['widthBranch'] ?? parameters['branchWidth'] ?? 100.0;
+    double currentMainW = parameters['widthMain'] ?? parameters['width'] ?? 100.0;
+
+    // Detect internal concave corners of cross if present
+    final concavePts = <CadPoint2D>[];
+    final n = workingContour.length;
+    for (int i = 0; i < n; i++) {
+      final pPrev = workingContour[(i - 1 + n) % n];
+      final pCurr = workingContour[i];
+      final pNext = workingContour[(i + 1) % n];
+      final crossZ = (pCurr.x - pPrev.x) * (pNext.y - pCurr.y) - (pCurr.y - pPrev.y) * (pNext.x - pCurr.x);
+      if (crossZ < -1e-4) {
+        concavePts.add(pCurr);
+      }
+    }
+
+    double xL = midX - currentBranchW / 2.0;
+    double xR = midX + currentBranchW / 2.0;
+    double yB = midY - currentMainW / 2.0;
+    double yT = midY + currentMainW / 2.0;
+
+    if (concavePts.length >= 4) {
+      final xs = concavePts.map((p) => p.x).toList()..sort();
+      final ys = concavePts.map((p) => p.y).toList()..sort();
+      final candXL = (xs[0] + xs[1]) / 2.0;
+      final candXR = (xs[xs.length - 2] + xs[xs.length - 1]) / 2.0;
+      final candYB = (ys[0] + ys[1]) / 2.0;
+      final candYT = (ys[ys.length - 2] + ys[ys.length - 1]) / 2.0;
+      if (candXR - candXL > 20.0) {
+        xL = candXL;
+        xR = candXR;
+        currentBranchW = xR - xL;
+      }
+      if (candYT - candYB > 20.0) {
+        yB = candYB;
+        yT = candYT;
+        currentMainW = yT - yB;
+      }
+    }
+
+    if (isCrossBranchWidth) {
+      final dBw = targetValue - currentBranchW;
+      if (dBw.abs() < 1e-4) return true;
+      final halfD = dBw / 2.0;
+
+      CadPoint2D morphBranch(CadPoint2D pt) {
+        double x = pt.x;
+        if (x <= xL + 1.0) {
+          x -= halfD;
+        } else if (x >= xR - 1.0) {
+          x += halfD;
+        } else {
+          final t = (x - xL) / (currentBranchW > 0 ? currentBranchW : 1.0);
+          x = (xL - halfD) + (t * targetValue);
+        }
+        return CadPoint2D(x, pt.y);
+      }
+
+      for (int i = 0; i < workingContour.length; i++) {
+        workingContour[i] = morphBranch(workingContour[i]);
+      }
+      for (int i = 0; i < workingBends.length; i++) {
+        workingBends[i] = workingBends[i].copyWith(
+          p1: morphBranch(workingBends[i].p1),
+          p2: morphBranch(workingBends[i].p2),
+        );
+      }
+      for (int i = 0; i < workingPunches.length; i++) {
+        workingPunches[i] = workingPunches[i].copyWith(
+          center: morphBranch(workingPunches[i].center),
+        );
+      }
+      parameters['widthBranch'] = targetValue;
+      parameters['branchWidth'] = targetValue;
+      return true;
+    }
+
+    if (isCrossMainWidth) {
+      final dMw = targetValue - currentMainW;
+      if (dMw.abs() < 1e-4) return true;
+      final halfD = dMw / 2.0;
+
+      CadPoint2D morphMain(CadPoint2D pt) {
+        double y = pt.y;
+        if (y <= yB + 1.0) {
+          y -= halfD;
+        } else if (y >= yT - 1.0) {
+          y += halfD;
+        } else {
+          final t = (y - yB) / (currentMainW > 0 ? currentMainW : 1.0);
+          y = (yB - halfD) + (t * targetValue);
+        }
+        return CadPoint2D(pt.x, y);
+      }
+
+      for (int i = 0; i < workingContour.length; i++) {
+        workingContour[i] = morphMain(workingContour[i]);
+      }
+      for (int i = 0; i < workingBends.length; i++) {
+        workingBends[i] = workingBends[i].copyWith(
+          p1: morphMain(workingBends[i].p1),
+          p2: morphMain(workingBends[i].p2),
+        );
+      }
+      for (int i = 0; i < workingPunches.length; i++) {
+        workingPunches[i] = workingPunches[i].copyWith(
+          center: morphMain(workingPunches[i].center),
+        );
+      }
+      parameters['widthMain'] = targetValue;
+      parameters['width'] = targetValue;
+      return true;
+    }
+
+    if (isHeight) {
+      final currentH = parameters['height'] ?? 50.0;
+      final dH = targetValue - currentH;
+      if (dH.abs() < 1e-4) return true;
+
+      CadPoint2D morphHeight(CadPoint2D pt) {
+        double x = pt.x;
+        double y = pt.y;
+        if ((x - bounds.minX).abs() < 2.0) x -= dH;
+        if ((x - bounds.maxX).abs() < 2.0) x += dH;
+        if ((y - bounds.minY).abs() < 2.0) y -= dH;
+        if ((y - bounds.maxY).abs() < 2.0) y += dH;
+        return CadPoint2D(x, y);
+      }
+
+      for (int i = 0; i < workingContour.length; i++) {
+        workingContour[i] = morphHeight(workingContour[i]);
+      }
+      parameters['height'] = targetValue;
+      return true;
+    }
+
+    return false;
+  }
+
+  // ===========================================================================
   // 1.2 Reducer Morphing (SET 19)
   // ===========================================================================
   static bool _applyDistanceReducer(
@@ -920,6 +1237,422 @@ class GeometricConstraintSolver {
     }
 
     return true;
+  }
+
+  // ===========================================================================
+  // 1.3 90° & 45° Flat Bend Morphing (SET 4 & 5)
+  // ===========================================================================
+  static bool _applyDistanceBend90(
+    ConstraintDefinition c, {
+    required double targetValue,
+    required List<CadPoint2D> workingContour,
+    required List<FoldBendLine> workingBends,
+    required List<CncPunchPrimitive> workingPunches,
+    required Set<String> fixedIds,
+    required DsfDocument document,
+    required Map<String, double> parameters,
+  }) {
+    if (targetValue <= 0.0) return false;
+
+    final paramId = (c.parameterId ?? '').toLowerCase();
+    final isWidth = paramId == 'width' || paramId == 'port1width' || paramId == 'port2width' || paramId == 'w';
+    final isRadius = paramId == 'radius' || paramId == 'r';
+    final isHeight = paramId == 'height' || paramId == 'heighta' || paramId == 'heightb' ||
+        paramId == 'port1height' || paramId == 'port1heighta' || paramId == 'h';
+
+    final bounds = _contourBounds(workingContour);
+    final minX = bounds.minX;
+    final minY = bounds.minY;
+    final maxX = bounds.maxX;
+    final maxY = bounds.maxY;
+
+    final currentW = parameters['width'] ?? 100.0;
+    final currentR = parameters['radius'] ?? 100.0;
+    final currentH = parameters['height'] ?? 50.0;
+
+    double dW = 0.0;
+    double dR = 0.0;
+    double dH = 0.0;
+
+    if (isWidth) {
+      dW = targetValue - currentW;
+      parameters['width'] = targetValue;
+    } else if (isRadius) {
+      dR = targetValue - currentR;
+      parameters['radius'] = targetValue;
+    } else if (isHeight) {
+      dH = targetValue - currentH;
+      parameters['height'] = targetValue;
+      if (paramId.contains('a')) parameters['heightA'] = targetValue;
+      if (paramId.contains('b')) parameters['heightB'] = targetValue;
+    } else {
+      // Check references
+      final refA = c.references[0].entityId.toUpperCase();
+      final refB = c.references[1].entityId.toUpperCase();
+      if (refA.contains('INLET') || refB.contains('INLET') || refA.contains('WIDTH') || refB.contains('WIDTH')) {
+        dW = targetValue - currentW;
+        parameters['width'] = targetValue;
+      } else {
+        return false;
+      }
+    }
+    if (dW.abs() < 1e-4 && dR.abs() < 1e-4 && dH.abs() < 1e-4) return true;
+
+    final is45Bend = document.productType.contains('45') ||
+        document.itemName.contains('45') ||
+        workingBends.any((b) => (b.targetAngleDeg - 25.0).abs() < 5.0 || (b.targetAngleDeg - 45.0).abs() < 5.0);
+
+    if (workingBends.isNotEmpty && is45Bend) {
+      final xCenter = (minX + maxX) / 2.0;
+      const alpha = 22.5 * math.pi / 180.0;
+
+      CadPoint2D morph45(CadPoint2D pt) {
+        double x = pt.x;
+        double y = pt.y;
+
+        final isCenter = (x - xCenter).abs() < 1.0;
+        final isLeft = x < xCenter - 1.0;
+        final isRight = x > xCenter + 1.0;
+
+        if (isCenter) {
+          y += (dW / 2.0) * math.tan(alpha);
+        } else if (isLeft) {
+          x -= dW / 2.0;
+        } else if (isRight) {
+          x += dW / 2.0;
+        }
+
+        if (dH.abs() > 1e-4) {
+          final isUpperBranch = y > 150.0;
+          if (isUpperBranch) {
+            if (isLeft) {
+              x -= dH * math.sin(alpha);
+              y += dH * math.cos(alpha);
+            } else if (isRight) {
+              x += dH * math.sin(alpha);
+              y += dH * math.cos(alpha);
+            }
+          } else {
+            if (y <= 10.0 + 1e-3) {
+              y -= dH;
+            }
+          }
+        }
+
+        return CadPoint2D(x, y);
+      }
+
+      for (int i = 0; i < workingContour.length; i++) {
+        workingContour[i] = morph45(workingContour[i]);
+      }
+      for (int i = 0; i < workingBends.length; i++) {
+        workingBends[i] = workingBends[i].copyWith(
+          p1: morph45(workingBends[i].p1),
+          p2: morph45(workingBends[i].p2),
+        );
+      }
+      for (int i = 0; i < workingPunches.length; i++) {
+        final p = workingPunches[i];
+        workingPunches[i] = p.copyWith(
+          center: morph45(p.center),
+          widthMm: p.widthMm,
+          lengthMm: p.lengthMm,
+          diameterMm: p.diameterMm,
+          rotationDeg: p.rotationDeg,
+          role: p.type == PunchType.obroundSlot || p.isCoupler ? CncPunchRole.coupler : p.role,
+        );
+      }
+      return true;
+    }
+
+    // Morph points based on corner topology
+    final cornerInnerX = minX + currentH;
+    final cornerInnerY = minY + currentH;
+
+    CadPoint2D morphBendPt(CadPoint2D pt) {
+      double x = pt.x;
+      double y = pt.y;
+
+      // Horizontal arm extends along X
+      if (x > maxX - currentH - 10.0) {
+        x += dW + dR;
+      } else if (x > cornerInnerX + currentW) {
+        final t = (x - (cornerInnerX + currentW)) / 100.0;
+        x += (dW + dR) * t.clamp(0.0, 1.0);
+      }
+
+      // Vertical arm extends along Y
+      if (y > maxY - currentH - 10.0) {
+        y += dW + dR;
+      } else if (y > cornerInnerY + currentW) {
+        final t = (y - (cornerInnerY + currentW)) / 100.0;
+        x += (dW + dR) * t.clamp(0.0, 1.0);
+      }
+
+      // Flange outer wall offset if height changed
+      if (dH.abs() > 1e-4) {
+        if (x <= minX + 2.0) {
+          x -= dH;
+        }
+        if (y <= minY + 2.0) {
+          y -= dH;
+        }
+      }
+
+      return CadPoint2D(x, y);
+    }
+
+    for (int i = 0; i < workingContour.length; i++) {
+      workingContour[i] = morphBendPt(workingContour[i]);
+    }
+    for (int i = 0; i < workingBends.length; i++) {
+      workingBends[i] = workingBends[i].copyWith(
+        p1: morphBendPt(workingBends[i].p1),
+        p2: morphBendPt(workingBends[i].p2),
+      );
+    }
+    for (int i = 0; i < workingPunches.length; i++) {
+      final p = workingPunches[i];
+      workingPunches[i] = p.copyWith(
+        center: morphBendPt(p.center),
+        widthMm: p.widthMm,
+        lengthMm: p.lengthMm,
+        diameterMm: p.diameterMm,
+        rotationDeg: p.rotationDeg,
+        role: p.type == PunchType.obroundSlot || p.isCoupler ? CncPunchRole.coupler : p.role,
+      );
+    }
+
+    return true;
+  }
+
+  // ===========================================================================
+  // 1.4 Straight Cable Tray Morphing (SET 4 & 5)
+  // ===========================================================================
+  static bool _applyDistanceStraight(
+    ConstraintDefinition c, {
+    required double targetValue,
+    required List<CadPoint2D> workingContour,
+    required List<FoldBendLine> workingBends,
+    required List<CncPunchPrimitive> workingPunches,
+    required Set<String> fixedIds,
+    required DsfDocument document,
+    required Map<String, double> parameters,
+  }) {
+    if (targetValue <= 0.0) return false;
+
+    final paramId = (c.parameterId ?? '').toLowerCase();
+    final refA = c.references[0].entityId.toUpperCase();
+    final refB = c.references[1].entityId.toUpperCase();
+
+    final isLength = paramId == 'length' ||
+        paramId == 'l' ||
+        ((refA == 'EDGE_LEFT' && refB == 'EDGE_RIGHT') || (refA == 'EDGE_RIGHT' && refB == 'EDGE_LEFT'));
+    final isWidth = paramId == 'width' ||
+        paramId == 'w' ||
+        paramId == 'bedwidth' ||
+        ((refA == 'EDGE_BOTTOM' && refB == 'EDGE_TOP') || (refA == 'EDGE_TOP' && refB == 'EDGE_BOTTOM'));
+    final isHeight = paramId == 'height' ||
+        paramId == 'heighta' ||
+        paramId == 'heightb' ||
+        paramId == 'h';
+
+    final bounds = _contourBounds(workingContour);
+    final minX = bounds.minX;
+    final minY = bounds.minY;
+    final maxX = bounds.maxX;
+    final maxY = bounds.maxY;
+
+    // Detect tray orientation:
+    // If bends are vertical (p1.x == p2.x), length is along Y and width is along X.
+    // If bends are horizontal (p1.y == p2.y), length is along X and width is along Y.
+    bool bendsVertical = true;
+    if (workingBends.isNotEmpty) {
+      final b = workingBends.first;
+      bendsVertical = (b.p1.x - b.p2.x).abs() < (b.p1.y - b.p2.y).abs();
+    } else {
+      bendsVertical = (maxX - minX) < (maxY - minY);
+    }
+
+    if (bendsVertical) {
+      // Development along X, Length along Y
+      final currentL = maxY - minY;
+      final currentW = parameters['width'] ?? 100.0;
+      final currentH = parameters['height'] ?? 50.0;
+
+      if (isLength) {
+        final dL = targetValue - currentL;
+        if (dL.abs() < 1e-4) return true;
+
+        CadPoint2D morphL(CadPoint2D pt) {
+          final t = (pt.y - minY) / (currentL > 0 ? currentL : 1.0);
+          return CadPoint2D(pt.x, pt.y + dL * t.clamp(0.0, 1.0));
+        }
+
+        for (int i = 0; i < workingContour.length; i++) {
+          workingContour[i] = morphL(workingContour[i]);
+        }
+        for (int i = 0; i < workingBends.length; i++) {
+          workingBends[i] = workingBends[i].copyWith(
+            p1: morphL(workingBends[i].p1),
+            p2: morphL(workingBends[i].p2),
+          );
+        }
+        for (int i = 0; i < workingPunches.length; i++) {
+          final p = workingPunches[i];
+          final t = p.center.y > (minY + currentL / 2.0) ? 1.0 : 0.0;
+          workingPunches[i] = p.copyWith(
+            center: CadPoint2D(p.center.x, p.center.y + dL * t),
+          );
+        }
+        parameters['length'] = targetValue;
+        return true;
+      }
+
+      if (isWidth) {
+        final dW = targetValue - currentW;
+        if (dW.abs() < 1e-4) return true;
+
+        final midX = (minX + maxX) / 2.0;
+        CadPoint2D morphW(CadPoint2D pt) {
+          if (pt.x > midX + 2.0) {
+            return CadPoint2D(pt.x + dW, pt.y);
+          }
+          return pt;
+        }
+
+        for (int i = 0; i < workingContour.length; i++) {
+          workingContour[i] = morphW(workingContour[i]);
+        }
+        for (int i = 0; i < workingBends.length; i++) {
+          workingBends[i] = workingBends[i].copyWith(
+            p1: morphW(workingBends[i].p1),
+            p2: morphW(workingBends[i].p2),
+          );
+        }
+        for (int i = 0; i < workingPunches.length; i++) {
+          final p = workingPunches[i];
+          if (p.center.x > midX + 2.0) {
+            workingPunches[i] = p.copyWith(
+              center: CadPoint2D(p.center.x + dW, p.center.y),
+            );
+          }
+        }
+        parameters['width'] = targetValue;
+        return true;
+      }
+
+      if (isHeight) {
+        final dH = targetValue - currentH;
+        if (dH.abs() < 1e-4) return true;
+
+        CadPoint2D morphH(CadPoint2D pt) {
+          double x = pt.x;
+          if (x <= minX + 2.0) {
+            x -= dH;
+          } else if (x >= maxX - 2.0) {
+            x += dH;
+          }
+          return CadPoint2D(x, pt.y);
+        }
+
+        for (int i = 0; i < workingContour.length; i++) {
+          workingContour[i] = morphH(workingContour[i]);
+        }
+        parameters['height'] = targetValue;
+        return true;
+      }
+    } else {
+      // Development along Y, Length along X
+      final currentL = maxX - minX;
+      final currentW = parameters['width'] ?? 100.0;
+      final currentH = parameters['height'] ?? 50.0;
+
+      if (isLength) {
+        final dL = targetValue - currentL;
+        if (dL.abs() < 1e-4) return true;
+
+        CadPoint2D morphL(CadPoint2D pt) {
+          final t = (pt.x - minX) / (currentL > 0 ? currentL : 1.0);
+          return CadPoint2D(pt.x + dL * t.clamp(0.0, 1.0), pt.y);
+        }
+
+        for (int i = 0; i < workingContour.length; i++) {
+          workingContour[i] = morphL(workingContour[i]);
+        }
+        for (int i = 0; i < workingBends.length; i++) {
+          workingBends[i] = workingBends[i].copyWith(
+            p1: morphL(workingBends[i].p1),
+            p2: morphL(workingBends[i].p2),
+          );
+        }
+        for (int i = 0; i < workingPunches.length; i++) {
+          final p = workingPunches[i];
+          final t = p.center.x > (minX + currentL / 2.0) ? 1.0 : 0.0;
+          workingPunches[i] = p.copyWith(
+            center: CadPoint2D(p.center.x + dL * t, p.center.y),
+          );
+        }
+        parameters['length'] = targetValue;
+        return true;
+      }
+
+      if (isWidth) {
+        final dW = targetValue - currentW;
+        if (dW.abs() < 1e-4) return true;
+
+        final midY = (minY + maxY) / 2.0;
+        CadPoint2D morphW(CadPoint2D pt) {
+          if (pt.y > midY + 2.0) {
+            return CadPoint2D(pt.x, pt.y + dW);
+          }
+          return pt;
+        }
+
+        for (int i = 0; i < workingContour.length; i++) {
+          workingContour[i] = morphW(workingContour[i]);
+        }
+        for (int i = 0; i < workingBends.length; i++) {
+          workingBends[i] = workingBends[i].copyWith(
+            p1: morphW(workingBends[i].p1),
+            p2: morphW(workingBends[i].p2),
+          );
+        }
+        for (int i = 0; i < workingPunches.length; i++) {
+          final p = workingPunches[i];
+          if (p.center.y > midY + 2.0) {
+            workingPunches[i] = p.copyWith(
+              center: CadPoint2D(p.center.x, p.center.y + dW),
+            );
+          }
+        }
+        parameters['width'] = targetValue;
+        return true;
+      }
+
+      if (isHeight) {
+        final dH = targetValue - currentH;
+        if (dH.abs() < 1e-4) return true;
+
+        CadPoint2D morphH(CadPoint2D pt) {
+          double y = pt.y;
+          if (y <= minY + 2.0) {
+            y -= dH;
+          } else if (y >= maxY - 2.0) {
+            y += dH;
+          }
+          return CadPoint2D(pt.x, y);
+        }
+
+        for (int i = 0; i < workingContour.length; i++) {
+          workingContour[i] = morphH(workingContour[i]);
+        }
+        parameters['height'] = targetValue;
+        return true;
+      }
+    }
+
+    return false;
   }
 
 

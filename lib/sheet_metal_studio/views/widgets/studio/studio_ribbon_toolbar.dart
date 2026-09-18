@@ -1,9 +1,11 @@
 // =============================================================================
 // studio_ribbon_toolbar.dart
 //
-// Single-Row CAD Sketch & Sheet Metal Toolbar for truFold Studio by Danish.
-// - High-density single-row CAD toolbar
-// - Tool Groups: File/Undo -> Draw -> Modify (with Construction Q) -> Constraints -> Dimensions -> Finish Sketch
+// Modern CAD Sketch & Sheet Metal Ribbon for truFold Studio by Danish.
+// Features:
+// - Decluttered Title Bar with Unique, Colorful, and Fun StudioMenuBar
+// - Multi-File Document Tab Bar
+// - Enlarged CAD Toolbar with Interactive 3D Animated Action Icons on Hover
 // =============================================================================
 
 import 'package:flutter/material.dart';
@@ -16,6 +18,9 @@ import '../studio_tab_bar.dart';
 import '../template_library_gallery_dialog.dart';
 import '../template_authoring_wizard_dialog.dart';
 import '../../../services/studio_clipboard_service.dart';
+import 'studio_3d_tool_icons.dart';
+import 'studio_menu_bar.dart';
+import 'studio_tool_button_3d.dart';
 
 class StudioRibbonToolbar extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -26,6 +31,7 @@ class StudioRibbonToolbar extends StatefulWidget {
   final VoidCallback onNewTab;
   final VoidCallback onOpenFile;
   final VoidCallback onSaveFile;
+  final VoidCallback? onSaveAsFile;
   final VoidCallback onFinishSketch;
   final VoidCallback? onSaveDdsProject;
   final VoidCallback? onExportDxf;
@@ -46,6 +52,7 @@ class StudioRibbonToolbar extends StatefulWidget {
     required this.onNewTab,
     required this.onOpenFile,
     required this.onSaveFile,
+    this.onSaveAsFile,
     required this.onFinishSketch,
     this.onSaveDdsProject,
     this.onExportDxf,
@@ -74,7 +81,7 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 1. Top Title & Quick Access Bar
+          // 1. Top Title & Colorful Menu Bar (Decluttered!)
           _buildTopTitleBar(vm),
 
           // 2. Multi-File Document Tab Bar
@@ -91,187 +98,84 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
             onPasteClipboard: () => StudioClipboardService.pasteInto(widget.viewModel),
           ),
 
-          // 3. Single-Row Icon Toolbar
+          // 3. Enlarged CAD Toolbar with 3D Animated Action Icons
           _buildStudioToolbar(vm),
         ],
       ),
     );
   }
 
-  /// 1. Top Title & Quick Access Bar
+  /// 1. Top Title & Colorful Menu Bar (Decluttered & Structured)
   Widget _buildTopTitleBar(SheetMetalStudioViewModel vm) {
     return Container(
-      height: 34,
+      height: 38,
       color: const Color(0xFF0F172A),
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
         children: [
+          // Brand Logo & Title
           const Icon(Icons.precision_manufacturing, color: Color(0xFF38BDF8), size: 16),
           const SizedBox(width: 8),
           const Text(
             'truFold Studio by Danish',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 11,
+              fontSize: 11.5,
               fontWeight: FontWeight.bold,
-              letterSpacing: 0.8,
+              letterSpacing: 0.6,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              reverse: true,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-          Tooltip(
-            message: 'DSF Parameter Inspector & Auto-Fold Settings',
-            child: InkWell(
-              onTap: widget.onFittingDetails ?? () => vm.setFittingInspectorOpen(true),
-              borderRadius: BorderRadius.circular(4),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
-                decoration: BoxDecoration(
-                  color: (vm.detectedFittingMetadata != null && vm.detectedFittingMetadata!.isAssigned)
-                      ? const Color(0xFF0284C7)
-                      : const Color(0xFF334155),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: (vm.detectedFittingMetadata != null && vm.detectedFittingMetadata!.isAssigned)
-                        ? const Color(0xFF38BDF8)
-                        : const Color(0xFF475569),
-                    width: 0.8,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.tune,
-                      size: 13,
-                      color: (vm.detectedFittingMetadata != null && vm.detectedFittingMetadata!.isAssigned)
-                          ? Colors.white
-                          : const Color(0xFF94A3B8),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      'DSF Inspector',
-                      style: TextStyle(
-                        color: (vm.detectedFittingMetadata != null && vm.detectedFittingMetadata!.isAssigned)
-                            ? Colors.white
-                            : const Color(0xFFE2E8F0),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Builder(
-              builder: (context) {
-                final activeTab = (widget.activeTabIndex >= 0 && widget.activeTabIndex < widget.tabs.length)
-                    ? widget.tabs[widget.activeTabIndex]
-                    : null;
-
-                final meta = vm.detectedFittingMetadata;
-                String primary = '';
-                // 1. Product variant if available
-                if (meta != null && meta.variantName.isNotEmpty && meta.variantName != 'None') {
-                  primary = meta.variantName;
-                }
-                // 2. If not then product type
-                else if (meta != null && meta.product.isNotEmpty && meta.product != 'None') {
-                  primary = meta.product;
-                }
-                // 3. If not then category
-                else if (meta != null && meta.category.isNotEmpty && meta.category != 'None') {
-                  primary = meta.category;
-                }
-                // 4. Fallback to active tab title / doc item name
-                else if (activeTab != null && activeTab.title.trim().isNotEmpty && activeTab.title != 'Untitled Part') {
-                  primary = activeTab.title.trim();
-                } else if (vm.document.itemName.trim().isNotEmpty) {
-                  primary = vm.document.itemName.trim();
-                } else {
-                  primary = 'Sheet Metal Part';
-                }
-
-                // Dimension calculation
-                String dimStr = '';
-                if (meta != null && meta.parameters.containsKey('width') && meta.parameters.containsKey('height')) {
-                  final w = meta.parameters['width']!.toStringAsFixed(meta.parameters['width']! % 1 == 0 ? 0 : 1);
-                  final h = meta.parameters['height']!.toStringAsFixed(meta.parameters['height']! % 1 == 0 ? 0 : 1);
-                  dimStr = '${w}x$h mm';
-                } else if (vm.document.blankWidthMm > 0 && vm.document.blankLengthMm > 0) {
-                  dimStr = '${vm.document.blankWidthMm.toInt()}x${vm.document.blankLengthMm.toInt()} mm';
-                }
-                if (vm.document.material.thicknessMm > 0) {
-                  final th = vm.document.material.thicknessMm.toStringAsFixed(vm.document.material.thicknessMm % 1 == 0 ? 0 : 1);
-                  dimStr = dimStr.isNotEmpty ? '$dimStr (T:${th}mm)' : 'T:${th}mm';
-                }
-
-                final displayTitle = dimStr.isNotEmpty ? '$primary • $dimStr' : primary;
-
-                return Tooltip(
-                  message: 'Active Drawing: $displayTitle',
-                  child: InkWell(
-                    onTap: () => vm.setFittingInspectorOpen(true),
-                    borderRadius: BorderRadius.circular(4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF334155),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: const Color(0xFF475569), width: 0.8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.architecture, size: 14, color: Color(0xFF38BDF8)),
-                          const SizedBox(width: 5),
-                          Flexible(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 180),
-                              child: Text(
-                                displayTitle,
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                                style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 11.5, fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
+          const SizedBox(width: 10),
+          Container(width: 1, height: 16, color: const Color(0xFF334155)),
           const SizedBox(width: 8),
+
+          // Unique, Colorful, Intuitive Menu Bar
+          Expanded(
+            child: StudioMenuBar(
+              viewModel: vm,
+              onNewTab: widget.onNewTab,
+              onOpenFile: widget.onOpenFile,
+              onSaveFile: widget.onSaveFile,
+              onSaveAsFile: widget.onSaveAsFile,
+              onSaveDdsProject: widget.onSaveDdsProject,
+              onExportDxf: widget.onExportDxf,
+              onMaterialDialog: widget.onMaterialDialog,
+              onLoadSampleBracket: widget.onLoadSampleBracket,
+              onFittingDetails: widget.onFittingDetails,
+              onLoadSampleTray: widget.onLoadSampleTray,
+              onOpenTemplateLibrary: widget.onOpenTemplateLibrary,
+              onOpenTemplateAuthoring: widget.onOpenTemplateAuthoring,
+              onConfirmClearAll: _confirmClearAll,
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Active Drawing Status Pill
+          _buildActiveDrawingStatusPill(vm),
+
+          const SizedBox(width: 6),
+
+          // Quick Save Button
           Tooltip(
-            message: 'Save Part (.dsf)',
+            message: 'Save Part (Ctrl+S)',
             child: InkWell(
               onTap: widget.onSaveFile,
               borderRadius: BorderRadius.circular(4),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF334155),
+                  color: const Color(0xFF0284C7).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFF0284C7), width: 0.8),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: const [
-                    Icon(Icons.save_outlined, size: 14, color: Color(0xFF38BDF8)),
+                    Icon(Icons.save_outlined, size: 13, color: Color(0xFF38BDF8)),
                     SizedBox(width: 4),
                     Text(
-                      'Save .dsf',
+                      'Save',
                       style: TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -279,135 +183,134 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
               ),
             ),
           ),
-          if (widget.onExportDxf != null) ...[
-            const SizedBox(width: 8),
+
+          if (widget.onMaterialDialog != null) ...[
+            const SizedBox(width: 6),
             Tooltip(
-              message: 'Export 2D Flat Pattern to DXF',
+              message: 'Sheet Material & Gauge Settings',
               child: InkWell(
-                onTap: widget.onExportDxf,
+                onTap: widget.onMaterialDialog,
                 borderRadius: BorderRadius.circular(4),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   decoration: BoxDecoration(
                     color: const Color(0xFF334155),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Text(
-                    'Export DXF',
-                    style: TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.bold),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.science_outlined, size: 12, color: Color(0xFF38BDF8)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${vm.document.material.materialType.shortCode} | ${vm.document.material.thicknessMm}mm',
+                        style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ],
-          const SizedBox(width: 8),
+
+          const SizedBox(width: 4),
+
+          // Quick Undo / Redo
           IconButton(
-            icon: const Icon(Icons.undo, size: 16, color: Color(0xFFCBD5E1)),
+            icon: const Icon(Icons.undo, size: 15, color: Color(0xFFCBD5E1)),
             tooltip: 'Undo (Ctrl+Z)',
             onPressed: vm.canUndo ? vm.undo : null,
             splashRadius: 14,
             padding: const EdgeInsets.all(4),
             constraints: const BoxConstraints(),
           ),
-          const SizedBox(width: 4),
           IconButton(
-            icon: const Icon(Icons.redo, size: 16, color: Color(0xFFCBD5E1)),
+            icon: const Icon(Icons.redo, size: 15, color: Color(0xFFCBD5E1)),
             tooltip: 'Redo (Ctrl+Y)',
             onPressed: vm.canRedo ? vm.redo : null,
             splashRadius: 14,
             padding: const EdgeInsets.all(4),
             constraints: const BoxConstraints(),
           ),
-          if (widget.onMaterialDialog != null) ...[
-            const SizedBox(width: 8),
-            InkWell(
-              onTap: widget.onMaterialDialog,
-              borderRadius: BorderRadius.circular(4),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF334155),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.science_outlined, size: 12, color: Color(0xFF38BDF8)),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${vm.document.material.materialType.shortCode} | ${vm.document.material.thicknessMm}mm',
-                      style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(width: 8),
-          Tooltip(
-            message: 'Press Brake Machine & Tooling Settings',
-            child: InkWell(
-              onTap: () => PressBrakeMachineDialog.show(context, vm),
-              borderRadius: BorderRadius.circular(4),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF334155),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.precision_manufacturing_outlined, size: 12, color: Color(0xFF38BDF8)),
-                    const SizedBox(width: 4),
-                    Text(
-                      vm.selectedMachine.name.split(' ').first,
-                      style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Tooltip(
-            message: 'Upper Punch Tooling Catalog',
-            child: InkWell(
-              onTap: () => PunchToolingSelectorDialog.show(context, vm),
-              borderRadius: BorderRadius.circular(4),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF334155),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.hardware_outlined, size: 12, color: Color(0xFF38BDF8)),
-                    SizedBox(width: 4),
-                    Text(
-                      'Punch Tooling',
-                      style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
         ],
       ),
-    ),
-  ),
-  ],
-  ),
-  );
+    );
   }
 
-  /// 2. Single-Row Icon Toolbar
+  /// Active Drawing Status Pill
+  Widget _buildActiveDrawingStatusPill(SheetMetalStudioViewModel vm) {
+    final activeTab = (widget.activeTabIndex >= 0 && widget.activeTabIndex < widget.tabs.length)
+        ? widget.tabs[widget.activeTabIndex]
+        : null;
+
+    final meta = vm.detectedFittingMetadata;
+    String primary = '';
+    if (meta != null && meta.variantName.isNotEmpty && meta.variantName != 'None') {
+      primary = meta.variantName;
+    } else if (meta != null && meta.product.isNotEmpty && meta.product != 'None') {
+      primary = meta.product;
+    } else if (meta != null && meta.category.isNotEmpty && meta.category != 'None') {
+      primary = meta.category;
+    } else if (activeTab != null && activeTab.title.trim().isNotEmpty && activeTab.title != 'Untitled Part') {
+      primary = activeTab.title.trim();
+    } else if (vm.document.itemName.trim().isNotEmpty) {
+      primary = vm.document.itemName.trim();
+    } else {
+      primary = 'Sheet Metal Part';
+    }
+
+    String dimStr = '';
+    if (meta != null && meta.parameters.containsKey('width') && meta.parameters.containsKey('height')) {
+      final w = meta.parameters['width']!.toStringAsFixed(meta.parameters['width']! % 1 == 0 ? 0 : 1);
+      final h = meta.parameters['height']!.toStringAsFixed(meta.parameters['height']! % 1 == 0 ? 0 : 1);
+      dimStr = '${w}x$h mm';
+    } else if (vm.document.blankWidthMm > 0 && vm.document.blankLengthMm > 0) {
+      dimStr = '${vm.document.blankWidthMm.toInt()}x${vm.document.blankLengthMm.toInt()} mm';
+    }
+    if (vm.document.material.thicknessMm > 0) {
+      final th = vm.document.material.thicknessMm.toStringAsFixed(vm.document.material.thicknessMm % 1 == 0 ? 0 : 1);
+      dimStr = dimStr.isNotEmpty ? '$dimStr (T:${th}mm)' : 'T:${th}mm';
+    }
+
+    final displayTitle = dimStr.isNotEmpty ? '$primary • $dimStr' : primary;
+
+    return Tooltip(
+      message: 'Active Drawing: $displayTitle (Click to open DSF Inspector)',
+      child: InkWell(
+        onTap: widget.onFittingDetails ?? () => vm.setFittingInspectorOpen(true),
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: const Color(0xFF475569), width: 0.8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.architecture, size: 13, color: Color(0xFF38BDF8)),
+              const SizedBox(width: 5),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 160),
+                child: Text(
+                  displayTitle,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 2. Enlarged CAD Toolbar with Interactive 3D Animated Action Icons on Hover
   Widget _buildStudioToolbar(SheetMetalStudioViewModel vm) {
     return Container(
-      height: 44,
+      height: 54,
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
@@ -419,149 +322,187 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
               physics: const BouncingScrollPhysics(),
               child: Row(
                 children: [
-                  // Sketch Indicator pill
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: const Color(0xFFBFDBFE)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(Icons.edit, size: 13, color: Color(0xFF2563EB)),
-                        SizedBox(width: 4),
-                        Text(
-                          'Sketch1',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1D4ED8),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  _buildDivider(),
-
-                  // DRAW TOOLS (Select, Line, Rectangle, Circle, Arc)
-                  _buildToolButton(
-                    icon: Icons.near_me_outlined,
-                    tooltip: 'Select (Esc)',
+                  // DRAW & PUNCH TOOLS (Bigger 3D Animated Action Icons!)
+                  Studio3DToolButton(
+                    toolType: Tool3DType.select,
+                    fallbackIcon: Icons.near_me_outlined,
+                    label: 'Select Tool',
+                    shortcut: 'Esc / V',
+                    description: 'Pick, drag, or inspect geometry in 2D and 3D',
                     isActive: vm.toolMode == StudioToolMode.select,
                     onTap: () => vm.setToolMode(StudioToolMode.select),
                   ),
-                  _buildToolButton(
-                    icon: Icons.horizontal_rule,
-                    tooltip: 'Line (L) — Click & Drag or Click-Click',
+                  Studio3DToolButton(
+                    toolType: Tool3DType.drawPolyline,
+                    fallbackIcon: Icons.horizontal_rule,
+                    label: 'Line / Polyline',
+                    shortcut: 'L',
+                    description: 'Draw connected straight edges in 2D space',
                     isActive: vm.toolMode == StudioToolMode.drawPolyline,
                     onTap: () => vm.setToolMode(StudioToolMode.drawPolyline),
                   ),
-                  _buildToolButton(
-                    icon: Icons.crop_square,
-                    tooltip: 'Corner Rectangle (G) — Click & Drag or Click-Click',
+                  Studio3DToolButton(
+                    toolType: Tool3DType.drawRectangle,
+                    fallbackIcon: Icons.crop_square,
+                    label: 'Rectangle Punch',
+                    shortcut: 'G',
+                    description: 'Click to stamp preset punch or drag to size',
                     isActive: vm.toolMode == StudioToolMode.drawRectangle,
                     onTap: () => vm.setToolMode(StudioToolMode.drawRectangle),
                   ),
-                  _buildToolButton(
-                    icon: Icons.radio_button_unchecked,
-                    tooltip: 'Center Point Circle (C) — Click & Drag or Click-Click',
+                  Studio3DToolButton(
+                    toolType: Tool3DType.drawCircle,
+                    fallbackIcon: Icons.radio_button_unchecked,
+                    label: 'Circle Punch',
+                    shortcut: 'C',
+                    description: 'Click to stamp bolt hole or drag to size',
                     isActive: vm.toolMode == StudioToolMode.drawCircle,
                     onTap: () => vm.setToolMode(StudioToolMode.drawCircle),
                   ),
-                  _buildToolButton(
-                    icon: Icons.gesture,
-                    tooltip: '3-Point Arc (A) — Click & Drag or Click-Click',
+                  // Obround / Slot Punch (Placed directly near the Circle Punch tool)
+                  Studio3DToolButton(
+                    toolType: Tool3DType.addPunchObround,
+                    fallbackIcon: Icons.crop_16_9,
+                    label: 'Slot / Obround Punch',
+                    shortcut: 'Slot',
+                    description: 'Stamp elongated slot for bolt adjustment',
+                    isActive: vm.toolMode == StudioToolMode.addPunchObround,
+                    activeColor: const Color(0xFF0284C7),
+                    onTap: () => vm.setToolMode(StudioToolMode.addPunchObround),
+                  ),
+                  Studio3DToolButton(
+                    toolType: Tool3DType.drawArc,
+                    fallbackIcon: Icons.gesture,
+                    label: '3-Point Arc',
+                    shortcut: 'A',
+                    description: 'Draw tangential or radial curved arc',
                     isActive: vm.toolMode == StudioToolMode.drawArc,
                     onTap: () => vm.setToolMode(StudioToolMode.drawArc),
                   ),
 
                   _buildDivider(),
 
-                  // SHEET METAL FEATURES (Bend Line, Flange, Cut Slit, Perforation, Base Anchor)
-                  _buildToolButton(
-                    icon: Icons.alt_route,
-                    tooltip: 'Add Bend Line (B) — Click & Drag or Click-Click',
+                  // SHEET METAL 3D FEATURES (Bending, Flanges, Cutting, Anchor)
+                  Studio3DToolButton(
+                    toolType: Tool3DType.addBend,
+                    fallbackIcon: Icons.alt_route,
+                    label: 'Add Bend Line',
+                    shortcut: 'B',
+                    description: 'Define press brake fold line (folds 0° to 90° in 3D)',
                     isActive: vm.toolMode == StudioToolMode.addBend,
+                    activeColor: const Color(0xFF0284C7),
                     onTap: () => vm.setToolMode(StudioToolMode.addBend),
                   ),
-                  _buildToolButton(
-                    icon: Icons.border_outer,
-                    tooltip: 'Add Return Flange (F) — Click & Drag or Click-Click',
+                  Studio3DToolButton(
+                    toolType: Tool3DType.addFlange,
+                    fallbackIcon: Icons.border_outer,
+                    label: 'Add Return Flange',
+                    shortcut: 'F',
+                    description: 'Extrude upward/downward edge return flange in 3D',
                     isActive: vm.toolMode == StudioToolMode.addFlange,
+                    activeColor: const Color(0xFF0284C7),
                     onTap: () => vm.setToolMode(StudioToolMode.addFlange),
                   ),
-                  _buildToolButton(
-                    icon: Icons.content_cut,
-                    tooltip: 'Add Laser Cut Line / Slit (M) — Click & Drag or Click-Click',
+                  Studio3DToolButton(
+                    toolType: Tool3DType.addCut,
+                    fallbackIcon: Icons.content_cut,
+                    label: 'Add Cut / Slit Line',
+                    shortcut: 'M',
+                    description: 'Slice internal laser cuts, relief notches, and parting slits',
                     isActive: vm.toolMode == StudioToolMode.addCut,
+                    activeColor: const Color(0xFFEF4444),
                     onTap: () => vm.setToolMode(StudioToolMode.addCut),
                   ),
-                  _buildToolButton(
-                    icon: Icons.grain,
-                    tooltip: 'Perforation Pattern (P)',
+                  Studio3DToolButton(
+                    toolType: Tool3DType.perforationPattern,
+                    fallbackIcon: Icons.grain,
+                    label: 'Perforation Pattern',
+                    shortcut: 'P',
+                    description: 'Pattern matrix of perforated ventilation punch holes',
                     isActive: vm.toolMode == StudioToolMode.perforationPattern,
+                    activeColor: const Color(0xFF0EA5E9),
                     onTap: () => vm.setToolMode(StudioToolMode.perforationPattern),
                   ),
-                  _buildToolButton(
-                    icon: Icons.anchor,
-                    tooltip: 'Set Base Floor Anchor (Stationary face for folding)',
+                  // Prominent Base Floor Anchor Button with 3D Action
+                  Studio3DToolButton(
+                    toolType: Tool3DType.setBaseAnchor,
+                    fallbackIcon: Icons.anchor,
+                    label: 'Set Base Floor Anchor',
+                    shortcut: 'Anchor',
+                    description: 'Stationary ground face that stays fixed during 3D folding',
                     isActive: vm.toolMode == StudioToolMode.setBaseAnchor,
+                    activeColor: const Color(0xFFD97706),
                     onTap: () => vm.setToolMode(StudioToolMode.setBaseAnchor),
                   ),
 
                   _buildDivider(),
 
-                  // MODIFY & PUNCH TOOLS (Construction Q, Fillet, Chamfer, Mirror, Punches)
-                  _buildToolButton(
-                    icon: Icons.border_style,
-                    tooltip: 'Construction Toggle (Q) — Toggle selected line to/from reference',
+                  // MODIFY TOOLS (Construction, Fillet, Chamfer, Mirror)
+                  Studio3DToolButton(
+                    toolType: Tool3DType.constructionToggle,
+                    fallbackIcon: Icons.border_style,
+                    label: 'Construction Mode',
+                    shortcut: 'Q',
+                    description: 'Toggle selected line between geometry and reference guide',
                     isActive: vm.isConstructionModeActive,
                     activeColor: const Color(0xFF00BCD4),
                     onTap: vm.toggleSelectedConstruction,
                   ),
-                  _buildToolButton(
-                    icon: Icons.rounded_corner,
-                    tooltip: 'Fillet (Shift+F) — Rounded corner',
+                  Studio3DToolButton(
+                    toolType: Tool3DType.cornerFillet,
+                    fallbackIcon: Icons.rounded_corner,
+                    label: 'Corner Fillet',
+                    shortcut: 'Shift+F',
+                    description: 'Create smooth tangent rounded corner radius',
                     isActive: vm.toolMode == StudioToolMode.cornerFillet,
+                    activeColor: const Color(0xFF06B6D4),
                     onTap: () => vm.setToolMode(StudioToolMode.cornerFillet),
                   ),
-                  _buildToolButton(
-                    icon: Icons.crop_square_sharp,
-                    tooltip: 'Chamfer (Shift+C) — 45° corner cut',
+                  Studio3DToolButton(
+                    toolType: Tool3DType.cornerChamfer,
+                    fallbackIcon: Icons.crop_square_sharp,
+                    label: 'Corner Chamfer',
+                    shortcut: 'Shift+C',
+                    description: 'Create 45° beveled corner cut',
                     isActive: vm.toolMode == StudioToolMode.cornerChamfer,
+                    activeColor: const Color(0xFF06B6D4),
                     onTap: () => vm.setToolMode(StudioToolMode.cornerChamfer),
                   ),
-                  _buildToolButton(
-                    icon: Icons.flip,
-                    tooltip: 'Mirror',
+                  Studio3DToolButton(
+                    toolType: Tool3DType.modifyMirror,
+                    fallbackIcon: Icons.flip,
+                    label: 'Mirror Features',
+                    shortcut: 'Mirror',
+                    description: 'Reflect sketch entities across a symmetry axis',
                     isActive: vm.toolMode == StudioToolMode.modifyMirror,
+                    activeColor: const Color(0xFF6366F1),
                     onTap: () => vm.setToolMode(StudioToolMode.modifyMirror),
-                  ),
-                  _buildToolButton(
-                    icon: Icons.adjust,
-                    tooltip: 'Round Hole Punch (Bolt clearance)',
-                    isActive: vm.toolMode == StudioToolMode.addPunchRound,
-                    onTap: () => vm.setToolMode(StudioToolMode.addPunchRound),
-                  ),
-                  _buildToolButton(
-                    icon: Icons.check_box_outline_blank,
-                    tooltip: 'Square / Rectangular Punch',
-                    isActive: vm.toolMode == StudioToolMode.addPunchSquare,
-                    onTap: () => vm.setToolMode(StudioToolMode.addPunchSquare),
-                  ),
-                  _buildToolButton(
-                    icon: Icons.crop_16_9,
-                    tooltip: 'Slot / Obround Punch',
-                    isActive: vm.toolMode == StudioToolMode.addPunchObround,
-                    onTap: () => vm.setToolMode(StudioToolMode.addPunchObround),
                   ),
 
                   _buildDivider(),
 
-                  // CONSTRAINTS (CAD Glyphs)
+                  // CONSTRAINTS & DIMENSIONS
+                  Studio3DToolButton(
+                    toolType: Tool3DType.dragDimension,
+                    fallbackIcon: Icons.straighten,
+                    label: 'Dimension',
+                    shortcut: 'D',
+                    description: 'Click and drag from Point A to Point B to display and place persistent dimension (Alt to move freely)',
+                    isActive: vm.toolMode == StudioToolMode.dragDimension,
+                    activeColor: const Color(0xFF0284C7),
+                    onTap: () => vm.setToolMode(StudioToolMode.dragDimension),
+                  ),
+                  Studio3DToolButton(
+                    toolType: Tool3DType.addDimension,
+                    fallbackIcon: Icons.tune,
+                    label: 'Dimensional Constraints',
+                    shortcut: 'Shift+D',
+                    description: 'Parametric geometric & distance constraints solver',
+                    isActive: vm.toolMode == StudioToolMode.addDimension ||
+                        vm.activeConstraintPickType == CadConstraintType.distance,
+                    activeColor: const Color(0xFFEC4899),
+                    onTap: () => vm.setToolMode(StudioToolMode.addDimension),
+                  ),
                   _buildConstraintButton(
                     glyph: '●',
                     tooltip: 'Coincident Constraint',
@@ -612,17 +553,6 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
                     tooltip: 'Symmetric Constraint',
                     onTap: () => vm.startInteractiveConstraintPick(CadConstraintType.symmetric),
                   ),
-
-                  _buildDivider(),
-
-                  // DIMENSIONS & RELATIONS (Dimension D, Relations)
-                  _buildToolButton(
-                    icon: Icons.straighten,
-                    tooltip: 'Smart Dimension (D)',
-                    isActive: vm.toolMode == StudioToolMode.addDimension ||
-                        vm.activeConstraintPickType == CadConstraintType.distance,
-                    onTap: () => vm.setToolMode(StudioToolMode.addDimension),
-                  ),
                   _buildToolButton(
                     icon: Icons.functions,
                     tooltip: 'Constraint Manager & Relations',
@@ -633,149 +563,31 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
                   _buildDivider(),
 
                   // MACHINE & PUNCH TOOLING
-                  _buildToolButton(
-                    icon: Icons.precision_manufacturing_outlined,
-                    tooltip: 'Machine & Press Brake Settings',
+                  Studio3DToolButton(
+                    toolType: Tool3DType.pressBrake,
+                    fallbackIcon: Icons.precision_manufacturing_outlined,
+                    label: 'Machine Setup',
+                    shortcut: 'Brake',
+                    description: 'Press brake tonnage, stroke, and bend speeds',
                     isActive: false,
+                    activeColor: const Color(0xFFF97316),
                     onTap: () => PressBrakeMachineDialog.show(context, vm),
                   ),
-                  _buildToolButton(
-                    icon: Icons.hardware_outlined,
-                    tooltip: 'Punch Tooling Catalog',
+                  Studio3DToolButton(
+                    toolType: Tool3DType.punchTooling,
+                    fallbackIcon: Icons.hardware_outlined,
+                    label: 'Punch Tooling',
+                    shortcut: 'Tools',
+                    description: 'Upper punch catalog and tip radius selection',
                     isActive: false,
+                    activeColor: const Color(0xFFF97316),
                     onTap: () => PunchToolingSelectorDialog.show(context, vm),
                   ),
 
                   _buildDivider(),
 
                   // Parametric Templates Popover
-                  PopupMenuButton<String>(
-                    tooltip: 'Parametric Sheet Metal Templates',
-                    offset: const Offset(0, 36),
-                    onSelected: (value) {
-                      if (value == 'sample_bracket') {
-                        widget.onLoadSampleBracket?.call();
-                        return;
-                      }
-                      if (value == 'gallery') {
-                        if (widget.onOpenTemplateLibrary != null) {
-                          widget.onOpenTemplateLibrary!.call();
-                        } else {
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => TemplateLibraryGalleryDialog(viewModel: vm),
-                          );
-                        }
-                        return;
-                      }
-                      if (value == 'author_wizard') {
-                        if (widget.onOpenTemplateAuthoring != null) {
-                          widget.onOpenTemplateAuthoring!.call();
-                        } else {
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => TemplateAuthoringWizardDialog(viewModel: vm),
-                          );
-                        }
-                        return;
-                      }
-                      vm.setPropertyInspectorOpen(true);
-                      switch (value) {
-                        case 'tee':
-                          vm.loadTemplateTee();
-                          break;
-                        case 'bend90':
-                          vm.loadTemplateBend90();
-                          break;
-                        case 'bend45':
-                          vm.loadTemplateBend45();
-                          break;
-                        case 'reducer':
-                          vm.loadTemplateReducer();
-                          break;
-                        case 'cross':
-                          vm.loadTemplateCross();
-                          break;
-                        case 'straight':
-                          vm.loadTemplateStraight();
-                          break;
-                        case 'close':
-                          vm.closeTemplateMode();
-                          break;
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'gallery',
-                        child: Row(
-                          children: [
-                            Icon(Icons.dashboard_customize, size: 16, color: Color(0xFF0284C7)),
-                            SizedBox(width: 8),
-                            Text('Template Library...'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'author_wizard',
-                        child: Row(
-                          children: [
-                            Icon(Icons.auto_fix_high, size: 16, color: Color(0xFF10B981)),
-                            SizedBox(width: 8),
-                            Text('Author Template from DXF...'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(
-                        value: 'sample_bracket',
-                        child: Row(
-                          children: [
-                            Icon(Icons.architecture, size: 16, color: Color(0xFF0284C7)),
-                            SizedBox(width: 8),
-                            Text('Sample Sheet Metal Bracket'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(value: 'tee', child: Text('T-Piece Duct Fitting')),
-                      const PopupMenuItem(value: 'bend90', child: Text('90° Radius Elbow')),
-                      const PopupMenuItem(value: 'bend45', child: Text('45° Radius Elbow')),
-                      const PopupMenuItem(value: 'reducer', child: Text('Concentric Reducer')),
-                      const PopupMenuItem(value: 'cross', child: Text('4-Way Cross Fitting')),
-                    ],
-                    child: Container(
-                      height: 32,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: vm.isTemplateActive ? const Color(0xFFE0F2FE) : Colors.transparent,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
-                          width: 1.0,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.auto_awesome_mosaic_outlined,
-                            size: 15,
-                            color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFF475569),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Templates',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFF334155),
-                            ),
-                          ),
-                          const Icon(Icons.arrow_drop_down, size: 14, color: Color(0xFF64748B)),
-                        ],
-                      ),
-                    ),
-                  ),
+                  _buildTemplatesDropdown(context, vm),
                 ],
               ),
             ),
@@ -783,35 +595,86 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
 
           const SizedBox(width: 8),
 
+          // Sketch Palette Toggle Button (opens/closes non-persistent floating sketch palette)
+          Tooltip(
+            message: vm.isSketchPaletteOpen
+                ? 'Close Sketch Palette'
+                : 'Open Sketch Palette (Grid, Points, Linetype)',
+            child: InkWell(
+              onTap: vm.toggleSketchPalette,
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7.5),
+                decoration: BoxDecoration(
+                  color: vm.isSketchPaletteOpen
+                      ? const Color(0xFFE0F2FE)
+                      : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: vm.isSketchPaletteOpen
+                        ? const Color(0xFF0284C7)
+                        : const Color(0xFFCBD5E1),
+                    width: 1.0,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.tune,
+                      size: 15,
+                      color: vm.isSketchPaletteOpen
+                          ? const Color(0xFF0284C7)
+                          : const Color(0xFF475569),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Palette',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: vm.isSketchPaletteOpen
+                            ? const Color(0xFF0284C7)
+                            : const Color(0xFF334155),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 6),
+
           // Green "FINISH SKETCH" Checkmark Button
           InkWell(
             onTap: widget.onFinishSketch,
             borderRadius: BorderRadius.circular(6),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: const Color(0xFF16A34A),
                 borderRadius: BorderRadius.circular(6),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFF16A34A).withValues(alpha: 0.25),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
+                    blurRadius: 5,
+                    offset: const Offset(0, 1.5),
                   ),
                 ],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: const [
-                  Icon(Icons.check, size: 15, color: Colors.white),
-                  SizedBox(width: 4),
+                  Icon(Icons.check, size: 16, color: Colors.white),
+                  SizedBox(width: 5),
                   Text(
                     'FINISH SKETCH',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 10.5,
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.6,
                     ),
                   ),
                 ],
@@ -823,9 +686,139 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
     );
   }
 
+  Widget _buildTemplatesDropdown(BuildContext context, SheetMetalStudioViewModel vm) {
+    return PopupMenuButton<String>(
+      tooltip: 'Parametric Sheet Metal Templates',
+      offset: const Offset(0, 42),
+      onSelected: (value) {
+        if (value == 'sample_bracket') {
+          widget.onLoadSampleBracket?.call();
+          return;
+        }
+        if (value == 'gallery') {
+          if (widget.onOpenTemplateLibrary != null) {
+            widget.onOpenTemplateLibrary!.call();
+          } else {
+            showDialog(
+              context: context,
+              builder: (ctx) => TemplateLibraryGalleryDialog(viewModel: vm),
+            );
+          }
+          return;
+        }
+        if (value == 'author_wizard') {
+          if (widget.onOpenTemplateAuthoring != null) {
+            widget.onOpenTemplateAuthoring!.call();
+          } else {
+            showDialog(
+              context: context,
+              builder: (ctx) => TemplateAuthoringWizardDialog(viewModel: vm),
+            );
+          }
+          return;
+        }
+        vm.setPropertyInspectorOpen(true);
+        switch (value) {
+          case 'tee':
+            vm.loadTemplateTee();
+            break;
+          case 'bend90':
+            vm.loadTemplateBend90();
+            break;
+          case 'bend45':
+            vm.loadTemplateBend45();
+            break;
+          case 'reducer':
+            vm.loadTemplateReducer();
+            break;
+          case 'cross':
+            vm.loadTemplateCross();
+            break;
+          case 'straight':
+            vm.loadTemplateStraight();
+            break;
+          case 'close':
+            vm.closeTemplateMode();
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'gallery',
+          child: Row(
+            children: [
+              Icon(Icons.dashboard_customize, size: 16, color: Color(0xFF0284C7)),
+              SizedBox(width: 8),
+              Text('Template Library...'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'author_wizard',
+          child: Row(
+            children: [
+              Icon(Icons.auto_fix_high, size: 16, color: Color(0xFF10B981)),
+              SizedBox(width: 8),
+              Text('Author Template from DXF...'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'sample_bracket',
+          child: Row(
+            children: [
+              Icon(Icons.architecture, size: 16, color: Color(0xFF0284C7)),
+              SizedBox(width: 8),
+              Text('Sample Sheet Metal Bracket'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'tee', child: Text('T-Piece Duct Fitting')),
+        const PopupMenuItem(value: 'bend90', child: Text('90° Radius Elbow')),
+        const PopupMenuItem(value: 'bend45', child: Text('45° Radius Elbow')),
+        const PopupMenuItem(value: 'reducer', child: Text('Concentric Reducer')),
+        const PopupMenuItem(value: 'cross', child: Text('4-Way Cross Fitting')),
+      ],
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: vm.isTemplateActive ? const Color(0xFFE0F2FE) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
+            width: 1.0,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.auto_awesome_mosaic_outlined,
+              size: 16,
+              color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFF475569),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              'Templates',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFF334155),
+              ),
+            ),
+            const Icon(Icons.arrow_drop_down, size: 15, color: Color(0xFF64748B)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDivider() {
     return Container(
-      height: 22,
+      height: 26,
       width: 1.0,
       margin: const EdgeInsets.symmetric(horizontal: 6),
       color: const Color(0xFFE2E8F0),
@@ -844,14 +837,14 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
       message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
         child: Container(
-          width: 32,
-          height: 32,
+          width: 34,
+          height: 34,
           margin: const EdgeInsets.symmetric(horizontal: 1.5),
           decoration: BoxDecoration(
             color: isActive ? actCol.withValues(alpha: 0.14) : Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: isActive ? actCol : Colors.transparent,
               width: 1.2,
@@ -859,7 +852,7 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
           ),
           child: Icon(
             icon,
-            size: 17,
+            size: 18,
             color: isActive ? actCol : const Color(0xFF334155),
           ),
         ),
@@ -876,19 +869,19 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
       message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
         child: Container(
-          width: 28,
-          height: 30,
-          margin: const EdgeInsets.symmetric(horizontal: 1),
+          width: 30,
+          height: 32,
+          margin: const EdgeInsets.symmetric(horizontal: 1.5),
           decoration: BoxDecoration(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(6),
           ),
           child: Center(
             child: Container(
-              width: 22,
-              height: 22,
+              width: 24,
+              height: 24,
               decoration: BoxDecoration(
                 color: const Color(0xFFF1F5F9),
                 shape: BoxShape.circle,
@@ -898,7 +891,7 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
               child: Text(
                 glyph,
                 style: const TextStyle(
-                  fontSize: 10,
+                  fontSize: 10.5,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF1E293B),
                 ),
@@ -908,5 +901,42 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmClearAll(BuildContext context, SheetMetalStudioViewModel vm) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+            SizedBox(width: 8),
+            Text('Clear Drawing & Start Fresh?'),
+          ],
+        ),
+        content: const Text(
+          'This will remove all lines, arcs, punches, bends, flanges, patterns, and dimensions from the canvas, resetting to a clean blank sheet.\n\nYou can undo this action if needed.',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      vm.clearAllDrawingEntities(resetToBlank: true);
+    }
   }
 }

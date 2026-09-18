@@ -7,7 +7,9 @@
 // corner relief miters, coupler punch clusters, or flange heights.
 // =============================================================================
 
+import 'dart:math' as math;
 import 'cad_parameter.dart';
+import '../engine/fitting_port_annotation_engine.dart';
 
 enum TopologicalZoneType {
   /// Rigid translation only: e.g. corner relief miters, coupler hole tabs.
@@ -23,32 +25,33 @@ enum TopologicalZoneType {
   /// Adjusts wall flange height based on height delta.
   stretchFlange,
 
-  /// Bed floor boundary where perforation patterns are parametrically re-nested.
+  /// Re-nests perforated hole patterns on the floor bed dynamically.
   renestPerforations,
 }
 
-/// A spatial or feature-based zone rule dictating how vertices and entities morph.
+/// A bounding-box rule for scaling a specific topological zone.
 class TopologicalZoneRule {
   final String id;
   final TopologicalZoneType type;
-
-  /// Normalized bounding box relative to part blank: [minX, maxX, minY, maxY] (0.0 to 1.0)
-  /// or null if applied globally / by feature tag.
   final List<double>? normalizedBounds;
-
-  /// Multiplier for X movement (e.g. 0.0 for fixed, 0.5 for centered expansion, 1.0 for end tabs)
+  final double minX;
+  final double maxX;
+  final double minY;
+  final double maxY;
+  final List<String> affectedEntityIds;
   final double dxFactor;
-
-  /// Multiplier for Y movement
   final double dyFactor;
-
-  /// Name of parameter driving this zone
   final String drivingParamKey;
 
   const TopologicalZoneRule({
     required this.id,
     required this.type,
     this.normalizedBounds,
+    this.minX = 0.0,
+    this.maxX = 1.0,
+    this.minY = 0.0,
+    this.maxY = 1.0,
+    this.affectedEntityIds = const [],
     this.dxFactor = 1.0,
     this.dyFactor = 1.0,
     this.drivingParamKey = 'width',
@@ -58,6 +61,11 @@ class TopologicalZoneRule {
     'id': id,
     'type': type.name,
     if (normalizedBounds != null) 'normalizedBounds': normalizedBounds,
+    'minX': minX,
+    'maxX': maxX,
+    'minY': minY,
+    'maxY': maxY,
+    if (affectedEntityIds.isNotEmpty) 'affectedEntityIds': affectedEntityIds,
     'dxFactor': dxFactor,
     'dyFactor': dyFactor,
     'drivingParamKey': drivingParamKey,
@@ -65,7 +73,7 @@ class TopologicalZoneRule {
 
   factory TopologicalZoneRule.fromJson(Map<String, dynamic> json) =>
       TopologicalZoneRule(
-        id: json['id'] as String,
+        id: json['id'] as String? ?? 'zone',
         type: TopologicalZoneType.values.firstWhere(
           (t) => t.name == json['type'],
           orElse: () => TopologicalZoneType.rigidAnchor,
@@ -73,6 +81,14 @@ class TopologicalZoneRule {
         normalizedBounds: (json['normalizedBounds'] as List?)
             ?.map((e) => (e as num).toDouble())
             .toList(),
+        minX: (json['minX'] as num?)?.toDouble() ?? 0.0,
+        maxX: (json['maxX'] as num?)?.toDouble() ?? 1.0,
+        minY: (json['minY'] as num?)?.toDouble() ?? 0.0,
+        maxY: (json['maxY'] as num?)?.toDouble() ?? 1.0,
+        affectedEntityIds: (json['affectedEntityIds'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+            const [],
         dxFactor: (json['dxFactor'] as num?)?.toDouble() ?? 1.0,
         dyFactor: (json['dyFactor'] as num?)?.toDouble() ?? 1.0,
         drivingParamKey: json['drivingParamKey'] as String? ?? 'width',
@@ -84,9 +100,16 @@ class TemplatePortDefinition {
   final int portIndex; // 1-indexed (e.g. 1, 2, 3, 4)
   final String name; // e.g. "Entry Port 1", "Main Out Port 2", "Branch Port 3"
   final String widthParamKey; // e.g. "port1Width" or "width"
-  final String heightParamKey; // e.g. "port1Height" or "height"
+  final String heightParamKey; // unified fallback height param key (e.g. "height")
+  final String? heightAParamKey; // sidewall A height param key (e.g. "port1HeightA")
+  final String? heightBParamKey; // sidewall B height param key (e.g. "port1HeightB")
   final double defaultWidth;
   final double defaultHeight;
+  final double? defaultHeightA;
+  final double? defaultHeightB;
+  final PortSide? side;
+  final double? outwardNormalAngleRad;
+  final List<String> associatedFeatureIds;
   final String? description;
 
   const TemplatePortDefinition({
@@ -94,18 +117,87 @@ class TemplatePortDefinition {
     required this.name,
     required this.widthParamKey,
     required this.heightParamKey,
+    this.heightAParamKey,
+    this.heightBParamKey,
     this.defaultWidth = 100.0,
     this.defaultHeight = 50.0,
+    this.defaultHeightA,
+    this.defaultHeightB,
+    this.side,
+    this.outwardNormalAngleRad,
+    this.associatedFeatureIds = const [],
     this.description,
   });
+
+  double get effectiveDefaultHeightA => defaultHeightA ?? defaultHeight;
+  double get effectiveDefaultHeightB => defaultHeightB ?? defaultHeight;
+  bool get isSymmetric => (effectiveDefaultHeightA - effectiveDefaultHeightB).abs() < 1e-3;
+
+  double resolveWidth(Map<String, double> params) =>
+      params[widthParamKey] ?? defaultWidth;
+
+  double resolveHeightA(Map<String, double> params) {
+    if (heightAParamKey != null && params.containsKey(heightAParamKey)) {
+      return params[heightAParamKey]!;
+    }
+    return params[heightParamKey] ?? effectiveDefaultHeightA;
+  }
+
+  double resolveHeightB(Map<String, double> params) {
+    if (heightBParamKey != null && params.containsKey(heightBParamKey)) {
+      return params[heightBParamKey]!;
+    }
+    return params[heightParamKey] ?? effectiveDefaultHeightB;
+  }
+
+  TemplatePortDefinition copyWith({
+    int? portIndex,
+    String? name,
+    String? widthParamKey,
+    String? heightParamKey,
+    String? heightAParamKey,
+    String? heightBParamKey,
+    double? defaultWidth,
+    double? defaultHeight,
+    double? defaultHeightA,
+    double? defaultHeightB,
+    PortSide? side,
+    double? outwardNormalAngleRad,
+    List<String>? associatedFeatureIds,
+    String? description,
+  }) {
+    return TemplatePortDefinition(
+      portIndex: portIndex ?? this.portIndex,
+      name: name ?? this.name,
+      widthParamKey: widthParamKey ?? this.widthParamKey,
+      heightParamKey: heightParamKey ?? this.heightParamKey,
+      heightAParamKey: heightAParamKey ?? this.heightAParamKey,
+      heightBParamKey: heightBParamKey ?? this.heightBParamKey,
+      defaultWidth: defaultWidth ?? this.defaultWidth,
+      defaultHeight: defaultHeight ?? this.defaultHeight,
+      defaultHeightA: defaultHeightA ?? this.defaultHeightA,
+      defaultHeightB: defaultHeightB ?? this.defaultHeightB,
+      side: side ?? this.side,
+      outwardNormalAngleRad: outwardNormalAngleRad ?? this.outwardNormalAngleRad,
+      associatedFeatureIds: associatedFeatureIds ?? this.associatedFeatureIds,
+      description: description ?? this.description,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'portIndex': portIndex,
     'name': name,
     'widthParamKey': widthParamKey,
     'heightParamKey': heightParamKey,
+    if (heightAParamKey != null) 'heightAParamKey': heightAParamKey,
+    if (heightBParamKey != null) 'heightBParamKey': heightBParamKey,
     'defaultWidth': defaultWidth,
     'defaultHeight': defaultHeight,
+    if (defaultHeightA != null) 'defaultHeightA': defaultHeightA,
+    if (defaultHeightB != null) 'defaultHeightB': defaultHeightB,
+    if (side != null) 'side': side!.name,
+    if (outwardNormalAngleRad != null) 'outwardNormalAngleRad': outwardNormalAngleRad,
+    if (associatedFeatureIds.isNotEmpty) 'associatedFeatureIds': associatedFeatureIds,
     if (description != null) 'description': description,
   };
 
@@ -115,8 +207,18 @@ class TemplatePortDefinition {
         name: json['name'] as String? ?? 'Port 1',
         widthParamKey: json['widthParamKey'] as String? ?? 'width',
         heightParamKey: json['heightParamKey'] as String? ?? 'height',
+        heightAParamKey: json['heightAParamKey'] as String?,
+        heightBParamKey: json['heightBParamKey'] as String?,
         defaultWidth: (json['defaultWidth'] as num?)?.toDouble() ?? 100.0,
         defaultHeight: (json['defaultHeight'] as num?)?.toDouble() ?? 50.0,
+        defaultHeightA: (json['defaultHeightA'] as num?)?.toDouble(),
+        defaultHeightB: (json['defaultHeightB'] as num?)?.toDouble(),
+        side: json['side'] != null ? PortSide.fromString(json['side'] as String) : null,
+        outwardNormalAngleRad: (json['outwardNormalAngleRad'] as num?)?.toDouble(),
+        associatedFeatureIds: (json['associatedFeatureIds'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const [],
         description: json['description'] as String?,
       );
 }
@@ -215,24 +317,45 @@ class TemplateParameterDefinition {
           name: 'Main Run In (Port 1)',
           widthParamKey: 'width',
           heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
           defaultWidth: width,
           defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.west,
+          outwardNormalAngleRad: math.pi,
+          description: 'Through-run entry feeder channel (West)',
         ),
         TemplatePortDefinition(
           portIndex: 2,
           name: 'Main Run Out (Port 2)',
           widthParamKey: 'width',
           heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
           defaultWidth: width,
           defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.east,
+          outwardNormalAngleRad: 0.0,
+          description: 'Through-run continuation channel (East)',
         ),
         TemplatePortDefinition(
           portIndex: 3,
           name: 'Tee Branch (Port 3)',
           widthParamKey: 'branchWidth',
           heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
           defaultWidth: branchWidth,
           defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.north,
+          outwardNormalAngleRad: math.pi / 2.0,
+          description: '90° lateral branch tap (North)',
         ),
       ],
       parameters: [
@@ -333,27 +456,45 @@ class TemplateParameterDefinition {
           name: 'Entry Part 1 (Main In)',
           widthParamKey: 'port1Width',
           heightParamKey: 'port1Height',
+          heightAParamKey: 'port1HeightA',
+          heightBParamKey: 'port1HeightB',
           defaultWidth: port1Width,
           defaultHeight: port1Height,
-          description: 'Primary entry feeder channel',
+          defaultHeightA: port1Height,
+          defaultHeightB: port1Height,
+          side: PortSide.west,
+          outwardNormalAngleRad: math.pi,
+          description: 'Primary entry feeder channel (West)',
         ),
         TemplatePortDefinition(
           portIndex: 2,
           name: 'Entry Part 2 (Main Out)',
           widthParamKey: 'port2Width',
           heightParamKey: 'port2Height',
+          heightAParamKey: 'port2HeightA',
+          heightBParamKey: 'port2HeightB',
           defaultWidth: port2Width,
           defaultHeight: port2Height,
-          description: 'Through-run continuation channel',
+          defaultHeightA: port2Height,
+          defaultHeightB: port2Height,
+          side: PortSide.east,
+          outwardNormalAngleRad: 0.0,
+          description: 'Through-run continuation channel (East)',
         ),
         TemplatePortDefinition(
           portIndex: 3,
           name: 'Entry Part 3 (Tee Branch)',
           widthParamKey: 'port3Width',
           heightParamKey: 'port3Height',
+          heightAParamKey: 'port3HeightA',
+          heightBParamKey: 'port3HeightB',
           defaultWidth: port3Width,
           defaultHeight: port3Height,
-          description: '90° lateral tap branch',
+          defaultHeightA: port3Height,
+          defaultHeightB: port3Height,
+          side: PortSide.north,
+          outwardNormalAngleRad: math.pi / 2.0,
+          description: '90° lateral tap branch (North)',
         ),
       ],
       parameters: [
@@ -441,6 +582,38 @@ class TemplateParameterDefinition {
       category: 'Tray Accessories',
       productType: 'Cable Tray 90° Bend',
       sourceDxfPath: 'assets/dxf_templates/tray_accessories/90_deg_bend_100x50.dxf',
+      ports: [
+        TemplatePortDefinition(
+          portIndex: 1,
+          name: 'Inlet (Port 1)',
+          widthParamKey: 'width',
+          heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
+          defaultWidth: width,
+          defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.west,
+          outwardNormalAngleRad: math.pi,
+          description: 'Inlet feeder opening (West)',
+        ),
+        TemplatePortDefinition(
+          portIndex: 2,
+          name: 'Outlet (Port 2)',
+          widthParamKey: 'width',
+          heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
+          defaultWidth: width,
+          defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.north,
+          outwardNormalAngleRad: math.pi / 2.0,
+          description: 'Outlet continuing opening (North)',
+        ),
+      ],
       parameters: [
         CadParameter(
           id: 'width',
@@ -511,6 +684,38 @@ class TemplateParameterDefinition {
       category: 'Tray Accessories',
       productType: 'Cable Tray 45° Bend',
       sourceDxfPath: 'assets/dxf_templates/tray_accessories/45_deg_bend_100x50.dxf',
+      ports: [
+        TemplatePortDefinition(
+          portIndex: 1,
+          name: 'Inlet (Port 1)',
+          widthParamKey: 'width',
+          heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
+          defaultWidth: width,
+          defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.west,
+          outwardNormalAngleRad: math.pi,
+          description: 'Inlet feeder opening (West)',
+        ),
+        TemplatePortDefinition(
+          portIndex: 2,
+          name: 'Outlet (Port 2)',
+          widthParamKey: 'width',
+          heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
+          defaultWidth: width,
+          defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.custom,
+          outwardNormalAngleRad: math.pi / 4.0,
+          description: '45° angled outlet opening (North-East)',
+        ),
+      ],
       parameters: [
         CadParameter(
           id: 'width',
@@ -563,6 +768,38 @@ class TemplateParameterDefinition {
       category: 'Tray Accessories',
       productType: 'Cable Tray Reducer',
       sourceDxfPath: 'assets/dxf_templates/tray_accessories/reducer_100x50x50.dxf',
+      ports: [
+        TemplatePortDefinition(
+          portIndex: 1,
+          name: 'Input (Port 1)',
+          widthParamKey: 'widthIn',
+          heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
+          defaultWidth: widthIn,
+          defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.west,
+          outwardNormalAngleRad: math.pi,
+          description: 'Larger channel feeder opening (West)',
+        ),
+        TemplatePortDefinition(
+          portIndex: 2,
+          name: 'Output (Port 2)',
+          widthParamKey: 'widthOut',
+          heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
+          defaultWidth: widthOut,
+          defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.east,
+          outwardNormalAngleRad: 0.0,
+          description: 'Reduced channel discharge opening (East)',
+        ),
+      ],
       parameters: [
         CadParameter(
           id: 'widthIn',
@@ -633,32 +870,60 @@ class TemplateParameterDefinition {
           name: 'Main Run In (Port 1)',
           widthParamKey: 'widthMain',
           heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
           defaultWidth: widthMain,
           defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.west,
+          outwardNormalAngleRad: math.pi,
+          description: 'Main Run Inlet (West)',
         ),
         TemplatePortDefinition(
           portIndex: 2,
           name: 'Main Run Out (Port 2)',
           widthParamKey: 'widthMain',
           heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
           defaultWidth: widthMain,
           defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.east,
+          outwardNormalAngleRad: 0.0,
+          description: 'Main Run Outlet (East)',
         ),
         TemplatePortDefinition(
           portIndex: 3,
           name: 'Left Branch (Port 3)',
           widthParamKey: 'widthBranch',
           heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
           defaultWidth: widthBranch,
           defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.north,
+          outwardNormalAngleRad: math.pi / 2.0,
+          description: 'North Branch (Top)',
         ),
         TemplatePortDefinition(
           portIndex: 4,
           name: 'Right Branch (Port 4)',
           widthParamKey: 'widthBranch',
           heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
           defaultWidth: widthBranch,
           defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.south,
+          outwardNormalAngleRad: -math.pi / 2.0,
+          description: 'South Branch (Bottom)',
         ),
       ],
       parameters: [
@@ -859,6 +1124,38 @@ class TemplateParameterDefinition {
       name: 'Straight Cable Tray Channel',
       category: 'Length',
       productType: 'Cable Tray',
+      ports: [
+        TemplatePortDefinition(
+          portIndex: 1,
+          name: 'Inlet (Port 1)',
+          widthParamKey: 'width',
+          heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
+          defaultWidth: width,
+          defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.west,
+          outwardNormalAngleRad: math.pi,
+          description: 'Inlet opening (West)',
+        ),
+        TemplatePortDefinition(
+          portIndex: 2,
+          name: 'Outlet (Port 2)',
+          widthParamKey: 'width',
+          heightParamKey: 'height',
+          heightAParamKey: 'heightA',
+          heightBParamKey: 'heightB',
+          defaultWidth: width,
+          defaultHeight: height,
+          defaultHeightA: height,
+          defaultHeightB: height,
+          side: PortSide.east,
+          outwardNormalAngleRad: 0.0,
+          description: 'Outlet opening (East)',
+        ),
+      ],
       parameters: [
         CadParameter(
           id: 'width',
@@ -930,3 +1227,417 @@ class TemplateParameterDefinition {
     }
   }
 }
+
+/// Template specification for an individual physical port within a product variation contract.
+class ProductPortTemplate {
+  final int portIndex; // 1-indexed (e.g. 1, 2, 3, 4)
+  final String physicalPortId; // e.g. "PORT_1"
+  final String defaultName; // e.g. "Port 1", "Port 2 (Branch)"
+  final double defaultWidth;
+  final double defaultHeight;
+  final double defaultFlange;
+  final PortSide? side;
+  final double? normalAngleRad;
+  final String? suggestedRoleName; // e.g. "main", "inlet", "outlet", "branch", "unassigned"
+  final String? suggestedRoleReason; // Rationale for why this role is suggested
+
+  const ProductPortTemplate({
+    required this.portIndex,
+    required this.physicalPortId,
+    required this.defaultName,
+    this.defaultWidth = 100.0,
+    this.defaultHeight = 50.0,
+    this.defaultFlange = 15.0,
+    this.side,
+    this.normalAngleRad,
+    this.suggestedRoleName,
+    this.suggestedRoleReason,
+  });
+}
+
+/// Represents the topological and semantic contract for a sheet metal product variation
+/// used to guide 3D folded face analysis, port matching, and constraint scaling.
+///
+/// Core Axiom:
+/// "Physical topology is factual geometry. Flow role is contextual product semantics.
+///  The system must never confuse the two."
+class ProductVariationContract {
+  final String productType;
+  final String variationName;
+  final String category;
+  final int expectedPortCount;
+  final List<double> expectedPortAnglesDeg;
+  final bool hasReturnFlanges;
+  final bool hasCouplerHoles;
+  final int expectedCouplerSlotsPerPort;
+  final double defaultBendAngleDeg;
+  final List<String> primaryParameters;
+  final List<ProductPortTemplate> portTemplates;
+
+  const ProductVariationContract({
+    required this.productType,
+    required this.variationName,
+    this.category = 'Trunking Accessories',
+    required this.expectedPortCount,
+    this.expectedPortAnglesDeg = const [],
+    this.hasReturnFlanges = true,
+    this.hasCouplerHoles = true,
+    this.expectedCouplerSlotsPerPort = 2,
+    this.defaultBendAngleDeg = 90.0,
+    this.primaryParameters = const ['width', 'height'],
+    this.portTemplates = const [],
+  });
+
+  /// Standard predefined product contracts for trunking & tray accessories
+  static final List<ProductVariationContract> standardContracts = [
+    const ProductVariationContract(
+      productType: 'Bend',
+      variationName: '45 Deg Bend',
+      category: 'Trunking Accessories',
+      expectedPortCount: 2,
+      expectedPortAnglesDeg: [180.0, 135.0], // Inlet West, Outlet 45° angle
+      hasReturnFlanges: true,
+      hasCouplerHoles: true,
+      expectedCouplerSlotsPerPort: 4,
+      primaryParameters: ['width', 'height', 'flange', 'angle'],
+      portTemplates: [
+        ProductPortTemplate(
+          portIndex: 1,
+          physicalPortId: 'PORT_1',
+          defaultName: 'Port 1 (West Opening)',
+          defaultWidth: 100.0,
+          defaultHeight: 100.0,
+          defaultFlange: 15.0,
+          side: PortSide.west,
+          normalAngleRad: math.pi,
+          suggestedRoleName: 'bidirectional',
+          suggestedRoleReason: 'Bend ends are geometrically symmetric and bidirectional',
+        ),
+        ProductPortTemplate(
+          portIndex: 2,
+          physicalPortId: 'PORT_2',
+          defaultName: 'Port 2 (45° Miter Opening)',
+          defaultWidth: 100.0,
+          defaultHeight: 100.0,
+          defaultFlange: 15.0,
+          side: PortSide.north,
+          normalAngleRad: 3 * math.pi / 4,
+          suggestedRoleName: 'bidirectional',
+          suggestedRoleReason: 'Bend ends are geometrically symmetric and bidirectional',
+        ),
+      ],
+    ),
+    const ProductVariationContract(
+      productType: 'Bend',
+      variationName: '90 Deg Bend',
+      category: 'Tray Accessories',
+      expectedPortCount: 2,
+      expectedPortAnglesDeg: [180.0, 90.0], // West and North
+      hasReturnFlanges: true,
+      hasCouplerHoles: true,
+      expectedCouplerSlotsPerPort: 2,
+      primaryParameters: ['width', 'height', 'flange', 'radius', 'angle'],
+      portTemplates: [
+        ProductPortTemplate(
+          portIndex: 1,
+          physicalPortId: 'PORT_1',
+          defaultName: 'Port 1 (West Opening)',
+          defaultWidth: 100.0,
+          defaultHeight: 50.0,
+          defaultFlange: 15.0,
+          side: PortSide.west,
+          normalAngleRad: math.pi,
+          suggestedRoleName: 'bidirectional',
+          suggestedRoleReason: '90° bend ends are structurally symmetric',
+        ),
+        ProductPortTemplate(
+          portIndex: 2,
+          physicalPortId: 'PORT_2',
+          defaultName: 'Port 2 (North Opening)',
+          defaultWidth: 100.0,
+          defaultHeight: 50.0,
+          defaultFlange: 15.0,
+          side: PortSide.north,
+          normalAngleRad: math.pi / 2,
+          suggestedRoleName: 'bidirectional',
+          suggestedRoleReason: '90° bend ends are structurally symmetric',
+        ),
+      ],
+    ),
+    const ProductVariationContract(
+      productType: 'Tee',
+      variationName: 'Equal Tee',
+      category: 'Tray Accessories',
+      expectedPortCount: 3,
+      expectedPortAnglesDeg: [180.0, 0.0, 90.0], // West, East, North
+      hasReturnFlanges: true,
+      hasCouplerHoles: true,
+      expectedCouplerSlotsPerPort: 2,
+      primaryParameters: ['width', 'branchWidth', 'height', 'flange'],
+      portTemplates: [
+        ProductPortTemplate(
+          portIndex: 1,
+          physicalPortId: 'PORT_1',
+          defaultName: 'Port 1 (Main West)',
+          defaultWidth: 100.0,
+          defaultHeight: 50.0,
+          defaultFlange: 15.0,
+          side: PortSide.west,
+          normalAngleRad: math.pi,
+          suggestedRoleName: 'main',
+          suggestedRoleReason: 'Collinear main through-path (Flow direction not assumed)',
+        ),
+        ProductPortTemplate(
+          portIndex: 2,
+          physicalPortId: 'PORT_2',
+          defaultName: 'Port 2 (Main East)',
+          defaultWidth: 100.0,
+          defaultHeight: 50.0,
+          defaultFlange: 15.0,
+          side: PortSide.east,
+          normalAngleRad: 0.0,
+          suggestedRoleName: 'main',
+          suggestedRoleReason: 'Collinear main through-path (Flow direction not assumed)',
+        ),
+        ProductPortTemplate(
+          portIndex: 3,
+          physicalPortId: 'PORT_3',
+          defaultName: 'Port 3 (Branch North)',
+          defaultWidth: 100.0,
+          defaultHeight: 50.0,
+          defaultFlange: 15.0,
+          side: PortSide.north,
+          normalAngleRad: math.pi / 2,
+          suggestedRoleName: 'branch',
+          suggestedRoleReason: 'Perpendicular branch arm in T-junction',
+        ),
+      ],
+    ),
+    const ProductVariationContract(
+      productType: 'Tee',
+      variationName: 'Unequal Tee',
+      category: 'Tray Accessories',
+      expectedPortCount: 3,
+      expectedPortAnglesDeg: [180.0, 0.0, 90.0],
+      hasReturnFlanges: true,
+      hasCouplerHoles: true,
+      expectedCouplerSlotsPerPort: 2,
+      primaryParameters: ['width', 'branchWidth', 'height', 'flange'],
+      portTemplates: [
+        ProductPortTemplate(
+          portIndex: 1,
+          physicalPortId: 'PORT_1',
+          defaultName: 'Port 1 (Main Inlet)',
+          defaultWidth: 300.0,
+          defaultHeight: 150.0,
+          defaultFlange: 20.0,
+          side: PortSide.west,
+          normalAngleRad: math.pi,
+          suggestedRoleName: 'inlet',
+          suggestedRoleReason: 'Largest width (300 mm) on main through-path candidate for Inlet',
+        ),
+        ProductPortTemplate(
+          portIndex: 2,
+          physicalPortId: 'PORT_2',
+          defaultName: 'Port 2 (Main Outlet)',
+          defaultWidth: 300.0,
+          defaultHeight: 150.0,
+          defaultFlange: 20.0,
+          side: PortSide.east,
+          normalAngleRad: 0.0,
+          suggestedRoleName: 'outlet',
+          suggestedRoleReason: 'Collinear with main inlet on primary through-path',
+        ),
+        ProductPortTemplate(
+          portIndex: 3,
+          physicalPortId: 'PORT_3',
+          defaultName: 'Port 3 (Reduced Branch)',
+          defaultWidth: 200.0,
+          defaultHeight: 100.0,
+          defaultFlange: 20.0,
+          side: PortSide.north,
+          normalAngleRad: math.pi / 2,
+          suggestedRoleName: 'branch',
+          suggestedRoleReason: 'Perpendicular reduced lateral arm (200 mm vs 300 mm main)',
+        ),
+      ],
+    ),
+    const ProductVariationContract(
+      productType: 'Reducer',
+      variationName: 'Concentric Reducer',
+      category: 'Tray Accessories',
+      expectedPortCount: 2,
+      expectedPortAnglesDeg: [180.0, 0.0],
+      hasReturnFlanges: true,
+      hasCouplerHoles: true,
+      expectedCouplerSlotsPerPort: 2,
+      primaryParameters: ['width', 'smallWidth', 'height', 'flange'],
+      portTemplates: [
+        ProductPortTemplate(
+          portIndex: 1,
+          physicalPortId: 'PORT_1',
+          defaultName: 'Port 1 (Large End)',
+          defaultWidth: 300.0,
+          defaultHeight: 100.0,
+          defaultFlange: 15.0,
+          side: PortSide.west,
+          normalAngleRad: math.pi,
+          suggestedRoleName: 'inlet',
+          suggestedRoleReason: 'Larger physical opening (300 mm)',
+        ),
+        ProductPortTemplate(
+          portIndex: 2,
+          physicalPortId: 'PORT_2',
+          defaultName: 'Port 2 (Small End)',
+          defaultWidth: 150.0,
+          defaultHeight: 100.0,
+          defaultFlange: 15.0,
+          side: PortSide.east,
+          normalAngleRad: 0.0,
+          suggestedRoleName: 'outlet',
+          suggestedRoleReason: 'Smaller physical opening (150 mm)',
+        ),
+      ],
+    ),
+    const ProductVariationContract(
+      productType: 'Cross',
+      variationName: 'Equal Cross',
+      category: 'Tray Accessories',
+      expectedPortCount: 4,
+      expectedPortAnglesDeg: [180.0, 0.0, 90.0, 270.0],
+      hasReturnFlanges: true,
+      hasCouplerHoles: true,
+      expectedCouplerSlotsPerPort: 2,
+      primaryParameters: ['width', 'height', 'flange'],
+      portTemplates: [
+        ProductPortTemplate(
+          portIndex: 1,
+          physicalPortId: 'PORT_1',
+          defaultName: 'Port 1 (West Opening)',
+          defaultWidth: 100.0,
+          defaultHeight: 50.0,
+          defaultFlange: 15.0,
+          side: PortSide.west,
+          normalAngleRad: math.pi,
+          suggestedRoleName: 'unassigned',
+          suggestedRoleReason: '4-way symmetric cross: flow direction is user-defined',
+        ),
+        ProductPortTemplate(
+          portIndex: 2,
+          physicalPortId: 'PORT_2',
+          defaultName: 'Port 2 (East Opening)',
+          defaultWidth: 100.0,
+          defaultHeight: 50.0,
+          defaultFlange: 15.0,
+          side: PortSide.east,
+          normalAngleRad: 0.0,
+          suggestedRoleName: 'unassigned',
+          suggestedRoleReason: '4-way symmetric cross: flow direction is user-defined',
+        ),
+        ProductPortTemplate(
+          portIndex: 3,
+          physicalPortId: 'PORT_3',
+          defaultName: 'Port 3 (North Opening)',
+          defaultWidth: 100.0,
+          defaultHeight: 50.0,
+          defaultFlange: 15.0,
+          side: PortSide.north,
+          normalAngleRad: math.pi / 2,
+          suggestedRoleName: 'unassigned',
+          suggestedRoleReason: '4-way symmetric cross: flow direction is user-defined',
+        ),
+        ProductPortTemplate(
+          portIndex: 4,
+          physicalPortId: 'PORT_4',
+          defaultName: 'Port 4 (South Opening)',
+          defaultWidth: 100.0,
+          defaultHeight: 50.0,
+          defaultFlange: 15.0,
+          side: PortSide.south,
+          normalAngleRad: 3 * math.pi / 2,
+          suggestedRoleName: 'unassigned',
+          suggestedRoleReason: '4-way symmetric cross: flow direction is user-defined',
+        ),
+      ],
+    ),
+    const ProductVariationContract(
+      productType: 'Straight',
+      variationName: 'Straight Tray',
+      category: 'Length',
+      expectedPortCount: 2,
+      expectedPortAnglesDeg: [180.0, 0.0], // West and East
+      hasReturnFlanges: true,
+      hasCouplerHoles: true,
+      expectedCouplerSlotsPerPort: 2,
+      primaryParameters: ['width', 'height', 'length', 'flange'],
+      portTemplates: [
+        ProductPortTemplate(
+          portIndex: 1,
+          physicalPortId: 'PORT_1',
+          defaultName: 'Port 1 (Entry)',
+          defaultWidth: 100.0,
+          defaultHeight: 50.0,
+          defaultFlange: 15.0,
+          side: PortSide.west,
+          normalAngleRad: math.pi,
+          suggestedRoleName: 'bidirectional',
+          suggestedRoleReason: 'Straight channel opening',
+        ),
+        ProductPortTemplate(
+          portIndex: 2,
+          physicalPortId: 'PORT_2',
+          defaultName: 'Port 2 (Exit)',
+          defaultWidth: 100.0,
+          defaultHeight: 50.0,
+          defaultFlange: 15.0,
+          side: PortSide.east,
+          normalAngleRad: 0.0,
+          suggestedRoleName: 'bidirectional',
+          suggestedRoleReason: 'Straight channel opening',
+        ),
+      ],
+    ),
+  ];
+
+  static ProductVariationContract? lookup(String? product, String? variant) {
+    if (product == null && variant == null) return null;
+    final p = (product ?? '').toLowerCase().replaceAll(' ', '_');
+    final v = (variant ?? '').toLowerCase().replaceAll(' ', '_');
+
+    // 1. Exact match first
+    for (final c in standardContracts) {
+      final cp = c.productType.toLowerCase().replaceAll(' ', '_');
+      final cv = c.variationName.toLowerCase().replaceAll(' ', '_');
+      if (cp == p && cv == v) return c;
+    }
+
+    // 2. Specific matching with unequal priority
+    for (final c in standardContracts) {
+      final cp = c.productType.toLowerCase().replaceAll(' ', '_');
+      final cv = c.variationName.toLowerCase().replaceAll(' ', '_');
+      final productMatch = p.isEmpty || p.contains(cp) || cp.contains(p);
+      if (productMatch) {
+        if (v.contains('unequal') && cv.contains('unequal')) return c;
+        if (!v.contains('unequal') && (v.contains('equal') || v.contains('tee')) && cv.contains('equal') && !cv.contains('unequal')) return c;
+        if (v.contains('45') && cv.contains('45')) return c;
+        if (v.contains('90') && cv.contains('90')) return c;
+        if (v.contains('reducer') && cv.contains('reducer')) return c;
+        if (v.contains('straight') && cv.contains('straight')) return c;
+      }
+    }
+
+    // 3. Fallback: match by variation name or product keywords
+    for (final c in standardContracts) {
+      final cv = c.variationName.toLowerCase().replaceAll(' ', '_');
+      if (v.contains('unequal') && cv.contains('unequal')) return c;
+      if (!v.contains('unequal') && v.contains('tee') && cv.contains('equal_tee')) return c;
+      if (v.contains('45') && cv.contains('45')) return c;
+      if (v.contains('90') && cv.contains('90')) return c;
+      if (v.contains('cross') && cv.contains('cross')) return c;
+      if (v.contains('reducer') && cv.contains('reducer')) return c;
+      if (v.contains('straight') && cv.contains('straight')) return c;
+    }
+    return null;
+  }
+}
+

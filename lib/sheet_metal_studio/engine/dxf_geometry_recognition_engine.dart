@@ -95,18 +95,21 @@ class DxfGeometryRecognitionEngine {
     }
 
     // 3. Recognize Obround Slots from paired lines & arcs, closed polylines, or interior loops
-    final slotHoles = _recognizeSlots(
+    final slotRecognition = _recognizeSlots(
       lines: lines,
       arcs: arcs,
       polylines: polylines,
       interiorLoops: interiorLoops,
       startCounter: punchCounter,
     );
+    final slotHoles = slotRecognition.slots;
+    final consumedSlotArcs = slotRecognition.consumedArcs;
+
     // 3B. Recognize Standalone & Boundary Arcs as First-Class CAD Entities
     final recognizedArcs = <CadArc2D>[];
     int arcCounter = 1;
     for (final a in arcs) {
-      if (_isArcPartOfSlot(a, slotHoles)) continue;
+      if (consumedSlotArcs.contains(a) || _isArcPartOfSlot(a, slotHoles)) continue;
 
       final sp = CadPoint2D(
         a.center.x + a.radius * math.cos(a.startAngleDeg * math.pi / 180.0),
@@ -322,9 +325,10 @@ class DxfGeometryRecognitionEngine {
   static bool _isArcPartOfSlot(DxfRawArc arc, List<CncPunchPrimitive> slots) {
     for (final s in slots) {
       if (s.type != PunchType.obroundSlot) continue;
-      final halfW = s.diameterMm / 2.0;
+      final slotW = s.widthMm > 0 ? s.widthMm : s.diameterMm;
+      final halfW = slotW / 2.0;
       if ((arc.radius - halfW).abs() > 1.5) continue;
-      final halfD = (s.lengthMm - s.diameterMm) / 2.0;
+      final halfD = (s.lengthMm - slotW) / 2.0;
       final rad = s.rotationDeg * math.pi / 180.0;
       final c1 = CadPoint2D(s.center.x + halfD * math.cos(rad), s.center.y + halfD * math.sin(rad));
       final c2 = CadPoint2D(s.center.x - halfD * math.cos(rad), s.center.y - halfD * math.sin(rad));
@@ -796,7 +800,7 @@ class DxfGeometryRecognitionEngine {
   }
 
 
-  static List<CncPunchPrimitive> _recognizeSlots({
+  static ({List<CncPunchPrimitive> slots, Set<DxfRawArc> consumedArcs}) _recognizeSlots({
     required List<DxfRawLine> lines,
     required List<DxfRawArc> arcs,
     required List<DxfRawPolyline> polylines,
@@ -804,31 +808,12 @@ class DxfGeometryRecognitionEngine {
     required int startCounter,
   }) {
     final slots = <CncPunchPrimitive>[];
+    final consumedArcs = <DxfRawArc>{};
     int counter = startCounter;
 
-    void addSlotIfUnique(CncPunchPrimitive? s) {
-      if (s == null) return;
-      if (!slots.any((existing) => existing.center.distanceTo(s.center) < 1.0)) {
-        slots.add(s);
-        counter++;
-      }
-    }
-
-    // 1. Process closed polylines
-    for (final poly in polylines) {
-      addSlotIfUnique(_recognizeSlotFromVertices(poly.vertices, counter));
-    }
-
-
-
-
-    // 2. Process interior closed loops from curve chaining
-    for (final loop in interiorLoops) {
-      addSlotIfUnique(_recognizeSlotFromVertices(loop, counter));
-    }
-
-    // 3. Complementary Arc-Pair Slot Recognition:
-    // Pair semicircular arcs (~180° sweep) of equal radius facing each other
+    // 1. Complementary Arc-Pair Slot Recognition:
+    // Pair semicircular arcs (~180° sweep) of equal radius facing each other.
+    // This gives the exact width (2 * radius) and true total length (centerDist + 2 * radius).
     final semiArcs = <DxfRawArc>[];
     for (final a in arcs) {
       double start = a.startAngleDeg;
@@ -854,12 +839,6 @@ class DxfGeometryRecognitionEngine {
               (a1.center.x + a2.center.x) / 2.0,
               (a1.center.y + a2.center.y) / 2.0,
             );
-            if (slots.any((s) => s.center.distanceTo(slotCenter) < 1.0)) {
-              matchedIndices.add(i);
-              matchedIndices.add(j);
-              break;
-            }
-
             final width = a1.radius * 2.0;
             final length = centerDist + width;
             var angleRad = math.atan2(a2.center.y - a1.center.y, a2.center.x - a1.center.x);
@@ -877,25 +856,56 @@ class DxfGeometryRecognitionEngine {
               }
             }
 
-            slots.add(
-              CncPunchPrimitive.obround(
-                id: 'SLOT_$counter',
+            final existingIdx = slots.indexWhere((s) => s.center.distanceTo(slotCenter) < 1.0);
+            if (existingIdx != -1) {
+              slots[existingIdx] = CncPunchPrimitive.obround(
+                id: slots[existingIdx].id,
                 center: slotCenter,
                 widthMm: width,
                 lengthMm: length,
                 rotationDeg: rotDeg,
-              ),
-            );
-            counter++;
+              );
+            } else {
+              slots.add(
+                CncPunchPrimitive.obround(
+                  id: 'SLOT_$counter',
+                  center: slotCenter,
+                  widthMm: width,
+                  lengthMm: length,
+                  rotationDeg: rotDeg,
+                ),
+              );
+              counter++;
+            }
             matchedIndices.add(i);
             matchedIndices.add(j);
+            consumedArcs.add(a1);
+            consumedArcs.add(a2);
             break;
           }
         }
       }
     }
 
-    return slots;
+    void addSlotIfUnique(CncPunchPrimitive? s) {
+      if (s == null) return;
+      if (!slots.any((existing) => existing.center.distanceTo(s.center) < 1.0)) {
+        slots.add(s);
+        counter++;
+      }
+    }
+
+    // 2. Process closed polylines
+    for (final poly in polylines) {
+      addSlotIfUnique(_recognizeSlotFromVertices(poly.vertices, counter));
+    }
+
+    // 3. Process interior closed loops from curve chaining
+    for (final loop in interiorLoops) {
+      addSlotIfUnique(_recognizeSlotFromVertices(loop, counter));
+    }
+
+    return (slots: slots, consumedArcs: consumedArcs);
   }
 
   static List<PerforationPattern> _recognizePatterns(

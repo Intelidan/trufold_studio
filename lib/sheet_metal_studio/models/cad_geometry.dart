@@ -387,6 +387,19 @@ class CadArc2D extends CadGeometry {
   final double startAngleRad;
   final double sweepAngleRad;
   final bool isBoundary;
+  final bool showLabel;
+
+  static double normalizeAngleDeg(double deg) {
+    double res = deg % 360.0;
+    if (res < 0) res += 360.0;
+    return res;
+  }
+
+  static double normalizeAngleRad(double rad) {
+    double res = rad % (2.0 * math.pi);
+    if (res < 0) res += 2.0 * math.pi;
+    return res;
+  }
 
   CadArc2D({
     required super.id,
@@ -400,26 +413,31 @@ class CadArc2D extends CadGeometry {
     CadPoint2D? endPoint,
     bool isClockwise = false,
     this.isBoundary = true,
+    this.showLabel = true,
     super.layer,
     super.isVisible,
     super.isConstruction,
-  }) : startAngleRad = startAngleRad ?? ((startAngleDeg ?? 0.0) * math.pi / 180.0),
+  }) : startAngleRad = startAngleRad != null
+           ? normalizeAngleRad(startAngleRad)
+           : normalizeAngleRad((startAngleDeg ?? 0.0) * math.pi / 180.0),
        sweepAngleRad = sweepAngleRad ?? _calcSweepRad(startAngleDeg, endAngleDeg, isClockwise);
 
   static double _calcSweepRad(double? startDeg, double? endDeg, bool isClockwise) {
     if (startDeg == null || endDeg == null) return math.pi;
+    final s = normalizeAngleDeg(startDeg);
+    final e = normalizeAngleDeg(endDeg);
     double sweepDeg;
     if (isClockwise) {
-      sweepDeg = endDeg <= startDeg ? (endDeg - startDeg) : (endDeg - startDeg - 360.0);
+      sweepDeg = e <= s ? (e - s) : (e - s - 360.0);
     } else {
-      sweepDeg = endDeg >= startDeg ? (endDeg - startDeg) : (endDeg - startDeg + 360.0);
+      sweepDeg = e >= s ? (e - s) : (e - s + 360.0);
     }
     return sweepDeg * math.pi / 180.0;
   }
 
-  double get startAngleDeg => startAngleRad * 180.0 / math.pi;
+  double get startAngleDeg => normalizeAngleDeg(startAngleRad * 180.0 / math.pi);
   double get sweepAngleDeg => sweepAngleRad * 180.0 / math.pi;
-  double get endAngleDeg => (startAngleRad + sweepAngleRad) * 180.0 / math.pi;
+  double get endAngleDeg => normalizeAngleDeg((startAngleRad + sweepAngleRad) * 180.0 / math.pi);
   double get arcLength => length;
   bool get isClockwise => sweepAngleRad < 0;
 
@@ -489,6 +507,8 @@ class CadArc2D extends CadGeometry {
     String layer = '0',
     bool isVisible = true,
     bool isConstruction = false,
+    bool isBoundary = false,
+    bool showLabel = true,
   }) {
     final x1 = p1.x, y1 = p1.y;
     final x2 = p2.x, y2 = p2.y;
@@ -507,6 +527,8 @@ class CadArc2D extends CadGeometry {
         layer: layer,
         isVisible: isVisible,
         isConstruction: isConstruction,
+        isBoundary: isBoundary,
+        showLabel: showLabel,
       );
     }
 
@@ -541,6 +563,7 @@ class CadArc2D extends CadGeometry {
       layer: layer,
       isVisible: isVisible,
       isConstruction: isConstruction,
+      isBoundary: isBoundary,
     );
   }
 
@@ -601,6 +624,7 @@ class CadArc2D extends CadGeometry {
     bool? isBoundary,
     bool? isVisible,
     bool? isConstruction,
+    bool? showLabel,
   }) {
     final effectiveStartRad = startAngleRad ?? (startAngleDeg != null ? startAngleDeg * math.pi / 180.0 : this.startAngleRad);
     double effectiveSweepRad;
@@ -625,6 +649,7 @@ class CadArc2D extends CadGeometry {
       isBoundary: isBoundary ?? this.isBoundary,
       isVisible: isVisible ?? this.isVisible,
       isConstruction: isConstruction ?? this.isConstruction,
+      showLabel: showLabel ?? this.showLabel,
     );
   }
 
@@ -639,6 +664,7 @@ class CadArc2D extends CadGeometry {
     'radius': radius,
     'startAngleRad': startAngleRad,
     'sweepAngleRad': sweepAngleRad,
+    'showLabel': showLabel,
   };
 
   factory CadArc2D.fromJson(Map<String, dynamic> json) => CadArc2D(
@@ -650,6 +676,7 @@ class CadArc2D extends CadGeometry {
     layer: json['layer'] as String? ?? '0',
     isVisible: json['isVisible'] as bool? ?? true,
     isConstruction: json['isConstruction'] as bool? ?? false,
+    showLabel: json['showLabel'] as bool? ?? true,
   );
 }
 

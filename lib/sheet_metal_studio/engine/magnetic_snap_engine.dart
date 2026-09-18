@@ -524,15 +524,26 @@ class MagneticSnapEngine {
       }
     }
 
+    for (final arc in doc.arcs) {
+      final pStart = Offset(arc.startPoint.x, arc.startPoint.y);
+      final pEnd = Offset(arc.endPoint.x, arc.endPoint.y);
+      final pMid = Offset(arc.midpoint.x, arc.midpoint.y);
+      if (cadBox.contains(pStart) && cadBox.contains(pEnd) && cadBox.contains(pMid)) {
+        selectedIds.add(arc.id);
+      }
+    }
+
     for (final punch in doc.punches) {
       if (!punch.isVisible) continue;
-      final punchBox = Rect.fromCenter(
-        center: Offset(punch.center.x, punch.center.y),
-        width: punch.widthMm,
-        height: punch.lengthMm > 0 ? punch.lengthMm : punch.widthMm,
-      );
-      if (cadBox.contains(punchBox.topLeft) && cadBox.contains(punchBox.bottomRight)) {
-        selectedIds.add(punch.id);
+      final poly = punch.toPolygon();
+      if (poly.isNotEmpty) {
+        if (poly.every((pt) => cadBox.contains(Offset(pt.x, pt.y)))) {
+          selectedIds.add(punch.id);
+        }
+      } else {
+        if (cadBox.contains(Offset(punch.center.x, punch.center.y))) {
+          selectedIds.add(punch.id);
+        }
       }
     }
 
@@ -565,15 +576,41 @@ class MagneticSnapEngine {
       }
     }
 
+    for (final arc in doc.arcs) {
+      final pStart = Offset(arc.startPoint.x, arc.startPoint.y);
+      final pEnd = Offset(arc.endPoint.x, arc.endPoint.y);
+      final pMid = Offset(arc.midpoint.x, arc.midpoint.y);
+      if (cadBox.contains(pStart) ||
+          cadBox.contains(pEnd) ||
+          cadBox.contains(pMid) ||
+          isSegmentIntersectingRect(arc.startPoint, arc.endPoint, cadBox)) {
+        selectedIds.add(arc.id);
+      }
+    }
+
     for (final punch in doc.punches) {
       if (!punch.isVisible) continue;
-      final punchBox = Rect.fromCenter(
-        center: Offset(punch.center.x, punch.center.y),
-        width: punch.widthMm,
-        height: punch.lengthMm > 0 ? punch.lengthMm : punch.widthMm,
-      );
-      if (cadBox.overlaps(punchBox)) {
-        selectedIds.add(punch.id);
+      final poly = punch.toPolygon();
+      if (poly.isNotEmpty) {
+        if (cadBox.contains(Offset(punch.center.x, punch.center.y)) ||
+            poly.any((pt) => cadBox.contains(Offset(pt.x, pt.y)))) {
+          selectedIds.add(punch.id);
+        } else {
+          bool intersects = false;
+          for (int i = 0; i < poly.length; i++) {
+            final pA = poly[i];
+            final pB = poly[(i + 1) % poly.length];
+            if (isSegmentIntersectingRect(pA, pB, cadBox)) {
+              intersects = true;
+              break;
+            }
+          }
+          if (intersects) selectedIds.add(punch.id);
+        }
+      } else {
+        if (cadBox.contains(Offset(punch.center.x, punch.center.y))) {
+          selectedIds.add(punch.id);
+        }
       }
     }
 

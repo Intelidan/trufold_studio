@@ -266,13 +266,13 @@ class FacePropertySheet extends StatelessWidget {
               ],
             ),
 
-            // 5. Dimension Tag Toggle
+            // 5. Size Dimension Toggle
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Expanded(
                   child: Text(
-                    'Dimension Tag:',
+                    'Size Dimension:',
                     style: TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -286,7 +286,7 @@ class FacePropertySheet extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
                   splashRadius: 14,
-                  tooltip: face.showLabel ? 'Hide Dimension Tag' : 'Show Dimension Tag',
+                  tooltip: face.showLabel ? 'Hide Size Dimension' : 'Show Size Dimension',
                   onPressed: () => viewModel.toggleFaceLabel(face.id),
                 ),
               ],

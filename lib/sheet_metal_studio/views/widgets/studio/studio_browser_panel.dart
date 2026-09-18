@@ -14,6 +14,7 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../models/dsf_document.dart';
 import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../cms_perforation_dialog.dart';
@@ -308,10 +309,14 @@ class _StudioBrowserPanelState extends State<StudioBrowserPanel> {
                                       _buildLeafNode(
                                         title: '${face.label} [${face.id}]',
                                         icon: Icons.crop_portrait,
-                                        isSelected: face.id == widget.viewModel.selectedFaceId,
+                                        isSelected: face.id == widget.viewModel.selectedFaceId ||
+                                            widget.viewModel.selectedEntityIds.contains(face.id),
                                         isVisible: face.isVisible,
                                         onToggleEye: () => widget.viewModel.toggleFaceVisibility(face.id),
-                                        onTap: () => widget.viewModel.selectFace(face.id),
+                                        onTap: () => widget.viewModel.selectFace(
+                                          face.id,
+                                          multiSelect: HardwareKeyboard.instance.isShiftPressed,
+                                        ),
                                         onDoubleTap: () {
                                           widget.viewModel.selectFace(face.id);
                                           widget.viewModel.setPropertyInspectorOpen(true);
@@ -331,10 +336,14 @@ class _StudioBrowserPanelState extends State<StudioBrowserPanel> {
                                       _buildLeafNode(
                                         title: '${bend.id} (${bend.angleDeg.round()}° R${bend.radiusMm})',
                                         icon: Icons.turn_right,
-                                        isSelected: bend.id == widget.viewModel.selectedBendId,
+                                        isSelected: bend.id == widget.viewModel.selectedBendId ||
+                                            widget.viewModel.selectedEntityIds.contains(bend.id),
                                         isVisible: bend.isVisible,
                                         onToggleEye: () => widget.viewModel.toggleBendVisibility(bend.id),
-                                        onTap: () => widget.viewModel.selectBend(bend.id),
+                                        onTap: () => widget.viewModel.selectBend(
+                                          bend.id,
+                                          multiSelect: HardwareKeyboard.instance.isShiftPressed,
+                                        ),
                                         onDoubleTap: () {
                                           widget.viewModel.selectBend(bend.id);
                                           widget.viewModel.setPropertyInspectorOpen(true);
@@ -355,10 +364,14 @@ class _StudioBrowserPanelState extends State<StudioBrowserPanel> {
                                       _buildLeafNode(
                                         title: '${punch.type.name.toUpperCase()} (${punch.center.x.round()}, ${punch.center.y.round()})',
                                         icon: Icons.adjust,
-                                        isSelected: punch.id == widget.viewModel.selectedPunchId,
+                                        isSelected: punch.id == widget.viewModel.selectedPunchId ||
+                                            widget.viewModel.selectedEntityIds.contains(punch.id),
                                         isVisible: punch.isVisible,
                                         onToggleEye: () => widget.viewModel.togglePunchVisibility(punch.id),
-                                        onTap: () => widget.viewModel.selectPunch(punch.id),
+                                        onTap: () => widget.viewModel.selectPunch(
+                                          punch.id,
+                                          multiSelect: HardwareKeyboard.instance.isShiftPressed,
+                                        ),
                                         onDoubleTap: () {
                                           widget.viewModel.selectPunch(punch.id);
                                           widget.viewModel.setPropertyInspectorOpen(true);
@@ -380,11 +393,16 @@ class _StudioBrowserPanelState extends State<StudioBrowserPanel> {
                                         _buildLeafNode(
                                           title: '${arc.id} (R${arc.radius.toStringAsFixed(1)}, L${arc.arcLength.toStringAsFixed(1)})',
                                           icon: Icons.all_inclusive,
-                                          isSelected: arc.id == widget.viewModel.selectedArcId,
+                                          isSelected: arc.id == widget.viewModel.selectedArcId ||
+                                              widget.viewModel.selectedEntityIds.contains(arc.id),
                                           isVisible: true,
                                           onTap: () {
-                                            widget.viewModel.setSelectedArc(arc.id);
-                                            widget.viewModel.setPropertyInspectorOpen(true);
+                                            if (HardwareKeyboard.instance.isShiftPressed) {
+                                              widget.viewModel.toggleEntitySelection(arc.id);
+                                            } else {
+                                              widget.viewModel.setSelectedArc(arc.id);
+                                              widget.viewModel.setPropertyInspectorOpen(true);
+                                            }
                                           },
                                           onDoubleTap: () {
                                             widget.viewModel.setSelectedArc(arc.id);
@@ -407,10 +425,15 @@ class _StudioBrowserPanelState extends State<StudioBrowserPanel> {
                                         _buildLeafNode(
                                           title: '${pat.id} (${pat.holeType.name})',
                                           icon: Icons.apps,
-                                          isSelected: pat.id == widget.viewModel.selectedPatternId,
+                                          isSelected: pat.id == widget.viewModel.selectedPatternId ||
+                                              widget.viewModel.selectedEntityIds.contains(pat.id),
                                           isVisible: pat.isVisible,
                                           onToggleEye: () => widget.viewModel.togglePatternVisibility(pat.id),
-                                          onTap: () => widget.viewModel.selectPattern(pat.id),
+                                          onTap: () => widget.viewModel.selectPattern(
+                                            pat.id,
+                                            null,
+                                            HardwareKeyboard.instance.isShiftPressed,
+                                          ),
                                           onDoubleTap: () {
                                             widget.viewModel.selectPattern(pat.id);
                                             widget.viewModel.setPropertyInspectorOpen(true);
@@ -432,10 +455,14 @@ class _StudioBrowserPanelState extends State<StudioBrowserPanel> {
                                         _buildLeafNode(
                                           title: 'Cut ${cut.id}',
                                           icon: Icons.timeline,
-                                          isSelected: cut.id == widget.viewModel.selectedCutId,
+                                          isSelected: cut.id == widget.viewModel.selectedCutId ||
+                                              widget.viewModel.selectedEntityIds.contains(cut.id),
                                           isVisible: cut.isVisible,
                                           onToggleEye: () => widget.viewModel.toggleCutVisibility(cut.id),
-                                          onTap: () => widget.viewModel.selectCut(cut.id),
+                                          onTap: () => widget.viewModel.selectCut(
+                                            cut.id,
+                                            multiSelect: HardwareKeyboard.instance.isShiftPressed,
+                                          ),
                                           onDoubleTap: () {
                                             widget.viewModel.selectCut(cut.id);
                                             widget.viewModel.setPropertyInspectorOpen(true);

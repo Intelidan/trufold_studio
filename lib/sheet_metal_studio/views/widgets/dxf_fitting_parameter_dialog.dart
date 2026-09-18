@@ -11,8 +11,12 @@
 
 import 'package:flutter/material.dart';
 import '../../engine/fitting_port_annotation_engine.dart';
+import '../../models/cms/cms_product_contract.dart';
+import '../../models/cms/cms_physical_port.dart';
 import '../../models/dxf_fitting_metadata.dart';
+import '../../models/fold_bend_line.dart';
 import '../../services/product_catalog_service.dart';
+import 'cms_channel_topology_pictograph.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
 
 class DxfFittingParameterDialog extends StatefulWidget {
@@ -240,6 +244,23 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     );
   }
 
+  void _handleLaunchTeachScaling() {
+    final meta = _buildCurrentMetadata();
+    final thk = double.tryParse(_thicknessController.text);
+    if (thk != null && thk > 0) {
+      widget.viewModel.setSheetThickness(thk);
+    }
+    widget.viewModel.updateFittingMetadata(meta);
+
+    if (widget.onClose != null) {
+      widget.onClose!();
+    } else if (Navigator.canPop(context)) {
+      Navigator.of(context).pop();
+    }
+    widget.viewModel.setFittingInspectorOpen(false);
+    widget.viewModel.startTeachScaling();
+  }
+
   void _startEdgePick(PortEdgePickTarget target) {
     final meta = _buildCurrentMetadata();
     final thk = double.tryParse(_thicknessController.text);
@@ -301,7 +322,8 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
       ),
       child: Container(
         width: 700,
-        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 580),
+        height: 590,
+        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 620),
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -318,40 +340,98 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                     Container(
                       padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0284C7).withValues(alpha: 0.12),
+                        color: (widget.viewModel.hasVerifiedCmsTemplate
+                                ? const Color(0xFF059669)
+                                : const Color(0xFF0284C7))
+                            .withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Icon(Icons.straighten, color: Color(0xFF0284C7), size: 18),
+                      child: Icon(
+                        widget.viewModel.hasVerifiedCmsTemplate ? Icons.verified : Icons.straighten,
+                        color: widget.viewModel.hasVerifiedCmsTemplate
+                            ? const Color(0xFF059669)
+                            : const Color(0xFF0284C7),
+                        size: 18,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+                          Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 6,
                             children: [
-                              const Text(
-                                'DSF Fitting Inspector',
-                                style: TextStyle(
+                              Text(
+                                widget.viewModel.hasVerifiedCmsTemplate
+                                    ? 'DSF Fitting & Template Inspector'
+                                    : 'DSF Fitting Inspector',
+                                style: const TextStyle(
                                   color: Color(0xFF0F172A),
-                                  fontSize: 15,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              if (widget.onDragHeader != null) ...[
-                                const SizedBox(width: 6),
+                              if (widget.viewModel.hasVerifiedCmsTemplate)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFECFDF5),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: const Color(0xFF10B981)),
+                                  ),
+                                  child: const Text(
+                                    'Stage 7 Verified ✓',
+                                    style: TextStyle(
+                                      color: Color(0xFF059669),
+                                      fontSize: 9.0,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              if (widget.onDragHeader != null)
                                 const Icon(Icons.drag_indicator, size: 14, color: Color(0xFF94A3B8)),
-                              ],
                             ],
                           ),
                           const SizedBox(height: 1),
-                          const Text(
-                            'Classify fitting and review Width (W) & Height (H) port dimensions.',
-                            style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
+                          Text(
+                            widget.viewModel.hasVerifiedCmsTemplate
+                                ? 'Stage 7 Verified CMS template. Review port kinematics, cross section, and launch scaling.'
+                                : 'Classify fitting and review Width (W) & Height (H) port dimensions.',
+                            style: const TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
                           ),
                         ],
                       ),
                     ),
+                    // Ports (2D/3D) Annotations Toggle
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        widget.viewModel.toggleCmsPortHighlights();
+                        setState(() {});
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: widget.viewModel.showCmsPortHighlights
+                            ? const Color(0xFF0D9488)
+                            : const Color(0xFF64748B),
+                        side: BorderSide(
+                          color: widget.viewModel.showCmsPortHighlights
+                              ? const Color(0xFF0D9488)
+                              : const Color(0xFFCBD5E1),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                      icon: Icon(
+                        widget.viewModel.showCmsPortHighlights ? Icons.visibility : Icons.visibility_off_outlined,
+                        size: 13,
+                      ),
+                      label: Text(
+                        widget.viewModel.showCmsPortHighlights ? 'Ports (2D/3D): ON' : 'Ports (2D/3D): OFF',
+                        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     // W×H Tags Visibility Toggle
                     OutlinedButton.icon(
                       onPressed: () {
@@ -360,11 +440,11 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                       },
                       style: OutlinedButton.styleFrom(
                         foregroundColor: widget.viewModel.showPortOpeningBadges
-                            ? const Color(0xFF0D9488)
+                            ? const Color(0xFF0284C7)
                             : const Color(0xFF64748B),
                         side: BorderSide(
                           color: widget.viewModel.showPortOpeningBadges
-                              ? const Color(0xFF0D9488)
+                              ? const Color(0xFF0284C7)
                               : const Color(0xFFCBD5E1),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -460,15 +540,27 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                     const SizedBox(height: 12),
 
                     // C. Parameters Entry Section
-                    _buildSectionHeader(
-                      '2. PORT PARAMETERS ($portCount OPENING${portCount > 1 ? 'S' : ''}) & EDGE ASSIGNMENT',
-                      Icons.straighten,
-                    ),
-                    const SizedBox(height: 3),
-                    const Text(
-                      'Right-click any edge on canvas to assign directly, or use buttons below.',
-                      style: TextStyle(color: Color(0xFF64748B), fontSize: 10),
-                    ),
+                    if (widget.viewModel.hasVerifiedCmsTemplate) ...[
+                      _buildSectionHeader(
+                        '2. 3D TEMPLATE TOPOLOGY & VERIFIED PORTS (${widget.viewModel.verifiedCmsPorts.length} PHYSICAL OPENINGS)',
+                        Icons.verified,
+                      ),
+                      const SizedBox(height: 3),
+                      const Text(
+                        'Baseline CMS template definition complete. Review cross-section, flow schematic, and launch Teach Scaling.',
+                        style: TextStyle(color: Color(0xFF059669), fontSize: 10, fontWeight: FontWeight.w600),
+                      ),
+                    ] else ...[
+                      _buildSectionHeader(
+                        '2. PORT PARAMETERS ($portCount OPENING${portCount > 1 ? 'S' : ''}) & EDGE ASSIGNMENT',
+                        Icons.straighten,
+                      ),
+                      const SizedBox(height: 3),
+                      const Text(
+                        'Right-click any edge on canvas to assign directly, or use buttons below.',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 10),
+                      ),
+                    ],
                     const SizedBox(height: 8),
 
                     _buildPortCardsSection(portCount),
@@ -482,8 +574,11 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
             const SizedBox(height: 10),
 
             // 3. Bottom Action Bar
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 TextButton(
                   onPressed: () {
@@ -496,20 +591,35 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                   },
                   child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
                 ),
-                const SizedBox(width: 10),
+                if (widget.viewModel.hasVerifiedCmsTemplate)
+                  ElevatedButton.icon(
+                    onPressed: _handleLaunchTeachScaling,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      elevation: 1,
+                    ),
+                    icon: const Icon(Icons.tune, size: 15),
+                    label: const Text(
+                      'Teach Scaling (Phase 2) →',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ElevatedButton.icon(
                   onPressed: _handleSaveParametersOnly,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0284C7),
+                    backgroundColor: widget.viewModel.hasVerifiedCmsTemplate ? const Color(0xFF059669) : const Color(0xFF0284C7),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                     elevation: 1,
                   ),
                   icon: const Icon(Icons.check, size: 15),
-                  label: const Text(
-                    'Save Parameters to DSF',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  label: Text(
+                    widget.viewModel.hasVerifiedCmsTemplate ? 'Save Template to DSF' : 'Save Parameters to DSF',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
@@ -911,6 +1021,34 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
   }
 
   Widget _buildPortCardsSection(int portCount) {
+    final verifiedPorts = widget.viewModel.verifiedCmsPorts;
+    if (verifiedPorts.isNotEmpty) {
+      final contract = widget.viewModel.cmsGuidedController.state.contract ?? CmsProductContract.bend45;
+      final thk = double.tryParse(_thicknessController.text) ?? widget.viewModel.document.material.thicknessMm;
+      final allBends = widget.viewModel.document.bends;
+      final wallCount = allBends.where((b) => b.role == BendLineRole.bend).length;
+      final flangeCount = allBends.where((b) => b.role == BendLineRole.flange).length;
+      final couplers = widget.viewModel.document.punches.where((p) => p.isCoupler).length;
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          CmsChannelTopologyPictograph(
+            contract: contract,
+            ports: verifiedPorts,
+            sheetThickness: thk,
+            flangeMm: _flangeMm,
+            bendCount: allBends.length,
+            wallCount: wallCount > 0 ? wallCount : null,
+            flangeCount: flangeCount > 0 ? flangeCount : null,
+            couplerCount: couplers,
+            onLaunchTeachScaling: _handleLaunchTeachScaling,
+          ),
+          _buildVerifiedPortCards(verifiedPorts),
+        ],
+      );
+    }
+
     if (portCount == 4) {
       return _buildFourPortCards();
     } else if (portCount == 3) {
@@ -922,6 +1060,200 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     } else {
       return _buildStandardParametersGrid();
     }
+  }
+
+  Widget _buildVerifiedPortCards(List<CmsPhysicalPort> ports) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 12),
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            const Text(
+              'VERIFIED 3D PHYSICAL PORT PARAMETERS',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF64748B),
+                letterSpacing: 0.5,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: const Color(0xFF10B981)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.lock_outline, size: 12, color: Color(0xFF059669)),
+                  SizedBox(width: 4),
+                  Text(
+                    'Topology Locked (Phase 1 Complete)',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: ports.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final port = entry.value;
+            final isFirst = idx == 0;
+            final accentColor = idx == 0
+                ? const Color(0xFF0284C7)
+                : (idx == 1 ? const Color(0xFF0D9488) : const Color(0xFF7C3AED));
+
+            return Expanded(
+              child: Container(
+                margin: EdgeInsets.only(left: isFirst ? 0 : 8, right: entry.key < ports.length - 1 ? 8 : 0),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: accentColor.withValues(alpha: 0.4), width: 1.2),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Port ${port.index} (${port.index == 1 ? 'Inlet / Opening 1' : 'Outlet / Opening 2'})',
+                            style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFECFDF5),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFFBBF7D0)),
+                          ),
+                          child: const Text(
+                            '✓ 3D Mouth',
+                            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Normal: [${port.normal.x.toStringAsFixed(2)}, ${port.normal.y.toStringAsFixed(2)}, ${port.normal.z.toStringAsFixed(2)}]',
+                      style: const TextStyle(fontSize: 10, color: Color(0xFF64748B), fontFamily: 'monospace'),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Width Row
+                    _buildVerifiedParamField(
+                      label: 'Width (W)',
+                      key: port.index == 1 ? 'port1Width' : 'port2Width',
+                      val: port.width,
+                      accentColor: accentColor,
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Height Row
+                    _buildVerifiedParamField(
+                      label: 'Height (H)',
+                      key: port.index == 1 ? 'port1Height' : 'port2Height',
+                      val: port.height,
+                      accentColor: accentColor,
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Area & Flange metrics
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Area: ${(port.width * port.height).toStringAsFixed(0)} mm²',
+                            style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                          ),
+                          Text(
+                            'Lip: ${port.flange.toStringAsFixed(0)} mm',
+                            style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVerifiedParamField({
+    required String label,
+    required String key,
+    required double val,
+    required Color accentColor,
+  }) {
+    final controller = _controllers[key] ??= TextEditingController(text: val.toStringAsFixed(1));
+    return Row(
+      children: [
+        Expanded(
+          flex: 2,
+          child: Text(
+            label,
+            style: const TextStyle(color: Color(0xFF334155), fontSize: 11, fontWeight: FontWeight.w500),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          flex: 3,
+          child: Container(
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 11.5, fontWeight: FontWeight.bold),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 6),
+                    ),
+                  ),
+                ),
+                const Text('mm', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildTwoPortCards() {
