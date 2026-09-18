@@ -7,8 +7,10 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+
 import '../../../models/cms/cms_ux_state.dart';
 import '../../../engine/cms/cms_guided_ux_controller.dart';
+import '../branding/trufold_3d_icon.dart';
 
 class CmsGuidedStageCard extends StatelessWidget {
   final CmsGuidedUxController controller;
@@ -67,29 +69,15 @@ class CmsGuidedStageCard extends StatelessWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                      decoration: BoxDecoration(
-                        color: accentColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6.0),
-                      ),
+                      decoration: BoxDecoration(color: accentColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6.0)),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            isComplete
-                                ? Icons.check_circle
-                                : (isAmbiguity ? Icons.help_outline : Icons.auto_awesome),
-                            size: 14.0,
-                            color: accentColor,
-                          ),
+                          Icon(isComplete ? Icons.check_circle : (isAmbiguity ? Icons.help_outline : Icons.auto_awesome), size: 14.0, color: accentColor),
                           const SizedBox(width: 4.0),
                           Text(
                             _phaseLabel(state.phase),
-                            style: TextStyle(
-                              fontSize: 11.0,
-                              fontWeight: FontWeight.w700,
-                              color: accentColor,
-                              letterSpacing: 0.3,
-                            ),
+                            style: TextStyle(fontSize: 11.0, fontWeight: FontWeight.w700, color: accentColor, letterSpacing: 0.3),
                           ),
                         ],
                       ),
@@ -106,25 +94,42 @@ class CmsGuidedStageCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 10.0),
 
-                // Stage Title
-                Text(
-                  state.stageTitle,
-                  style: const TextStyle(
-                    fontSize: 15.0,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF0F172A), // Dark slate
-                  ),
-                ),
-                const SizedBox(height: 4.0),
+                // Stage Title & 3D Animated Indicator Row
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Stage Title
+                          Text(
+                            state.stageTitle,
+                            style: const TextStyle(
+                              fontSize: 15.0,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0F172A), // Dark slate
+                            ),
+                          ),
+                          const SizedBox(height: 4.0),
 
-                // Subtitle
-                Text(
-                  state.stageSubtitle,
-                  style: const TextStyle(
-                    fontSize: 12.0,
-                    color: Color(0xFF475569),
-                    height: 1.3,
-                  ),
+                          // Subtitle
+                          Text(state.stageSubtitle, style: const TextStyle(fontSize: 12.0, color: Color(0xFF475569), height: 1.3)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10.0),
+                    // True 3D Folding Indicator
+                    TruFold3DIcon(
+                      size: 38.0,
+                      isAnimated: !isComplete && state.phase != CmsUxPhase.idle,
+                      fixedFoldAngleDeg: isComplete ? 65.0 : (state.phase == CmsUxPhase.idle ? 0.0 : null),
+                      sheetThickness: 2.2,
+                      tColor: const Color(0xFF0284C7),
+                      fColor: const Color(0xFF334155),
+                      accentColor: accentColor,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12.0),
 
@@ -170,10 +175,7 @@ class CmsGuidedStageCard extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(vertical: 10.0),
                           ),
                           icon: const Icon(Icons.check_circle_outline, size: 18.0),
-                          label: const Text(
-                            'Use Suggested Bends',
-                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.0),
-                          ),
+                          label: const Text('Use Suggested Bends', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.0)),
                           onPressed: onUseSuggestedBends,
                         ),
                       ),
@@ -207,10 +209,7 @@ class CmsGuidedStageCard extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(vertical: 10.0),
                             ),
                             icon: const Icon(Icons.check, size: 16.0),
-                            label: const Text(
-                              'Finalize & Save',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.0),
-                            ),
+                            label: const Text('Finalize & Save', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.0)),
                             onPressed: onFinalizeTemplate,
                           ),
                         ),
@@ -225,10 +224,7 @@ class CmsGuidedStageCard extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(vertical: 10.0),
                             ),
                             icon: const Icon(Icons.tune, size: 16.0),
-                            label: const Text(
-                              'Teach Scaling →',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.0),
-                            ),
+                            label: const Text('Teach Scaling →', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.0)),
                             onPressed: onStartTeachScaling,
                           ),
                         ),

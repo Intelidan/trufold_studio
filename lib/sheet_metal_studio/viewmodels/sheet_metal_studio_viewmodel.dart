@@ -57,6 +57,9 @@ import '../models/cms/cms_product_contract.dart';
 import '../models/cms/cms_physical_port.dart';
 import '../engine/cms/cms_scaling_controller.dart';
 import '../models/cms/cms_ux_state.dart';
+import '../engine/cms/cms_3d_opening_detector.dart';
+import '../engine/cms/cms_opening_plane_analyzer.dart';
+import '../engine/cms/cms_port_matcher.dart';
 
 import '../engine/planar_face_decomposer.dart';
 
@@ -566,7 +569,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   Future<void> startCleanCmsDiscovery({CmsProductContract? contract}) async {
     final selectedContract = contract ?? CmsProductContract.bend45;
     cmsGuidedController.startSession(contract: selectedContract);
-    await cmsGuidedController.runAutomaticDiscovery(document: _document, stepDelay: const Duration(milliseconds: 300));
+    await cmsGuidedController.runAutomaticDiscovery(document: _document, stepDelay: const Duration(milliseconds: 650));
     notifyListeners();
   }
 
@@ -587,7 +590,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
           );
         }).toList();
 
-    final updatedDoc = await cmsGuidedController.applyUserBends(userBends: bendsToApply, document: _document, stepDelay: const Duration(milliseconds: 300));
+    final updatedDoc = await cmsGuidedController.applyUserBends(userBends: bendsToApply, document: _document, stepDelay: const Duration(milliseconds: 650));
 
     _document = updatedDoc;
     _recomputeMesh();
@@ -610,8 +613,11 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       return _persistentCmsPorts;
     }
     final cmsRaw = _document.metadata['cmsTemplate'];
-    if (cmsRaw is Map<String, dynamic> && cmsRaw['ports'] is List) {
-      _persistentCmsPorts = (cmsRaw['ports'] as List).whereType<Map<String, dynamic>>().map((p) => CmsPhysicalPort.fromJson(p)).toList();
+    if (cmsRaw is Map && cmsRaw['ports'] is List) {
+      _persistentCmsPorts = (cmsRaw['ports'] as List)
+          .whereType<Map>()
+          .map((p) => CmsPhysicalPort.fromJson(Map<String, dynamic>.from(p)))
+          .toList();
       return _persistentCmsPorts;
     }
     return const [];
@@ -699,6 +705,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     _persistentCmsPorts = _scalingController!.currentPreview?.derivedPorts ?? _persistentCmsPorts;
     _isTeachScalingActive = false;
     _scalingController = null;
+    _detectedFittingMetadata = DxfFittingMetadata.fromDocument(_document);
     _recomputeMesh();
     _recordHistory('✓ Learned and Accepted CMS Scaling Model');
     notifyListeners();
@@ -724,8 +731,11 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }
 
     final cmsRaw = _document.metadata['cmsTemplate'];
-    if (cmsRaw is Map<String, dynamic> && cmsRaw['ports'] is List) {
-      _persistentCmsPorts = (cmsRaw['ports'] as List).whereType<Map<String, dynamic>>().map((p) => CmsPhysicalPort.fromJson(p)).toList();
+    if (cmsRaw is Map && cmsRaw['ports'] is List) {
+      _persistentCmsPorts = (cmsRaw['ports'] as List)
+          .whereType<Map>()
+          .map((p) => CmsPhysicalPort.fromJson(Map<String, dynamic>.from(p)))
+          .toList();
     }
 
     _hydrateUndoStackFromDocument();
@@ -1225,6 +1235,22 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     _commitPendingHistoryDelta();
 
     _syncUndoDeltasToMetadata();
+
+    if (_isTeachScalingActive && _scalingController != null) {
+      final committed = _scalingController!.acceptScalingModel();
+      _document = committed;
+      _persistentCmsPorts = _scalingController!.currentPreview?.derivedPorts ?? _persistentCmsPorts;
+      _isTeachScalingActive = false;
+      _scalingController = null;
+    }
+
+    if (_persistentCmsPorts.isNotEmpty && _document.metadata['cmsTemplate'] is Map) {
+      final meta = Map<String, dynamic>.from(_document.metadata);
+      final cms = Map<String, dynamic>.from(meta['cmsTemplate'] as Map);
+      cms['ports'] = _persistentCmsPorts.map((p) => p.toJson()).toList();
+      meta['cmsTemplate'] = cms;
+      _document = _document.copyWith(metadata: meta);
+    }
 
     return _document;
   }
@@ -7289,6 +7315,15 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       });
     }
 
+    _persistentCmsPorts.clear();
+    final cmsRaw = doc.metadata['cmsTemplate'];
+    if (cmsRaw is Map && cmsRaw['ports'] is List) {
+      _persistentCmsPorts = (cmsRaw['ports'] as List)
+          .whereType<Map>()
+          .map((p) => CmsPhysicalPort.fromJson(Map<String, dynamic>.from(p)))
+          .toList();
+    }
+
     _hydrateUndoStackFromDocument();
 
     _recomputeMesh();
@@ -7619,6 +7654,77 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   void _recomputeMesh() {
     _cachedMesh = KinematicFoldEngine.foldDocument(_document, foldProgress: _foldProgress, curveResolution3D: _curveResolution3D);
     _cachedFlatPattern = FlatPatternEngine.computeFlatPattern(_document);
+    _syncPersistentCmsPortsWithCurrentMesh();
+  }
+
+  void _syncPersistentCmsPortsWithCurrentMesh() {
+    if (_isTeachScalingActive || _foldProgress < 0.99) return;
+    final cmsRaw = _document.metadata['cmsTemplate'];
+    if (cmsRaw is! Map || _persistentCmsPorts.isEmpty) return;
+    if (_cachedMesh == null || _cachedMesh!.polygons.isEmpty) return;
+
+    try {
+      final contract = CmsProductContract.lookup(
+        cmsRaw['productType'] as String?,
+        cmsRaw['variation'] as String?,
+      ) ?? cmsGuidedController.state.contract ?? CmsProductContract.bend45;
+
+      final rawOpenings = Cms3DOpeningDetector.detectOpenings(
+        document: _document,
+        foldResult: _cachedMesh!,
+      );
+      if (rawOpenings.length == _persistentCmsPorts.length) {
+        final measured = rawOpenings.map(
+          (r) => CmsOpeningPlaneAnalyzer.analyze(
+            raw: r,
+            document: _document,
+            foldResult: _cachedMesh!,
+          ),
+        ).toList();
+        final match = CmsPortMatcher.match(
+          measuredOpenings: measured,
+          contract: contract,
+        );
+        if (match.matchedPorts.length == _persistentCmsPorts.length) {
+          bool needsUpdate = false;
+          for (int i = 0; i < match.matchedPorts.length; i++) {
+            final current = _persistentCmsPorts[i];
+            final fresh = match.matchedPorts[i];
+            if ((current.width - fresh.width).abs() > 0.5 ||
+                (current.height - fresh.height).abs() > 0.5 ||
+                (current.center.x - fresh.center.x).abs() > 0.5 ||
+                (current.center.y - fresh.center.y).abs() > 0.5 ||
+                (current.center.z - fresh.center.z).abs() > 0.5) {
+              needsUpdate = true;
+              break;
+            }
+          }
+          if (needsUpdate) {
+            final updated = <CmsPhysicalPort>[];
+            for (int i = 0; i < match.matchedPorts.length; i++) {
+              final fresh = match.matchedPorts[i];
+              final old = _persistentCmsPorts[i];
+              updated.add(fresh.copyWith(
+                id: old.id,
+                index: old.index,
+                role: old.role,
+                suggestedRole: old.suggestedRole,
+                roleSource: old.roleSource,
+                suggestionReason: old.suggestionReason,
+              ));
+            }
+            _persistentCmsPorts = updated;
+            final meta = Map<String, dynamic>.from(_document.metadata);
+            final cms = Map<String, dynamic>.from(meta['cmsTemplate'] as Map);
+            cms['ports'] = updated.map((p) => p.toJson()).toList();
+            meta['cmsTemplate'] = cms;
+            _document = _document.copyWith(metadata: meta);
+          }
+        }
+      }
+    } catch (_) {
+      // Silently ignore if mesh opening detection cannot resolve
+    }
   }
 
   bool _isPointInPoly(CadPoint2D pt, List<CadPoint2D> poly) {

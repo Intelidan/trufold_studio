@@ -16,6 +16,7 @@ import '../press_brake_machine_dialog.dart';
 import '../punch_tooling_selector_dialog.dart';
 import '../template_library_gallery_dialog.dart';
 import '../template_authoring_wizard_dialog.dart';
+import '../branding/trufold_app_icon_painter.dart';
 
 class StudioMenuBar extends StatelessWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -929,6 +930,7 @@ class StudioMenuBar extends StatelessWidget {
         onTap: () {
           showAboutDialog(
             context: context,
+            applicationIcon: const TruFoldAppIconTile(size: 54, isDark: true),
             applicationName: 'truFold Studio',
             applicationVersion: '1.0.0 Pro',
             applicationLegalese: '© Danish Sheet Metal CAD Solutions. All rights reserved.',

@@ -6,6 +6,7 @@ import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_product_contrac
 import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_scaling_model.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dsf_document.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_physical_port.dart';
+import 'package:trufold_studio/sheet_metal_studio/viewmodels/sheet_metal_studio_viewmodel.dart';
 
 void main() {
   group('CmsScalingController (Canonical Geometry Rule)', () {
@@ -93,6 +94,72 @@ void main() {
       final scalingModelJson = meta!['scalingModel'] as Map<String, dynamic>?;
       expect(scalingModelJson, isNotNull);
       expect(scalingModelJson!['parameters']['width']['teachingState'], 'learned');
+
+      // Verify derived scaled ports are persisted into DSF metadata
+      final portsJson = meta['ports'] as List?;
+      expect(portsJson, isNotNull);
+      expect(portsJson!.length, equals(baselinePorts.length));
+      final scaledPort1 = portsJson.first as Map<String, dynamic>;
+      expect(scaledPort1['width'], greaterThan(140.0));
+    });
+
+    test('Round-trip save and reopen DSF preserves scaled port dimensions in SheetMetalStudioViewModel', () {
+      final vm = SheetMetalStudioViewModel(initialDocument: baselineDoc);
+      vm.startCleanCmsDiscovery(contract: CmsProductContract.bend45);
+      vm.finalizeCmsTemplate(openInspector: false);
+
+      // Start Teach Scaling and evaluate morph to 150mm
+      vm.startTeachScaling();
+      expect(vm.isTeachScalingActive, isTrue);
+      vm.scalingController!.selectParameter('width');
+      vm.scalingController!.evaluateMorph(150.0);
+
+      // Accept scaling
+      vm.acceptTeachScaling();
+      expect(vm.isTeachScalingActive, isFalse);
+      expect(vm.verifiedCmsPorts.first.width, greaterThan(140.0));
+
+      // Simulate Save
+      final savedDoc = vm.prepareDocumentForSave();
+      final jsonString = jsonEncode(savedDoc.toJson());
+
+      // Simulate Reopen
+      final reopenedDoc = DsfDocument.parseJsonString(jsonString);
+      final reopenedVm = SheetMetalStudioViewModel(initialDocument: reopenedDoc);
+
+      expect(reopenedVm.verifiedCmsPorts, isNotEmpty);
+      expect(reopenedVm.activeCmsPorts, isNotEmpty);
+      expect(reopenedVm.activeCmsPorts.first.width, greaterThan(140.0));
+      expect(reopenedVm.activeCmsPorts.last.width, greaterThan(140.0));
+      expect(reopenedVm.activeCmsPorts.first.derivedMouthCorners.length, equals(4));
+    });
+
+    test('Opening DSF with stale port metadata auto-synchronizes port visualization from folded 3D mesh', () {
+      // Create a document with 150mm scaled geometry, but intentionally inject stale 98mm ports in metadata
+      final controller = CmsScalingController(
+        baselineDocument: baselineDoc,
+        contract: CmsProductContract.bend45,
+        baselinePorts: baselinePorts,
+      );
+      controller.selectParameter('width');
+      controller.evaluateMorph(150.0);
+      final preview = controller.currentPreview!;
+
+      // Simulate a document saved with the previous bug (geometry is 150mm, but cmsTemplate['ports'] has baseline 98mm)
+      final buggyMeta = Map<String, dynamic>.from(preview.scaledDocument.metadata);
+      final buggyCms = Map<String, dynamic>.from(buggyMeta['cmsTemplate'] as Map? ?? {});
+      buggyCms['ports'] = baselinePorts.map((p) => p.toJson()).toList(); // stale 98mm
+      buggyMeta['cmsTemplate'] = buggyCms;
+      final buggyDoc = preview.scaledDocument.copyWith(metadata: buggyMeta);
+
+      // Load into ViewModel
+      final vm = SheetMetalStudioViewModel(initialDocument: buggyDoc);
+
+      // _recomputeMesh auto-syncs from folded 3D mesh
+      expect(vm.verifiedCmsPorts, isNotEmpty);
+      expect(vm.activeCmsPorts, isNotEmpty);
+      expect(vm.activeCmsPorts.first.width, greaterThan(140.0));
+      expect(vm.activeCmsPorts.last.width, greaterThan(140.0));
     });
   });
 }

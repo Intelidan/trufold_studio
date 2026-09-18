@@ -145,10 +145,26 @@ class CmsScalingController extends ChangeNotifier {
       contract: contract,
     );
 
+    final effectivePorts = matchResult.matchedPorts.isNotEmpty
+        ? matchResult.matchedPorts.map((mp) {
+            final baseMatch = baselinePorts.firstWhere(
+              (bp) => bp.id == mp.id || bp.index == mp.index,
+              orElse: () => mp,
+            );
+            if (baseMatch.role != null && baseMatch.role != CmsPortRole.unassigned) {
+              return mp.copyWith(
+                role: baseMatch.role,
+                roleSource: baseMatch.roleSource,
+              );
+            }
+            return mp;
+          }).toList()
+        : baselinePorts;
+
     _currentPreview = CmsScalingPreviewResult(
       scaledDocument: scaledDoc,
       foldedMesh: mesh,
-      derivedPorts: matchResult.matchedPorts.isNotEmpty ? matchResult.matchedPorts : baselinePorts,
+      derivedPorts: effectivePorts,
       isValid: true,
       validationMessage: 'Successfully evaluated 2D blank and regenerated 3D model for ${targetValue.toStringAsFixed(1)} mm.',
     );
@@ -170,12 +186,25 @@ class CmsScalingController extends ChangeNotifier {
       _model = _model.copyWith(parameters: newParams);
     }
 
-    // Persist scaling model into DSF metadata
+    // Persist scaling model and derived scaled ports into DSF metadata
     final previewDoc = _currentPreview?.scaledDocument ?? baselineDocument;
     final meta = Map<String, dynamic>.from(previewDoc.metadata);
     final cmsTemplate = Map<String, dynamic>.from(meta['cmsTemplate'] as Map<String, dynamic>? ?? {});
     cmsTemplate['scalingModel'] = _model.toJson();
+    if (_currentPreview != null && _currentPreview!.derivedPorts.isNotEmpty) {
+      cmsTemplate['ports'] = _currentPreview!.derivedPorts.map((p) => p.toJson()).toList();
+    }
     meta['cmsTemplate'] = cmsTemplate;
+
+    if (meta['fittingMetadata'] is Map) {
+      final fittingMeta = Map<String, dynamic>.from(meta['fittingMetadata'] as Map);
+      final params = Map<String, dynamic>.from(fittingMeta['parameters'] as Map? ?? {});
+      if (param != null) {
+        params[param.id] = _previewMorphValue;
+      }
+      fittingMeta['parameters'] = params;
+      meta['fittingMetadata'] = fittingMeta;
+    }
 
     final finalDoc = previewDoc.copyWith(metadata: meta);
     notifyListeners();

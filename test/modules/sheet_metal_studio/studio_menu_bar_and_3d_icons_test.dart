@@ -819,15 +819,9 @@ void main() {
 
     testWidgets('18. Dimension default offset is 8.0 mm and dimension line segment offset dragging updates line position', (tester) async {
       final vm = SheetMetalStudioViewModel();
-      
+
       // Check CadDimension default line offset
-      const dim = CadDimension(
-        id: 'dim_test_1',
-        type: CadDimensionType.aligned,
-        referenceAId: 'seg_1',
-        referenceBId: 'seg_2',
-        measuredValue: 100.0,
-      );
+      const dim = CadDimension(id: 'dim_test_1', type: CadDimensionType.aligned, referenceAId: 'seg_1', referenceBId: 'seg_2', measuredValue: 100.0);
       expect(dim.dimensionLineOffset, equals(8.0));
 
       vm.addDimension(dim);
@@ -910,12 +904,7 @@ void main() {
       expect(vm.document.faces.first.showLabel, isTrue);
 
       // 2. Cut line size dimension toggle
-      final testCut = CadLineSegment(
-        id: 'CUT_TEST',
-        p1: CadPoint2D(0, 0),
-        p2: CadPoint2D(50, 0),
-        showLabel: true,
-      );
+      final testCut = CadLineSegment(id: 'CUT_TEST', p1: CadPoint2D(0, 0), p2: CadPoint2D(50, 0), showLabel: true);
       vm.loadDocument(vm.document.copyWith(cutLines: [testCut]));
       expect(vm.document.cutLines.first.showLabel, isTrue);
       vm.toggleCutLabel('CUT_TEST');
@@ -924,12 +913,7 @@ void main() {
       expect(vm.document.cutLines.first.showLabel, isTrue);
 
       // 3. Bend line size dimension toggle
-      final testBend = FoldBendLine(
-        id: 'BEND_TEST',
-        p1: CadPoint2D(10, 0),
-        p2: CadPoint2D(10, 50),
-        showLabel: true,
-      );
+      final testBend = FoldBendLine(id: 'BEND_TEST', p1: CadPoint2D(10, 0), p2: CadPoint2D(10, 50), showLabel: true);
       vm.loadDocument(vm.document.copyWith(bends: [testBend]));
       expect(vm.document.bends.first.showLabel, isTrue);
       vm.toggleBendLabel('BEND_TEST');
@@ -938,12 +922,7 @@ void main() {
       expect(vm.document.bends.first.showLabel, isTrue);
 
       // 4. Punch size dimension toggle
-      final testPunch = CncPunchPrimitive(
-        id: 'PUNCH_TEST',
-        type: PunchType.roundHole,
-        center: CadPoint2D(25, 25),
-        showLabel: true,
-      );
+      final testPunch = CncPunchPrimitive(id: 'PUNCH_TEST', type: PunchType.roundHole, center: CadPoint2D(25, 25), showLabel: true);
       vm.loadDocument(vm.document.copyWith(punches: [testPunch]));
       expect(vm.document.punches.first.showLabel, isTrue);
       vm.togglePunchLabel('PUNCH_TEST');
@@ -952,20 +931,79 @@ void main() {
       expect(vm.document.punches.first.showLabel, isTrue);
 
       // 5. Arc size dimension toggle
-      final testArc = CadArc2D(
-        id: 'ARC_TEST',
-        center: CadPoint2D(50, 50),
-        radius: 20.0,
-        startAngleRad: 0,
-        sweepAngleRad: math.pi / 2,
-        showLabel: true,
-      );
+      final testArc = CadArc2D(id: 'ARC_TEST', center: CadPoint2D(50, 50), radius: 20.0, startAngleRad: 0, sweepAngleRad: math.pi / 2, showLabel: true);
       vm.loadDocument(vm.document.copyWith(arcs: [testArc]));
       expect(vm.document.arcs.first.showLabel, isTrue);
       vm.toggleArcLabel('ARC_TEST');
       expect(vm.document.arcs.first.showLabel, isFalse);
       vm.toggleArcLabel('ARC_TEST');
       expect(vm.document.arcs.first.showLabel, isTrue);
+    });
+
+    testWidgets('22. In-place dimension editing converts badge to entry point, commits on Enter/Tab, cancels on Esc', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(const MaterialApp(home: SheetMetalStudioScreen()));
+      await tester.pumpAndSettle();
+
+      final canvasFinder = find.byType(UnfoldedCanvasWidget);
+      expect(canvasFinder, findsOneWidget);
+
+      final state = tester.state(canvasFinder) as dynamic;
+      final SheetMetalStudioViewModel vm = state.widget.viewModel;
+
+      // Locate the rendered blank width dimension badge
+      final dimBadges = state.dimensionBadgeRects as Map<String, Rect>;
+      expect(dimBadges.containsKey('dim_blank_w'), isTrue);
+
+      // 1. Double tap / trigger dimension badge -> converts in-place to entry point
+      state.startInPlaceDimensionEditForTesting('dim_blank_w');
+      await tester.pumpAndSettle();
+
+      // Verify the in-place entry point (TextField) appears
+      final inputFinder = find.byType(TextField);
+      expect(inputFinder, findsOneWidget);
+
+      // Verify initial text matches blank width (200.00)
+      final initialText = tester.widget<TextField>(inputFinder).controller!.text;
+      final initialW = vm.document.blankWidthMm;
+      expect(double.tryParse(initialText), equals(initialW));
+
+      // 2. Press Esc -> Cancels the edit, closes entry point, no value change
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsNothing);
+      expect(vm.document.blankWidthMm, equals(initialW));
+
+      // 3. Edit value to 260, then press Enter -> Executes and drives dimension
+      state.startInPlaceDimensionEditForTesting('dim_blank_w');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsOneWidget);
+      await tester.enterText(find.byType(TextField), '260');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsNothing);
+      expect(vm.document.blankWidthMm, equals(260.0));
+
+      // 4. Test Tab execution: enter 280, press Tab -> Executes and drives dimension
+      state.startInPlaceDimensionEditForTesting('dim_blank_w');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsOneWidget);
+      await tester.enterText(find.byType(TextField), '280');
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsNothing);
+      expect(vm.document.blankWidthMm, equals(280.0));
     });
   });
 }

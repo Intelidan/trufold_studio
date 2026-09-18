@@ -21,6 +21,7 @@ import '../../../services/studio_clipboard_service.dart';
 import 'studio_3d_tool_icons.dart';
 import 'studio_menu_bar.dart';
 import 'studio_tool_button_3d.dart';
+import '../branding/trufold_3d_icon.dart';
 
 class StudioRibbonToolbar extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -113,8 +114,15 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
         children: [
-          // Brand Logo & Title
-          const Icon(Icons.precision_manufacturing, color: Color(0xFF38BDF8), size: 16),
+          // Brand Logo & Title (True 3D Branding Icon)
+          const TruFold3DIcon(
+            size: 20,
+            isAnimated: false,
+            fixedFoldAngleDeg: 42.0,
+            sheetThickness: 2.0,
+            tColor: Color(0xFF38BDF8),
+            fColor: Color(0xFF94A3B8),
+          ),
           const SizedBox(width: 8),
           const Text(
             'truFold Studio by Danish',

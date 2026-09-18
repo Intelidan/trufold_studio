@@ -39,7 +39,6 @@ import 'bend_radius_dialog.dart';
 import '../../models/cad_dimension.dart';
 import '../../engine/associative_dimension_engine.dart';
 import 'cad_property_inspector.dart';
-import 'dimension_drive_dialog.dart';
 import '../../models/dxf_fitting_metadata.dart';
 import '../../services/product_catalog_service.dart';
 import '../../models/cad_constraint.dart';
@@ -105,8 +104,21 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
   Offset _dragDimensionStartOffset = Offset.zero;
   Offset _dragStartScreen = Offset.zero;
   final Map<String, Rect> _dimensionBadgeRects = {};
+  @visibleForTesting
+  Map<String, Rect> get dimensionBadgeRects => _dimensionBadgeRects;
   String? _hoveredDimId;
-  final Map<String, ({Offset pA, Offset pB, double offsetDist, CadPoint2D ptA, CadPoint2D ptB, CadDimensionType type})> _dimensionLineSegments = {};
+  final Map<
+    String,
+    ({
+      Offset pA,
+      Offset pB,
+      double offsetDist,
+      CadPoint2D ptA,
+      CadPoint2D ptB,
+      CadDimensionType type,
+    })
+  >
+  _dimensionLineSegments = {};
   String? _hoveredDimLineId;
   String? _draggedDimLineId;
   DateTime? _lastTapTime;
@@ -131,19 +143,31 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
   String? _hoveredConstraintId;
   final Set<String> _constraintHoverHighlightedEntityIds = {};
 
-  // Inline Floating Dimension Callout Editor (Component 1)
-  String? _activeInlineDimId;
+  // In-Place Dimension Value Editor
+  String? _editingDimId;
+  Rect? _editingDimRect;
   CadPoint2D? _activeInlineDimPA;
   CadPoint2D? _activeInlineDimPB;
   String? _activeInlineDimRefA;
   String? _activeInlineDimRefB;
   double _activeInlineDimOffset = 25.0;
-  Offset? _inlineDimEditorScreenPos;
-  final TextEditingController _inlineDimTextController = TextEditingController();
-  final FocusNode _inlineDimFocusNode = FocusNode();
+  final TextEditingController _inPlaceDimController = TextEditingController();
+  final FocusNode _inPlaceDimFocusNode = FocusNode();
   final FocusNode _canvasFocusNode = FocusNode();
+  final Map<String, double> _dimensionBadgeValues = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _inPlaceDimFocusNode.addListener(() {
+      if (!_inPlaceDimFocusNode.hasFocus && _editingDimId != null) {
+        _commitInPlaceDimensionEdit(widget.viewModel);
+      }
+    });
+  }
 
   bool _isEditingText() {
+    if (_editingDimId != null) return true;
     final focus = FocusManager.instance.primaryFocus;
     if (focus == null) return false;
     final ctx = focus.context;
@@ -154,185 +178,161 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
 
   @override
   void dispose() {
-    _inlineDimTextController.dispose();
-    _inlineDimFocusNode.dispose();
+    _inPlaceDimController.dispose();
+    _inPlaceDimFocusNode.dispose();
     _canvasFocusNode.dispose();
     super.dispose();
   }
 
-  void _openInlineDimensionCallout({
-    required Offset screenPos,
-    String? dimId,
+  void _startInPlaceDimensionEdit({
+    required String dimId,
+    required Rect badgeRect,
+    required double initialValue,
     CadPoint2D? pA,
     CadPoint2D? pB,
     String? referenceAId,
     String? referenceBId,
-    required double measuredValue,
     double offset = 25.0,
   }) {
     setState(() {
-      _activeInlineDimId = dimId;
+      _editingDimId = dimId;
+      _editingDimRect = badgeRect;
       _activeInlineDimPA = pA;
       _activeInlineDimPB = pB;
       _activeInlineDimRefA = referenceAId;
       _activeInlineDimRefB = referenceBId;
       _activeInlineDimOffset = offset;
-      _inlineDimEditorScreenPos = screenPos;
-      _inlineDimTextController.text = measuredValue.toStringAsFixed(2);
-      _inlineDimTextController.selection = TextSelection(
+      _inPlaceDimController.text = initialValue > 0
+          ? initialValue.toStringAsFixed(2)
+          : '';
+      _inPlaceDimController.selection = TextSelection(
         baseOffset: 0,
-        extentOffset: _inlineDimTextController.text.length,
+        extentOffset: _inPlaceDimController.text.length,
       );
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _inlineDimFocusNode.requestFocus();
+      _inPlaceDimFocusNode.requestFocus();
     });
   }
 
-  Widget _buildInlineDimensionCallout(SheetMetalStudioViewModel viewModel) {
-    if (_inlineDimEditorScreenPos == null) return const SizedBox.shrink();
+  @visibleForTesting
+  void startInPlaceDimensionEditForTesting(String dimId) {
+    final rect =
+        _dimensionBadgeRects[dimId] ?? const Rect.fromLTWH(100, 100, 60, 22);
+    final currentValue =
+        _dimensionBadgeValues[dimId] ??
+        (dimId == 'dim_blank_w'
+            ? widget.viewModel.document.blankWidthMm
+            : widget.viewModel.document.blankLengthMm);
+    _startInPlaceDimensionEdit(
+      dimId: dimId,
+      badgeRect: rect,
+      initialValue: currentValue,
+    );
+  }
+
+  void _cancelInPlaceDimensionEdit() {
+    setState(() {
+      _editingDimId = null;
+      _editingDimRect = null;
+      _activeInlineDimPA = null;
+      _activeInlineDimPB = null;
+      _activeInlineDimRefA = null;
+      _activeInlineDimRefB = null;
+    });
+  }
+
+  void _commitInPlaceDimensionEdit(SheetMetalStudioViewModel viewModel) {
+    if (_editingDimId == null) return;
+    final text = _inPlaceDimController.text.trim();
+    final parsed = double.tryParse(text);
+    if (parsed != null && parsed > 0) {
+      final dimId = _editingDimId!;
+      if (_activeInlineDimPA != null && _activeInlineDimPB != null) {
+        viewModel.commitInteractiveDimension(
+          pA: _activeInlineDimPA!,
+          pB: _activeInlineDimPB!,
+          referenceAId: _activeInlineDimRefA,
+          referenceBId: _activeInlineDimRefB,
+          offset: _activeInlineDimOffset,
+          customValue: parsed,
+        );
+      } else {
+        viewModel.driveDimension(dimId, parsed);
+      }
+    }
+    _cancelInPlaceDimensionEdit();
+  }
+
+  Widget _buildInPlaceDimensionEditor(SheetMetalStudioViewModel viewModel) {
+    if (_editingDimId == null) return const SizedBox.shrink();
+
+    final currentRect = _dimensionBadgeRects[_editingDimId] ?? _editingDimRect;
+    if (currentRect == null) return const SizedBox.shrink();
+
+    final center = currentRect.center;
+    final width = math.max(currentRect.width + 24.0, 76.0);
+    const height = 24.0;
 
     return Positioned(
-      left: (_inlineDimEditorScreenPos!.dx - 85).clamp(10.0, 4000.0),
-      top: (_inlineDimEditorScreenPos!.dy - 70).clamp(10.0, 4000.0),
-      child: Material(
-        elevation: 8,
-        borderRadius: BorderRadius.circular(6),
-        color: Colors.transparent,
+      left: (center.dx - width / 2.0).clamp(4.0, 4000.0),
+      top: (center.dy - height / 2.0).clamp(4.0, 4000.0),
+      child: Focus(
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent) {
+            if (event.logicalKey == LogicalKeyboardKey.escape) {
+              _cancelInPlaceDimensionEdit();
+              return KeyEventResult.handled;
+            } else if (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                event.logicalKey == LogicalKeyboardKey.tab) {
+              _commitInPlaceDimensionEdit(viewModel);
+              return KeyEventResult.handled;
+            }
+          }
+          return KeyEventResult.ignored;
+        },
         child: Container(
-          width: 175,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          width: width,
+          height: height,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.98),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFF0284C7), width: 1.5),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(3.5),
+            border: Border.all(color: const Color(0xFF0284C7), width: 1.6),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.16),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
+                color: const Color(0xFF0284C7).withValues(alpha: 0.25),
+                blurRadius: 5,
+                spreadRadius: 1,
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 4,
+                offset: const Offset(0, 1.5),
               ),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.straighten, size: 12, color: Color(0xFF0284C7)),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'DIMENSION (mm)',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                      color: Color(0xFF475569),
-                    ),
-                  ),
-                  const Spacer(),
-                  InkWell(
-                    onTap: () {
-                      setState(() {
-                        _inlineDimEditorScreenPos = null;
-                      });
-                    },
-                    child: const Icon(Icons.close, size: 13, color: Color(0xFF94A3B8)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 28,
-                      child: TextField(
-                        controller: _inlineDimTextController,
-                        focusNode: _inlineDimFocusNode,
-                        autofocus: true,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                        ),
-                        decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: const BorderSide(color: Color(0xFF0284C7), width: 1.5),
-                          ),
-                        ),
-                        onSubmitted: (val) {
-                          final parsed = double.tryParse(val.trim());
-                          if (parsed != null && parsed > 0) {
-                            if (_activeInlineDimId != null) {
-                              viewModel.driveDimension(_activeInlineDimId!, parsed);
-                            } else if (_activeInlineDimPA != null && _activeInlineDimPB != null) {
-                              viewModel.commitInteractiveDimension(
-                                pA: _activeInlineDimPA!,
-                                pB: _activeInlineDimPB!,
-                                referenceAId: _activeInlineDimRefA,
-                                referenceBId: _activeInlineDimRefB,
-                                offset: _activeInlineDimOffset,
-                                customValue: parsed,
-                              );
-                            }
-                          }
-                          setState(() {
-                            _inlineDimEditorScreenPos = null;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  InkWell(
-                    onTap: () {
-                      final val = _inlineDimTextController.text.trim();
-                      final parsed = double.tryParse(val);
-                      if (parsed != null && parsed > 0) {
-                        if (_activeInlineDimId != null) {
-                          viewModel.driveDimension(_activeInlineDimId!, parsed);
-                        } else if (_activeInlineDimPA != null && _activeInlineDimPB != null) {
-                          viewModel.commitInteractiveDimension(
-                            pA: _activeInlineDimPA!,
-                            pB: _activeInlineDimPB!,
-                            referenceAId: _activeInlineDimRefA,
-                            referenceBId: _activeInlineDimRefB,
-                            offset: _activeInlineDimOffset,
-                            customValue: parsed,
-                          );
-                        }
-                      }
-                      setState(() {
-                        _inlineDimEditorScreenPos = null;
-                      });
-                    },
-                    child: Container(
-                      height: 28,
-                      width: 28,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0284C7),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Icon(Icons.check, size: 16, color: Colors.white),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 3),
-              const Text(
-                'Enter ↵ to drive geometry',
-                style: TextStyle(fontSize: 8.5, color: Color(0xFF94A3B8)),
-              ),
-            ],
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: TextField(
+            controller: _inPlaceDimController,
+            focusNode: _inPlaceDimFocusNode,
+            autofocus: true,
+            textAlign: TextAlign.center,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            style: const TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 11.0,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'monospace',
+              letterSpacing: 0.2,
+            ),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              isDense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
+            onSubmitted: (_) => _commitInPlaceDimensionEdit(viewModel),
           ),
         ),
       ),
@@ -359,8 +359,12 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
       if (HardwareKeyboard.instance.isAltPressed) return true;
     } catch (_) {}
     try {
-      if (HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.altLeft) ||
-          HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.altRight)) {
+      if (HardwareKeyboard.instance.isLogicalKeyPressed(
+            LogicalKeyboardKey.altLeft,
+          ) ||
+          HardwareKeyboard.instance.isLogicalKeyPressed(
+            LogicalKeyboardKey.altRight,
+          )) {
         return true;
       }
     } catch (_) {}
@@ -372,8 +376,12 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
       if (HardwareKeyboard.instance.isShiftPressed) return true;
     } catch (_) {}
     try {
-      if (HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.shiftLeft) ||
-          HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.shiftRight)) {
+      if (HardwareKeyboard.instance.isLogicalKeyPressed(
+            LogicalKeyboardKey.shiftLeft,
+          ) ||
+          HardwareKeyboard.instance.isLogicalKeyPressed(
+            LogicalKeyboardKey.shiftRight,
+          )) {
         return true;
       }
     } catch (_) {}
@@ -455,49 +463,32 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
       }
     }
 
-    // 1. If double-tapping a dimension badge, open Direct Dimension Driving Dialog!
+    // 1. If double-tapping a dimension badge, convert number tag in-place to entry point!
     for (final entry in _dimensionBadgeRects.entries) {
       if (entry.value.inflate(6.0).contains(touchScreen)) {
-        // Find explicit CadDimension
+        final dimId = entry.key;
+        double currentValue = _dimensionBadgeValues[dimId] ?? 0.0;
         final cadDim = viewModel.document.dimensions
-            .where((d) => d.id == entry.key)
+            .where((d) => d.id == dimId)
             .firstOrNull;
         if (cadDim != null) {
-          _openInlineDimensionCallout(
-            screenPos: entry.value.center,
-            dimId: cadDim.id,
-            pA: cadDim.pointA,
-            pB: cadDim.pointB,
-            referenceAId: cadDim.referenceAId,
-            referenceBId: cadDim.referenceBId,
-            measuredValue: cadDim.measuredValue,
-            offset: cadDim.dimensionLineOffset,
-          );
-          return;
+          currentValue = cadDim.measuredValue;
+        } else if (dimId == 'dim_blank_w') {
+          currentValue = viewModel.document.blankWidthMm;
+        } else if (dimId == 'dim_blank_l') {
+          currentValue = viewModel.document.blankLengthMm;
         }
-        // Check implicit blank dimensions
-        if (entry.key == 'dim_blank_w') {
-          final dim = CadDimension(
-            id: 'dim_blank_w',
-            type: CadDimensionType.horizontal,
-            measuredValue: viewModel.document.blankWidthMm,
-            prefix: 'BLANK W',
-          );
-          DimensionDriveDialog.show(context, viewModel: viewModel, dimension: dim);
-          return;
-        }
-        if (entry.key == 'dim_blank_l') {
-          final dim = CadDimension(
-            id: 'dim_blank_l',
-            type: CadDimensionType.vertical,
-            measuredValue: viewModel.document.blankLengthMm,
-            prefix: 'BLANK L',
-          );
-          DimensionDriveDialog.show(context, viewModel: viewModel, dimension: dim);
-          return;
-        }
-        // Fallback: reset offset
-        viewModel.resetDimensionOffset(entry.key);
+
+        _startInPlaceDimensionEdit(
+          dimId: dimId,
+          badgeRect: entry.value,
+          initialValue: currentValue,
+          pA: cadDim?.pointA,
+          pB: cadDim?.pointB,
+          referenceAId: cadDim?.referenceAId,
+          referenceBId: cadDim?.referenceBId,
+          offset: cadDim?.dimensionLineOffset ?? 25.0,
+        );
         return;
       }
     }
@@ -506,10 +497,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
     // 2. If double tapping on an applied perforation pattern, select it and open inspector
     for (final pat in viewModel.document.perforationPatterns) {
       if (!pat.isVisible) continue;
-      final holeIdx = pat.findHoleAt(
-        cadPt,
-        maxDistMm: 16.0 / scale,
-      );
+      final holeIdx = pat.findHoleAt(cadPt, maxDistMm: 16.0 / scale);
       if (holeIdx != null || pat.containsPoint(cadPt)) {
         viewModel.selectPattern(pat.id, holeIdx);
         viewModel.setPropertyInspectorOpen(true);
@@ -602,8 +590,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
       onPanUpdate: (details) {
         if (_dragStartGlobal != null && _dragStartPanel != null) {
           setState(() {
-            _inspectorOffset = _dragStartPanel! +
-                (details.globalPosition - _dragStartGlobal!);
+            _inspectorOffset =
+                _dragStartPanel! + (details.globalPosition - _dragStartGlobal!);
           });
         }
       },
@@ -625,7 +613,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
         onDragHeader: (details) {
           if (_dragStartGlobal != null && _dragStartPanel != null) {
             setState(() {
-              _inspectorOffset = _dragStartPanel! +
+              _inspectorOffset =
+                  _dragStartPanel! +
                   (details.globalPosition - _dragStartGlobal!);
             });
           }
@@ -638,7 +627,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
   Widget build(BuildContext context) {
     final viewModel = widget.viewModel;
 
-    final currentEntity = viewModel.selectedBendId ??
+    final currentEntity =
+        viewModel.selectedBendId ??
         viewModel.selectedPunchId ??
         viewModel.selectedArcId ??
         viewModel.selectedCutId;
@@ -653,3008 +643,3919 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
       builder: (context, _) {
         return LayoutBuilder(
           builder: (context, constraints) {
-        final size = Size(constraints.maxWidth, constraints.maxHeight);
+            final size = Size(constraints.maxWidth, constraints.maxHeight);
 
-        // Calculate coordinate transform parameters
-        final bw = viewModel.document.blankWidthMm > 0
-            ? viewModel.document.blankWidthMm
-            : 200.0;
-        final bl = viewModel.document.blankLengthMm > 0
-            ? viewModel.document.blankLengthMm
-            : 300.0;
+            // Calculate coordinate transform parameters
+            final bw = viewModel.document.blankWidthMm > 0
+                ? viewModel.document.blankWidthMm
+                : 200.0;
+            final bl = viewModel.document.blankLengthMm > 0
+                ? viewModel.document.blankLengthMm
+                : 300.0;
 
-        final fitScale = math.min(
-          (size.width * 0.75) / bw,
-          (size.height * 0.75) / bl,
-        );
-        final scale = fitScale * viewModel.zoom2D;
-
-        final cx = size.width / 2.0 + viewModel.pan2D.dx;
-        final cy = size.height / 2.0 + viewModel.pan2D.dy;
-
-        final originX = cx - (bw / 2.0) * scale;
-        final originY = cy - (bl / 2.0) * scale;
-
-        CadPoint2D screenToCad(Offset screenPos) {
-          final x = (screenPos.dx - originX) / scale;
-          final y = (screenPos.dy - originY) / scale;
-          return CadPoint2D(x, y);
-        }
-
-        Offset cadToScreen(CadPoint2D pt) {
-          return Offset(
-            originX + pt.x * scale,
-            originY + pt.y * scale,
-          );
-        }
-
-        // Check if a bend, cut, or punch is currently selected
-        FoldBendLine? selectedBend;
-        if (viewModel.selectedBendId != null) {
-          try {
-            selectedBend = viewModel.document.bends.firstWhere(
-              (b) => b.id == viewModel.selectedBendId,
+            final fitScale = math.min(
+              (size.width * 0.75) / bw,
+              (size.height * 0.75) / bl,
             );
-          } catch (_) {}
-        }
+            final scale = fitScale * viewModel.zoom2D;
 
-        CadLineSegment? selectedCut;
-        if (viewModel.selectedCutId != null) {
-          try {
-            selectedCut = viewModel.document.cutLines.firstWhere(
-              (c) => c.id == viewModel.selectedCutId,
-            );
-          } catch (_) {}
-        }
+            final cx = size.width / 2.0 + viewModel.pan2D.dx;
+            final cy = size.height / 2.0 + viewModel.pan2D.dy;
 
-        CncPunchPrimitive? selectedPunch;
-        if (viewModel.selectedPunchId != null) {
-          try {
-            selectedPunch = viewModel.document.punches.firstWhere(
-              (p) => p.id == viewModel.selectedPunchId,
-            );
-          } catch (_) {}
-        }
+            final originX = cx - (bw / 2.0) * scale;
+            final originY = cy - (bl / 2.0) * scale;
 
-        PerforationPattern? selectedPattern;
-        if (viewModel.selectedPatternId != null) {
-          try {
-            selectedPattern = viewModel.document.perforationPatterns.firstWhere(
-              (p) => p.id == viewModel.selectedPatternId,
-            );
-          } catch (_) {}
-        }
+            CadPoint2D screenToCad(Offset screenPos) {
+              final x = (screenPos.dx - originX) / scale;
+              final y = (screenPos.dy - originY) / scale;
+              return CadPoint2D(x, y);
+            }
 
-        PlanarSheetFace? selectedFace;
-        if (viewModel.selectedFaceId != null) {
-          try {
-            selectedFace = viewModel.document.faces.firstWhere(
-              (f) => f.id == viewModel.selectedFaceId,
-            );
-          } catch (_) {}
-        }
+            Offset cadToScreen(CadPoint2D pt) {
+              return Offset(originX + pt.x * scale, originY + pt.y * scale);
+            }
 
-        CadDimension? selectedDimension;
-        if (viewModel.selectedDimensionId != null) {
-          try {
-            selectedDimension = viewModel.document.dimensions.firstWhere(
-              (d) => d.id == viewModel.selectedDimensionId,
-            );
-          } catch (_) {}
-        }
+            // Check if a bend, cut, or punch is currently selected
+            FoldBendLine? selectedBend;
+            if (viewModel.selectedBendId != null) {
+              try {
+                selectedBend = viewModel.document.bends.firstWhere(
+                  (b) => b.id == viewModel.selectedBendId,
+                );
+              } catch (_) {}
+            }
 
-        CadArc2D? selectedArc;
-        if (viewModel.selectedArcId != null) {
-          try {
-            selectedArc = viewModel.document.arcs.firstWhere(
-              (a) => a.id == viewModel.selectedArcId,
-            );
-          } catch (_) {}
-        }
+            CadLineSegment? selectedCut;
+            if (viewModel.selectedCutId != null) {
+              try {
+                selectedCut = viewModel.document.cutLines.firstWhere(
+                  (c) => c.id == viewModel.selectedCutId,
+                );
+              } catch (_) {}
+            }
 
-        final isToolActive =
-            viewModel.toolMode != StudioToolMode.select &&
-            viewModel.toolMode != StudioToolMode.pan;
+            CncPunchPrimitive? selectedPunch;
+            if (viewModel.selectedPunchId != null) {
+              try {
+                selectedPunch = viewModel.document.punches.firstWhere(
+                  (p) => p.id == viewModel.selectedPunchId,
+                );
+              } catch (_) {}
+            }
 
-        // Default position for inspector panel (top left corner, below 2D toolbar)
-        const defaultInspectorOffset = Offset(16.0, 95.0);
-        final effectiveInspectorPos =
-            _inspectorOffset ?? defaultInspectorOffset;
+            PerforationPattern? selectedPattern;
+            if (viewModel.selectedPatternId != null) {
+              try {
+                selectedPattern = viewModel.document.perforationPatterns
+                    .firstWhere((p) => p.id == viewModel.selectedPatternId);
+              } catch (_) {}
+            }
 
-        return ClipRect(
-          child: Container(
-            color: const Color(0xFFF8FAFC), // Light CAD Engineering Canvas
-            child: Stack(
-              children: [
-                // 1. Interactive 2D Canvas with Pan, Mouse Wheel Zoom, Hover Snap, Click/Drag, and Arrow Key Nudging
-                Focus(
-                  focusNode: _canvasFocusNode,
-                  autofocus: true,
-                  onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent) {
-                      if (_activeEditingPortId != null) {
-                        if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                          _applyPortDimensionEditor();
-                          return KeyEventResult.handled;
-                        }
-                        if (event.logicalKey == LogicalKeyboardKey.escape) {
-                          _cancelPortDimensionEditor();
-                          return KeyEventResult.handled;
-                        }
-                      }
-                      if (event.logicalKey == LogicalKeyboardKey.escape) {
-                        if (viewModel.selectedPunchId != null) {
-                          viewModel.selectPunch(null);
-                          return KeyEventResult.handled;
-                        }
-                      }
-                      final isShift = HardwareKeyboard.instance.isShiftPressed;
-                      final isCtrl = HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed;
-                      final step = isShift ? 0.1 : 1.0;
-                      if (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace) {
-                        viewModel.deleteSelectedEntities();
-                        return KeyEventResult.handled;
-                      }
-                      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                        viewModel.nudgeSelectedBend(0, step);
-                        return KeyEventResult.handled;
-                      } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                        viewModel.nudgeSelectedBend(0, -step);
-                        return KeyEventResult.handled;
-                      } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                        viewModel.nudgeSelectedBend(-step, 0);
-                        return KeyEventResult.handled;
-                      } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                        viewModel.nudgeSelectedBend(step, 0);
-                        return KeyEventResult.handled;
-                      }
+            PlanarSheetFace? selectedFace;
+            if (viewModel.selectedFaceId != null) {
+              try {
+                selectedFace = viewModel.document.faces.firstWhere(
+                  (f) => f.id == viewModel.selectedFaceId,
+                );
+              } catch (_) {}
+            }
 
-                      // Direct CAD tool shortcuts when canvas is focused (KeyDown only, no Ctrl/Meta)
-                      if (!isCtrl && _activeEditingPortId == null && !_isEditingText()) {
-                        if (event.logicalKey == LogicalKeyboardKey.keyB) {
-                          viewModel.setToolMode(StudioToolMode.addBend);
-                          return KeyEventResult.handled;
-                        } else if (event.logicalKey == LogicalKeyboardKey.keyF) {
-                          viewModel.setToolMode(isShift ? StudioToolMode.cornerFillet : StudioToolMode.addFlange);
-                          return KeyEventResult.handled;
-                        } else if (event.logicalKey == LogicalKeyboardKey.keyM) {
-                          viewModel.setToolMode(StudioToolMode.addCut);
-                          return KeyEventResult.handled;
-                        } else if (event.logicalKey == LogicalKeyboardKey.keyL) {
-                          viewModel.setToolMode(StudioToolMode.drawPolyline);
-                          return KeyEventResult.handled;
-                        } else if (event.logicalKey == LogicalKeyboardKey.keyG) {
-                          viewModel.setToolMode(StudioToolMode.drawRectangle);
-                          return KeyEventResult.handled;
-                        } else if (event.logicalKey == LogicalKeyboardKey.keyC) {
-                          viewModel.setToolMode(isShift ? StudioToolMode.cornerChamfer : StudioToolMode.drawCircle);
-                          return KeyEventResult.handled;
-                        } else if (event.logicalKey == LogicalKeyboardKey.keyA && !isShift) {
-                          viewModel.setToolMode(StudioToolMode.drawArc);
-                          return KeyEventResult.handled;
-                        } else if (event.logicalKey == LogicalKeyboardKey.keyQ) {
-                          viewModel.toggleSelectedConstruction();
-                          return KeyEventResult.handled;
-                        } else if (event.logicalKey == LogicalKeyboardKey.keyD) {
-                          viewModel.setToolMode(StudioToolMode.addDimension);
-                          return KeyEventResult.handled;
-                        } else if (event.logicalKey == LogicalKeyboardKey.keyP) {
-                          viewModel.setToolMode(StudioToolMode.perforationPattern);
-                          return KeyEventResult.handled;
-                        } else if (event.logicalKey == LogicalKeyboardKey.keyV || event.logicalKey == LogicalKeyboardKey.space) {
-                          viewModel.setToolMode(StudioToolMode.select);
-                          return KeyEventResult.handled;
-                        } else if (event.logicalKey == LogicalKeyboardKey.keyH) {
-                          viewModel.setToolMode(StudioToolMode.pan);
-                          return KeyEventResult.handled;
-                        }
-                      }
-                    }
-                    return KeyEventResult.ignored;
-                  },
-                  child: Listener(
-                  onPointerDown: (event) {
-                    if (!_canvasFocusNode.hasFocus && !_inlineDimFocusNode.hasFocus) {
-                      _canvasFocusNode.requestFocus();
-                    }
-                  },
-                  onPointerSignal: (pointerSignal) {
-                    if (pointerSignal is PointerScrollEvent) {
-                      final zoomFactor = pointerSignal.scrollDelta.dy < 0
-                          ? 1.12
-                          : 0.89;
-                      viewModel.zoom2DCanvas(
-                        zoomFactor,
-                        focalPoint: pointerSignal.localPosition,
-                        viewportSize: size,
-                      );
-                    }
-                  },
-                  onPointerPanZoomUpdate: (event) {
-                    if (event.pan != Offset.zero) {
-                      viewModel.pan2DCanvas(event.pan);
-                    }
-                    if (event.scale != 1.0) {
-                      viewModel.zoom2DCanvas(
-                        event.scale,
-                        focalPoint: event.localPosition,
-                        viewportSize: size,
-                      );
-                    }
-                  },
-                  onPointerMove: (event) {
-                    final isMiddleMouse =
-                        (event.buttons & kTertiaryButton) != 0;
-                    final isSecondaryMouse =
-                        (event.buttons & kSecondaryMouseButton) != 0;
-                    bool isSpaceHeld = false;
-                    try {
-                      isSpaceHeld = HardwareKeyboard.instance
-                          .isLogicalKeyPressed(LogicalKeyboardKey.space);
-                    } catch (_) {}
+            CadDimension? selectedDimension;
+            if (viewModel.selectedDimensionId != null) {
+              try {
+                selectedDimension = viewModel.document.dimensions.firstWhere(
+                  (d) => d.id == viewModel.selectedDimensionId,
+                );
+              } catch (_) {}
+            }
 
-                    if (isMiddleMouse ||
-                        isSecondaryMouse ||
-                        (isSpaceHeld &&
-                            (event.buttons & kPrimaryMouseButton) != 0)) {
-                      viewModel.pan2DCanvas(event.delta);
-                    }
-                  },
-                  child: MouseRegion(
-                    cursor: _activeDrag == _DragTarget.canvasPan
-                        ? SystemMouseCursors.grabbing
-                        : (_activeDrag == _DragTarget.boxSelect || _activeDrag == _DragTarget.drawEntity
-                            ? SystemMouseCursors.precise
-                            : (_activeDrag == _DragTarget.dimensionBadge ||
-                                    _hoveredDimId != null ||
-                                    _activeDrag == _DragTarget.dimensionLine ||
-                                    _hoveredDimLineId != null ||
-                                    _activeDrag == _DragTarget.portBadge ||
-                                    _hoveredPortBadgeId != null)
-                                ? SystemMouseCursors.move
-                                : ((viewModel.toolMode == StudioToolMode.pickPortEdge ||
-                                          viewModel.activePortPickTarget != null)
-                                      ? SystemMouseCursors.precise
-                                      : (viewModel.toolMode == StudioToolMode.pan
-                                          ? SystemMouseCursors.grab
-                                          : ((viewModel.toolMode != StudioToolMode.select &&
-                                                    viewModel.toolMode !=
-                                                        StudioToolMode.pan &&
-                                                    viewModel.toolMode !=
-                                                        StudioToolMode.setBaseAnchor)
-                                                ? SystemMouseCursors.precise
-                                                : (_hoveredEndpoint != null
-                                                    ? SystemMouseCursors.precise
-                                                    : SystemMouseCursors.basic))))),
-                    onHover: (event) {
-                      final cadPt = screenToCad(event.localPosition);
-                      _hoverCursorScreen = event.localPosition;
-                      _hoverCursorCad = cadPt;
-                      final screenSnapMm = (8.0 / scale).clamp(1.5, 8.0);
-                      final isAlt = _isAltPressed();
-                      viewModel.updateCursorMm(
-                        cadPt,
-                        snapRadiusMm: screenSnapMm,
-                        isAlt: isAlt,
-                      );
+            CadArc2D? selectedArc;
+            if (viewModel.selectedArcId != null) {
+              try {
+                selectedArc = viewModel.document.arcs.firstWhere(
+                  (a) => a.id == viewModel.selectedArcId,
+                );
+              } catch (_) {}
+            }
 
-                      // Check hover on movable dimension line segments
-                      String? hoveredDimLine;
-                      for (final entry in _dimensionLineSegments.entries) {
-                        if (_distToScreenSegment(event.localPosition, entry.value.pA, entry.value.pB) <= 8.0) {
-                          hoveredDimLine = entry.key;
-                          break;
-                        }
-                      }
-                      if (hoveredDimLine != _hoveredDimLineId) {
-                        setState(() {
-                          _hoveredDimLineId = hoveredDimLine;
-                        });
-                      }
+            final isToolActive =
+                viewModel.toolMode != StudioToolMode.select &&
+                viewModel.toolMode != StudioToolMode.pan;
 
-                      // Check hover on movable dimension badges
-                      String? hoveredDim;
-                      for (final entry in _dimensionBadgeRects.entries) {
-                        if (entry.value.inflate(4.0).contains(event.localPosition)) {
-                          hoveredDim = entry.key;
-                          break;
-                        }
-                      }
-                      if (hoveredDim != _hoveredDimId) {
-                        setState(() {
-                          _hoveredDimId = hoveredDim;
-                        });
-                      }
+            // Default position for inspector panel (top left corner, below 2D toolbar)
+            const defaultInspectorOffset = Offset(16.0, 95.0);
+            final effectiveInspectorPos =
+                _inspectorOffset ?? defaultInspectorOffset;
 
-                      // Check hover on interactive constraint badges
-                      String? hoveredConstraint;
-                      for (final entry in _constraintBadgeRects.entries) {
-                        if (entry.value.inflate(4.0).contains(event.localPosition)) {
-                          hoveredConstraint = entry.key;
-                          break;
-                        }
-                      }
-                      if (hoveredConstraint != _hoveredConstraintId) {
-                        final highlightedRefs = <String>{};
-                        if (hoveredConstraint != null) {
-                          final c = viewModel.activeConstraintDefinitions
-                              .where((def) => def.id == hoveredConstraint)
-                              .firstOrNull;
-                          if (c != null) {
-                            for (final ref in c.references) {
-                              highlightedRefs.add(ref.canonicalPath);
-                              highlightedRefs.add(ref.entityId);
+            return ClipRect(
+              child: Container(
+                color: const Color(0xFFF8FAFC), // Light CAD Engineering Canvas
+                child: Stack(
+                  children: [
+                    // 1. Interactive 2D Canvas with Pan, Mouse Wheel Zoom, Hover Snap, Click/Drag, and Arrow Key Nudging
+                    Focus(
+                      focusNode: _canvasFocusNode,
+                      autofocus: true,
+                      onKeyEvent: (node, event) {
+                        if (event is KeyDownEvent) {
+                          if (_activeEditingPortId != null) {
+                            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                                event.logicalKey ==
+                                    LogicalKeyboardKey.numpadEnter) {
+                              _applyPortDimensionEditor();
+                              return KeyEventResult.handled;
+                            }
+                            if (event.logicalKey == LogicalKeyboardKey.escape) {
+                              _cancelPortDimensionEditor();
+                              return KeyEventResult.handled;
                             }
                           }
-                        }
-                        setState(() {
-                          _hoveredConstraintId = hoveredConstraint;
-                          _constraintHoverHighlightedEntityIds.clear();
-                          _constraintHoverHighlightedEntityIds.addAll(highlightedRefs);
-                        });
-                      }
-
-                      // Check hover on movable port badges
-                      String? hoveredPort;
-                      for (final entry in _portBadgeRects.entries) {
-                        if (entry.value.inflate(4.0).contains(event.localPosition)) {
-                          hoveredPort = entry.key;
-                          break;
-                        }
-                      }
-                      if (hoveredPort != _hoveredPortBadgeId) {
-                        setState(() {
-                          _hoveredPortBadgeId = hoveredPort;
-                        });
-                      }
-
-                      // Dynamic contour edge hover for selection, dimensioning, and port edge picking
-                      if (viewModel.toolMode == StudioToolMode.select ||
-                          viewModel.toolMode == StudioToolMode.addDimension ||
-                          viewModel.toolMode == StudioToolMode.pickPortEdge ||
-                          viewModel.activePortPickTarget != null) {
-                        final contour = viewModel.document.outerContour;
-                        final candidateEdges = <(CadPoint2D, CadPoint2D)>[];
-                        if (contour.length >= 2) {
-                          for (int i = 0; i < contour.length; i++) {
-                            candidateEdges.add((contour[i], contour[(i + 1) % contour.length]));
-                          }
-                        } else {
-                          for (final f in viewModel.document.faces) {
-                            if (!f.isVisible) continue;
-                            for (int i = 0; i < f.vertices.length; i++) {
-                              candidateEdges.add((f.vertices[i], f.vertices[(i + 1) % f.vertices.length]));
+                          if (event.logicalKey == LogicalKeyboardKey.escape) {
+                            if (viewModel.selectedPunchId != null) {
+                              viewModel.selectPunch(null);
+                              return KeyEventResult.handled;
                             }
                           }
-                        }
-
-                        CadPoint2D? bestP1;
-                        CadPoint2D? bestP2;
-                        double minD = double.infinity;
-                        for (final edge in candidateEdges) {
-                          // Check if edge is part of a CAD arc chord
-                          bool isPartOfArc = false;
-                          for (final a in viewModel.document.arcs) {
-                            if (a.distanceTo(edge.$1) <= 1.2 && a.distanceTo(edge.$2) <= 1.2) {
-                              isPartOfArc = true;
-                              break;
-                            }
+                          final isShift =
+                              HardwareKeyboard.instance.isShiftPressed;
+                          final isCtrl =
+                              HardwareKeyboard.instance.isControlPressed ||
+                              HardwareKeyboard.instance.isMetaPressed;
+                          final step = isShift ? 0.1 : 1.0;
+                          if (event.logicalKey == LogicalKeyboardKey.delete ||
+                              event.logicalKey ==
+                                  LogicalKeyboardKey.backspace) {
+                            viewModel.deleteSelectedEntities();
+                            return KeyEventResult.handled;
                           }
-                          if (isPartOfArc) continue;
-
-                          final d = _distToSegment(cadPt, edge.$1, edge.$2) * scale;
-                          if (d < minD && d <= 28.0) {
-                            minD = d;
-                            bestP1 = edge.$1;
-                            bestP2 = edge.$2;
-                          }
-                        }
-                        if (bestP1 != null && bestP2 != null) {
-                          final len = bestP1.distanceTo(bestP2);
-                          viewModel.updateHoveredContourEdge(bestP1, bestP2, len);
-                        } else {
-                          viewModel.updateHoveredContourEdge(null, null, null);
-                        }
-                      } else {
-                        viewModel.updateHoveredContourEdge(null, null, null);
-                      }
-
-                      // Check hover on punches
-                      String? hoveredPunch;
-                      for (final p in viewModel.document.punches) {
-                        final rad =
-                            math.max(
-                              p.diameterMm,
-                              math.max(p.widthMm, p.lengthMm),
-                            ) /
-                            2.0;
-                        if (p.center.distanceTo(cadPt) <= rad + 6.0 / scale) {
-                          hoveredPunch = p.id;
-                          break;
-                        }
-                      }
-                      viewModel.setHoveredPunch(hoveredPunch);
-
-                      // Check hover on bends
-                      String? hoveredBend;
-                      for (final b in viewModel.document.bends) {
-                        if (_distToSegment(cadPt, b.p1, b.p2) * scale <= 14.0) {
-                          hoveredBend = b.id;
-                          break;
-                        }
-                      }
-                      viewModel.setHoveredBend(hoveredBend);
-
-                      // Check hover on cuts
-                      String? hoveredCut;
-                      for (final c in viewModel.document.cutLines) {
-                        if (_distToSegment(cadPt, c.p1, c.p2) * scale <= 14.0) {
-                          hoveredCut = c.id;
-                          break;
-                        }
-                      }
-                      viewModel.setHoveredCut(hoveredCut);
-
-                      // Check hover on arcs
-                      String? hoveredArc;
-                      for (final a in viewModel.document.arcs) {
-                        if (a.distanceTo(cadPt) * scale <= 14.0) {
-                          hoveredArc = a.id;
-                          break;
-                        }
-                      }
-                      viewModel.setHoveredArc(hoveredArc);
-                      if (hoveredArc != null) {
-                        viewModel.updateHoveredContourEdge(null, null, null);
-                      }
-
-                      // Check proximity to any bend or cut line endpoint
-                      CadPoint2D? nearPt;
-                      for (final b in viewModel.document.bends) {
-                        if (cadPt.distanceTo(b.p1) * scale <= 18.0) {
-                          nearPt = b.p1;
-                          break;
-                        }
-                        if (cadPt.distanceTo(b.p2) * scale <= 18.0) {
-                          nearPt = b.p2;
-                          break;
-                        }
-                      }
-                      if (nearPt == null) {
-                        for (final c in viewModel.document.cutLines) {
-                          if (cadPt.distanceTo(c.p1) * scale <= 18.0) {
-                            nearPt = c.p1;
-                            break;
-                          }
-                          if (cadPt.distanceTo(c.p2) * scale <= 18.0) {
-                            nearPt = c.p2;
-                            break;
-                          }
-                        }
-                      }
-                      if (nearPt != _hoveredEndpoint) {
-                        setState(() {
-                          _hoveredEndpoint = nearPt;
-                        });
-                      }
-                    },
-                    onExit: (_) {
-                      viewModel.clearSnap();
-                      viewModel.setHoveredPunch(null);
-                      viewModel.setHoveredBend(null);
-                      viewModel.setHoveredCut(null);
-                      viewModel.setHoveredArc(null);
-                      viewModel.setHoveredFace(null);
-                      viewModel.updateHoveredContourEdge(null, null, null);
-                      if (_hoveredDimId != null || _hoveredDimLineId != null || _hoveredEndpoint != null || _hoveredPortBadgeId != null || _hoverCursorScreen != null || _hoverCursorCad != null) {
-                        setState(() {
-                          _hoveredDimId = null;
-                          _hoveredDimLineId = null;
-                          _hoveredPortBadgeId = null;
-                          _hoveredEndpoint = null;
-                          _hoverCursorScreen = null;
-                          _hoverCursorCad = null;
-                        });
-                      }
-                    },
-                    child: MenuAnchor(
-                      controller: _contextMenuController,
-                      menuChildren: _buildEdgeContextMenuChildren(viewModel),
-                      builder: (context, controller, child) => GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                      onPanStart: (details) {
-                        _shiftSelectionHandledInPan = false;
-                        final isShiftHeld = _isShiftPressed();
-                        bool isSpaceHeld = false;
-                        try {
-                          isSpaceHeld = HardwareKeyboard.instance
-                              .isLogicalKeyPressed(LogicalKeyboardKey.space);
-                        } catch (_) {}
-
-                        if (isSpaceHeld ||
-                            viewModel.toolMode == StudioToolMode.pan) {
-                          _activeDrag = _DragTarget.canvasPan;
-                          return;
-                        }
-
-                        final touchScreen = details.localPosition;
-                        final cadPt = screenToCad(touchScreen);
-                        _draggedBendId = null;
-                        _draggedCutId = null;
-                        _draggedDimId = null;
-                        _draggedDimLineId = null;
-
-                        bool found = false;
-
-                        // 0a. Direct hit-test on ANY movable port badge
-                        for (final entry in _portBadgeRects.entries) {
-                          if (entry.value.inflate(4.0).contains(touchScreen)) {
-                            _activeDrag = _DragTarget.portBadge;
-                            _draggedPortBadgeId = entry.key;
-                            _hasMovedPortBadge = false;
-                            _dragStartScreen = touchScreen;
-                            _dragPortBadgeStartOffset =
-                                viewModel.portBadgeOffsets[entry.key] ?? Offset.zero;
-                            found = true;
-                            break;
-                          }
-                        }
-
-                        // 0b. Direct hit-test on ANY movable dimension badge
-                        if (!found) {
-                          for (final entry in _dimensionBadgeRects.entries) {
-                            if (entry.value.inflate(4.0).contains(touchScreen)) {
-                              _activeDrag = _DragTarget.dimensionBadge;
-                              _draggedDimId = entry.key;
-                              _dragStartScreen = touchScreen;
-                              _dragDimensionStartOffset =
-                                  viewModel.dimensionOffsets[entry.key] ?? Offset.zero;
-                              if (viewModel.document.dimensions.any((d) => d.id == entry.key)) {
-                                viewModel.selectDimension(entry.key);
-                                _isInspectorCollapsed = false;
-                              }
-                              found = true;
-                              break;
-                            }
-                          }
-                        }
-
-                        // 0b2. Direct hit-test on ANY movable dimension line segment
-                        if (!found) {
-                          for (final entry in _dimensionLineSegments.entries) {
-                            if (_distToScreenSegment(touchScreen, entry.value.pA, entry.value.pB) <= 8.0) {
-                              _activeDrag = _DragTarget.dimensionLine;
-                              _draggedDimLineId = entry.key;
-                              viewModel.selectDimension(entry.key);
-                              _isInspectorCollapsed = false;
-                              found = true;
-                              break;
-                            }
-                          }
-                        }
-
-                        // 0c. Direct hit-test on ANY interactive constraint badge
-                        if (!found) {
-                          for (final entry in _constraintBadgeRects.entries) {
-                            if (entry.value.inflate(4.0).contains(touchScreen)) {
-                              final badge = entry.value;
-                              final isDeleteRegion = touchScreen.dx > (badge.right - 18);
-                              if (isDeleteRegion && (viewModel.selectedConstraintId == entry.key || _hoveredConstraintId == entry.key)) {
-                                viewModel.removeConstraint(entry.key);
-                                setState(() {
-                                  _hoveredConstraintId = null;
-                                  _constraintHoverHighlightedEntityIds.clear();
-                                });
-                              } else {
-                                viewModel.selectConstraint(entry.key);
-                              }
-                              found = true;
-                              break;
-                            }
-                          }
-                        }
-
-                        final isDrawingTool = viewModel.toolMode == StudioToolMode.addBend ||
-                            viewModel.toolMode == StudioToolMode.addFlange ||
-                            viewModel.toolMode == StudioToolMode.addCut ||
-                            viewModel.toolMode == StudioToolMode.drawRectangle ||
-                            viewModel.toolMode == StudioToolMode.drawCircle ||
-                            viewModel.toolMode == StudioToolMode.drawArc ||
-                            viewModel.toolMode == StudioToolMode.drawPolyline ||
-                            viewModel.toolMode == StudioToolMode.addPunchRound ||
-                            viewModel.toolMode == StudioToolMode.addPunchObround ||
-                            viewModel.toolMode == StudioToolMode.addPunchSquare ||
-                            viewModel.toolMode == StudioToolMode.dragDimension;
-
-                        // 1. Direct hit-test on ANY bend line endpoint (P1 or P2)
-                        if (!found && !isDrawingTool) {
-                          for (final b in viewModel.document.bends) {
-                            if (!b.isVisible) continue;
-                            final s1 = cadToScreen(b.p1);
-                            final s2 = cadToScreen(b.p2);
-                            if ((touchScreen - s1).distance <= 20.0) {
-                              if (isShiftHeld) {
-                                viewModel.toggleEntitySelection(b.id);
-                                _shiftSelectionHandledInPan = true;
-                                found = true;
-                                _activeDrag = _DragTarget.none;
-                                break;
-                              }
-                              viewModel.selectBend(b.id);
-                              _activeDrag = _DragTarget.bendP1;
-                              _draggedBendId = b.id;
-                              found = true;
-                              break;
-                            } else if ((touchScreen - s2).distance <= 20.0) {
-                              if (isShiftHeld) {
-                                viewModel.toggleEntitySelection(b.id);
-                                _shiftSelectionHandledInPan = true;
-                                found = true;
-                                _activeDrag = _DragTarget.none;
-                                break;
-                              }
-                              viewModel.selectBend(b.id);
-                              _activeDrag = _DragTarget.bendP2;
-                              _draggedBendId = b.id;
-                              found = true;
-                              break;
-                            }
+                          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                            viewModel.nudgeSelectedBend(0, step);
+                            return KeyEventResult.handled;
+                          } else if (event.logicalKey ==
+                              LogicalKeyboardKey.arrowDown) {
+                            viewModel.nudgeSelectedBend(0, -step);
+                            return KeyEventResult.handled;
+                          } else if (event.logicalKey ==
+                              LogicalKeyboardKey.arrowLeft) {
+                            viewModel.nudgeSelectedBend(-step, 0);
+                            return KeyEventResult.handled;
+                          } else if (event.logicalKey ==
+                              LogicalKeyboardKey.arrowRight) {
+                            viewModel.nudgeSelectedBend(step, 0);
+                            return KeyEventResult.handled;
                           }
 
-                        // 2. Direct hit-test on ANY cut line endpoint (P1 or P2)
-                        if (!found) {
-                          for (final c in viewModel.document.cutLines) {
-                            if (!c.isVisible) continue;
-                            final s1 = cadToScreen(c.p1);
-                            final s2 = cadToScreen(c.p2);
-                            if ((touchScreen - s1).distance <= 20.0) {
-                              if (isShiftHeld) {
-                                viewModel.toggleEntitySelection(c.id);
-                                _shiftSelectionHandledInPan = true;
-                                found = true;
-                                _activeDrag = _DragTarget.none;
-                                break;
-                              }
-                              viewModel.selectCut(c.id);
-                              _activeDrag = _DragTarget.cutP1;
-                              _draggedCutId = c.id;
-                              found = true;
-                              break;
-                            } else if ((touchScreen - s2).distance <= 20.0) {
-                              if (isShiftHeld) {
-                                viewModel.toggleEntitySelection(c.id);
-                                _shiftSelectionHandledInPan = true;
-                                found = true;
-                                _activeDrag = _DragTarget.none;
-                                break;
-                              }
-                              viewModel.selectCut(c.id);
-                              _activeDrag = _DragTarget.cutP2;
-                              _draggedCutId = c.id;
-                              found = true;
-                              break;
-                            }
-                          }
-                        }
-
-                        // 3. Direct hit-test along ANY bend line body
-                        if (!found) {
-                          for (final b in viewModel.document.bends) {
-                            if (!b.isVisible) continue;
-                            final d = _distToSegment(cadPt, b.p1, b.p2) * scale;
-                            if (d <= 14.0) {
-                              if (isShiftHeld) {
-                                viewModel.toggleEntitySelection(b.id);
-                                _shiftSelectionHandledInPan = true;
-                                found = true;
-                                _activeDrag = _DragTarget.none;
-                                break;
-                              }
-                              viewModel.selectBend(b.id);
-                              _activeDrag = _DragTarget.bendBody;
-                              _draggedBendId = b.id;
-                              found = true;
-                              break;
-                            }
-                          }
-                        }
-
-                        // 4. Direct hit-test along ANY cut line body
-                        if (!found) {
-                          for (final c in viewModel.document.cutLines) {
-                            if (!c.isVisible) continue;
-                            final d = _distToSegment(cadPt, c.p1, c.p2) * scale;
-                            if (d <= 14.0) {
-                              if (isShiftHeld) {
-                                viewModel.toggleEntitySelection(c.id);
-                                _shiftSelectionHandledInPan = true;
-                                found = true;
-                                _activeDrag = _DragTarget.none;
-                                break;
-                              }
-                              viewModel.selectCut(c.id);
-                              _activeDrag = _DragTarget.cutBody;
-                              _draggedCutId = c.id;
-                              found = true;
-                              break;
-                            }
-                          }
-                        }
-
-                        // 4b. Direct hit-test along ANY arc entity
-                        if (!found) {
-                          for (final a in viewModel.document.arcs) {
-                            final d = a.distanceTo(cadPt) * scale;
-                            if (d <= 14.0) {
-                              if (isShiftHeld) {
-                                viewModel.toggleEntitySelection(a.id);
-                                _shiftSelectionHandledInPan = true;
-                                found = true;
-                                _activeDrag = _DragTarget.none;
-                                break;
-                              }
-                              viewModel.setSelectedArc(a.id);
-                              viewModel.setPropertyInspectorOpen(true);
-                              _isInspectorCollapsed = false;
-                              found = true;
-                              _activeDrag = _DragTarget.none;
-                              break;
-                            }
-                          }
-                        }
-
-                        // 5. Direct hit-test on ANY punch (with Selection Cycling for overlapping punches)
-                        if (!found) {
-                          final hitPunches = <CncPunchPrimitive>[];
-                          for (final p in viewModel.document.punches) {
-                            if (!p.isVisible) continue;
-                            final dist = cadPt.distanceTo(p.center);
-                            final effRadius = p.isRound
-                                ? p.diameterMm / 2.0
-                                : math.max(p.widthMm, p.lengthMm) / 2.0;
-                            final hitR = math.max(14.0 / scale, effRadius + 3.0);
-                            if (dist <= hitR) {
-                              hitPunches.add(p);
-                            }
-                          }
-
-                          if (hitPunches.isNotEmpty) {
-                            if (isShiftHeld) {
-                              hitPunches.sort((a, b) => cadPt.distanceTo(a.center).compareTo(cadPt.distanceTo(b.center)));
-                              final targetPunch = hitPunches.first;
-                              viewModel.toggleEntitySelection(targetPunch.id);
-                              _shiftSelectionHandledInPan = true;
-                              _activeDrag = _DragTarget.none;
-                              found = true;
-                            } else {
-                              final currIdx = hitPunches.indexWhere(
-                                (p) => p.id == viewModel.selectedPunchId,
+                          // Direct CAD tool shortcuts when canvas is focused (KeyDown only, no Ctrl/Meta)
+                          if (!isCtrl &&
+                              _activeEditingPortId == null &&
+                              !_isEditingText()) {
+                            if (event.logicalKey == LogicalKeyboardKey.keyB) {
+                              viewModel.setToolMode(StudioToolMode.addBend);
+                              return KeyEventResult.handled;
+                            } else if (event.logicalKey ==
+                                LogicalKeyboardKey.keyF) {
+                              viewModel.setToolMode(
+                                isShift
+                                    ? StudioToolMode.cornerFillet
+                                    : StudioToolMode.addFlange,
                               );
-                              final nextPunch =
-                                  hitPunches[(currIdx + 1) % hitPunches.length];
-                              viewModel.selectPunch(nextPunch.id);
-                              _activeDrag = _DragTarget.punch;
-                              found = true;
+                              return KeyEventResult.handled;
+                            } else if (event.logicalKey ==
+                                LogicalKeyboardKey.keyM) {
+                              viewModel.setToolMode(StudioToolMode.addCut);
+                              return KeyEventResult.handled;
+                            } else if (event.logicalKey ==
+                                LogicalKeyboardKey.keyL) {
+                              viewModel.setToolMode(
+                                StudioToolMode.drawPolyline,
+                              );
+                              return KeyEventResult.handled;
+                            } else if (event.logicalKey ==
+                                LogicalKeyboardKey.keyG) {
+                              viewModel.setToolMode(
+                                StudioToolMode.drawRectangle,
+                              );
+                              return KeyEventResult.handled;
+                            } else if (event.logicalKey ==
+                                LogicalKeyboardKey.keyC) {
+                              viewModel.setToolMode(
+                                isShift
+                                    ? StudioToolMode.cornerChamfer
+                                    : StudioToolMode.drawCircle,
+                              );
+                              return KeyEventResult.handled;
+                            } else if (event.logicalKey ==
+                                    LogicalKeyboardKey.keyA &&
+                                !isShift) {
+                              viewModel.setToolMode(StudioToolMode.drawArc);
+                              return KeyEventResult.handled;
+                            } else if (event.logicalKey ==
+                                LogicalKeyboardKey.keyQ) {
+                              viewModel.toggleSelectedConstruction();
+                              return KeyEventResult.handled;
+                            } else if (event.logicalKey ==
+                                LogicalKeyboardKey.keyD) {
+                              viewModel.setToolMode(
+                                StudioToolMode.addDimension,
+                              );
+                              return KeyEventResult.handled;
+                            } else if (event.logicalKey ==
+                                LogicalKeyboardKey.keyP) {
+                              viewModel.setToolMode(
+                                StudioToolMode.perforationPattern,
+                              );
+                              return KeyEventResult.handled;
+                            } else if (event.logicalKey ==
+                                    LogicalKeyboardKey.keyV ||
+                                event.logicalKey == LogicalKeyboardKey.space) {
+                              viewModel.setToolMode(StudioToolMode.select);
+                              return KeyEventResult.handled;
+                            } else if (event.logicalKey ==
+                                LogicalKeyboardKey.keyH) {
+                              viewModel.setToolMode(StudioToolMode.pan);
+                              return KeyEventResult.handled;
                             }
                           }
                         }
-
-                        // 5b. Direct hit-test on ANY perforation pattern
-                        if (!found) {
-                          for (final pat
-                              in viewModel.document.perforationPatterns) {
-                            if (!pat.isVisible) continue;
-                            final holeIdx = pat.findHoleAt(
-                              cadPt,
-                              maxDistMm: 16.0 / scale,
+                        return KeyEventResult.ignored;
+                      },
+                      child: Listener(
+                        onPointerDown: (event) {
+                          if (!_canvasFocusNode.hasFocus &&
+                              !_inPlaceDimFocusNode.hasFocus) {
+                            _canvasFocusNode.requestFocus();
+                          }
+                        },
+                        onPointerSignal: (pointerSignal) {
+                          if (pointerSignal is PointerScrollEvent) {
+                            final zoomFactor = pointerSignal.scrollDelta.dy < 0
+                                ? 1.12
+                                : 0.89;
+                            viewModel.zoom2DCanvas(
+                              zoomFactor,
+                              focalPoint: pointerSignal.localPosition,
+                              viewportSize: size,
                             );
-                            if (holeIdx != null || pat.containsPoint(cadPt)) {
-                              if (isShiftHeld) {
-                                viewModel.toggleEntitySelection(pat.id);
-                                _shiftSelectionHandledInPan = true;
-                                found = true;
-                                _activeDrag = _DragTarget.none;
-                                break;
-                              }
-                              viewModel.selectPattern(pat.id, holeIdx);
-                              // Per user requirement: applied perforations must NOT be movable by mouse dragging!
-                              found = true;
-                              _activeDrag = _DragTarget.none;
-                              break;
-                            }
                           }
-                        }
-                        }
+                        },
+                        onPointerPanZoomUpdate: (event) {
+                          if (event.pan != Offset.zero) {
+                            viewModel.pan2DCanvas(event.pan);
+                          }
+                          if (event.scale != 1.0) {
+                            viewModel.zoom2DCanvas(
+                              event.scale,
+                              focalPoint: event.localPosition,
+                              viewportSize: size,
+                            );
+                          }
+                        },
+                        onPointerMove: (event) {
+                          final isMiddleMouse =
+                              (event.buttons & kTertiaryButton) != 0;
+                          final isSecondaryMouse =
+                              (event.buttons & kSecondaryMouseButton) != 0;
+                          bool isSpaceHeld = false;
+                          try {
+                            isSpaceHeld = HardwareKeyboard.instance
+                                .isLogicalKeyPressed(LogicalKeyboardKey.space);
+                          } catch (_) {}
 
-                        if (found) {
-                          if (!isShiftHeld &&
-                              _activeDrag != _DragTarget.none &&
-                              _activeDrag != _DragTarget.dimensionBadge) {
-                            viewModel.beginObjectDrag();
+                          if (isMiddleMouse ||
+                              isSecondaryMouse ||
+                              (isSpaceHeld &&
+                                  (event.buttons & kPrimaryMouseButton) != 0)) {
+                            viewModel.pan2DCanvas(event.delta);
                           }
-                        } else {
-                          if (isDrawingTool) {
+                        },
+                        child: MouseRegion(
+                          cursor: _activeDrag == _DragTarget.canvasPan
+                              ? SystemMouseCursors.grabbing
+                              : (_activeDrag == _DragTarget.boxSelect ||
+                                        _activeDrag == _DragTarget.drawEntity
+                                    ? SystemMouseCursors.precise
+                                    : (_activeDrag ==
+                                              _DragTarget.dimensionBadge ||
+                                          _hoveredDimId != null ||
+                                          _activeDrag ==
+                                              _DragTarget.dimensionLine ||
+                                          _hoveredDimLineId != null ||
+                                          _activeDrag ==
+                                              _DragTarget.portBadge ||
+                                          _hoveredPortBadgeId != null)
+                                    ? SystemMouseCursors.move
+                                    : ((viewModel.toolMode ==
+                                                  StudioToolMode.pickPortEdge ||
+                                              viewModel.activePortPickTarget !=
+                                                  null)
+                                          ? SystemMouseCursors.precise
+                                          : (viewModel.toolMode ==
+                                                    StudioToolMode.pan
+                                                ? SystemMouseCursors.grab
+                                                : ((viewModel.toolMode !=
+                                                              StudioToolMode
+                                                                  .select &&
+                                                          viewModel.toolMode !=
+                                                              StudioToolMode
+                                                                  .pan &&
+                                                          viewModel.toolMode !=
+                                                              StudioToolMode
+                                                                  .setBaseAnchor)
+                                                      ? SystemMouseCursors
+                                                            .precise
+                                                      : (_hoveredEndpoint !=
+                                                                null
+                                                            ? SystemMouseCursors
+                                                                  .precise
+                                                            : SystemMouseCursors
+                                                                  .basic))))),
+                          onHover: (event) {
+                            final cadPt = screenToCad(event.localPosition);
+                            _hoverCursorScreen = event.localPosition;
+                            _hoverCursorCad = cadPt;
                             final screenSnapMm = (8.0 / scale).clamp(1.5, 8.0);
-                            _drawStartAltPressed = _isAltPressed();
+                            final isAlt = _isAltPressed();
+                            viewModel.updateCursorMm(
+                              cadPt,
+                              snapRadiusMm: screenSnapMm,
+                              isAlt: isAlt,
+                            );
 
-                            CadPoint2D effectiveStart;
-                            if (_drawStartAltPressed) {
-                              // Free mode for start point when Alt is held
-                              effectiveStart = cadPt;
-                            } else {
-                              // Magnetic snap to nearest geometry/spanning point
-                              viewModel.updateCursorMm(cadPt, snapRadiusMm: screenSnapMm);
-                              effectiveStart = viewModel.activeSnap?.point ??
-                                  viewModel.resolveEffectivePoint(cadPt, snapRadiusMm: screenSnapMm);
-                            }
-
-                            _activeDrag = _DragTarget.drawEntity;
-                            _drawDragStartScreen = touchScreen;
-                            _drawDragCurrentScreen = touchScreen;
-                            _drawDragStartCad = effectiveStart;
-                            _drawDragCommitted = false;
-
-                            if (viewModel.pendingBendStart == null &&
-                                viewModel.toolMode != StudioToolMode.drawArc &&
-                                viewModel.toolMode != StudioToolMode.drawPolyline) {
-                              viewModel.setPendingBendStart(effectiveStart);
-                            }
-                            setState(() {});
-                          } else if (viewModel.toolMode == StudioToolMode.select) {
-                            // In Select mode, dragging on blank canvas starts box selection
-                            _activeDrag = _DragTarget.boxSelect;
-                            _boxSelectStart = touchScreen;
-                            _boxSelectCurrent = touchScreen;
-                            setState(() {});
-                          } else {
-                            // Dragging on blank canvas/surface in other modes pans the 2D flat view
-                            _activeDrag = _DragTarget.canvasPan;
-                          }
-                        }
-                      },
-                      onPanUpdate: (details) {
-                        if (_activeDrag == _DragTarget.boxSelect) {
-                          setState(() {
-                            _boxSelectCurrent = details.localPosition;
-                          });
-                          return;
-                        }
-
-                        final cadPt = screenToCad(details.localPosition);
-
-                        if (_activeDrag == _DragTarget.drawEntity) {
-                          _drawDragCurrentScreen = details.localPosition;
-                          final screenSnapMm = (8.0 / scale).clamp(1.5, 8.0);
-                          final isEndAlt = _isAltPressed();
-
-                          final isLineTool = viewModel.toolMode == StudioToolMode.addBend ||
-                              viewModel.toolMode == StudioToolMode.addFlange ||
-                              viewModel.toolMode == StudioToolMode.addCut ||
-                              viewModel.toolMode == StudioToolMode.dragDimension ||
-                              viewModel.toolMode == StudioToolMode.drawPolyline;
-
-                          CadPoint2D effectivePt = cadPt;
-
-                          if (isEndAlt) {
-                            // Alt is pressed during drag: end point moves freely without snapping
-                            effectivePt = cadPt;
-                            viewModel.clearSnap();
-                            if (isLineTool && _drawDragStartCad != null) {
-                              final dx = effectivePt.x - _drawDragStartCad!.x;
-                              final dy = effectivePt.y - _drawDragStartCad!.y;
-                              double angle = math.atan2(dy, dx) * 180.0 / math.pi;
-                              if (angle < 0) angle += 360.0;
-                              final toolLabel = viewModel.toolMode == StudioToolMode.addCut
-                                  ? "CUT"
-                                  : (viewModel.toolMode == StudioToolMode.dragDimension
-                                      ? "DIM"
-                                      : (viewModel.toolMode == StudioToolMode.drawPolyline ? "LINE" : "BEND"));
-                              _dragAngleInfo = (
-                                point: effectivePt,
-                                label: '$toolLabel ${angle.round() % 360}° (Alt Free)',
-                              );
-                            } else {
-                              _dragAngleInfo = null;
-                            }
-                          } else {
-                            // Alt is not pressed: end point snaps on 5 degrees and nearest geometry
-                            if (isLineTool && _drawDragStartCad != null) {
-                              effectivePt = SheetMetalStudioViewModel.snapEndpointAngle(
-                                anchor: _drawDragStartCad!,
-                                target: effectivePt,
-                                isAlt: false,
-                              );
-                              final dx = effectivePt.x - _drawDragStartCad!.x;
-                              final dy = effectivePt.y - _drawDragStartCad!.y;
-                              double angle = math.atan2(dy, dx) * 180.0 / math.pi;
-                              if (angle < 0) angle += 360.0;
-                              final toolLabel = viewModel.toolMode == StudioToolMode.addCut
-                                  ? "CUT"
-                                  : (viewModel.toolMode == StudioToolMode.dragDimension
-                                      ? "DIM"
-                                      : (viewModel.toolMode == StudioToolMode.drawPolyline ? "LINE" : "BEND"));
-                              _dragAngleInfo = (
-                                point: effectivePt,
-                                label: '$toolLabel ${angle.round() % 360}°',
-                              );
-                            } else {
-                              _dragAngleInfo = null;
-                            }
-
-                            // Magnetic snapping to nearest entity
-                            viewModel.updateCursorMm(effectivePt, snapRadiusMm: screenSnapMm);
-                            effectivePt = viewModel.activeSnap?.point ?? effectivePt;
-                          }
-
-                          viewModel.updateRubberBand(effectivePt);
-                          setState(() {});
-                          return;
-                        }
-
-                        // Determine fixed anchor for line endpoint dragging to anchor angle snapping
-                        CadPoint2D? anchor;
-                        bool isCutLineDrag = false;
-
-                        if (_activeDrag == _DragTarget.bendP1) {
-                          final targetBendId =
-                              _draggedBendId ?? selectedBend?.id;
-                          final b = viewModel.document.bends
-                              .cast<FoldBendLine?>()
-                              .firstWhere(
-                                (x) => x?.id == targetBendId,
-                                orElse: () => null,
-                              );
-                          if (b != null) anchor = b.p2;
-                        } else if (_activeDrag == _DragTarget.bendP2) {
-                          final targetBendId =
-                              _draggedBendId ?? selectedBend?.id;
-                          final b = viewModel.document.bends
-                              .cast<FoldBendLine?>()
-                              .firstWhere(
-                                (x) => x?.id == targetBendId,
-                                orElse: () => null,
-                              );
-                          if (b != null) anchor = b.p1;
-                        } else if (_activeDrag == _DragTarget.cutP1) {
-                          isCutLineDrag = true;
-                          final targetCutId = _draggedCutId ?? selectedCut?.id;
-                          final c = viewModel.document.cutLines
-                              .cast<CadLineSegment?>()
-                              .firstWhere(
-                                (x) => x?.id == targetCutId,
-                                orElse: () => null,
-                              );
-                          if (c != null) anchor = c.p2;
-                        } else if (_activeDrag == _DragTarget.cutP2) {
-                          isCutLineDrag = true;
-                          final targetCutId = _draggedCutId ?? selectedCut?.id;
-                          final c = viewModel.document.cutLines
-                              .cast<CadLineSegment?>()
-                              .firstWhere(
-                                (x) => x?.id == targetCutId,
-                                orElse: () => null,
-                              );
-                          if (c != null) anchor = c.p1;
-                        }
-
-                        CadPoint2D candidate = cadPt;
-                        int currentAngleDeg = 0;
-                        bool isAlt = false;
-                        try {
-                          isAlt = HardwareKeyboard.instance.isAltPressed;
-                        } catch (_) {}
-
-                        if (anchor != null) {
-                          candidate =
-                              SheetMetalStudioViewModel.snapEndpointAngle(
-                                anchor: anchor,
-                                target: cadPt,
-                                isAlt: isAlt,
-                              );
-                          final dx = candidate.x - anchor.x;
-                          final dy = candidate.y - anchor.y;
-                          double angle = math.atan2(dy, dx) * 180.0 / math.pi;
-                          if (angle < 0) angle += 360.0;
-                          currentAngleDeg = angle.round() % 360;
-                        }
-
-                        // Live magnetic snap update during dragging (lines snap, punches move smoothly)
-                        if (_activeDrag == _DragTarget.bendP1 ||
-                            _activeDrag == _DragTarget.bendP2 ||
-                            _activeDrag == _DragTarget.cutP1 ||
-                            _activeDrag == _DragTarget.cutP2) {
-                          final screenSnapMm = (8.0 / scale).clamp(1.5, 8.0);
-                          viewModel.updateCursorMm(
-                            candidate,
-                            snapRadiusMm: screenSnapMm,
-                          );
-                        }
-                        final effectivePt =
-                            viewModel.activeSnap?.point ?? candidate;
-
-                        if (anchor != null) {
-                          _dragAngleInfo = (
-                            point: effectivePt,
-                            label:
-                                '${isCutLineDrag ? "CUT" : "BEND"} $currentAngleDeg° ${isAlt ? "(Alt Free)" : ""}',
-                          );
-                        } else {
-                          _dragAngleInfo = null;
-                        }
-
-                        switch (_activeDrag) {
-                          case _DragTarget.boxSelect:
-                            break;
-
-                          case _DragTarget.canvasPan:
-                            viewModel.pan2DCanvas(details.delta);
-                            break;
-
-                          case _DragTarget.portBadge:
-                            if (_draggedPortBadgeId != null) {
-                              if ((details.localPosition - _dragStartScreen).distance > 4.0) {
-                                _hasMovedPortBadge = true;
+                            // Check hover on movable dimension line segments
+                            String? hoveredDimLine;
+                            for (final entry
+                                in _dimensionLineSegments.entries) {
+                              if (_distToScreenSegment(
+                                    event.localPosition,
+                                    entry.value.pA,
+                                    entry.value.pB,
+                                  ) <=
+                                  8.0) {
+                                hoveredDimLine = entry.key;
+                                break;
                               }
-                              final currentOffset =
-                                  _dragPortBadgeStartOffset +
-                                  (details.localPosition - _dragStartScreen);
-                              viewModel.setPortBadgeOffset(
-                                _draggedPortBadgeId!,
-                                currentOffset,
-                              );
                             }
-                            break;
-
-                          case _DragTarget.dimensionBadge:
-                            if (_draggedDimId != null) {
-                              final currentOffset =
-                                  _dragDimensionStartOffset +
-                                  (details.localPosition - _dragStartScreen);
-                              viewModel.setDimensionOffset(
-                                _draggedDimId!,
-                                currentOffset,
-                              );
+                            if (hoveredDimLine != _hoveredDimLineId) {
+                              setState(() {
+                                _hoveredDimLineId = hoveredDimLine;
+                              });
                             }
-                            break;
 
-                          case _DragTarget.dimensionLine:
-                            if (_draggedDimLineId != null) {
-                              final dim = viewModel.document.dimensions
-                                  .where((d) => d.id == _draggedDimLineId)
-                                  .firstOrNull;
-                              if (dim != null) {
-                                final assoc = AssociativeDimensionEngine.resolveAssociation(dim, viewModel.document);
-                                final pA = assoc.pA;
-                                final pB = assoc.pB;
-                                double newOffset = dim.dimensionLineOffset;
+                            // Check hover on movable dimension badges
+                            String? hoveredDim;
+                            for (final entry in _dimensionBadgeRects.entries) {
+                              if (entry.value
+                                  .inflate(4.0)
+                                  .contains(event.localPosition)) {
+                                hoveredDim = entry.key;
+                                break;
+                              }
+                            }
+                            if (hoveredDim != _hoveredDimId) {
+                              setState(() {
+                                _hoveredDimId = hoveredDim;
+                              });
+                            }
 
-                                if (dim.type == CadDimensionType.horizontal) {
-                                  final minY = math.min(pA.y, pB.y);
-                                  newOffset = minY - cadPt.y;
-                                } else if (dim.type == CadDimensionType.vertical) {
-                                  final minX = math.min(pA.x, pB.x);
-                                  newOffset = minX - cadPt.x;
-                                } else {
-                                  final dx = pB.x - pA.x;
-                                  final dy = pB.y - pA.y;
-                                  final len = math.sqrt(dx * dx + dy * dy);
-                                  if (len > 1e-4) {
-                                    final nx = -dy / len;
-                                    final ny = dx / len;
-                                    newOffset = (cadPt.x - pA.x) * nx + (cadPt.y - pA.y) * ny;
+                            // Check hover on interactive constraint badges
+                            String? hoveredConstraint;
+                            for (final entry in _constraintBadgeRects.entries) {
+                              if (entry.value
+                                  .inflate(4.0)
+                                  .contains(event.localPosition)) {
+                                hoveredConstraint = entry.key;
+                                break;
+                              }
+                            }
+                            if (hoveredConstraint != _hoveredConstraintId) {
+                              final highlightedRefs = <String>{};
+                              if (hoveredConstraint != null) {
+                                final c = viewModel.activeConstraintDefinitions
+                                    .where((def) => def.id == hoveredConstraint)
+                                    .firstOrNull;
+                                if (c != null) {
+                                  for (final ref in c.references) {
+                                    highlightedRefs.add(ref.canonicalPath);
+                                    highlightedRefs.add(ref.entityId);
                                   }
                                 }
-                                viewModel.setDimensionLineOffset(_draggedDimLineId!, newOffset);
+                              }
+                              setState(() {
+                                _hoveredConstraintId = hoveredConstraint;
+                                _constraintHoverHighlightedEntityIds.clear();
+                                _constraintHoverHighlightedEntityIds.addAll(
+                                  highlightedRefs,
+                                );
+                              });
+                            }
+
+                            // Check hover on movable port badges
+                            String? hoveredPort;
+                            for (final entry in _portBadgeRects.entries) {
+                              if (entry.value
+                                  .inflate(4.0)
+                                  .contains(event.localPosition)) {
+                                hoveredPort = entry.key;
+                                break;
+                              }
+                            }
+                            if (hoveredPort != _hoveredPortBadgeId) {
+                              setState(() {
+                                _hoveredPortBadgeId = hoveredPort;
+                              });
+                            }
+
+                            // Dynamic contour edge hover for selection, dimensioning, and port edge picking
+                            if (viewModel.toolMode == StudioToolMode.select ||
+                                viewModel.toolMode ==
+                                    StudioToolMode.addDimension ||
+                                viewModel.toolMode ==
+                                    StudioToolMode.pickPortEdge ||
+                                viewModel.activePortPickTarget != null) {
+                              final contour = viewModel.document.outerContour;
+                              final candidateEdges =
+                                  <(CadPoint2D, CadPoint2D)>[];
+                              if (contour.length >= 2) {
+                                for (int i = 0; i < contour.length; i++) {
+                                  candidateEdges.add((
+                                    contour[i],
+                                    contour[(i + 1) % contour.length],
+                                  ));
+                                }
                               } else {
-                                final seg = _dimensionLineSegments[_draggedDimLineId!];
-                                if (seg != null) {
-                                  double newOffset = seg.offsetDist;
-                                  if (seg.type == CadDimensionType.horizontal) {
-                                    final refY = math.min(seg.ptA.y, seg.ptB.y);
-                                    newOffset = math.max(6.0, (refY - cadPt.y).abs());
-                                  } else if (seg.type == CadDimensionType.vertical) {
-                                    final refX = math.min(seg.ptA.x, seg.ptB.x);
-                                    newOffset = math.max(6.0, (refX - cadPt.x).abs());
+                                for (final f in viewModel.document.faces) {
+                                  if (!f.isVisible) continue;
+                                  for (int i = 0; i < f.vertices.length; i++) {
+                                    candidateEdges.add((
+                                      f.vertices[i],
+                                      f.vertices[(i + 1) % f.vertices.length],
+                                    ));
                                   }
-                                  viewModel.setDimensionLineOffset(_draggedDimLineId!, newOffset);
                                 }
                               }
-                            }
-                            break;
 
-                          case _DragTarget.punch:
-                            viewModel.moveSelectedPunch(candidate);
-                            break;
+                              CadPoint2D? bestP1;
+                              CadPoint2D? bestP2;
+                              double minD = double.infinity;
+                              for (final edge in candidateEdges) {
+                                // Check if edge is part of a CAD arc chord
+                                bool isPartOfArc = false;
+                                for (final a in viewModel.document.arcs) {
+                                  if (a.distanceTo(edge.$1) <= 1.2 &&
+                                      a.distanceTo(edge.$2) <= 1.2) {
+                                    isPartOfArc = true;
+                                    break;
+                                  }
+                                }
+                                if (isPartOfArc) continue;
 
-                          case _DragTarget.pattern:
-                            if (viewModel.selectedPatternId != null &&
-                                details.delta.distance > 0.05) {
-                              viewModel.movePattern(
-                                viewModel.selectedPatternId!,
-                                candidate,
-                              );
-                            }
-                            break;
-
-                          case _DragTarget.bendP1:
-                            final targetBendId =
-                                _draggedBendId ?? selectedBend?.id;
-                            if (targetBendId != null) {
-                              viewModel.updateBendEndpoint(
-                                bendId: targetBendId,
-                                isP1: true,
-                                newPoint: effectivePt,
-                              );
-                            }
-                            break;
-
-                          case _DragTarget.bendP2:
-                            final targetBendId =
-                                _draggedBendId ?? selectedBend?.id;
-                            if (targetBendId != null) {
-                              viewModel.updateBendEndpoint(
-                                bendId: targetBendId,
-                                isP1: false,
-                                newPoint: effectivePt,
-                              );
-                            }
-                            break;
-
-                          case _DragTarget.bendBody:
-                            final cadDelta = CadPoint2D(
-                              details.delta.dx / scale,
-                              details.delta.dy / scale,
-                            );
-                            if (cadDelta.x.abs() > 0.0 || cadDelta.y.abs() > 0.0) {
-                              viewModel.moveSelectedBend(cadDelta);
-                            }
-                            break;
-
-                          case _DragTarget.cutP1:
-                            final targetCutId =
-                                _draggedCutId ?? selectedCut?.id;
-                            if (targetCutId != null) {
-                              viewModel.updateCutEndpoint(
-                                cutId: targetCutId,
-                                isP1: true,
-                                newPoint: effectivePt,
-                              );
-                            }
-                            break;
-
-                          case _DragTarget.cutP2:
-                            final targetCutId =
-                                _draggedCutId ?? selectedCut?.id;
-                            if (targetCutId != null) {
-                              viewModel.updateCutEndpoint(
-                                cutId: targetCutId,
-                                isP1: false,
-                                newPoint: effectivePt,
-                              );
-                            }
-                            break;
-
-                          case _DragTarget.cutBody:
-                            final cadDeltaCut = CadPoint2D(
-                              details.delta.dx / scale,
-                              details.delta.dy / scale,
-                            );
-                            if (cadDeltaCut.x.abs() > 0.0 || cadDeltaCut.y.abs() > 0.0) {
-                              viewModel.moveSelectedCut(cadDeltaCut);
-                            }
-                            break;
-
-                          case _DragTarget.drawEntity:
-                            break;
-
-                          case _DragTarget.none:
-                            break;
-                        }
-                      },
-                      onPanEnd: (_) {
-                        if (_activeDrag == _DragTarget.drawEntity) {
-                          final dragDist = (_drawDragStartScreen != null && _drawDragCurrentScreen != null)
-                              ? (_drawDragCurrentScreen! - _drawDragStartScreen!).distance
-                              : 0.0;
-                          final screenSnapMm = (8.0 / scale).clamp(1.5, 8.0);
-
-                          if (dragDist > 6.0) {
-                            // Onshape-style: Drag & Release committed the entity!
-                            final endScreen = _drawDragCurrentScreen ?? _drawDragStartScreen!;
-                            final endCad = screenToCad(endScreen);
-                            final isEndAlt = _isAltPressed();
-
-                            final isLineTool = viewModel.toolMode == StudioToolMode.addBend ||
-                                viewModel.toolMode == StudioToolMode.addFlange ||
-                                viewModel.toolMode == StudioToolMode.addCut ||
-                                viewModel.toolMode == StudioToolMode.dragDimension ||
-                                viewModel.toolMode == StudioToolMode.drawPolyline;
-
-                            CadPoint2D effectiveEnd = endCad;
-                            if (isEndAlt) {
-                              // Free mode for end point (Alt held at release)
-                              effectiveEnd = endCad;
-                            } else {
-                              // Snapped mode for end point (Alt NOT held at release)
-                              if (_drawDragStartCad != null && isLineTool) {
-                                effectiveEnd = SheetMetalStudioViewModel.snapEndpointAngle(
-                                  anchor: _drawDragStartCad!,
-                                  target: effectiveEnd,
-                                  isAlt: false,
+                                final d =
+                                    _distToSegment(cadPt, edge.$1, edge.$2) *
+                                    scale;
+                                if (d < minD && d <= 28.0) {
+                                  minD = d;
+                                  bestP1 = edge.$1;
+                                  bestP2 = edge.$2;
+                                }
+                              }
+                              if (bestP1 != null && bestP2 != null) {
+                                final len = bestP1.distanceTo(bestP2);
+                                viewModel.updateHoveredContourEdge(
+                                  bestP1,
+                                  bestP2,
+                                  len,
+                                );
+                              } else {
+                                viewModel.updateHoveredContourEdge(
+                                  null,
+                                  null,
+                                  null,
                                 );
                               }
-                              viewModel.updateCursorMm(effectiveEnd, snapRadiusMm: screenSnapMm);
-                              effectiveEnd = viewModel.activeSnap?.point ?? effectiveEnd;
+                            } else {
+                              viewModel.updateHoveredContourEdge(
+                                null,
+                                null,
+                                null,
+                              );
                             }
 
-                            if (viewModel.toolMode == StudioToolMode.drawCircle ||
-                                viewModel.toolMode == StudioToolMode.addPunchRound) {
-                              final center = _drawDragStartCad ?? viewModel.pendingBendStart ?? effectiveEnd;
-                              final radius = center.distanceTo(effectiveEnd);
-                              final diam = radius > 0.5
-                                  ? radius * 2.0
-                                  : (viewModel.toolConfig.roundHoleDiameter > 0
-                                      ? viewModel.toolConfig.roundHoleDiameter
-                                      : 10.0);
-                              final newId = 'P${viewModel.document.punches.length + 1}';
-                              final p = CncTurretEngine.createRoundHole(
-                                id: newId,
-                                center: center,
-                                diameterMm: diam,
-                              );
-                              viewModel.addPunch(p);
-                              viewModel.selectPunch(p.id);
-                              viewModel.setPendingBendStart(null);
-                              viewModel.setToolMode(StudioToolMode.select);
-                            } else if (viewModel.toolMode == StudioToolMode.drawRectangle ||
-                                viewModel.toolMode == StudioToolMode.addPunchSquare) {
-                              final startPt = _drawDragStartCad ?? viewModel.pendingBendStart ?? effectiveEnd;
-                              final rawW = (effectiveEnd.x - startPt.x).abs();
-                              final rawH = (effectiveEnd.y - startPt.y).abs();
-                              final double effW;
-                              final double effH;
-                              if (viewModel.toolConfig.squareAspectLocked) {
-                                final side = math.max(rawW, rawH);
-                                effW = side > 1.0
-                                    ? side
-                                    : (viewModel.toolConfig.squareSize > 0
-                                        ? viewModel.toolConfig.squareSize
-                                        : 20.0);
-                                effH = effW;
-                              } else {
-                                effW = rawW > 1.0
-                                    ? rawW
-                                    : (viewModel.toolConfig.rectWidth > 0
-                                        ? viewModel.toolConfig.rectWidth
-                                        : 20.0);
-                                effH = rawH > 1.0
-                                    ? rawH
-                                    : (viewModel.toolConfig.rectHeight > 0
-                                        ? viewModel.toolConfig.rectHeight
-                                        : 20.0);
+                            // Check hover on punches
+                            String? hoveredPunch;
+                            for (final p in viewModel.document.punches) {
+                              final rad =
+                                  math.max(
+                                    p.diameterMm,
+                                    math.max(p.widthMm, p.lengthMm),
+                                  ) /
+                                  2.0;
+                              if (p.center.distanceTo(cadPt) <=
+                                  rad + 6.0 / scale) {
+                                hoveredPunch = p.id;
+                                break;
                               }
-                              final center = CadPoint2D(
-                                (startPt.x + effectiveEnd.x) / 2.0,
-                                (startPt.y + effectiveEnd.y) / 2.0,
-                              );
-                              final newId = 'P${viewModel.document.punches.length + 1}';
-                              final p = CncTurretEngine.createRectangularPunch(
-                                id: newId,
-                                center: center,
-                                widthMm: effW,
-                                heightMm: effH,
-                              );
-                              viewModel.addPunch(p);
-                              viewModel.selectPunch(p.id);
-                              viewModel.setPendingBendStart(null);
-                              viewModel.setToolMode(StudioToolMode.select);
-                            } else if (viewModel.toolMode == StudioToolMode.addPunchObround) {
-                              final center = _drawDragStartCad ?? effectiveEnd;
-                              final w = (effectiveEnd.x - center.x).abs() * 2.0;
-                              final l = (effectiveEnd.y - center.y).abs() * 2.0;
-                              final effW = w > 2.0 ? w : viewModel.toolConfig.obroundLength;
-                              final effL = l > 2.0 ? l : viewModel.toolConfig.obroundWidth;
-                              final newId = 'P${viewModel.document.punches.length + 1}';
-                              final p = CncTurretEngine.createObroundSlot(id: newId, center: center, widthMm: effW, lengthMm: effL);
-                              viewModel.addPunch(p);
-                              viewModel.selectPunch(p.id);
-                              viewModel.setPendingBendStart(null);
-                              viewModel.setToolMode(StudioToolMode.select);
-                            } else if (viewModel.toolMode == StudioToolMode.dragDimension) {
-                              final start = _drawDragStartCad ?? viewModel.pendingBendStart ?? effectiveEnd;
-                              final end = effectiveEnd;
-                              final dist = start.distanceTo(end);
-                              if (dist > 0.5) {
-                                viewModel.commitDragDimension(pA: start, pB: end);
+                            }
+                            viewModel.setHoveredPunch(hoveredPunch);
+
+                            // Check hover on bends
+                            String? hoveredBend;
+                            for (final b in viewModel.document.bends) {
+                              if (_distToSegment(cadPt, b.p1, b.p2) * scale <=
+                                  14.0) {
+                                hoveredBend = b.id;
+                                break;
                               }
-                              viewModel.setPendingBendStart(null);
-                              viewModel.setToolMode(StudioToolMode.select);
-                            } else if (viewModel.toolMode == StudioToolMode.addBend ||
-                                viewModel.toolMode == StudioToolMode.addFlange) {
-                              final p1 = _drawDragStartCad ?? viewModel.pendingBendStart ?? effectiveEnd;
-                              final p2 = effectiveEnd;
-                              viewModel.setPendingBendStart(null);
-                              if (p1.distanceTo(p2) > 1.0) {
-                                if (viewModel.toolMode == StudioToolMode.addFlange) {
-                                  viewModel.addFlangeLine(p1, p2);
-                                } else {
-                                  viewModel.addBendLine(p1, p2);
+                            }
+                            viewModel.setHoveredBend(hoveredBend);
+
+                            // Check hover on cuts
+                            String? hoveredCut;
+                            for (final c in viewModel.document.cutLines) {
+                              if (_distToSegment(cadPt, c.p1, c.p2) * scale <=
+                                  14.0) {
+                                hoveredCut = c.id;
+                                break;
+                              }
+                            }
+                            viewModel.setHoveredCut(hoveredCut);
+
+                            // Check hover on arcs
+                            String? hoveredArc;
+                            for (final a in viewModel.document.arcs) {
+                              if (a.distanceTo(cadPt) * scale <= 14.0) {
+                                hoveredArc = a.id;
+                                break;
+                              }
+                            }
+                            viewModel.setHoveredArc(hoveredArc);
+                            if (hoveredArc != null) {
+                              viewModel.updateHoveredContourEdge(
+                                null,
+                                null,
+                                null,
+                              );
+                            }
+
+                            // Check proximity to any bend or cut line endpoint
+                            CadPoint2D? nearPt;
+                            for (final b in viewModel.document.bends) {
+                              if (cadPt.distanceTo(b.p1) * scale <= 18.0) {
+                                nearPt = b.p1;
+                                break;
+                              }
+                              if (cadPt.distanceTo(b.p2) * scale <= 18.0) {
+                                nearPt = b.p2;
+                                break;
+                              }
+                            }
+                            if (nearPt == null) {
+                              for (final c in viewModel.document.cutLines) {
+                                if (cadPt.distanceTo(c.p1) * scale <= 18.0) {
+                                  nearPt = c.p1;
+                                  break;
+                                }
+                                if (cadPt.distanceTo(c.p2) * scale <= 18.0) {
+                                  nearPt = c.p2;
+                                  break;
                                 }
                               }
-                              viewModel.setToolMode(StudioToolMode.select);
-                            } else if (viewModel.toolMode == StudioToolMode.addCut) {
-                              final p1 = _drawDragStartCad ?? viewModel.pendingBendStart ?? effectiveEnd;
-                              final p2 = effectiveEnd;
-                              viewModel.setPendingBendStart(null);
-                              if (p1.distanceTo(p2) > 1.0) {
-                                viewModel.addCutLine(p1, p2);
-                              }
-                              viewModel.setToolMode(StudioToolMode.select);
-                            } else {
-                              viewModel.handleCanvasClick(
-                                effectiveEnd,
-                                snapRadiusMm: screenSnapMm,
-                                autoPlace: false,
-                              );
-                              if (viewModel.selectedDimensionId != null) {
-                                final newlyCreated = viewModel.document.dimensions
-                                    .where((d) => d.id == viewModel.selectedDimensionId)
-                                    .firstOrNull;
-                                if (newlyCreated != null) {
-                                  _openInlineDimensionCallout(
-                                    screenPos: _drawDragCurrentScreen ?? _drawDragStartScreen ?? Offset.zero,
-                                    dimId: newlyCreated.id,
-                                    pA: newlyCreated.pointA,
-                                    pB: newlyCreated.pointB,
-                                    referenceAId: newlyCreated.referenceAId,
-                                    referenceBId: newlyCreated.referenceBId,
-                                    measuredValue: newlyCreated.measuredValue,
-                                    offset: newlyCreated.dimensionLineOffset,
+                            }
+                            if (nearPt != _hoveredEndpoint) {
+                              setState(() {
+                                _hoveredEndpoint = nearPt;
+                              });
+                            }
+                          },
+                          onExit: (_) {
+                            viewModel.clearSnap();
+                            viewModel.setHoveredPunch(null);
+                            viewModel.setHoveredBend(null);
+                            viewModel.setHoveredCut(null);
+                            viewModel.setHoveredArc(null);
+                            viewModel.setHoveredFace(null);
+                            viewModel.updateHoveredContourEdge(
+                              null,
+                              null,
+                              null,
+                            );
+                            if (_hoveredDimId != null ||
+                                _hoveredDimLineId != null ||
+                                _hoveredEndpoint != null ||
+                                _hoveredPortBadgeId != null ||
+                                _hoverCursorScreen != null ||
+                                _hoverCursorCad != null) {
+                              setState(() {
+                                _hoveredDimId = null;
+                                _hoveredDimLineId = null;
+                                _hoveredPortBadgeId = null;
+                                _hoveredEndpoint = null;
+                                _hoverCursorScreen = null;
+                                _hoverCursorCad = null;
+                              });
+                            }
+                          },
+                          child: MenuAnchor(
+                            controller: _contextMenuController,
+                            menuChildren: _buildEdgeContextMenuChildren(
+                              viewModel,
+                            ),
+                            builder: (context, controller, child) => GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onPanStart: (details) {
+                                _shiftSelectionHandledInPan = false;
+                                final isShiftHeld = _isShiftPressed();
+                                bool isSpaceHeld = false;
+                                try {
+                                  isSpaceHeld = HardwareKeyboard.instance
+                                      .isLogicalKeyPressed(
+                                        LogicalKeyboardKey.space,
+                                      );
+                                } catch (_) {}
+
+                                if (isSpaceHeld ||
+                                    viewModel.toolMode == StudioToolMode.pan) {
+                                  _activeDrag = _DragTarget.canvasPan;
+                                  return;
+                                }
+
+                                final touchScreen = details.localPosition;
+                                if (_editingDimId != null) {
+                                  final curRect =
+                                      _dimensionBadgeRects[_editingDimId] ??
+                                      _editingDimRect;
+                                  if (curRect == null ||
+                                      !curRect
+                                          .inflate(8.0)
+                                          .contains(touchScreen)) {
+                                    _commitInPlaceDimensionEdit(viewModel);
+                                  }
+                                }
+                                final cadPt = screenToCad(touchScreen);
+                                _draggedBendId = null;
+                                _draggedCutId = null;
+                                _draggedDimId = null;
+                                _draggedDimLineId = null;
+
+                                bool found = false;
+
+                                // 0a. Direct hit-test on ANY movable port badge
+                                for (final entry in _portBadgeRects.entries) {
+                                  if (entry.value
+                                      .inflate(4.0)
+                                      .contains(touchScreen)) {
+                                    _activeDrag = _DragTarget.portBadge;
+                                    _draggedPortBadgeId = entry.key;
+                                    _hasMovedPortBadge = false;
+                                    _dragStartScreen = touchScreen;
+                                    _dragPortBadgeStartOffset =
+                                        viewModel.portBadgeOffsets[entry.key] ??
+                                        Offset.zero;
+                                    found = true;
+                                    break;
+                                  }
+                                }
+
+                                // 0b. Direct hit-test on ANY movable dimension badge
+                                if (!found) {
+                                  for (final entry
+                                      in _dimensionBadgeRects.entries) {
+                                    if (entry.value
+                                        .inflate(4.0)
+                                        .contains(touchScreen)) {
+                                      _activeDrag = _DragTarget.dimensionBadge;
+                                      _draggedDimId = entry.key;
+                                      _dragStartScreen = touchScreen;
+                                      _dragDimensionStartOffset =
+                                          viewModel.dimensionOffsets[entry
+                                              .key] ??
+                                          Offset.zero;
+                                      if (viewModel.document.dimensions.any(
+                                        (d) => d.id == entry.key,
+                                      )) {
+                                        viewModel.selectDimension(entry.key);
+                                        _isInspectorCollapsed = false;
+                                      }
+                                      found = true;
+                                      break;
+                                    }
+                                  }
+                                }
+
+                                // 0b2. Direct hit-test on ANY movable dimension line segment
+                                if (!found) {
+                                  for (final entry
+                                      in _dimensionLineSegments.entries) {
+                                    if (_distToScreenSegment(
+                                          touchScreen,
+                                          entry.value.pA,
+                                          entry.value.pB,
+                                        ) <=
+                                        8.0) {
+                                      _activeDrag = _DragTarget.dimensionLine;
+                                      _draggedDimLineId = entry.key;
+                                      viewModel.selectDimension(entry.key);
+                                      _isInspectorCollapsed = false;
+                                      found = true;
+                                      break;
+                                    }
+                                  }
+                                }
+
+                                // 0c. Direct hit-test on ANY interactive constraint badge
+                                if (!found) {
+                                  for (final entry
+                                      in _constraintBadgeRects.entries) {
+                                    if (entry.value
+                                        .inflate(4.0)
+                                        .contains(touchScreen)) {
+                                      final badge = entry.value;
+                                      final isDeleteRegion =
+                                          touchScreen.dx > (badge.right - 18);
+                                      if (isDeleteRegion &&
+                                          (viewModel.selectedConstraintId ==
+                                                  entry.key ||
+                                              _hoveredConstraintId ==
+                                                  entry.key)) {
+                                        viewModel.removeConstraint(entry.key);
+                                        setState(() {
+                                          _hoveredConstraintId = null;
+                                          _constraintHoverHighlightedEntityIds
+                                              .clear();
+                                        });
+                                      } else {
+                                        viewModel.selectConstraint(entry.key);
+                                      }
+                                      found = true;
+                                      break;
+                                    }
+                                  }
+                                }
+
+                                final isDrawingTool =
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addBend ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addFlange ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addCut ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.drawRectangle ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.drawCircle ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.drawArc ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.drawPolyline ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addPunchRound ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addPunchObround ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addPunchSquare ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.dragDimension;
+
+                                // 1. Direct hit-test on ANY bend line endpoint (P1 or P2)
+                                if (!found && !isDrawingTool) {
+                                  for (final b in viewModel.document.bends) {
+                                    if (!b.isVisible) continue;
+                                    final s1 = cadToScreen(b.p1);
+                                    final s2 = cadToScreen(b.p2);
+                                    if ((touchScreen - s1).distance <= 20.0) {
+                                      if (isShiftHeld) {
+                                        viewModel.toggleEntitySelection(b.id);
+                                        _shiftSelectionHandledInPan = true;
+                                        found = true;
+                                        _activeDrag = _DragTarget.none;
+                                        break;
+                                      }
+                                      viewModel.selectBend(b.id);
+                                      _activeDrag = _DragTarget.bendP1;
+                                      _draggedBendId = b.id;
+                                      found = true;
+                                      break;
+                                    } else if ((touchScreen - s2).distance <=
+                                        20.0) {
+                                      if (isShiftHeld) {
+                                        viewModel.toggleEntitySelection(b.id);
+                                        _shiftSelectionHandledInPan = true;
+                                        found = true;
+                                        _activeDrag = _DragTarget.none;
+                                        break;
+                                      }
+                                      viewModel.selectBend(b.id);
+                                      _activeDrag = _DragTarget.bendP2;
+                                      _draggedBendId = b.id;
+                                      found = true;
+                                      break;
+                                    }
+                                  }
+
+                                  // 2. Direct hit-test on ANY cut line endpoint (P1 or P2)
+                                  if (!found) {
+                                    for (final c
+                                        in viewModel.document.cutLines) {
+                                      if (!c.isVisible) continue;
+                                      final s1 = cadToScreen(c.p1);
+                                      final s2 = cadToScreen(c.p2);
+                                      if ((touchScreen - s1).distance <= 20.0) {
+                                        if (isShiftHeld) {
+                                          viewModel.toggleEntitySelection(c.id);
+                                          _shiftSelectionHandledInPan = true;
+                                          found = true;
+                                          _activeDrag = _DragTarget.none;
+                                          break;
+                                        }
+                                        viewModel.selectCut(c.id);
+                                        _activeDrag = _DragTarget.cutP1;
+                                        _draggedCutId = c.id;
+                                        found = true;
+                                        break;
+                                      } else if ((touchScreen - s2).distance <=
+                                          20.0) {
+                                        if (isShiftHeld) {
+                                          viewModel.toggleEntitySelection(c.id);
+                                          _shiftSelectionHandledInPan = true;
+                                          found = true;
+                                          _activeDrag = _DragTarget.none;
+                                          break;
+                                        }
+                                        viewModel.selectCut(c.id);
+                                        _activeDrag = _DragTarget.cutP2;
+                                        _draggedCutId = c.id;
+                                        found = true;
+                                        break;
+                                      }
+                                    }
+                                  }
+
+                                  // 3. Direct hit-test along ANY bend line body
+                                  if (!found) {
+                                    for (final b in viewModel.document.bends) {
+                                      if (!b.isVisible) continue;
+                                      final d =
+                                          _distToSegment(cadPt, b.p1, b.p2) *
+                                          scale;
+                                      if (d <= 14.0) {
+                                        if (isShiftHeld) {
+                                          viewModel.toggleEntitySelection(b.id);
+                                          _shiftSelectionHandledInPan = true;
+                                          found = true;
+                                          _activeDrag = _DragTarget.none;
+                                          break;
+                                        }
+                                        viewModel.selectBend(b.id);
+                                        _activeDrag = _DragTarget.bendBody;
+                                        _draggedBendId = b.id;
+                                        found = true;
+                                        break;
+                                      }
+                                    }
+                                  }
+
+                                  // 4. Direct hit-test along ANY cut line body
+                                  if (!found) {
+                                    for (final c
+                                        in viewModel.document.cutLines) {
+                                      if (!c.isVisible) continue;
+                                      final d =
+                                          _distToSegment(cadPt, c.p1, c.p2) *
+                                          scale;
+                                      if (d <= 14.0) {
+                                        if (isShiftHeld) {
+                                          viewModel.toggleEntitySelection(c.id);
+                                          _shiftSelectionHandledInPan = true;
+                                          found = true;
+                                          _activeDrag = _DragTarget.none;
+                                          break;
+                                        }
+                                        viewModel.selectCut(c.id);
+                                        _activeDrag = _DragTarget.cutBody;
+                                        _draggedCutId = c.id;
+                                        found = true;
+                                        break;
+                                      }
+                                    }
+                                  }
+
+                                  // 4b. Direct hit-test along ANY arc entity
+                                  if (!found) {
+                                    for (final a in viewModel.document.arcs) {
+                                      final d = a.distanceTo(cadPt) * scale;
+                                      if (d <= 14.0) {
+                                        if (isShiftHeld) {
+                                          viewModel.toggleEntitySelection(a.id);
+                                          _shiftSelectionHandledInPan = true;
+                                          found = true;
+                                          _activeDrag = _DragTarget.none;
+                                          break;
+                                        }
+                                        viewModel.setSelectedArc(a.id);
+                                        viewModel.setPropertyInspectorOpen(
+                                          true,
+                                        );
+                                        _isInspectorCollapsed = false;
+                                        found = true;
+                                        _activeDrag = _DragTarget.none;
+                                        break;
+                                      }
+                                    }
+                                  }
+
+                                  // 5. Direct hit-test on ANY punch (with Selection Cycling for overlapping punches)
+                                  if (!found) {
+                                    final hitPunches = <CncPunchPrimitive>[];
+                                    for (final p
+                                        in viewModel.document.punches) {
+                                      if (!p.isVisible) continue;
+                                      final dist = cadPt.distanceTo(p.center);
+                                      final effRadius = p.isRound
+                                          ? p.diameterMm / 2.0
+                                          : math.max(p.widthMm, p.lengthMm) /
+                                                2.0;
+                                      final hitR = math.max(
+                                        14.0 / scale,
+                                        effRadius + 3.0,
+                                      );
+                                      if (dist <= hitR) {
+                                        hitPunches.add(p);
+                                      }
+                                    }
+
+                                    if (hitPunches.isNotEmpty) {
+                                      if (isShiftHeld) {
+                                        hitPunches.sort(
+                                          (a, b) => cadPt
+                                              .distanceTo(a.center)
+                                              .compareTo(
+                                                cadPt.distanceTo(b.center),
+                                              ),
+                                        );
+                                        final targetPunch = hitPunches.first;
+                                        viewModel.toggleEntitySelection(
+                                          targetPunch.id,
+                                        );
+                                        _shiftSelectionHandledInPan = true;
+                                        _activeDrag = _DragTarget.none;
+                                        found = true;
+                                      } else {
+                                        final currIdx = hitPunches.indexWhere(
+                                          (p) =>
+                                              p.id == viewModel.selectedPunchId,
+                                        );
+                                        final nextPunch =
+                                            hitPunches[(currIdx + 1) %
+                                                hitPunches.length];
+                                        viewModel.selectPunch(nextPunch.id);
+                                        _activeDrag = _DragTarget.punch;
+                                        found = true;
+                                      }
+                                    }
+                                  }
+
+                                  // 5b. Direct hit-test on ANY perforation pattern
+                                  if (!found) {
+                                    for (final pat
+                                        in viewModel
+                                            .document
+                                            .perforationPatterns) {
+                                      if (!pat.isVisible) continue;
+                                      final holeIdx = pat.findHoleAt(
+                                        cadPt,
+                                        maxDistMm: 16.0 / scale,
+                                      );
+                                      if (holeIdx != null ||
+                                          pat.containsPoint(cadPt)) {
+                                        if (isShiftHeld) {
+                                          viewModel.toggleEntitySelection(
+                                            pat.id,
+                                          );
+                                          _shiftSelectionHandledInPan = true;
+                                          found = true;
+                                          _activeDrag = _DragTarget.none;
+                                          break;
+                                        }
+                                        viewModel.selectPattern(
+                                          pat.id,
+                                          holeIdx,
+                                        );
+                                        // Per user requirement: applied perforations must NOT be movable by mouse dragging!
+                                        found = true;
+                                        _activeDrag = _DragTarget.none;
+                                        break;
+                                      }
+                                    }
+                                  }
+                                }
+
+                                if (found) {
+                                  if (!isShiftHeld &&
+                                      _activeDrag != _DragTarget.none &&
+                                      _activeDrag !=
+                                          _DragTarget.dimensionBadge) {
+                                    viewModel.beginObjectDrag();
+                                  }
+                                } else {
+                                  if (isDrawingTool) {
+                                    final screenSnapMm = (8.0 / scale).clamp(
+                                      1.5,
+                                      8.0,
+                                    );
+                                    _drawStartAltPressed = _isAltPressed();
+
+                                    CadPoint2D effectiveStart;
+                                    if (_drawStartAltPressed) {
+                                      // Free mode for start point when Alt is held
+                                      effectiveStart = cadPt;
+                                    } else {
+                                      // Magnetic snap to nearest geometry/spanning point
+                                      viewModel.updateCursorMm(
+                                        cadPt,
+                                        snapRadiusMm: screenSnapMm,
+                                      );
+                                      effectiveStart =
+                                          viewModel.activeSnap?.point ??
+                                          viewModel.resolveEffectivePoint(
+                                            cadPt,
+                                            snapRadiusMm: screenSnapMm,
+                                          );
+                                    }
+
+                                    _activeDrag = _DragTarget.drawEntity;
+                                    _drawDragStartScreen = touchScreen;
+                                    _drawDragCurrentScreen = touchScreen;
+                                    _drawDragStartCad = effectiveStart;
+                                    _drawDragCommitted = false;
+
+                                    if (viewModel.pendingBendStart == null &&
+                                        viewModel.toolMode !=
+                                            StudioToolMode.drawArc &&
+                                        viewModel.toolMode !=
+                                            StudioToolMode.drawPolyline) {
+                                      viewModel.setPendingBendStart(
+                                        effectiveStart,
+                                      );
+                                    }
+                                    setState(() {});
+                                  } else if (viewModel.toolMode ==
+                                      StudioToolMode.select) {
+                                    // In Select mode, dragging on blank canvas starts box selection
+                                    _activeDrag = _DragTarget.boxSelect;
+                                    _boxSelectStart = touchScreen;
+                                    _boxSelectCurrent = touchScreen;
+                                    setState(() {});
+                                  } else {
+                                    // Dragging on blank canvas/surface in other modes pans the 2D flat view
+                                    _activeDrag = _DragTarget.canvasPan;
+                                  }
+                                }
+                              },
+                              onPanUpdate: (details) {
+                                if (_activeDrag == _DragTarget.boxSelect) {
+                                  setState(() {
+                                    _boxSelectCurrent = details.localPosition;
+                                  });
+                                  return;
+                                }
+
+                                final cadPt = screenToCad(
+                                  details.localPosition,
+                                );
+
+                                if (_activeDrag == _DragTarget.drawEntity) {
+                                  _drawDragCurrentScreen =
+                                      details.localPosition;
+                                  final screenSnapMm = (8.0 / scale).clamp(
+                                    1.5,
+                                    8.0,
+                                  );
+                                  final isEndAlt = _isAltPressed();
+
+                                  final isLineTool =
+                                      viewModel.toolMode ==
+                                          StudioToolMode.addBend ||
+                                      viewModel.toolMode ==
+                                          StudioToolMode.addFlange ||
+                                      viewModel.toolMode ==
+                                          StudioToolMode.addCut ||
+                                      viewModel.toolMode ==
+                                          StudioToolMode.dragDimension ||
+                                      viewModel.toolMode ==
+                                          StudioToolMode.drawPolyline;
+
+                                  CadPoint2D effectivePt = cadPt;
+
+                                  if (isEndAlt) {
+                                    // Alt is pressed during drag: end point moves freely without snapping
+                                    effectivePt = cadPt;
+                                    viewModel.clearSnap();
+                                    if (isLineTool &&
+                                        _drawDragStartCad != null) {
+                                      final dx =
+                                          effectivePt.x - _drawDragStartCad!.x;
+                                      final dy =
+                                          effectivePt.y - _drawDragStartCad!.y;
+                                      double angle =
+                                          math.atan2(dy, dx) * 180.0 / math.pi;
+                                      if (angle < 0) angle += 360.0;
+                                      final toolLabel =
+                                          viewModel.toolMode ==
+                                              StudioToolMode.addCut
+                                          ? "CUT"
+                                          : (viewModel.toolMode ==
+                                                    StudioToolMode.dragDimension
+                                                ? "DIM"
+                                                : (viewModel.toolMode ==
+                                                          StudioToolMode
+                                                              .drawPolyline
+                                                      ? "LINE"
+                                                      : "BEND"));
+                                      _dragAngleInfo = (
+                                        point: effectivePt,
+                                        label:
+                                            '$toolLabel ${angle.round() % 360}° (Alt Free)',
+                                      );
+                                    } else {
+                                      _dragAngleInfo = null;
+                                    }
+                                  } else {
+                                    // Alt is not pressed: end point snaps on 5 degrees and nearest geometry
+                                    if (isLineTool &&
+                                        _drawDragStartCad != null) {
+                                      effectivePt =
+                                          SheetMetalStudioViewModel.snapEndpointAngle(
+                                            anchor: _drawDragStartCad!,
+                                            target: effectivePt,
+                                            isAlt: false,
+                                          );
+                                      final dx =
+                                          effectivePt.x - _drawDragStartCad!.x;
+                                      final dy =
+                                          effectivePt.y - _drawDragStartCad!.y;
+                                      double angle =
+                                          math.atan2(dy, dx) * 180.0 / math.pi;
+                                      if (angle < 0) angle += 360.0;
+                                      final toolLabel =
+                                          viewModel.toolMode ==
+                                              StudioToolMode.addCut
+                                          ? "CUT"
+                                          : (viewModel.toolMode ==
+                                                    StudioToolMode.dragDimension
+                                                ? "DIM"
+                                                : (viewModel.toolMode ==
+                                                          StudioToolMode
+                                                              .drawPolyline
+                                                      ? "LINE"
+                                                      : "BEND"));
+                                      _dragAngleInfo = (
+                                        point: effectivePt,
+                                        label:
+                                            '$toolLabel ${angle.round() % 360}°',
+                                      );
+                                    } else {
+                                      _dragAngleInfo = null;
+                                    }
+
+                                    // Magnetic snapping to nearest entity
+                                    viewModel.updateCursorMm(
+                                      effectivePt,
+                                      snapRadiusMm: screenSnapMm,
+                                    );
+                                    effectivePt =
+                                        viewModel.activeSnap?.point ??
+                                        effectivePt;
+                                  }
+
+                                  viewModel.updateRubberBand(effectivePt);
+                                  setState(() {});
+                                  return;
+                                }
+
+                                // Determine fixed anchor for line endpoint dragging to anchor angle snapping
+                                CadPoint2D? anchor;
+                                bool isCutLineDrag = false;
+
+                                if (_activeDrag == _DragTarget.bendP1) {
+                                  final targetBendId =
+                                      _draggedBendId ?? selectedBend?.id;
+                                  final b = viewModel.document.bends
+                                      .cast<FoldBendLine?>()
+                                      .firstWhere(
+                                        (x) => x?.id == targetBendId,
+                                        orElse: () => null,
+                                      );
+                                  if (b != null) anchor = b.p2;
+                                } else if (_activeDrag == _DragTarget.bendP2) {
+                                  final targetBendId =
+                                      _draggedBendId ?? selectedBend?.id;
+                                  final b = viewModel.document.bends
+                                      .cast<FoldBendLine?>()
+                                      .firstWhere(
+                                        (x) => x?.id == targetBendId,
+                                        orElse: () => null,
+                                      );
+                                  if (b != null) anchor = b.p1;
+                                } else if (_activeDrag == _DragTarget.cutP1) {
+                                  isCutLineDrag = true;
+                                  final targetCutId =
+                                      _draggedCutId ?? selectedCut?.id;
+                                  final c = viewModel.document.cutLines
+                                      .cast<CadLineSegment?>()
+                                      .firstWhere(
+                                        (x) => x?.id == targetCutId,
+                                        orElse: () => null,
+                                      );
+                                  if (c != null) anchor = c.p2;
+                                } else if (_activeDrag == _DragTarget.cutP2) {
+                                  isCutLineDrag = true;
+                                  final targetCutId =
+                                      _draggedCutId ?? selectedCut?.id;
+                                  final c = viewModel.document.cutLines
+                                      .cast<CadLineSegment?>()
+                                      .firstWhere(
+                                        (x) => x?.id == targetCutId,
+                                        orElse: () => null,
+                                      );
+                                  if (c != null) anchor = c.p1;
+                                }
+
+                                CadPoint2D candidate = cadPt;
+                                int currentAngleDeg = 0;
+                                bool isAlt = false;
+                                try {
+                                  isAlt =
+                                      HardwareKeyboard.instance.isAltPressed;
+                                } catch (_) {}
+
+                                if (anchor != null) {
+                                  candidate =
+                                      SheetMetalStudioViewModel.snapEndpointAngle(
+                                        anchor: anchor,
+                                        target: cadPt,
+                                        isAlt: isAlt,
+                                      );
+                                  final dx = candidate.x - anchor.x;
+                                  final dy = candidate.y - anchor.y;
+                                  double angle =
+                                      math.atan2(dy, dx) * 180.0 / math.pi;
+                                  if (angle < 0) angle += 360.0;
+                                  currentAngleDeg = angle.round() % 360;
+                                }
+
+                                // Live magnetic snap update during dragging (lines snap, punches move smoothly)
+                                if (_activeDrag == _DragTarget.bendP1 ||
+                                    _activeDrag == _DragTarget.bendP2 ||
+                                    _activeDrag == _DragTarget.cutP1 ||
+                                    _activeDrag == _DragTarget.cutP2) {
+                                  final screenSnapMm = (8.0 / scale).clamp(
+                                    1.5,
+                                    8.0,
+                                  );
+                                  viewModel.updateCursorMm(
+                                    candidate,
+                                    snapRadiusMm: screenSnapMm,
                                   );
                                 }
-                              }
-                            }
-                            _drawDragCommitted = true;
-                          } else {
-                            // Single click without drag (<= 6px)
-                            final clickCad = _drawDragStartCad ?? viewModel.pendingBendStart;
+                                final effectivePt =
+                                    viewModel.activeSnap?.point ?? candidate;
 
-                            if (clickCad != null &&
-                                (viewModel.toolMode == StudioToolMode.drawRectangle ||
-                                 viewModel.toolMode == StudioToolMode.addPunchSquare)) {
-                              final center = clickCad;
-                              final w = viewModel.toolConfig.squareAspectLocked
-                                  ? viewModel.toolConfig.squareSize
-                                  : viewModel.toolConfig.rectWidth;
-                              final h = viewModel.toolConfig.squareAspectLocked
-                                  ? viewModel.toolConfig.squareSize
-                                  : viewModel.toolConfig.rectHeight;
-                              final effW = w > 0 ? w : 20.0;
-                              final effH = h > 0 ? h : 20.0;
-                              final newId = 'P${viewModel.document.punches.length + 1}';
-                              final p = CncTurretEngine.createRectangularPunch(
-                                id: newId,
-                                center: center,
-                                widthMm: effW,
-                                heightMm: effH,
-                              );
-                              viewModel.addPunch(p);
-                              viewModel.selectPunch(p.id);
-                              viewModel.setPendingBendStart(null);
-                              viewModel.setToolMode(StudioToolMode.select);
-                              _drawDragCommitted = true;
-                            } else if (clickCad != null &&
-                                (viewModel.toolMode == StudioToolMode.drawCircle ||
-                                 viewModel.toolMode == StudioToolMode.addPunchRound)) {
-                              final center = clickCad;
-                              final diam = viewModel.toolConfig.roundHoleDiameter > 0
-                                  ? viewModel.toolConfig.roundHoleDiameter
-                                  : 10.0;
-                              final newId = 'P${viewModel.document.punches.length + 1}';
-                              final p = CncTurretEngine.createRoundHole(
-                                id: newId,
-                                center: center,
-                                diameterMm: diam,
-                              );
-                              viewModel.addPunch(p);
-                              viewModel.selectPunch(p.id);
-                              viewModel.setPendingBendStart(null);
-                              viewModel.setToolMode(StudioToolMode.select);
-                              _drawDragCommitted = true;
-                            } else if (clickCad != null && viewModel.toolMode == StudioToolMode.addPunchObround) {
-                              final center = clickCad;
-                              final effW = viewModel.toolConfig.obroundLength > 0 ? viewModel.toolConfig.obroundLength : 25.0;
-                              final effL = viewModel.toolConfig.obroundWidth > 0 ? viewModel.toolConfig.obroundWidth : 10.0;
-                              final newId = 'P${viewModel.document.punches.length + 1}';
-                              final p = CncTurretEngine.createObroundSlot(
-                                id: newId,
-                                center: center,
-                                widthMm: effW,
-                                lengthMm: effL,
-                              );
-                              viewModel.addPunch(p);
-                              viewModel.selectPunch(p.id);
-                              viewModel.setPendingBendStart(null);
-                              viewModel.setToolMode(StudioToolMode.select);
-                              _drawDragCommitted = true;
-                            } else if (clickCad != null && viewModel.toolMode == StudioToolMode.dragDimension) {
-                              if (viewModel.pendingBendStart == null) {
-                                viewModel.setPendingBendStart(clickCad);
-                              } else {
-                                final pA = viewModel.pendingBendStart!;
-                                final pB = clickCad;
-                                if (pA.distanceTo(pB) > 0.5) {
-                                  viewModel.commitDragDimension(pA: pA, pB: pB);
+                                if (anchor != null) {
+                                  _dragAngleInfo = (
+                                    point: effectivePt,
+                                    label:
+                                        '${isCutLineDrag ? "CUT" : "BEND"} $currentAngleDeg° ${isAlt ? "(Alt Free)" : ""}',
+                                  );
+                                } else {
+                                  _dragAngleInfo = null;
                                 }
-                                viewModel.setPendingBendStart(null);
-                                viewModel.setToolMode(StudioToolMode.select);
-                              }
-                              _drawDragCommitted = true;
-                            } else {
-                              // Standard multi-click line/polyline/arc drawing:
-                              if (viewModel.pendingBendStart != null && _drawDragStartCad != null &&
-                                  viewModel.pendingBendStart != _drawDragStartCad) {
-                                viewModel.handleCanvasClick(
-                                  _drawDragStartCad!,
-                                  snapRadiusMm: screenSnapMm,
-                                  autoPlace: false,
-                                );
-                                if (viewModel.selectedDimensionId != null) {
-                                  final newlyCreated = viewModel.document.dimensions
-                                      .where((d) => d.id == viewModel.selectedDimensionId)
-                                      .firstOrNull;
-                                  if (newlyCreated != null) {
-                                    _openInlineDimensionCallout(
-                                      screenPos: _drawDragStartScreen ?? _drawDragCurrentScreen ?? Offset.zero,
-                                      dimId: newlyCreated.id,
-                                      pA: newlyCreated.pointA,
-                                      pB: newlyCreated.pointB,
-                                      referenceAId: newlyCreated.referenceAId,
-                                      referenceBId: newlyCreated.referenceBId,
-                                      measuredValue: newlyCreated.measuredValue,
-                                      offset: newlyCreated.dimensionLineOffset,
+
+                                switch (_activeDrag) {
+                                  case _DragTarget.boxSelect:
+                                    break;
+
+                                  case _DragTarget.canvasPan:
+                                    viewModel.pan2DCanvas(details.delta);
+                                    break;
+
+                                  case _DragTarget.portBadge:
+                                    if (_draggedPortBadgeId != null) {
+                                      if ((details.localPosition -
+                                                  _dragStartScreen)
+                                              .distance >
+                                          4.0) {
+                                        _hasMovedPortBadge = true;
+                                      }
+                                      final currentOffset =
+                                          _dragPortBadgeStartOffset +
+                                          (details.localPosition -
+                                              _dragStartScreen);
+                                      viewModel.setPortBadgeOffset(
+                                        _draggedPortBadgeId!,
+                                        currentOffset,
+                                      );
+                                    }
+                                    break;
+
+                                  case _DragTarget.dimensionBadge:
+                                    if (_draggedDimId != null) {
+                                      final currentOffset =
+                                          _dragDimensionStartOffset +
+                                          (details.localPosition -
+                                              _dragStartScreen);
+                                      viewModel.setDimensionOffset(
+                                        _draggedDimId!,
+                                        currentOffset,
+                                      );
+                                    }
+                                    break;
+
+                                  case _DragTarget.dimensionLine:
+                                    if (_draggedDimLineId != null) {
+                                      final dim = viewModel.document.dimensions
+                                          .where(
+                                            (d) => d.id == _draggedDimLineId,
+                                          )
+                                          .firstOrNull;
+                                      if (dim != null) {
+                                        final assoc =
+                                            AssociativeDimensionEngine.resolveAssociation(
+                                              dim,
+                                              viewModel.document,
+                                            );
+                                        final pA = assoc.pA;
+                                        final pB = assoc.pB;
+                                        double newOffset =
+                                            dim.dimensionLineOffset;
+
+                                        if (dim.type ==
+                                            CadDimensionType.horizontal) {
+                                          final minY = math.min(pA.y, pB.y);
+                                          newOffset = minY - cadPt.y;
+                                        } else if (dim.type ==
+                                            CadDimensionType.vertical) {
+                                          final minX = math.min(pA.x, pB.x);
+                                          newOffset = minX - cadPt.x;
+                                        } else {
+                                          final dx = pB.x - pA.x;
+                                          final dy = pB.y - pA.y;
+                                          final len = math.sqrt(
+                                            dx * dx + dy * dy,
+                                          );
+                                          if (len > 1e-4) {
+                                            final nx = -dy / len;
+                                            final ny = dx / len;
+                                            newOffset =
+                                                (cadPt.x - pA.x) * nx +
+                                                (cadPt.y - pA.y) * ny;
+                                          }
+                                        }
+                                        viewModel.setDimensionLineOffset(
+                                          _draggedDimLineId!,
+                                          newOffset,
+                                        );
+                                      } else {
+                                        final seg =
+                                            _dimensionLineSegments[_draggedDimLineId!];
+                                        if (seg != null) {
+                                          double newOffset = seg.offsetDist;
+                                          if (seg.type ==
+                                              CadDimensionType.horizontal) {
+                                            final refY = math.min(
+                                              seg.ptA.y,
+                                              seg.ptB.y,
+                                            );
+                                            newOffset = math.max(
+                                              6.0,
+                                              (refY - cadPt.y).abs(),
+                                            );
+                                          } else if (seg.type ==
+                                              CadDimensionType.vertical) {
+                                            final refX = math.min(
+                                              seg.ptA.x,
+                                              seg.ptB.x,
+                                            );
+                                            newOffset = math.max(
+                                              6.0,
+                                              (refX - cadPt.x).abs(),
+                                            );
+                                          }
+                                          viewModel.setDimensionLineOffset(
+                                            _draggedDimLineId!,
+                                            newOffset,
+                                          );
+                                        }
+                                      }
+                                    }
+                                    break;
+
+                                  case _DragTarget.punch:
+                                    viewModel.moveSelectedPunch(candidate);
+                                    break;
+
+                                  case _DragTarget.pattern:
+                                    if (viewModel.selectedPatternId != null &&
+                                        details.delta.distance > 0.05) {
+                                      viewModel.movePattern(
+                                        viewModel.selectedPatternId!,
+                                        candidate,
+                                      );
+                                    }
+                                    break;
+
+                                  case _DragTarget.bendP1:
+                                    final targetBendId =
+                                        _draggedBendId ?? selectedBend?.id;
+                                    if (targetBendId != null) {
+                                      viewModel.updateBendEndpoint(
+                                        bendId: targetBendId,
+                                        isP1: true,
+                                        newPoint: effectivePt,
+                                      );
+                                    }
+                                    break;
+
+                                  case _DragTarget.bendP2:
+                                    final targetBendId =
+                                        _draggedBendId ?? selectedBend?.id;
+                                    if (targetBendId != null) {
+                                      viewModel.updateBendEndpoint(
+                                        bendId: targetBendId,
+                                        isP1: false,
+                                        newPoint: effectivePt,
+                                      );
+                                    }
+                                    break;
+
+                                  case _DragTarget.bendBody:
+                                    final cadDelta = CadPoint2D(
+                                      details.delta.dx / scale,
+                                      details.delta.dy / scale,
+                                    );
+                                    if (cadDelta.x.abs() > 0.0 ||
+                                        cadDelta.y.abs() > 0.0) {
+                                      viewModel.moveSelectedBend(cadDelta);
+                                    }
+                                    break;
+
+                                  case _DragTarget.cutP1:
+                                    final targetCutId =
+                                        _draggedCutId ?? selectedCut?.id;
+                                    if (targetCutId != null) {
+                                      viewModel.updateCutEndpoint(
+                                        cutId: targetCutId,
+                                        isP1: true,
+                                        newPoint: effectivePt,
+                                      );
+                                    }
+                                    break;
+
+                                  case _DragTarget.cutP2:
+                                    final targetCutId =
+                                        _draggedCutId ?? selectedCut?.id;
+                                    if (targetCutId != null) {
+                                      viewModel.updateCutEndpoint(
+                                        cutId: targetCutId,
+                                        isP1: false,
+                                        newPoint: effectivePt,
+                                      );
+                                    }
+                                    break;
+
+                                  case _DragTarget.cutBody:
+                                    final cadDeltaCut = CadPoint2D(
+                                      details.delta.dx / scale,
+                                      details.delta.dy / scale,
+                                    );
+                                    if (cadDeltaCut.x.abs() > 0.0 ||
+                                        cadDeltaCut.y.abs() > 0.0) {
+                                      viewModel.moveSelectedCut(cadDeltaCut);
+                                    }
+                                    break;
+
+                                  case _DragTarget.drawEntity:
+                                    break;
+
+                                  case _DragTarget.none:
+                                    break;
+                                }
+                              },
+                              onPanEnd: (_) {
+                                if (_activeDrag == _DragTarget.drawEntity) {
+                                  final dragDist =
+                                      (_drawDragStartScreen != null &&
+                                          _drawDragCurrentScreen != null)
+                                      ? (_drawDragCurrentScreen! -
+                                                _drawDragStartScreen!)
+                                            .distance
+                                      : 0.0;
+                                  final screenSnapMm = (8.0 / scale).clamp(
+                                    1.5,
+                                    8.0,
+                                  );
+
+                                  if (dragDist > 6.0) {
+                                    // Onshape-style: Drag & Release committed the entity!
+                                    final endScreen =
+                                        _drawDragCurrentScreen ??
+                                        _drawDragStartScreen!;
+                                    final endCad = screenToCad(endScreen);
+                                    final isEndAlt = _isAltPressed();
+
+                                    final isLineTool =
+                                        viewModel.toolMode ==
+                                            StudioToolMode.addBend ||
+                                        viewModel.toolMode ==
+                                            StudioToolMode.addFlange ||
+                                        viewModel.toolMode ==
+                                            StudioToolMode.addCut ||
+                                        viewModel.toolMode ==
+                                            StudioToolMode.dragDimension ||
+                                        viewModel.toolMode ==
+                                            StudioToolMode.drawPolyline;
+
+                                    CadPoint2D effectiveEnd = endCad;
+                                    if (isEndAlt) {
+                                      // Free mode for end point (Alt held at release)
+                                      effectiveEnd = endCad;
+                                    } else {
+                                      // Snapped mode for end point (Alt NOT held at release)
+                                      if (_drawDragStartCad != null &&
+                                          isLineTool) {
+                                        effectiveEnd =
+                                            SheetMetalStudioViewModel.snapEndpointAngle(
+                                              anchor: _drawDragStartCad!,
+                                              target: effectiveEnd,
+                                              isAlt: false,
+                                            );
+                                      }
+                                      viewModel.updateCursorMm(
+                                        effectiveEnd,
+                                        snapRadiusMm: screenSnapMm,
+                                      );
+                                      effectiveEnd =
+                                          viewModel.activeSnap?.point ??
+                                          effectiveEnd;
+                                    }
+
+                                    if (viewModel.toolMode ==
+                                            StudioToolMode.drawCircle ||
+                                        viewModel.toolMode ==
+                                            StudioToolMode.addPunchRound) {
+                                      final center =
+                                          _drawDragStartCad ??
+                                          viewModel.pendingBendStart ??
+                                          effectiveEnd;
+                                      final radius = center.distanceTo(
+                                        effectiveEnd,
+                                      );
+                                      final diam = radius > 0.5
+                                          ? radius * 2.0
+                                          : (viewModel
+                                                        .toolConfig
+                                                        .roundHoleDiameter >
+                                                    0
+                                                ? viewModel
+                                                      .toolConfig
+                                                      .roundHoleDiameter
+                                                : 10.0);
+                                      final newId =
+                                          'P${viewModel.document.punches.length + 1}';
+                                      final p = CncTurretEngine.createRoundHole(
+                                        id: newId,
+                                        center: center,
+                                        diameterMm: diam,
+                                      );
+                                      viewModel.addPunch(p);
+                                      viewModel.selectPunch(p.id);
+                                      viewModel.setPendingBendStart(null);
+                                      viewModel.setToolMode(
+                                        StudioToolMode.select,
+                                      );
+                                    } else if (viewModel.toolMode ==
+                                            StudioToolMode.drawRectangle ||
+                                        viewModel.toolMode ==
+                                            StudioToolMode.addPunchSquare) {
+                                      final startPt =
+                                          _drawDragStartCad ??
+                                          viewModel.pendingBendStart ??
+                                          effectiveEnd;
+                                      final rawW = (effectiveEnd.x - startPt.x)
+                                          .abs();
+                                      final rawH = (effectiveEnd.y - startPt.y)
+                                          .abs();
+                                      final double effW;
+                                      final double effH;
+                                      if (viewModel
+                                          .toolConfig
+                                          .squareAspectLocked) {
+                                        final side = math.max(rawW, rawH);
+                                        effW = side > 1.0
+                                            ? side
+                                            : (viewModel.toolConfig.squareSize >
+                                                      0
+                                                  ? viewModel
+                                                        .toolConfig
+                                                        .squareSize
+                                                  : 20.0);
+                                        effH = effW;
+                                      } else {
+                                        effW = rawW > 1.0
+                                            ? rawW
+                                            : (viewModel.toolConfig.rectWidth >
+                                                      0
+                                                  ? viewModel
+                                                        .toolConfig
+                                                        .rectWidth
+                                                  : 20.0);
+                                        effH = rawH > 1.0
+                                            ? rawH
+                                            : (viewModel.toolConfig.rectHeight >
+                                                      0
+                                                  ? viewModel
+                                                        .toolConfig
+                                                        .rectHeight
+                                                  : 20.0);
+                                      }
+                                      final center = CadPoint2D(
+                                        (startPt.x + effectiveEnd.x) / 2.0,
+                                        (startPt.y + effectiveEnd.y) / 2.0,
+                                      );
+                                      final newId =
+                                          'P${viewModel.document.punches.length + 1}';
+                                      final p =
+                                          CncTurretEngine.createRectangularPunch(
+                                            id: newId,
+                                            center: center,
+                                            widthMm: effW,
+                                            heightMm: effH,
+                                          );
+                                      viewModel.addPunch(p);
+                                      viewModel.selectPunch(p.id);
+                                      viewModel.setPendingBendStart(null);
+                                      viewModel.setToolMode(
+                                        StudioToolMode.select,
+                                      );
+                                    } else if (viewModel.toolMode ==
+                                        StudioToolMode.addPunchObround) {
+                                      final center =
+                                          _drawDragStartCad ?? effectiveEnd;
+                                      final w =
+                                          (effectiveEnd.x - center.x).abs() *
+                                          2.0;
+                                      final l =
+                                          (effectiveEnd.y - center.y).abs() *
+                                          2.0;
+                                      final effW = w > 2.0
+                                          ? w
+                                          : viewModel.toolConfig.obroundLength;
+                                      final effL = l > 2.0
+                                          ? l
+                                          : viewModel.toolConfig.obroundWidth;
+                                      final newId =
+                                          'P${viewModel.document.punches.length + 1}';
+                                      final p =
+                                          CncTurretEngine.createObroundSlot(
+                                            id: newId,
+                                            center: center,
+                                            widthMm: effW,
+                                            lengthMm: effL,
+                                          );
+                                      viewModel.addPunch(p);
+                                      viewModel.selectPunch(p.id);
+                                      viewModel.setPendingBendStart(null);
+                                      viewModel.setToolMode(
+                                        StudioToolMode.select,
+                                      );
+                                    } else if (viewModel.toolMode ==
+                                        StudioToolMode.dragDimension) {
+                                      final start =
+                                          _drawDragStartCad ??
+                                          viewModel.pendingBendStart ??
+                                          effectiveEnd;
+                                      final end = effectiveEnd;
+                                      final dist = start.distanceTo(end);
+                                      if (dist > 0.5) {
+                                        viewModel.commitDragDimension(
+                                          pA: start,
+                                          pB: end,
+                                        );
+                                      }
+                                      viewModel.setPendingBendStart(null);
+                                      viewModel.setToolMode(
+                                        StudioToolMode.select,
+                                      );
+                                    } else if (viewModel.toolMode ==
+                                            StudioToolMode.addBend ||
+                                        viewModel.toolMode ==
+                                            StudioToolMode.addFlange) {
+                                      final p1 =
+                                          _drawDragStartCad ??
+                                          viewModel.pendingBendStart ??
+                                          effectiveEnd;
+                                      final p2 = effectiveEnd;
+                                      viewModel.setPendingBendStart(null);
+                                      if (p1.distanceTo(p2) > 1.0) {
+                                        if (viewModel.toolMode ==
+                                            StudioToolMode.addFlange) {
+                                          viewModel.addFlangeLine(p1, p2);
+                                        } else {
+                                          viewModel.addBendLine(p1, p2);
+                                        }
+                                      }
+                                      viewModel.setToolMode(
+                                        StudioToolMode.select,
+                                      );
+                                    } else if (viewModel.toolMode ==
+                                        StudioToolMode.addCut) {
+                                      final p1 =
+                                          _drawDragStartCad ??
+                                          viewModel.pendingBendStart ??
+                                          effectiveEnd;
+                                      final p2 = effectiveEnd;
+                                      viewModel.setPendingBendStart(null);
+                                      if (p1.distanceTo(p2) > 1.0) {
+                                        viewModel.addCutLine(p1, p2);
+                                      }
+                                      viewModel.setToolMode(
+                                        StudioToolMode.select,
+                                      );
+                                    } else {
+                                      viewModel.handleCanvasClick(
+                                        effectiveEnd,
+                                        snapRadiusMm: screenSnapMm,
+                                        autoPlace: false,
+                                      );
+                                      if (viewModel.selectedDimensionId !=
+                                          null) {
+                                        final newlyCreated = viewModel
+                                            .document
+                                            .dimensions
+                                            .where(
+                                              (d) =>
+                                                  d.id ==
+                                                  viewModel.selectedDimensionId,
+                                            )
+                                            .firstOrNull;
+                                        if (newlyCreated != null) {
+                                          final badgePos =
+                                              _drawDragCurrentScreen ??
+                                              _drawDragStartScreen ??
+                                              Offset.zero;
+                                          _startInPlaceDimensionEdit(
+                                            dimId: newlyCreated.id,
+                                            badgeRect: Rect.fromCenter(
+                                              center: badgePos,
+                                              width: 60,
+                                              height: 22,
+                                            ),
+                                            initialValue:
+                                                newlyCreated.measuredValue,
+                                            pA: newlyCreated.pointA,
+                                            pB: newlyCreated.pointB,
+                                            referenceAId:
+                                                newlyCreated.referenceAId,
+                                            referenceBId:
+                                                newlyCreated.referenceBId,
+                                            offset: newlyCreated
+                                                .dimensionLineOffset,
+                                          );
+                                        }
+                                      }
+                                    }
+                                    _drawDragCommitted = true;
+                                  } else {
+                                    // Single click without drag (<= 6px)
+                                    final clickCad =
+                                        _drawDragStartCad ??
+                                        viewModel.pendingBendStart;
+
+                                    if (clickCad != null &&
+                                        (viewModel.toolMode ==
+                                                StudioToolMode.drawRectangle ||
+                                            viewModel.toolMode ==
+                                                StudioToolMode
+                                                    .addPunchSquare)) {
+                                      final center = clickCad;
+                                      final w =
+                                          viewModel
+                                              .toolConfig
+                                              .squareAspectLocked
+                                          ? viewModel.toolConfig.squareSize
+                                          : viewModel.toolConfig.rectWidth;
+                                      final h =
+                                          viewModel
+                                              .toolConfig
+                                              .squareAspectLocked
+                                          ? viewModel.toolConfig.squareSize
+                                          : viewModel.toolConfig.rectHeight;
+                                      final effW = w > 0 ? w : 20.0;
+                                      final effH = h > 0 ? h : 20.0;
+                                      final newId =
+                                          'P${viewModel.document.punches.length + 1}';
+                                      final p =
+                                          CncTurretEngine.createRectangularPunch(
+                                            id: newId,
+                                            center: center,
+                                            widthMm: effW,
+                                            heightMm: effH,
+                                          );
+                                      viewModel.addPunch(p);
+                                      viewModel.selectPunch(p.id);
+                                      viewModel.setPendingBendStart(null);
+                                      viewModel.setToolMode(
+                                        StudioToolMode.select,
+                                      );
+                                      _drawDragCommitted = true;
+                                    } else if (clickCad != null &&
+                                        (viewModel.toolMode ==
+                                                StudioToolMode.drawCircle ||
+                                            viewModel.toolMode ==
+                                                StudioToolMode.addPunchRound)) {
+                                      final center = clickCad;
+                                      final diam =
+                                          viewModel
+                                                  .toolConfig
+                                                  .roundHoleDiameter >
+                                              0
+                                          ? viewModel
+                                                .toolConfig
+                                                .roundHoleDiameter
+                                          : 10.0;
+                                      final newId =
+                                          'P${viewModel.document.punches.length + 1}';
+                                      final p = CncTurretEngine.createRoundHole(
+                                        id: newId,
+                                        center: center,
+                                        diameterMm: diam,
+                                      );
+                                      viewModel.addPunch(p);
+                                      viewModel.selectPunch(p.id);
+                                      viewModel.setPendingBendStart(null);
+                                      viewModel.setToolMode(
+                                        StudioToolMode.select,
+                                      );
+                                      _drawDragCommitted = true;
+                                    } else if (clickCad != null &&
+                                        viewModel.toolMode ==
+                                            StudioToolMode.addPunchObround) {
+                                      final center = clickCad;
+                                      final effW =
+                                          viewModel.toolConfig.obroundLength > 0
+                                          ? viewModel.toolConfig.obroundLength
+                                          : 25.0;
+                                      final effL =
+                                          viewModel.toolConfig.obroundWidth > 0
+                                          ? viewModel.toolConfig.obroundWidth
+                                          : 10.0;
+                                      final newId =
+                                          'P${viewModel.document.punches.length + 1}';
+                                      final p =
+                                          CncTurretEngine.createObroundSlot(
+                                            id: newId,
+                                            center: center,
+                                            widthMm: effW,
+                                            lengthMm: effL,
+                                          );
+                                      viewModel.addPunch(p);
+                                      viewModel.selectPunch(p.id);
+                                      viewModel.setPendingBendStart(null);
+                                      viewModel.setToolMode(
+                                        StudioToolMode.select,
+                                      );
+                                      _drawDragCommitted = true;
+                                    } else if (clickCad != null &&
+                                        viewModel.toolMode ==
+                                            StudioToolMode.dragDimension) {
+                                      if (viewModel.pendingBendStart == null) {
+                                        viewModel.setPendingBendStart(clickCad);
+                                      } else {
+                                        final pA = viewModel.pendingBendStart!;
+                                        final pB = clickCad;
+                                        if (pA.distanceTo(pB) > 0.5) {
+                                          viewModel.commitDragDimension(
+                                            pA: pA,
+                                            pB: pB,
+                                          );
+                                        }
+                                        viewModel.setPendingBendStart(null);
+                                        viewModel.setToolMode(
+                                          StudioToolMode.select,
+                                        );
+                                      }
+                                      _drawDragCommitted = true;
+                                    } else {
+                                      // Standard multi-click line/polyline/arc drawing:
+                                      if (viewModel.pendingBendStart != null &&
+                                          _drawDragStartCad != null &&
+                                          viewModel.pendingBendStart !=
+                                              _drawDragStartCad) {
+                                        viewModel.handleCanvasClick(
+                                          _drawDragStartCad!,
+                                          snapRadiusMm: screenSnapMm,
+                                          autoPlace: false,
+                                        );
+                                        if (viewModel.selectedDimensionId !=
+                                            null) {
+                                          final newlyCreated = viewModel
+                                              .document
+                                              .dimensions
+                                              .where(
+                                                (d) =>
+                                                    d.id ==
+                                                    viewModel
+                                                        .selectedDimensionId,
+                                              )
+                                              .firstOrNull;
+                                          if (newlyCreated != null) {
+                                            final badgePos =
+                                                _drawDragCurrentScreen ??
+                                                _drawDragStartScreen ??
+                                                Offset.zero;
+                                            _startInPlaceDimensionEdit(
+                                              dimId: newlyCreated.id,
+                                              badgeRect: Rect.fromCenter(
+                                                center: badgePos,
+                                                width: 60,
+                                                height: 22,
+                                              ),
+                                              initialValue:
+                                                  newlyCreated.measuredValue,
+                                              pA: newlyCreated.pointA,
+                                              pB: newlyCreated.pointB,
+                                              referenceAId:
+                                                  newlyCreated.referenceAId,
+                                              referenceBId:
+                                                  newlyCreated.referenceBId,
+                                              offset: newlyCreated
+                                                  .dimensionLineOffset,
+                                            );
+                                          }
+                                        }
+                                        _drawDragCommitted = true;
+                                      } else {
+                                        if (viewModel.pendingBendStart ==
+                                                null &&
+                                            _drawDragStartCad != null) {
+                                          viewModel.setPendingBendStart(
+                                            _drawDragStartCad,
+                                          );
+                                        }
+                                        _drawDragCommitted = true;
+                                      }
+                                    }
+                                  }
+
+                                  _activeDrag = _DragTarget.none;
+                                  _drawDragStartScreen = null;
+                                  _drawDragCurrentScreen = null;
+                                  _drawDragStartCad = null;
+                                  _dragAngleInfo = null;
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (mounted) _drawDragCommitted = false;
+                                  });
+                                  setState(() {});
+                                  return;
+                                }
+
+                                if (_activeDrag == _DragTarget.boxSelect) {
+                                  if (_boxSelectStart != null &&
+                                      _boxSelectCurrent != null) {
+                                    final dist =
+                                        (_boxSelectCurrent! - _boxSelectStart!)
+                                            .distance;
+                                    if (dist > 6.0) {
+                                      final p1 = screenToCad(_boxSelectStart!);
+                                      final p2 = screenToCad(
+                                        _boxSelectCurrent!,
+                                      );
+                                      final cadBox = Rect.fromPoints(
+                                        Offset(p1.x, p1.y),
+                                        Offset(p2.x, p2.y),
+                                      );
+                                      final Set<String> selectedIds;
+                                      if (_boxSelectCurrent!.dx >=
+                                          _boxSelectStart!.dx) {
+                                        // Window selection (Left-to-Right): strictly contained
+                                        selectedIds =
+                                            MagneticSnapEngine.evaluateWindowSelection(
+                                              doc: viewModel.document,
+                                              cadBox: cadBox,
+                                            );
+                                      } else {
+                                        // Crossing selection (Right-to-Left): touches or intersects
+                                        selectedIds =
+                                            MagneticSnapEngine.evaluateCrossingSelection(
+                                              doc: viewModel.document,
+                                              cadBox: cadBox,
+                                            );
+                                      }
+                                      final isShiftHeld = _isShiftPressed();
+
+                                      if (isShiftHeld) {
+                                        viewModel.selectEntities({
+                                          ...viewModel.selectedEntityIds,
+                                          ...selectedIds,
+                                        });
+                                      } else {
+                                        viewModel.selectEntities(selectedIds);
+                                      }
+                                    } else {
+                                      final isShiftHeld = _isShiftPressed();
+                                      if (!isShiftHeld) {
+                                        viewModel.clearSelection();
+                                      }
+                                    }
+                                  }
+                                  _boxSelectStart = null;
+                                  _boxSelectCurrent = null;
+                                  _activeDrag = _DragTarget.none;
+                                  _shiftSelectionHandledInPan = false;
+                                  setState(() {});
+                                  return;
+                                }
+
+                                if (_draggedPortBadgeId != null &&
+                                    !_hasMovedPortBadge) {
+                                  final pId = _draggedPortBadgeId!;
+                                  _draggedPortBadgeId = null;
+                                  _activeDrag = _DragTarget.none;
+                                  _shiftSelectionHandledInPan = false;
+                                  _openPortDimensionEditor(pId);
+                                  return;
+                                }
+
+                                if (_activeDrag == _DragTarget.dimensionLine) {
+                                  if (_draggedDimLineId != null) {
+                                    viewModel.commitDimensionLineOffset(
+                                      _draggedDimLineId!,
                                     );
                                   }
+                                  _draggedDimLineId = null;
+                                  _activeDrag = _DragTarget.none;
+                                  _shiftSelectionHandledInPan = false;
+                                  setState(() {});
+                                  return;
                                 }
-                                _drawDragCommitted = true;
-                              } else {
-                                if (viewModel.pendingBendStart == null && _drawDragStartCad != null) {
-                                  viewModel.setPendingBendStart(_drawDragStartCad);
+
+                                final wasObjectDrag =
+                                    _activeDrag != _DragTarget.none &&
+                                    _activeDrag != _DragTarget.canvasPan;
+                                _draggedBendId = null;
+                                _draggedCutId = null;
+                                _draggedPortBadgeId = null;
+                                _draggedDimLineId = null;
+                                _activeDrag = _DragTarget.none;
+                                _dragAngleInfo = null;
+                                _shiftSelectionHandledInPan = false;
+                                if (wasObjectDrag) {
+                                  viewModel.endObjectDrag();
                                 }
-                                _drawDragCommitted = true;
-                              }
-                            }
-                          }
+                              },
+                              onPanCancel: () {
+                                _shiftSelectionHandledInPan = false;
+                                _boxSelectStart = null;
+                                _boxSelectCurrent = null;
+                                if (_activeDrag == _DragTarget.drawEntity) {
+                                  _drawDragStartScreen = null;
+                                  _drawDragCurrentScreen = null;
+                                  _drawDragStartCad = null;
+                                  _dragAngleInfo = null;
+                                  viewModel.setPendingBendStart(null);
+                                }
+                                final wasObjectDrag =
+                                    _activeDrag != _DragTarget.none &&
+                                    _activeDrag != _DragTarget.canvasPan;
+                                _draggedBendId = null;
+                                _draggedCutId = null;
+                                _draggedPortBadgeId = null;
+                                _draggedDimLineId = null;
+                                _activeDrag = _DragTarget.none;
+                                _dragAngleInfo = null;
+                                if (wasObjectDrag) {
+                                  viewModel.endObjectDrag();
+                                }
+                                setState(() {});
+                              },
+                              onSecondaryTapUp: (details) {
+                                if (viewModel.toolMode ==
+                                        StudioToolMode.drawPolyline &&
+                                    viewModel.pendingMultiPoints.isNotEmpty) {
+                                  viewModel.finishPolyline(close: false);
+                                  return;
+                                }
+                                if (viewModel.pendingBendStart != null) {
+                                  viewModel.clearSnap();
+                                  viewModel.setToolMode(viewModel.toolMode);
+                                  return;
+                                }
+                                if (viewModel.toolMode !=
+                                    StudioToolMode.select) {
+                                  viewModel.setToolMode(StudioToolMode.select);
+                                  return;
+                                }
 
-                          _activeDrag = _DragTarget.none;
-                          _drawDragStartScreen = null;
-                          _drawDragCurrentScreen = null;
-                          _drawDragStartCad = null;
-                          _dragAngleInfo = null;
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) _drawDragCommitted = false;
-                          });
-                          setState(() {});
-                          return;
-                        }
-
-                        if (_activeDrag == _DragTarget.boxSelect) {
-                          if (_boxSelectStart != null &&
-                              _boxSelectCurrent != null) {
-                            final dist =
-                                (_boxSelectCurrent! - _boxSelectStart!).distance;
-                            if (dist > 6.0) {
-                              final p1 = screenToCad(_boxSelectStart!);
-                              final p2 = screenToCad(_boxSelectCurrent!);
-                              final cadBox = Rect.fromPoints(
-                                Offset(p1.x, p1.y),
-                                Offset(p2.x, p2.y),
-                              );
-                              final Set<String> selectedIds;
-                              if (_boxSelectCurrent!.dx >=
-                                  _boxSelectStart!.dx) {
-                                // Window selection (Left-to-Right): strictly contained
-                                selectedIds =
-                                    MagneticSnapEngine.evaluateWindowSelection(
-                                  doc: viewModel.document,
-                                  cadBox: cadBox,
+                                // Check if right-clicking on or near an outer contour edge for port assignment
+                                final cadPt = screenToCad(
+                                  details.localPosition,
                                 );
-                              } else {
-                                // Crossing selection (Right-to-Left): touches or intersects
-                                selectedIds =
-                                    MagneticSnapEngine.evaluateCrossingSelection(
-                                  doc: viewModel.document,
-                                  cadBox: cadBox,
-                                );
-                              }
-                              final isShiftHeld = _isShiftPressed();
+                                final contour = viewModel.document.outerContour;
+                                CadPoint2D? bestP1;
+                                CadPoint2D? bestP2;
+                                double minD = double.infinity;
+                                for (int i = 0; i < contour.length; i++) {
+                                  final p1 = contour[i];
+                                  final p2 = contour[(i + 1) % contour.length];
+                                  final d =
+                                      _distToSegment(cadPt, p1, p2) * scale;
+                                  if (d < minD && d <= 28.0) {
+                                    minD = d;
+                                    bestP1 = p1;
+                                    bestP2 = p2;
+                                  }
+                                }
 
-                              if (isShiftHeld) {
-                                viewModel.selectEntities({...viewModel.selectedEntityIds, ...selectedIds});
-                              } else {
-                                viewModel.selectEntities(selectedIds);
-                              }
-                            } else {
-                              final isShiftHeld = _isShiftPressed();
-                              if (!isShiftHeld) {
-                                viewModel.clearSelection();
-                              }
-                            }
-                          }
-                          _boxSelectStart = null;
-                          _boxSelectCurrent = null;
-                          _activeDrag = _DragTarget.none;
-                          _shiftSelectionHandledInPan = false;
-                          setState(() {});
-                          return;
-                        }
+                                if (bestP1 != null && bestP2 != null) {
+                                  setState(() {
+                                    _contextMenuP1 = bestP1;
+                                    _contextMenuP2 = bestP2;
+                                    _contextMenuLenMm = bestP1!.distanceTo(
+                                      bestP2!,
+                                    );
+                                  });
+                                  _contextMenuController.open(
+                                    position: details.localPosition,
+                                  );
+                                } else {
+                                  viewModel.clearSelection();
+                                }
+                              },
+                              onTapUp: (details) {
+                                if (_shiftSelectionHandledInPan) {
+                                  _shiftSelectionHandledInPan = false;
+                                  return;
+                                }
 
-                        if (_draggedPortBadgeId != null && !_hasMovedPortBadge) {
-                          final pId = _draggedPortBadgeId!;
-                          _draggedPortBadgeId = null;
-                          _activeDrag = _DragTarget.none;
-                          _shiftSelectionHandledInPan = false;
-                          _openPortDimensionEditor(pId);
-                          return;
-                        }
+                                if (_drawDragCommitted) {
+                                  _drawDragCommitted = false;
+                                  return;
+                                }
 
-                        if (_activeDrag == _DragTarget.dimensionLine) {
-                          if (_draggedDimLineId != null) {
-                            viewModel.commitDimensionLineOffset(_draggedDimLineId!);
-                          }
-                          _draggedDimLineId = null;
-                          _activeDrag = _DragTarget.none;
-                          _shiftSelectionHandledInPan = false;
-                          setState(() {});
-                          return;
-                        }
+                                if (viewModel.toolMode == StudioToolMode.pan) {
+                                  return;
+                                }
 
-                        final wasObjectDrag =
-                            _activeDrag != _DragTarget.none &&
-                            _activeDrag != _DragTarget.canvasPan;
-                        _draggedBendId = null;
-                        _draggedCutId = null;
-                        _draggedPortBadgeId = null;
-                        _draggedDimLineId = null;
-                        _activeDrag = _DragTarget.none;
-                        _dragAngleInfo = null;
-                        _shiftSelectionHandledInPan = false;
-                        if (wasObjectDrag) {
-                          viewModel.endObjectDrag();
-                        }
-                      },
-                      onPanCancel: () {
-                        _shiftSelectionHandledInPan = false;
-                        _boxSelectStart = null;
-                        _boxSelectCurrent = null;
-                        if (_activeDrag == _DragTarget.drawEntity) {
-                          _drawDragStartScreen = null;
-                          _drawDragCurrentScreen = null;
-                          _drawDragStartCad = null;
-                          _dragAngleInfo = null;
-                          viewModel.setPendingBendStart(null);
-                        }
-                        final wasObjectDrag =
-                            _activeDrag != _DragTarget.none &&
-                            _activeDrag != _DragTarget.canvasPan;
-                        _draggedBendId = null;
-                        _draggedCutId = null;
-                        _draggedPortBadgeId = null;
-                        _draggedDimLineId = null;
-                        _activeDrag = _DragTarget.none;
-                        _dragAngleInfo = null;
-                        if (wasObjectDrag) {
-                          viewModel.endObjectDrag();
-                        }
-                        setState(() {});
-                      },
-                      onSecondaryTapUp: (details) {
-                        if (viewModel.toolMode == StudioToolMode.drawPolyline &&
-                            viewModel.pendingMultiPoints.isNotEmpty) {
-                          viewModel.finishPolyline(close: false);
-                          return;
-                        }
-                        if (viewModel.pendingBendStart != null) {
-                          viewModel.clearSnap();
-                          viewModel.setToolMode(viewModel.toolMode);
-                          return;
-                        }
-                        if (viewModel.toolMode != StudioToolMode.select) {
-                          viewModel.setToolMode(StudioToolMode.select);
-                          return;
-                        }
+                                // Instant click with software double-tap detection (0ms tap delay!)
+                                final now = DateTime.now();
+                                final touchScreen = details.localPosition;
+                                if (_lastTapTime != null &&
+                                    now.difference(_lastTapTime!) <
+                                        const Duration(milliseconds: 280) &&
+                                    _lastTapPosition != null &&
+                                    (touchScreen - _lastTapPosition!)
+                                            .distance <=
+                                        20.0) {
+                                  _lastTapTime = null;
+                                  _lastTapPosition = null;
+                                  _handleCanvasDoubleTap(
+                                    touchScreen,
+                                    screenToCad,
+                                    cadToScreen,
+                                  );
+                                  return;
+                                }
+                                _lastTapTime = now;
+                                _lastTapPosition = touchScreen;
 
-                        // Check if right-clicking on or near an outer contour edge for port assignment
-                        final cadPt = screenToCad(details.localPosition);
-                        final contour = viewModel.document.outerContour;
-                        CadPoint2D? bestP1;
-                        CadPoint2D? bestP2;
-                        double minD = double.infinity;
-                        for (int i = 0; i < contour.length; i++) {
-                          final p1 = contour[i];
-                          final p2 = contour[(i + 1) % contour.length];
-                          final d = _distToSegment(cadPt, p1, p2) * scale;
-                          if (d < minD && d <= 28.0) {
-                            minD = d;
-                            bestP1 = p1;
-                            bestP2 = p2;
-                          }
-                        }
+                                // Handling interactive geometric constraint picking
+                                if (viewModel.activeConstraintPickType !=
+                                    null) {
+                                  if (viewModel.hoveredPunchId != null) {
+                                    viewModel.registerEntityPickForConstraint(
+                                      EntityRef.punchCenter(
+                                        viewModel.hoveredPunchId!,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  if (viewModel.hoveredBendId != null) {
+                                    viewModel.registerEntityPickForConstraint(
+                                      EntityRef(
+                                        entityId: viewModel.hoveredBendId!,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  if (viewModel.hoveredCutId != null) {
+                                    viewModel.registerEntityPickForConstraint(
+                                      EntityRef(
+                                        entityId: viewModel.hoveredCutId!,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  if (viewModel.hoveredContourEdgeP1 != null &&
+                                      viewModel.hoveredContourEdgeP2 != null) {
+                                    final p1 = viewModel.hoveredContourEdgeP1!;
+                                    final p2 = viewModel.hoveredContourEdgeP2!;
+                                    final isVertical =
+                                        (p1.x - p2.x).abs() < 1.0;
+                                    final bw =
+                                        viewModel.document.blankWidthMm > 0
+                                        ? viewModel.document.blankWidthMm
+                                        : 200.0;
+                                    final bl =
+                                        viewModel.document.blankLengthMm > 0
+                                        ? viewModel.document.blankLengthMm
+                                        : 300.0;
+                                    final EntityRef edgeRef;
+                                    if (isVertical) {
+                                      final midX = (p1.x + p2.x) / 2.0;
+                                      edgeRef = midX < bw / 2.0
+                                          ? EntityRef.edgeLeft
+                                          : EntityRef.edgeRight;
+                                    } else {
+                                      final midY = (p1.y + p2.y) / 2.0;
+                                      edgeRef = midY < bl / 2.0
+                                          ? EntityRef.edgeBottom
+                                          : EntityRef.edgeTop;
+                                    }
+                                    viewModel.registerEntityPickForConstraint(
+                                      edgeRef,
+                                    );
+                                    return;
+                                  }
+                                }
 
-                        if (bestP1 != null && bestP2 != null) {
-                          setState(() {
-                            _contextMenuP1 = bestP1;
-                            _contextMenuP2 = bestP2;
-                            _contextMenuLenMm = bestP1!.distanceTo(bestP2!);
-                          });
-                          _contextMenuController.open(position: details.localPosition);
-                        } else {
-                          viewModel.clearSelection();
-                        }
-                      },
-                      onTapUp: (details) {
-                        if (_shiftSelectionHandledInPan) {
-                          _shiftSelectionHandledInPan = false;
-                          return;
-                        }
+                                // Handling 1-Click Semantic Port Inference
+                                if (viewModel.toolMode ==
+                                        StudioToolMode.assignPortSemantic ||
+                                    viewModel.activeSemanticPortId != null) {
+                                  final cadPt = screenToCad(
+                                    details.localPosition,
+                                  );
+                                  viewModel.handleCanvasSemanticPortClick(
+                                    cadPt,
+                                  );
+                                  return;
+                                }
 
-                        if (_drawDragCommitted) {
-                          _drawDragCommitted = false;
-                          return;
-                        }
-
-                        if (viewModel.toolMode == StudioToolMode.pan) {
-                          return;
-                        }
-
-                        // Instant click with software double-tap detection (0ms tap delay!)
-                        final now = DateTime.now();
-                        final touchScreen = details.localPosition;
-                        if (_lastTapTime != null &&
-                            now.difference(_lastTapTime!) < const Duration(milliseconds: 280) &&
-                            _lastTapPosition != null &&
-                            (touchScreen - _lastTapPosition!).distance <= 20.0) {
-                          _lastTapTime = null;
-                          _lastTapPosition = null;
-                          _handleCanvasDoubleTap(touchScreen, screenToCad, cadToScreen);
-                          return;
-                        }
-                        _lastTapTime = now;
-                        _lastTapPosition = touchScreen;
-
-                        // Handling interactive geometric constraint picking
-                        if (viewModel.activeConstraintPickType != null) {
-                          if (viewModel.hoveredPunchId != null) {
-                            viewModel.registerEntityPickForConstraint(
-                              EntityRef.punchCenter(viewModel.hoveredPunchId!),
-                            );
-                            return;
-                          }
-                          if (viewModel.hoveredBendId != null) {
-                            viewModel.registerEntityPickForConstraint(
-                              EntityRef(entityId: viewModel.hoveredBendId!),
-                            );
-                            return;
-                          }
-                          if (viewModel.hoveredCutId != null) {
-                            viewModel.registerEntityPickForConstraint(
-                              EntityRef(entityId: viewModel.hoveredCutId!),
-                            );
-                            return;
-                          }
-                          if (viewModel.hoveredContourEdgeP1 != null &&
-                              viewModel.hoveredContourEdgeP2 != null) {
-                            final p1 = viewModel.hoveredContourEdgeP1!;
-                            final p2 = viewModel.hoveredContourEdgeP2!;
-                            final isVertical = (p1.x - p2.x).abs() < 1.0;
-                            final bw = viewModel.document.blankWidthMm > 0 ? viewModel.document.blankWidthMm : 200.0;
-                            final bl = viewModel.document.blankLengthMm > 0 ? viewModel.document.blankLengthMm : 300.0;
-                            final EntityRef edgeRef;
-                            if (isVertical) {
-                              final midX = (p1.x + p2.x) / 2.0;
-                              edgeRef = midX < bw / 2.0 ? EntityRef.edgeLeft : EntityRef.edgeRight;
-                            } else {
-                              final midY = (p1.y + p2.y) / 2.0;
-                              edgeRef = midY < bl / 2.0 ? EntityRef.edgeBottom : EntityRef.edgeTop;
-                            }
-                            viewModel.registerEntityPickForConstraint(edgeRef);
-                            return;
-                          }
-                        }
-
-                        // Handling 1-Click Semantic Port Inference
-                        if (viewModel.toolMode == StudioToolMode.assignPortSemantic ||
-                            viewModel.activeSemanticPortId != null) {
-                          final cadPt = screenToCad(details.localPosition);
-                          viewModel.handleCanvasSemanticPortClick(cadPt);
-                          return;
-                        }
-
-                        // Handling interactive edge picking for fitting openings (W and H)
-                        if (viewModel.toolMode == StudioToolMode.pickPortEdge ||
-                            viewModel.activePortPickTarget != null) {
-                          if (viewModel.hoveredContourEdgeP1 != null &&
-                              viewModel.hoveredContourEdgeP2 != null) {
-                            final p1 = viewModel.hoveredContourEdgeP1!;
-                            final p2 = viewModel.hoveredContourEdgeP2!;
-                            final lenMm = viewModel.hoveredContourEdgeLengthMm ?? p1.distanceTo(p2);
-                            final target = viewModel.activePortPickTarget!;
-                            final targetName = target.displayName;
-                            final collisionError = viewModel.completePortEdgePick(
-                              p1: p1,
-                              p2: p2,
-                              measuredLengthMm: lenMm,
-                            );
-                            if (collisionError != null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Row(
-                                    children: [
-                                      const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          collisionError,
-                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                // Handling interactive edge picking for fitting openings (W and H)
+                                if (viewModel.toolMode ==
+                                        StudioToolMode.pickPortEdge ||
+                                    viewModel.activePortPickTarget != null) {
+                                  if (viewModel.hoveredContourEdgeP1 != null &&
+                                      viewModel.hoveredContourEdgeP2 != null) {
+                                    final p1 = viewModel.hoveredContourEdgeP1!;
+                                    final p2 = viewModel.hoveredContourEdgeP2!;
+                                    final lenMm =
+                                        viewModel.hoveredContourEdgeLengthMm ??
+                                        p1.distanceTo(p2);
+                                    final target =
+                                        viewModel.activePortPickTarget!;
+                                    final targetName = target.displayName;
+                                    final collisionError = viewModel
+                                        .completePortEdgePick(
+                                          p1: p1,
+                                          p2: p2,
+                                          measuredLengthMm: lenMm,
+                                        );
+                                    if (collisionError != null) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.warning_amber_rounded,
+                                                color: Colors.white,
+                                                size: 20,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  collisionError,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          backgroundColor: const Color(
+                                            0xFFDC2626,
+                                          ),
+                                          duration: const Duration(seconds: 4),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Assigned $targetName: ${lenMm.toStringAsFixed(1)} mm',
+                                        ),
+                                        backgroundColor: const Color(
+                                          0xFF0D9488,
+                                        ),
+                                        duration: const Duration(seconds: 4),
+                                        action: SnackBarAction(
+                                          label: 'Open Inspector',
+                                          textColor: Colors.amberAccent,
+                                          onPressed: () => viewModel
+                                              .setFittingInspectorOpen(true),
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                  backgroundColor: const Color(0xFFDC2626),
-                                  duration: const Duration(seconds: 4),
-                                ),
-                              );
-                              return;
-                            }
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Assigned $targetName: ${lenMm.toStringAsFixed(1)} mm'),
-                                backgroundColor: const Color(0xFF0D9488),
-                                duration: const Duration(seconds: 4),
-                                action: SnackBarAction(
-                                  label: 'Open Inspector',
-                                  textColor: Colors.amberAccent,
-                                  onPressed: () => viewModel.setFittingInspectorOpen(true),
-                                ),
+                                    );
+                                    return;
+                                  }
+                                }
+
+                                final cadPt = screenToCad(
+                                  details.localPosition,
+                                );
+                                // When in Fillet mode, clicking on a bend line pops up the bend radius editor
+                                if (viewModel.toolMode ==
+                                    StudioToolMode.cornerFillet) {
+                                  FoldBendLine? hitBend;
+                                  for (final b in viewModel.document.bends) {
+                                    if (_distToSegment(cadPt, b.p1, b.p2) *
+                                            scale <=
+                                        16.0) {
+                                      hitBend = b;
+                                      break;
+                                    }
+                                  }
+                                  if (hitBend != null) {
+                                    BendRadiusDialog.show(
+                                      context,
+                                      viewModel,
+                                      hitBend,
+                                    );
+                                    return;
+                                  }
+                                }
+                                final isShiftHeld = _isShiftPressed();
+                                final screenSnapMm = (8.0 / scale).clamp(
+                                  1.5,
+                                  8.0,
+                                );
+                                viewModel.handleCanvasClick(
+                                  cadPt,
+                                  snapRadiusMm: screenSnapMm,
+                                  autoPlace: true,
+                                  multiSelect: isShiftHeld,
+                                );
+                              },
+                              child: Builder(
+                                builder: (context) {
+                                  CadLineSegment? autoCandidateLine;
+                                  if (viewModel.pendingBendStart == null &&
+                                      (viewModel.toolMode ==
+                                              StudioToolMode.addBend ||
+                                          viewModel.toolMode ==
+                                              StudioToolMode.addFlange) &&
+                                      viewModel.rubberBandEndpoint != null) {
+                                    autoCandidateLine = viewModel
+                                        .computeAutoBendOrFlangeLine(
+                                          viewModel.rubberBandEndpoint!,
+                                          isFlange:
+                                              viewModel.toolMode ==
+                                              StudioToolMode.addFlange,
+                                        );
+                                  }
+
+                                  return ExcludeSemantics(
+                                    child: Stack(
+                                      children: [
+                                        CustomPaint(
+                                          size: Size.infinite,
+                                          painter: _UnfoldedBoardPainter(
+                                            doc: viewModel.document,
+                                            foldProgress:
+                                                viewModel.foldProgress,
+                                            foldedMesh: viewModel.currentMesh,
+                                            pan: viewModel.pan2D,
+                                            zoom: viewModel.zoom2D,
+                                            toolMode: viewModel.toolMode,
+                                            activeSnap: viewModel.activeSnap,
+                                            pendingBendStart:
+                                                viewModel.pendingBendStart,
+                                            rubberBandEndpoint:
+                                                viewModel.rubberBandEndpoint,
+                                            pendingMultiPoints:
+                                                viewModel.pendingMultiPoints,
+                                            selectedBendId:
+                                                viewModel.selectedBendId,
+                                            selectedCutId:
+                                                viewModel.selectedCutId,
+                                            selectedFaceId:
+                                                viewModel.selectedFaceId,
+                                            selectedPunchId:
+                                                viewModel.selectedPunchId,
+                                            selectedPatternId:
+                                                viewModel.selectedPatternId,
+                                            selectedPatternHoleIndex: viewModel
+                                                .selectedPatternHoleIndex,
+                                            showDimensions:
+                                                viewModel.showDimensions,
+                                            bendViolations:
+                                                viewModel.bendViolations,
+                                            hoveredPunchId:
+                                                viewModel.hoveredPunchId,
+                                            hoveredBendId:
+                                                viewModel.hoveredBendId,
+                                            toolConfig: viewModel.toolConfig,
+                                            isBendIncompleteFn:
+                                                viewModel.isBendIncomplete,
+                                            hoveredEndpoint: _hoveredEndpoint,
+                                            dragAngleInfo: _dragAngleInfo,
+                                            previewPerforationPattern: viewModel
+                                                .previewPerforationPattern,
+                                            previewCouplerPunches:
+                                                viewModel.previewCouplerPunches,
+                                            dimensionOffsets:
+                                                viewModel.dimensionOffsets,
+                                            dimensionLineOffsets:
+                                                viewModel.dimensionLineOffsets,
+                                            renderedDimensionBadges:
+                                                _dimensionBadgeRects,
+                                            renderedDimensionLines:
+                                                _dimensionLineSegments,
+                                            editingDimId: _editingDimId,
+                                            renderedDimensionValues:
+                                                _dimensionBadgeValues,
+                                            hoveredDimLineId: _hoveredDimLineId,
+                                            portBadgeOffsets:
+                                                viewModel.portBadgeOffsets,
+                                            renderedPortBadges: _portBadgeRects,
+                                            hoveredContourEdgeP1:
+                                                viewModel.hoveredContourEdgeP1,
+                                            hoveredContourEdgeP2:
+                                                viewModel.hoveredContourEdgeP2,
+                                            hoveredContourEdgeLengthMm:
+                                                viewModel
+                                                    .hoveredContourEdgeLengthMm,
+                                            selectedEntityIds:
+                                                viewModel.selectedEntityIds,
+                                            boxSelectStart: _boxSelectStart,
+                                            boxSelectCurrent: _boxSelectCurrent,
+                                            autoCandidateLine:
+                                                autoCandidateLine,
+                                            showOpeningTags:
+                                                viewModel.showPortOpeningBadges,
+                                            fittingMetadata:
+                                                viewModel
+                                                    .detectedFittingMetadata ??
+                                                DxfFittingMetadata.fromDocument(
+                                                  viewModel.document,
+                                                ),
+                                            referenceGeometries: viewModel
+                                                .activeReferenceGeometries,
+                                            constraintDefinitions: viewModel
+                                                .activeConstraintDefinitions,
+                                            selectedConstraintId:
+                                                viewModel.selectedConstraintId,
+                                            hoveredConstraintId:
+                                                _hoveredConstraintId,
+                                            renderedConstraintBadges:
+                                                _constraintBadgeRects,
+                                            constraintHoverHighlightedEntityIds:
+                                                _constraintHoverHighlightedEntityIds,
+                                            showDofDiagnostics:
+                                                viewModel.showDofDiagnostics,
+                                            dofStateProvider: viewModel
+                                                .getEntityConstraintState,
+                                            showConstructionGeometry: viewModel
+                                                .showConstructionGeometry,
+                                            showConstraints:
+                                                viewModel.showConstraints,
+                                            showProfileFill: _showProfileFill,
+                                            showPoints: _showPoints,
+                                            showGrid: _showGrid,
+                                            selectedArcId:
+                                                viewModel.selectedArcId,
+                                            hoveredArcId:
+                                                viewModel.hoveredArcId,
+                                            activePortInferenceResult: viewModel
+                                                .activePortInferenceResult,
+                                            hoverCursorCad: _hoverCursorCad,
+                                            isAltPressed: _isAltPressed(),
+                                          ),
+                                        ),
+                                        AnimatedBuilder(
+                                          animation: Listenable.merge([
+                                            viewModel,
+                                            viewModel.cmsGuidedController,
+                                          ]),
+                                          builder: (context, _) {
+                                            final ctrl =
+                                                viewModel.cmsGuidedController;
+                                            final ports =
+                                                viewModel.activeCmsPorts;
+                                            final suggestedBends =
+                                                ctrl.state.suggestedBends;
+                                            final showBends =
+                                                ctrl.phase ==
+                                                    CmsUxPhase
+                                                        .suggestingBends ||
+                                                ctrl.phase ==
+                                                    CmsUxPhase.confirmingBends;
+                                            if (ports.isEmpty &&
+                                                (!showBends ||
+                                                    suggestedBends.isEmpty)) {
+                                              return const SizedBox.shrink();
+                                            }
+                                            return CustomPaint(
+                                              size: Size.infinite,
+                                              painter: Cms2DOverlayPainter(
+                                                ports: ports,
+                                                suggestedBends: showBends
+                                                    ? suggestedBends
+                                                    : const [],
+                                                focus: ctrl.state.focus,
+                                                worldToScreen: (x, y) =>
+                                                    cadToScreen(
+                                                      CadPoint2D(x, y),
+                                                    ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                            return;
-                          }
-                        }
-
-                        final cadPt = screenToCad(details.localPosition);
-                        // When in Fillet mode, clicking on a bend line pops up the bend radius editor
-                        if (viewModel.toolMode == StudioToolMode.cornerFillet) {
-                          FoldBendLine? hitBend;
-                          for (final b in viewModel.document.bends) {
-                            if (_distToSegment(cadPt, b.p1, b.p2) * scale <=
-                                16.0) {
-                              hitBend = b;
-                              break;
-                            }
-                          }
-                          if (hitBend != null) {
-                            BendRadiusDialog.show(context, viewModel, hitBend);
-                            return;
-                          }
-                        }
-                        final isShiftHeld = _isShiftPressed();
-                        final screenSnapMm = (8.0 / scale).clamp(1.5, 8.0);
-                        viewModel.handleCanvasClick(
-                          cadPt,
-                          snapRadiusMm: screenSnapMm,
-                          autoPlace: true,
-                          multiSelect: isShiftHeld,
-                        );
-                      },
-                      child: Builder(
-                        builder: (context) {
-                          CadLineSegment? autoCandidateLine;
-                          if (viewModel.pendingBendStart == null &&
-                              (viewModel.toolMode == StudioToolMode.addBend ||
-                               viewModel.toolMode == StudioToolMode.addFlange) &&
-                              viewModel.rubberBandEndpoint != null) {
-                            autoCandidateLine = viewModel.computeAutoBendOrFlangeLine(
-                              viewModel.rubberBandEndpoint!,
-                              isFlange: viewModel.toolMode == StudioToolMode.addFlange,
-                            );
-                          }
-
-                          return ExcludeSemantics(
-                            child: Stack(
-                              children: [
-                                CustomPaint(
-                                  size: Size.infinite,
-                                  painter: _UnfoldedBoardPainter(
-                              doc: viewModel.document,
-                              foldProgress: viewModel.foldProgress,
-                              foldedMesh: viewModel.currentMesh,
-                              pan: viewModel.pan2D,
-                              zoom: viewModel.zoom2D,
-                              toolMode: viewModel.toolMode,
-                              activeSnap: viewModel.activeSnap,
-                              pendingBendStart: viewModel.pendingBendStart,
-                              rubberBandEndpoint: viewModel.rubberBandEndpoint,
-                              pendingMultiPoints: viewModel.pendingMultiPoints,
-                              selectedBendId: viewModel.selectedBendId,
-                              selectedCutId: viewModel.selectedCutId,
-                              selectedFaceId: viewModel.selectedFaceId,
-                              selectedPunchId: viewModel.selectedPunchId,
-                              selectedPatternId: viewModel.selectedPatternId,
-                              selectedPatternHoleIndex:
-                                  viewModel.selectedPatternHoleIndex,
-                              showDimensions: viewModel.showDimensions,
-                              bendViolations: viewModel.bendViolations,
-                              hoveredPunchId: viewModel.hoveredPunchId,
-                              hoveredBendId: viewModel.hoveredBendId,
-                              toolConfig: viewModel.toolConfig,
-                              isBendIncompleteFn: viewModel.isBendIncomplete,
-                              hoveredEndpoint: _hoveredEndpoint,
-                              dragAngleInfo: _dragAngleInfo,
-                              previewPerforationPattern:
-                                  viewModel.previewPerforationPattern,
-                              previewCouplerPunches:
-                                  viewModel.previewCouplerPunches,
-                              dimensionOffsets: viewModel.dimensionOffsets,
-                              dimensionLineOffsets: viewModel.dimensionLineOffsets,
-                              renderedDimensionBadges: _dimensionBadgeRects,
-                              renderedDimensionLines: _dimensionLineSegments,
-                              hoveredDimLineId: _hoveredDimLineId,
-                              portBadgeOffsets: viewModel.portBadgeOffsets,
-                              renderedPortBadges: _portBadgeRects,
-                              hoveredContourEdgeP1: viewModel.hoveredContourEdgeP1,
-                              hoveredContourEdgeP2: viewModel.hoveredContourEdgeP2,
-                              hoveredContourEdgeLengthMm: viewModel.hoveredContourEdgeLengthMm,
-                              selectedEntityIds: viewModel.selectedEntityIds,
-                              boxSelectStart: _boxSelectStart,
-                              boxSelectCurrent: _boxSelectCurrent,
-                              autoCandidateLine: autoCandidateLine,
-                              showOpeningTags: viewModel.showPortOpeningBadges,
-                              fittingMetadata: viewModel.detectedFittingMetadata ??
-                                  DxfFittingMetadata.fromDocument(viewModel.document),
-                              referenceGeometries: viewModel.activeReferenceGeometries,
-                              constraintDefinitions: viewModel.activeConstraintDefinitions,
-                              selectedConstraintId: viewModel.selectedConstraintId,
-                              hoveredConstraintId: _hoveredConstraintId,
-                              renderedConstraintBadges: _constraintBadgeRects,
-                              constraintHoverHighlightedEntityIds: _constraintHoverHighlightedEntityIds,
-                              showDofDiagnostics: viewModel.showDofDiagnostics,
-                              dofStateProvider: viewModel.getEntityConstraintState,
-                              showConstructionGeometry: viewModel.showConstructionGeometry,
-                              showConstraints: viewModel.showConstraints,
-                              showProfileFill: _showProfileFill,
-                              showPoints: _showPoints,
-                              showGrid: _showGrid,
-                              selectedArcId: viewModel.selectedArcId,
-                              hoveredArcId: viewModel.hoveredArcId,
-                              activePortInferenceResult: viewModel.activePortInferenceResult,
-                              hoverCursorCad: _hoverCursorCad,
-                              isAltPressed: _isAltPressed(),
                             ),
                           ),
-                          AnimatedBuilder(
-                            animation: Listenable.merge([viewModel, viewModel.cmsGuidedController]),
-                            builder: (context, _) {
-                              final ctrl = viewModel.cmsGuidedController;
-                              final ports = viewModel.activeCmsPorts;
-                              final suggestedBends = ctrl.state.suggestedBends;
-                              final showBends = ctrl.phase == CmsUxPhase.suggestingBends ||
-                                                ctrl.phase == CmsUxPhase.confirmingBends;
-                              if (ports.isEmpty && (!showBends || suggestedBends.isEmpty)) {
-                                return const SizedBox.shrink();
-                              }
-                              return CustomPaint(
-                                size: Size.infinite,
-                                painter: Cms2DOverlayPainter(
-                                  ports: ports,
-                                  suggestedBends: showBends ? suggestedBends : const [],
-                                  focus: ctrl.state.focus,
-                                  worldToScreen: (x, y) => cadToScreen(CadPoint2D(x, y)),
-                                ),
+                        ),
+                      ),
+                    ),
+
+                    // Floating Contextual Quick Constraints Bar (Component 3)
+                    if (viewModel.toolMode == StudioToolMode.select &&
+                        (viewModel.selectedEntityIds.isNotEmpty ||
+                            viewModel.selectedCutId != null ||
+                            viewModel.selectedBendId != null ||
+                            viewModel.selectedPunchId != null))
+                      Positioned(
+                        top: 14,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: FloatingSketchConstraintBar(
+                            viewModel: viewModel,
+                            onApplyConstraint: (type) {
+                              viewModel.applyConstraint(type);
+                            },
+                            onStartDimension: () {
+                              viewModel.setToolMode(
+                                StudioToolMode.addDimension,
                               );
                             },
+                            onDismiss: () {
+                              viewModel.clearSelection();
+                            },
                           ),
-                        ],
+                        ),
                       ),
-                    );
-                  },
-                      ),
-                    ),
-                  ),
-                  ),
-                ),
-              ),
 
-                // Floating Contextual Quick Constraints Bar (Component 3)
-                if (viewModel.toolMode == StudioToolMode.select &&
-                    (viewModel.selectedEntityIds.isNotEmpty ||
-                     viewModel.selectedCutId != null ||
-                     viewModel.selectedBendId != null ||
-                     viewModel.selectedPunchId != null))
-                  Positioned(
-                    top: 14,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: FloatingSketchConstraintBar(
-                        viewModel: viewModel,
-                        onApplyConstraint: (type) {
-                          viewModel.applyConstraint(type);
-                        },
-                        onStartDimension: () {
-                          viewModel.setToolMode(StudioToolMode.addDimension);
-                        },
-                        onDismiss: () {
-                          viewModel.clearSelection();
-                        },
-                      ),
-                    ),
-                  ),
+                    // In-Place Dimension Editor (converts number tag directly in-place)
+                    _buildInPlaceDimensionEditor(viewModel),
 
-                // Inline Floating Dimension Callout Card (Component 1)
-                _buildInlineDimensionCallout(viewModel),
-
-                // 2. Fitting Metadata / DSF Inspector Badge (Always accessible)
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: InkWell(
-                    onTap: () => viewModel.setFittingInspectorOpen(true),
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B).withValues(alpha: 0.88),
+                    // 2. Fitting Metadata / DSF Inspector Badge (Always accessible)
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: InkWell(
+                        onTap: () => viewModel.setFittingInspectorOpen(true),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.65),
-                          width: 1.2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
                           ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.tune, size: 14, color: Color(0xFFA78BFA)),
-                          const SizedBox(width: 6),
-                          Text(
-                            (viewModel.detectedFittingMetadata != null &&
-                                    viewModel.detectedFittingMetadata!.isAssigned &&
-                                    viewModel.detectedFittingMetadata!.product.isNotEmpty)
-                                ? '${viewModel.detectedFittingMetadata!.product} (${viewModel.detectedFittingMetadata!.variantName})'
-                                : 'DSF Inspector',
-                            style: const TextStyle(
-                              color: Color(0xFFF1F5F9),
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.bold,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B)
+                                .withValues(alpha: 0.88),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: const Color(0xFF8B5CF6)
+                                  .withValues(alpha: 0.65),
+                              width: 1.2,
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Floating Sketch Palette (Top Right Corner - non-persistent, toggled via toolbar button)
-                if (viewModel.isSketchPaletteOpen)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: StudioSketchPalette(
-                      viewModel: viewModel,
-                      showGrid: _showGrid,
-                      showProfileFill: _showProfileFill,
-                      showPoints: _showPoints,
-                      onToggleGrid: (val) {
-                        setState(() {
-                          _showGrid = val;
-                        });
-                      },
-                      onToggleProfileFill: (val) {
-                        setState(() {
-                          _showProfileFill = val;
-                        });
-                      },
-                      onTogglePoints: (val) {
-                        setState(() {
-                          _showPoints = val;
-                        });
-                      },
-                      onClose: () {
-                        viewModel.setSketchPaletteOpen(false);
-                      },
-                      onFinishSketch: () {
-                        viewModel.setToolMode(StudioToolMode.select);
-                        viewModel.setSketchPaletteOpen(false);
-                      },
-                    ),
-                  ),
-
-                // Floating Constraints Manager Sheet
-                if (viewModel.isConstraintManagerOpen)
-                  Positioned(
-                    top: 48,
-                    left: 12,
-                    child: ConstraintManagerSheet(
-                      viewModel: viewModel,
-                      onClose: () => viewModel.setConstraintManagerOpen(false),
-                    ),
-                  ),
-
-                // Constraint Binding HUD (Interactive prompt banner during constraint creation)
-                if (viewModel.activeConstraintPickType != null)
-                  Positioned(
-                    top: 12,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: ConstraintBindingHud(viewModel: viewModel),
-                    ),
-                  ),
-
-                // 2b. Floating HUD for Interactive Port Edge Picking (W and H)
-                if (viewModel.activePortPickTarget != null)
-                  Positioned(
-                    top: 12,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF0284C7), width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.touch_app, color: Color(0xFF38BDF8), size: 18),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Select Edge for ${viewModel.activePortPickTarget!.displayName}',
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            if (viewModel.hoveredContourEdgeLengthMm != null) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0D9488),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  '${viewModel.hoveredContourEdgeLengthMm!.toStringAsFixed(1)} mm',
-                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
                               ),
                             ],
-                            const SizedBox(width: 12),
-                            InkWell(
-                              onTap: () => viewModel.cancelPortEdgePick(),
-                              borderRadius: BorderRadius.circular(4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text('Cancel', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // 2c. Floating HUD for 1-Click Semantic Port Inference
-                if (viewModel.activeSemanticPortId != null)
-                  Positioned(
-                    top: 12,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: viewModel.activePortInferenceResult != null
-                                ? const Color(0xFF10B981)
-                                : const Color(0xFF0EA5E9),
-                            width: 1.8,
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.35),
-                              blurRadius: 14,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              viewModel.activePortInferenceResult != null
-                                  ? Icons.check_circle_outline
-                                  : Icons.ads_click,
-                              color: viewModel.activePortInferenceResult != null
-                                  ? const Color(0xFF34D399)
-                                  : const Color(0xFF38BDF8),
-                              size: 20,
-                            ),
-                            const SizedBox(width: 10),
-                            if (viewModel.activePortInferenceResult == null) ...[
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'Click Opening Edge for ${viewModel.activeSemanticPortId!.toUpperCase()}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const Text(
-                                    'Auto-infers Width (W), Sidewalls (H-A/H-B), and Connection Normal',
-                                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 14),
-                              InkWell(
-                                onTap: () => viewModel.cancelSemanticPortAssignment(),
-                                borderRadius: BorderRadius.circular(5),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: const Text('Cancel', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                                ),
-                              ),
-                            ] else ...[
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'Inferred ${viewModel.activePortInferenceResult!.inferredSide.displayName} Port (${viewModel.activeSemanticPortId!.toUpperCase()}):',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    viewModel.activePortInferenceResult!.summaryText,
-                                    style: const TextStyle(
-                                      color: Color(0xFF34D399),
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 14),
-                              ElevatedButton.icon(
-                                onPressed: () => viewModel.confirmSemanticPortAssignment(),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF10B981),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                  elevation: 2,
-                                ),
-                                icon: const Icon(Icons.check, size: 16),
-                                label: const Text(
-                                  'Confirm (1-Click)',
-                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              InkWell(
-                                onTap: () => viewModel.cancelSemanticPortAssignment(),
-                                borderRadius: BorderRadius.circular(5),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: const Text('Cancel', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // 2d. Port-Driven Dimension Editor Floating Card (Set 4A)
-                if (_activeEditingPortId != null)
-                  Positioned(
-                    left: (_portEditorScreenPos?.dx ?? 40.0).clamp(16.0, math.max(16.0, constraints.maxWidth - 300.0)),
-                    top: (_portEditorScreenPos?.dy ?? 80.0).clamp(16.0, math.max(16.0, constraints.maxHeight - 340.0)),
-                    child: _buildPortDimensionEditorCard(viewModel),
-                  ),
-
-                // 2e. "Why Did This Move?" Semantic Feature Inspector Card (Set 4A)
-                if (viewModel.selectedPunchId != null)
-                  _buildWhyDidThisMoveCard(viewModel, constraints),
-
-                // 3. Tool Mode Selector (+ Bend, + Cut, Punches, Snapping Toggle)
-                if (widget.showInCanvasToolRibbon)
-                  Positioned(
-                    top: 50,
-                    left: 12,
-                    right: 12,
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: Container(
-                      constraints: BoxConstraints(
-                        maxWidth: math.max(100.0, constraints.maxWidth - 24.0),
-                      ),
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.95),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFCBD5E1)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: ScrollConfiguration(
-                        behavior: ScrollConfiguration.of(context).copyWith(
-                          dragDevices: {
-                            PointerDeviceKind.touch,
-                            PointerDeviceKind.mouse,
-                            PointerDeviceKind.trackpad,
-                            PointerDeviceKind.stylus,
-                          },
-                        ),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              _toolButton(
-                                icon: Icons.near_me,
-                                label: 'Select',
-                                active:
-                                    viewModel.toolMode == StudioToolMode.select,
-                                onTap: () => viewModel.setToolMode(
-                                  StudioToolMode.select,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              _toolButton(
-                                icon: Icons.pan_tool_outlined,
-                                label: 'Pan',
-                                active:
-                                    viewModel.toolMode == StudioToolMode.pan,
-                                onTap: () =>
-                                    viewModel.setToolMode(StudioToolMode.pan),
-                              ),
-                              if (viewModel.document.productType.toLowerCase().contains('tee') ||
-                                  viewModel.document.productType.toLowerCase().contains('fitting')) ...[
-                                const SizedBox(width: 3),
-                                _toolButton(
-                                  icon: viewModel.showPortOpeningBadges
-                                      ? Icons.label
-                                      : Icons.label_off_outlined,
-                                  label: viewModel.showPortOpeningBadges
-                                      ? 'W×H Tags: ON'
-                                      : 'W×H Tags: OFF',
-                                  active: viewModel.showPortOpeningBadges,
-                                  onTap: viewModel.togglePortOpeningBadges,
-                                ),
-                              ],
-                              const SizedBox(width: 3),
-                              _toolButton(
-                                icon: Icons.polyline,
-                                label: '+ Bend',
-                                active:
-                                    viewModel.toolMode ==
-                                    StudioToolMode.addBend,
-                                onTap: () => viewModel.setToolMode(
-                                  StudioToolMode.addBend,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              _toolButton(
-                                icon: Icons.border_top,
-                                label: '+ Flange',
-                                active:
-                                    viewModel.toolMode ==
-                                    StudioToolMode.addFlange,
-                                onTap: () => viewModel.setToolMode(
-                                  StudioToolMode.addFlange,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              _toolButton(
-                                icon: Icons.content_cut,
-                                label: '+ Cut',
-                                active:
-                                    viewModel.toolMode == StudioToolMode.addCut,
-                                onTap: () => viewModel.setToolMode(
-                                  StudioToolMode.addCut,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              _toolButton(
-                                icon: Icons.radio_button_unchecked,
-                                label: 'Round Hole',
-                                active:
-                                    viewModel.toolMode ==
-                                    StudioToolMode.addPunchRound,
-                                onTap: () => viewModel.setToolMode(
-                                  StudioToolMode.addPunchRound,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              _toolButton(
-                                customIcon: ObroundSlotIcon(
-                                  width: 15,
-                                  height: 10,
-                                  color:
-                                      viewModel.toolMode ==
-                                          StudioToolMode.addPunchObround
-                                      ? const Color(0xFF0284C7)
-                                      : const Color(0xFF475569),
-                                ),
-                                label: 'Obround Slot',
-                                active:
-                                    viewModel.toolMode ==
-                                    StudioToolMode.addPunchObround,
-                                onTap: () => viewModel.setToolMode(
-                                  StudioToolMode.addPunchObround,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              _toolButton(
-                                icon: Icons.crop_square,
-                                label: 'Square',
-                                active:
-                                    viewModel.toolMode ==
-                                    StudioToolMode.addPunchSquare,
-                                onTap: () => viewModel.setToolMode(
-                                  StudioToolMode.addPunchSquare,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              _toolButton(
-                                icon: Icons.grid_view,
-                                label: 'Perforation',
-                                active:
-                                    viewModel.toolMode ==
-                                    StudioToolMode.perforationPattern,
-                                onTap: () => viewModel.setToolMode(
-                                  StudioToolMode.perforationPattern,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              _toolButton(
-                                icon: Icons.anchor,
-                                label: 'Anchor',
-                                active:
-                                    viewModel.toolMode ==
-                                    StudioToolMode.setBaseAnchor,
-                                onTap: () => viewModel.setToolMode(
-                                  StudioToolMode.setBaseAnchor,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              // 2D Draw Tools Dropdown Menu (Step 3 #16)
-                              PopupMenuButton<StudioToolMode>(
-                                tooltip: '2D Draw Tools',
-                                icon: Icon(
-                                  Icons.draw_outlined,
-                                  size: 15,
-                                  color: (viewModel.toolMode == StudioToolMode.drawRectangle ||
-                                          viewModel.toolMode == StudioToolMode.drawCircle ||
-                                          viewModel.toolMode == StudioToolMode.drawArc ||
-                                          viewModel.toolMode == StudioToolMode.drawPolyline)
-                                      ? const Color(0xFF0284C7)
-                                      : const Color(0xFF475569),
-                                ),
-                                onSelected: (mode) => viewModel.setToolMode(mode),
-                                itemBuilder: (context) => [
-                                  const PopupMenuItem(
-                                    value: StudioToolMode.drawRectangle,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.crop_3_2, size: 16, color: Color(0xFF0F172A)),
-                                        SizedBox(width: 8),
-                                        Text('Rectangle (2-Point)'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: StudioToolMode.drawCircle,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.circle_outlined, size: 16, color: Color(0xFF0F172A)),
-                                        SizedBox(width: 8),
-                                        Text('Circle (Center-Radius)'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: StudioToolMode.drawArc,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.architecture, size: 16, color: Color(0xFF0F172A)),
-                                        SizedBox(width: 8),
-                                        Text('Arc (3-Point)'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: StudioToolMode.drawPolyline,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.timeline, size: 16, color: Color(0xFF0F172A)),
-                                        SizedBox(width: 8),
-                                        Text('Polyline (Continuous)'),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 3),
-                              // 2D Modify Tools Dropdown Menu (Step 4 #17)
-                              PopupMenuButton<String>(
-                                tooltip: '2D Modify Tools',
-                                icon: Icon(
-                                  Icons.handyman_outlined,
-                                  size: 15,
-                                  color: (viewModel.toolMode == StudioToolMode.modifyMove ||
-                                          viewModel.toolMode == StudioToolMode.modifyRotate ||
-                                          viewModel.toolMode == StudioToolMode.modifyMirror ||
-                                          viewModel.toolMode == StudioToolMode.modifyOffset)
-                                      ? const Color(0xFF0284C7)
-                                      : const Color(0xFF475569),
-                                ),
-                                onSelected: (action) {
-                                  switch (action) {
-                                    case 'move':
-                                      viewModel.setToolMode(StudioToolMode.modifyMove);
-                                      break;
-                                    case 'rotate':
-                                      viewModel.setToolMode(StudioToolMode.modifyRotate);
-                                      break;
-                                    case 'mirror':
-                                      viewModel.setToolMode(StudioToolMode.modifyMirror);
-                                      break;
-                                    case 'offset':
-                                      viewModel.setToolMode(StudioToolMode.modifyOffset);
-                                      break;
-                                    case 'duplicate':
-                                      viewModel.duplicateSelectedEntities(10.0, 10.0);
-                                      break;
-                                    case 'delete':
-                                      viewModel.deleteSelectedEntities();
-                                      break;
-                                  }
-                                },
-                                itemBuilder: (context) => [
-                                  const PopupMenuItem(
-                                    value: 'move',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.open_with, size: 16, color: Color(0xFF0F172A)),
-                                        SizedBox(width: 8),
-                                        Text('Move Selected'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'rotate',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.rotate_right, size: 16, color: Color(0xFF0F172A)),
-                                        SizedBox(width: 8),
-                                        Text('Rotate Selected'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'mirror',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.flip, size: 16, color: Color(0xFF0F172A)),
-                                        SizedBox(width: 8),
-                                        Text('Mirror Selected (Copy)'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'offset',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.copy_all, size: 16, color: Color(0xFF0F172A)),
-                                        SizedBox(width: 8),
-                                        Text('Offset Contour'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuDivider(),
-                                  const PopupMenuItem(
-                                    value: 'duplicate',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.content_copy, size: 16, color: Color(0xFF0F172A)),
-                                        SizedBox(width: 8),
-                                        Text('Duplicate (+10, +10 mm)'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'delete',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.delete_outline, size: 16, color: Color(0xFFEF4444)),
-                                        SizedBox(width: 8),
-                                        Text('Delete Selected',
-                                            style: TextStyle(color: Color(0xFFEF4444))),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 3),
-                              // Associative Dimension Tool (Step 6 #19)
-                              _toolButton(
-                                icon: Icons.straighten,
-                                label: 'Dim',
-                                active: viewModel.toolMode == StudioToolMode.addDimension,
-                                onTap: () => viewModel.setToolMode(
-                                  viewModel.toolMode == StudioToolMode.addDimension
-                                      ? StudioToolMode.select
-                                      : StudioToolMode.addDimension,
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              // Geometric Constraints Tool Menu
-                              PopupMenuButton<CadConstraintType>(
-                                tooltip: 'Apply Geometric Constraint',
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: viewModel.activeConstraintPickType != null
-                                        ? const Color(0xFFE0F2FE)
-                                        : const Color(0xFFF8FAFC),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: viewModel.activeConstraintPickType != null
-                                          ? const Color(0xFF0284C7)
-                                          : const Color(0xFFE2E8F0),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.link,
-                                        size: 13,
-                                        color: viewModel.activeConstraintPickType != null
-                                            ? const Color(0xFF0284C7)
-                                            : const Color(0xFF475569),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Text(
-                                        'Constraint',
-                                        style: TextStyle(
-                                          color: viewModel.activeConstraintPickType != null
-                                              ? const Color(0xFF0284C7)
-                                              : const Color(0xFF475569),
-                                          fontSize: 11,
-                                          fontWeight: viewModel.activeConstraintPickType != null
-                                              ? FontWeight.bold
-                                              : FontWeight.normal,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 2),
-                                      const Icon(Icons.arrow_drop_down, size: 14, color: Color(0xFF64748B)),
-                                    ],
-                                  ),
-                                ),
-                                onSelected: (type) {
-                                  viewModel.startInteractiveConstraint(type);
-                                },
-                                itemBuilder: (context) => [
-                                  const PopupMenuItem(
-                                    value: CadConstraintType.coincident,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.adjust, size: 16, color: Color(0xFF2563EB)),
-                                        SizedBox(width: 8),
-                                        Text('Coincident (Snap points together)'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: CadConstraintType.distance,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.straighten, size: 16, color: Color(0xFF2563EB)),
-                                        SizedBox(width: 8),
-                                        Text('Distance / Clearance (Bind to Edge)'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: CadConstraintType.horizontal,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.horizontal_rule, size: 16, color: Color(0xFF2563EB)),
-                                        SizedBox(width: 8),
-                                        Text('Horizontal Alignment'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: CadConstraintType.vertical,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.vertical_distribute, size: 16, color: Color(0xFF2563EB)),
-                                        SizedBox(width: 8),
-                                        Text('Vertical Alignment'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: CadConstraintType.parallel,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.reorder, size: 16, color: Color(0xFF2563EB)),
-                                        SizedBox(width: 8),
-                                        Text('Parallel'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: CadConstraintType.perpendicular,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.square_foot, size: 16, color: Color(0xFF2563EB)),
-                                        SizedBox(width: 8),
-                                        Text('Perpendicular'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: CadConstraintType.symmetric,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.splitscreen, size: 16, color: Color(0xFF2563EB)),
-                                        SizedBox(width: 8),
-                                        Text('Symmetric about Centerline'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: CadConstraintType.concentric,
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.album_outlined, size: 16, color: Color(0xFF2563EB)),
-                                        SizedBox(width: 8),
-                                        Text('Concentric'),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                              const Icon(
+                                Icons.tune,
+                                size: 14,
+                                color: Color(0xFFA78BFA),
                               ),
                               const SizedBox(width: 6),
-                              Container(
-                                width: 1,
-                                height: 18,
-                                color: const Color(0xFFCBD5E1),
-                              ),
-                              const SizedBox(width: 6),
-                              // Magnetic Snapping Toggle
-                              _toolButton(
-                                icon: viewModel.magneticSnapEnabled
-                                    ? Icons.gps_fixed
-                                    : Icons.gps_not_fixed,
-                                label: viewModel.magneticSnapEnabled
-                                    ? 'Snap: ON'
-                                    : 'Snap: OFF',
-                                active: viewModel.magneticSnapEnabled,
-                                onTap: viewModel.toggleMagneticSnap,
-                              ),
-                              const SizedBox(width: 3),
-                              // Snap Mode Dropdown / Settings Menu
-                              PopupMenuButton<SnapType>(
-                                tooltip: 'Snap Modes',
-                                icon: const Icon(
-                                  Icons.tune,
-                                  size: 15,
-                                  color: Color(0xFF475569),
+                              Text(
+                                (viewModel.detectedFittingMetadata != null &&
+                                        viewModel
+                                            .detectedFittingMetadata!
+                                            .isAssigned &&
+                                        viewModel
+                                            .detectedFittingMetadata!
+                                            .product
+                                            .isNotEmpty)
+                                    ? '${viewModel.detectedFittingMetadata!.product} (${viewModel.detectedFittingMetadata!.variantName})'
+                                    : 'DSF Inspector',
+                                style: const TextStyle(
+                                  color: Color(0xFFF1F5F9),
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                onSelected: (type) =>
-                                    viewModel.toggleSnapSetting(type),
-                                itemBuilder: (context) {
-                                  final s = viewModel.snapSettings;
-                                  return [
-                                    _snapMenuItem(
-                                      SnapType.endpoint,
-                                      'Endpoint 🔲',
-                                      s.enableEndpoint,
-                                    ),
-                                    _snapMenuItem(
-                                      SnapType.midpoint,
-                                      'Midpoint 🔺',
-                                      s.enableMidpoint,
-                                    ),
-                                    _snapMenuItem(
-                                      SnapType.center,
-                                      'Center ⭕',
-                                      s.enableCenter,
-                                    ),
-                                    _snapMenuItem(
-                                      SnapType.intersection,
-                                      'Intersection ✖',
-                                      s.enableIntersection,
-                                    ),
-                                    _snapMenuItem(
-                                      SnapType.perpendicular,
-                                      'Perpendicular ⟂',
-                                      s.enablePerpendicular,
-                                    ),
-                                    _snapMenuItem(
-                                      SnapType.tangent,
-                                      'Tangent ⊚',
-                                      s.enableTangent,
-                                    ),
-                                    _snapMenuItem(
-                                      SnapType.quadrant,
-                                      'Quadrant 🔷',
-                                      s.enableQuadrant,
-                                    ),
-                                    _snapMenuItem(
-                                      SnapType.nearest,
-                                      'Nearest ⧗',
-                                      s.enableNearest,
-                                    ),
-                                    _snapMenuItem(
-                                      SnapType.grid,
-                                      'Grid Snap ⊞',
-                                      s.enableGrid,
-                                    ),
-                                  ];
-                                },
-                              ),
-                              const SizedBox(width: 3),
-                              // Ortho Tracking Toggle
-                              _toolButton(
-                                icon: Icons.near_me_disabled,
-                                label: viewModel.snapSettings.enableOrthoTracking
-                                    ? 'Ortho: ON'
-                                    : 'Ortho: OFF',
-                                active:
-                                    viewModel.snapSettings.enableOrthoTracking,
-                                onTap: viewModel.toggleOrthoTracking,
                               ),
                             ],
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
 
-                // 4. Draggable Floating Property Inspector (Line, Punch, Bend, Pattern, Face, Dimension)
-                if (widget.renderFloatingInspectors &&
-                    (selectedBend != null ||
-                        selectedCut != null ||
-                        selectedPunch != null ||
-                        selectedPattern != null ||
-                        selectedDimension != null ||
-                        selectedArc != null ||
-                        (selectedFace != null && !isToolActive)) &&
-                    viewModel.isPropertyInspectorOpen)
-                  Positioned(
-                    left: effectiveInspectorPos.dx.clamp(
-                      8.0,
-                      math.max(8.0, constraints.maxWidth - 280.0),
-                    ),
-                    top: effectiveInspectorPos.dy.clamp(
-                      8.0,
-                      math.max(8.0, constraints.maxHeight - 120.0),
-                    ),
-                    child: _buildFloatingInspector(
-                      viewModel: viewModel,
-                      effectiveInspectorPos: effectiveInspectorPos,
-                    ),
-                  ),
-
-                // 4b. Draggable Active Tool Property Inspector (Configured BEFORE stamping)
-                if (widget.renderFloatingInspectors &&
-                    viewModel.toolMode != StudioToolMode.select &&
-                    viewModel.toolMode != StudioToolMode.pan &&
-                    viewModel.toolMode != StudioToolMode.addBend &&
-                    viewModel.toolMode != StudioToolMode.addFlange &&
-                    viewModel.toolMode != StudioToolMode.addCut &&
-                    viewModel.toolMode != StudioToolMode.setBaseAnchor)
-                  Positioned(
-                    left: effectiveInspectorPos.dx.clamp(
-                      8.0,
-                      math.max(8.0, constraints.maxWidth - 290.0),
-                    ),
-                    top: effectiveInspectorPos.dy.clamp(
-                      8.0,
-                      math.max(8.0, constraints.maxHeight - 120.0),
-                    ),
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onPanStart: (details) {
-                        _dragStartGlobal = details.globalPosition;
-                        _dragStartPanel = effectiveInspectorPos;
-                      },
-                      onPanUpdate: (details) {
-                        if (_dragStartGlobal != null &&
-                            _dragStartPanel != null) {
-                          setState(() {
-                            _inspectorOffset =
-                                _dragStartPanel! +
-                                (details.globalPosition - _dragStartGlobal!);
-                          });
-                        }
-                      },
-                      child: ActiveToolPropertySheet(
-                        viewModel: viewModel,
-                        onClose: () =>
-                            viewModel.setToolMode(StudioToolMode.select),
-                        onDragStartHeader: (details) {
-                          _dragStartGlobal = details.globalPosition;
-                          _dragStartPanel = effectiveInspectorPos;
-                        },
-                        onDragHeader: (details) {
-                          if (_dragStartGlobal != null &&
-                              _dragStartPanel != null) {
+                    // Floating Sketch Palette (Top Right Corner - non-persistent, toggled via toolbar button)
+                    if (viewModel.isSketchPaletteOpen)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: StudioSketchPalette(
+                          viewModel: viewModel,
+                          showGrid: _showGrid,
+                          showProfileFill: _showProfileFill,
+                          showPoints: _showPoints,
+                          onToggleGrid: (val) {
                             setState(() {
-                              _inspectorOffset =
-                                  _dragStartPanel! +
-                                  (details.globalPosition - _dragStartGlobal!);
+                              _showGrid = val;
                             });
-                          }
-                        },
+                          },
+                          onToggleProfileFill: (val) {
+                            setState(() {
+                              _showProfileFill = val;
+                            });
+                          },
+                          onTogglePoints: (val) {
+                            setState(() {
+                              _showPoints = val;
+                            });
+                          },
+                          onClose: () {
+                            viewModel.setSketchPaletteOpen(false);
+                          },
+                          onFinishSketch: () {
+                            viewModel.setToolMode(StudioToolMode.select);
+                            viewModel.setSketchPaletteOpen(false);
+                          },
+                        ),
                       ),
-                    ),
-                  ),
 
-                // Floating Reopen Button if Inspector is closed but an item is selected
-                if (widget.renderFloatingInspectors &&
-                    (selectedBend != null ||
-                        selectedPunch != null ||
-                        selectedPattern != null ||
-                        selectedFace != null) &&
-                    !viewModel.isPropertyInspectorOpen)
-                  Positioned(
-                    top: 12,
-                    right: 180,
-                    child: InkWell(
-                      onTap: () {
-                        viewModel.setPropertyInspectorOpen(true);
-                      },
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
+                    // Floating Constraints Manager Sheet
+                    if (viewModel.isConstraintManagerOpen)
+                      Positioned(
+                        top: 48,
+                        left: 12,
+                        child: ConstraintManagerSheet(
+                          viewModel: viewModel,
+                          onClose: () =>
+                              viewModel.setConstraintManagerOpen(false),
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFF0284C7)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.08),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                      ),
+
+                    // Constraint Binding HUD (Interactive prompt banner during constraint creation)
+                    if (viewModel.activeConstraintPickType != null)
+                      Positioned(
+                        top: 12,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: ConstraintBindingHud(viewModel: viewModel),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.tune,
-                              size: 14,
-                              color: Color(0xFF0284C7),
+                      ),
+
+                    // 2b. Floating HUD for Interactive Port Edge Picking (W and H)
+                    if (viewModel.activePortPickTarget != null)
+                      Positioned(
+                        top: 12,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              selectedBend != null
-                                  ? 'Open ${selectedBend.id} Properties'
-                                  : (selectedPunch != null
-                                      ? 'Open ${selectedPunch.id} Properties'
-                                      : (selectedPattern != null
-                                          ? 'Open ${selectedPattern.id} Properties'
-                                          : 'Open ${selectedFace!.id} Properties')),
-                              style: const TextStyle(
-                                color: Color(0xFF0284C7),
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFF0284C7),
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.touch_app,
+                                  color: Color(0xFF38BDF8),
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Select Edge for ${viewModel.activePortPickTarget!.displayName}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                if (viewModel.hoveredContourEdgeLengthMm !=
+                                    null) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0D9488),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '${viewModel.hoveredContourEdgeLengthMm!.toStringAsFixed(1)} mm',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 12),
+                                InkWell(
+                                  onTap: () => viewModel.cancelPortEdgePick(),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.15,
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'Cancel',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // 2c. Floating HUD for 1-Click Semantic Port Inference
+                    if (viewModel.activeSemanticPortId != null)
+                      Positioned(
+                        top: 12,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color:
+                                    viewModel.activePortInferenceResult != null
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFF0EA5E9),
+                                width: 1.8,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  blurRadius: 14,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  viewModel.activePortInferenceResult != null
+                                      ? Icons.check_circle_outline
+                                      : Icons.ads_click,
+                                  color:
+                                      viewModel.activePortInferenceResult !=
+                                          null
+                                      ? const Color(0xFF34D399)
+                                      : const Color(0xFF38BDF8),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                if (viewModel.activePortInferenceResult ==
+                                    null) ...[
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Click Opening Edge for ${viewModel.activeSemanticPortId!.toUpperCase()}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'Auto-infers Width (W), Sidewalls (H-A/H-B), and Connection Normal',
+                                        style: TextStyle(
+                                          color: Color(0xFF94A3B8),
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(width: 14),
+                                  InkWell(
+                                    onTap: () => viewModel
+                                        .cancelSemanticPortAssignment(),
+                                    borderRadius: BorderRadius.circular(5),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      child: const Text(
+                                        'Cancel',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ] else ...[
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Inferred ${viewModel.activePortInferenceResult!.inferredSide.displayName} Port (${viewModel.activeSemanticPortId!.toUpperCase()}):',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        viewModel
+                                            .activePortInferenceResult!
+                                            .summaryText,
+                                        style: const TextStyle(
+                                          color: Color(0xFF34D399),
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(width: 14),
+                                  ElevatedButton.icon(
+                                    onPressed: () => viewModel
+                                        .confirmSemanticPortAssignment(),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF10B981),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      elevation: 2,
+                                    ),
+                                    icon: const Icon(Icons.check, size: 16),
+                                    label: const Text(
+                                      'Confirm (1-Click)',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: () => viewModel
+                                        .cancelSemanticPortAssignment(),
+                                    borderRadius: BorderRadius.circular(5),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      child: const Text(
+                                        'Cancel',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // 2d. Port-Driven Dimension Editor Floating Card (Set 4A)
+                    if (_activeEditingPortId != null)
+                      Positioned(
+                        left: (_portEditorScreenPos?.dx ?? 40.0).clamp(
+                          16.0,
+                          math.max(16.0, constraints.maxWidth - 300.0),
+                        ),
+                        top: (_portEditorScreenPos?.dy ?? 80.0).clamp(
+                          16.0,
+                          math.max(16.0, constraints.maxHeight - 340.0),
+                        ),
+                        child: _buildPortDimensionEditorCard(viewModel),
+                      ),
+
+                    // 2e. "Why Did This Move?" Semantic Feature Inspector Card (Set 4A)
+                    if (viewModel.selectedPunchId != null)
+                      _buildWhyDidThisMoveCard(viewModel, constraints),
+
+                    // 3. Tool Mode Selector (+ Bend, + Cut, Punches, Snapping Toggle)
+                    if (widget.showInCanvasToolRibbon)
+                      Positioned(
+                        top: 50,
+                        left: 12,
+                        right: 12,
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: Container(
+                            constraints: BoxConstraints(
+                              maxWidth: math.max(
+                                100.0,
+                                constraints.maxWidth - 24.0,
                               ),
                             ),
-                          ],
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.95),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: const Color(0xFFCBD5E1),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.06),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: ScrollConfiguration(
+                              behavior: ScrollConfiguration.of(context)
+                                  .copyWith(
+                                    dragDevices: {
+                                      PointerDeviceKind.touch,
+                                      PointerDeviceKind.mouse,
+                                      PointerDeviceKind.trackpad,
+                                      PointerDeviceKind.stylus,
+                                    },
+                                  ),
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                physics: const BouncingScrollPhysics(),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _toolButton(
+                                      icon: Icons.near_me,
+                                      label: 'Select',
+                                      active:
+                                          viewModel.toolMode ==
+                                          StudioToolMode.select,
+                                      onTap: () => viewModel.setToolMode(
+                                        StudioToolMode.select,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    _toolButton(
+                                      icon: Icons.pan_tool_outlined,
+                                      label: 'Pan',
+                                      active:
+                                          viewModel.toolMode ==
+                                          StudioToolMode.pan,
+                                      onTap: () => viewModel.setToolMode(
+                                        StudioToolMode.pan,
+                                      ),
+                                    ),
+                                    if (viewModel.document.productType
+                                            .toLowerCase()
+                                            .contains('tee') ||
+                                        viewModel.document.productType
+                                            .toLowerCase()
+                                            .contains('fitting')) ...[
+                                      const SizedBox(width: 3),
+                                      _toolButton(
+                                        icon: viewModel.showPortOpeningBadges
+                                            ? Icons.label
+                                            : Icons.label_off_outlined,
+                                        label: viewModel.showPortOpeningBadges
+                                            ? 'W×H Tags: ON'
+                                            : 'W×H Tags: OFF',
+                                        active: viewModel.showPortOpeningBadges,
+                                        onTap:
+                                            viewModel.togglePortOpeningBadges,
+                                      ),
+                                    ],
+                                    const SizedBox(width: 3),
+                                    _toolButton(
+                                      icon: Icons.polyline,
+                                      label: '+ Bend',
+                                      active:
+                                          viewModel.toolMode ==
+                                          StudioToolMode.addBend,
+                                      onTap: () => viewModel.setToolMode(
+                                        StudioToolMode.addBend,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    _toolButton(
+                                      icon: Icons.border_top,
+                                      label: '+ Flange',
+                                      active:
+                                          viewModel.toolMode ==
+                                          StudioToolMode.addFlange,
+                                      onTap: () => viewModel.setToolMode(
+                                        StudioToolMode.addFlange,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    _toolButton(
+                                      icon: Icons.content_cut,
+                                      label: '+ Cut',
+                                      active:
+                                          viewModel.toolMode ==
+                                          StudioToolMode.addCut,
+                                      onTap: () => viewModel.setToolMode(
+                                        StudioToolMode.addCut,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    _toolButton(
+                                      icon: Icons.radio_button_unchecked,
+                                      label: 'Round Hole',
+                                      active:
+                                          viewModel.toolMode ==
+                                          StudioToolMode.addPunchRound,
+                                      onTap: () => viewModel.setToolMode(
+                                        StudioToolMode.addPunchRound,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    _toolButton(
+                                      customIcon: ObroundSlotIcon(
+                                        width: 15,
+                                        height: 10,
+                                        color:
+                                            viewModel.toolMode ==
+                                                StudioToolMode.addPunchObround
+                                            ? const Color(0xFF0284C7)
+                                            : const Color(0xFF475569),
+                                      ),
+                                      label: 'Obround Slot',
+                                      active:
+                                          viewModel.toolMode ==
+                                          StudioToolMode.addPunchObround,
+                                      onTap: () => viewModel.setToolMode(
+                                        StudioToolMode.addPunchObround,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    _toolButton(
+                                      icon: Icons.crop_square,
+                                      label: 'Square',
+                                      active:
+                                          viewModel.toolMode ==
+                                          StudioToolMode.addPunchSquare,
+                                      onTap: () => viewModel.setToolMode(
+                                        StudioToolMode.addPunchSquare,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    _toolButton(
+                                      icon: Icons.grid_view,
+                                      label: 'Perforation',
+                                      active:
+                                          viewModel.toolMode ==
+                                          StudioToolMode.perforationPattern,
+                                      onTap: () => viewModel.setToolMode(
+                                        StudioToolMode.perforationPattern,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    _toolButton(
+                                      icon: Icons.anchor,
+                                      label: 'Anchor',
+                                      active:
+                                          viewModel.toolMode ==
+                                          StudioToolMode.setBaseAnchor,
+                                      onTap: () => viewModel.setToolMode(
+                                        StudioToolMode.setBaseAnchor,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    // 2D Draw Tools Dropdown Menu (Step 3 #16)
+                                    PopupMenuButton<StudioToolMode>(
+                                      tooltip: '2D Draw Tools',
+                                      icon: Icon(
+                                        Icons.draw_outlined,
+                                        size: 15,
+                                        color:
+                                            (viewModel.toolMode ==
+                                                    StudioToolMode
+                                                        .drawRectangle ||
+                                                viewModel.toolMode ==
+                                                    StudioToolMode.drawCircle ||
+                                                viewModel.toolMode ==
+                                                    StudioToolMode.drawArc ||
+                                                viewModel.toolMode ==
+                                                    StudioToolMode.drawPolyline)
+                                            ? const Color(0xFF0284C7)
+                                            : const Color(0xFF475569),
+                                      ),
+                                      onSelected: (mode) =>
+                                          viewModel.setToolMode(mode),
+                                      itemBuilder: (context) => [
+                                        const PopupMenuItem(
+                                          value: StudioToolMode.drawRectangle,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.crop_3_2,
+                                                size: 16,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Rectangle (2-Point)'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: StudioToolMode.drawCircle,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.circle_outlined,
+                                                size: 16,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Circle (Center-Radius)'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: StudioToolMode.drawArc,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.architecture,
+                                                size: 16,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Arc (3-Point)'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: StudioToolMode.drawPolyline,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.timeline,
+                                                size: 16,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Polyline (Continuous)'),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 3),
+                                    // 2D Modify Tools Dropdown Menu (Step 4 #17)
+                                    PopupMenuButton<String>(
+                                      tooltip: '2D Modify Tools',
+                                      icon: Icon(
+                                        Icons.handyman_outlined,
+                                        size: 15,
+                                        color:
+                                            (viewModel.toolMode ==
+                                                    StudioToolMode.modifyMove ||
+                                                viewModel.toolMode ==
+                                                    StudioToolMode
+                                                        .modifyRotate ||
+                                                viewModel.toolMode ==
+                                                    StudioToolMode
+                                                        .modifyMirror ||
+                                                viewModel.toolMode ==
+                                                    StudioToolMode.modifyOffset)
+                                            ? const Color(0xFF0284C7)
+                                            : const Color(0xFF475569),
+                                      ),
+                                      onSelected: (action) {
+                                        switch (action) {
+                                          case 'move':
+                                            viewModel.setToolMode(
+                                              StudioToolMode.modifyMove,
+                                            );
+                                            break;
+                                          case 'rotate':
+                                            viewModel.setToolMode(
+                                              StudioToolMode.modifyRotate,
+                                            );
+                                            break;
+                                          case 'mirror':
+                                            viewModel.setToolMode(
+                                              StudioToolMode.modifyMirror,
+                                            );
+                                            break;
+                                          case 'offset':
+                                            viewModel.setToolMode(
+                                              StudioToolMode.modifyOffset,
+                                            );
+                                            break;
+                                          case 'duplicate':
+                                            viewModel.duplicateSelectedEntities(
+                                              10.0,
+                                              10.0,
+                                            );
+                                            break;
+                                          case 'delete':
+                                            viewModel.deleteSelectedEntities();
+                                            break;
+                                        }
+                                      },
+                                      itemBuilder: (context) => [
+                                        const PopupMenuItem(
+                                          value: 'move',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.open_with,
+                                                size: 16,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Move Selected'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'rotate',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.rotate_right,
+                                                size: 16,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Rotate Selected'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'mirror',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.flip,
+                                                size: 16,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Mirror Selected (Copy)'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'offset',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.copy_all,
+                                                size: 16,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Offset Contour'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuDivider(),
+                                        const PopupMenuItem(
+                                          value: 'duplicate',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.content_copy,
+                                                size: 16,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Duplicate (+10, +10 mm)'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'delete',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.delete_outline,
+                                                size: 16,
+                                                color: Color(0xFFEF4444),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                'Delete Selected',
+                                                style: TextStyle(
+                                                  color: Color(0xFFEF4444),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 3),
+                                    // Associative Dimension Tool (Step 6 #19)
+                                    _toolButton(
+                                      icon: Icons.straighten,
+                                      label: 'Dim',
+                                      active:
+                                          viewModel.toolMode ==
+                                          StudioToolMode.addDimension,
+                                      onTap: () => viewModel.setToolMode(
+                                        viewModel.toolMode ==
+                                                StudioToolMode.addDimension
+                                            ? StudioToolMode.select
+                                            : StudioToolMode.addDimension,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    // Geometric Constraints Tool Menu
+                                    PopupMenuButton<CadConstraintType>(
+                                      tooltip: 'Apply Geometric Constraint',
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color:
+                                              viewModel
+                                                      .activeConstraintPickType !=
+                                                  null
+                                              ? const Color(0xFFE0F2FE)
+                                              : const Color(0xFFF8FAFC),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          border: Border.all(
+                                            color:
+                                                viewModel
+                                                        .activeConstraintPickType !=
+                                                    null
+                                                ? const Color(0xFF0284C7)
+                                                : const Color(0xFFE2E8F0),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.link,
+                                              size: 13,
+                                              color:
+                                                  viewModel
+                                                          .activeConstraintPickType !=
+                                                      null
+                                                  ? const Color(0xFF0284C7)
+                                                  : const Color(0xFF475569),
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              'Constraint',
+                                              style: TextStyle(
+                                                color:
+                                                    viewModel
+                                                            .activeConstraintPickType !=
+                                                        null
+                                                    ? const Color(0xFF0284C7)
+                                                    : const Color(0xFF475569),
+                                                fontSize: 11,
+                                                fontWeight:
+                                                    viewModel
+                                                            .activeConstraintPickType !=
+                                                        null
+                                                    ? FontWeight.bold
+                                                    : FontWeight.normal,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 2),
+                                            const Icon(
+                                              Icons.arrow_drop_down,
+                                              size: 14,
+                                              color: Color(0xFF64748B),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      onSelected: (type) {
+                                        viewModel.startInteractiveConstraint(
+                                          type,
+                                        );
+                                      },
+                                      itemBuilder: (context) => [
+                                        const PopupMenuItem(
+                                          value: CadConstraintType.coincident,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.adjust,
+                                                size: 16,
+                                                color: Color(0xFF2563EB),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                'Coincident (Snap points together)',
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: CadConstraintType.distance,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.straighten,
+                                                size: 16,
+                                                color: Color(0xFF2563EB),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                'Distance / Clearance (Bind to Edge)',
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: CadConstraintType.horizontal,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.horizontal_rule,
+                                                size: 16,
+                                                color: Color(0xFF2563EB),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Horizontal Alignment'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: CadConstraintType.vertical,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.vertical_distribute,
+                                                size: 16,
+                                                color: Color(0xFF2563EB),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Vertical Alignment'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: CadConstraintType.parallel,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.reorder,
+                                                size: 16,
+                                                color: Color(0xFF2563EB),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Parallel'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value:
+                                              CadConstraintType.perpendicular,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.square_foot,
+                                                size: 16,
+                                                color: Color(0xFF2563EB),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Perpendicular'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: CadConstraintType.symmetric,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.splitscreen,
+                                                size: 16,
+                                                color: Color(0xFF2563EB),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                'Symmetric about Centerline',
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: CadConstraintType.concentric,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.album_outlined,
+                                                size: 16,
+                                                color: Color(0xFF2563EB),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Concentric'),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      width: 1,
+                                      height: 18,
+                                      color: const Color(0xFFCBD5E1),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    // Magnetic Snapping Toggle
+                                    _toolButton(
+                                      icon: viewModel.magneticSnapEnabled
+                                          ? Icons.gps_fixed
+                                          : Icons.gps_not_fixed,
+                                      label: viewModel.magneticSnapEnabled
+                                          ? 'Snap: ON'
+                                          : 'Snap: OFF',
+                                      active: viewModel.magneticSnapEnabled,
+                                      onTap: viewModel.toggleMagneticSnap,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    // Snap Mode Dropdown / Settings Menu
+                                    PopupMenuButton<SnapType>(
+                                      tooltip: 'Snap Modes',
+                                      icon: const Icon(
+                                        Icons.tune,
+                                        size: 15,
+                                        color: Color(0xFF475569),
+                                      ),
+                                      onSelected: (type) =>
+                                          viewModel.toggleSnapSetting(type),
+                                      itemBuilder: (context) {
+                                        final s = viewModel.snapSettings;
+                                        return [
+                                          _snapMenuItem(
+                                            SnapType.endpoint,
+                                            'Endpoint 🔲',
+                                            s.enableEndpoint,
+                                          ),
+                                          _snapMenuItem(
+                                            SnapType.midpoint,
+                                            'Midpoint 🔺',
+                                            s.enableMidpoint,
+                                          ),
+                                          _snapMenuItem(
+                                            SnapType.center,
+                                            'Center ⭕',
+                                            s.enableCenter,
+                                          ),
+                                          _snapMenuItem(
+                                            SnapType.intersection,
+                                            'Intersection ✖',
+                                            s.enableIntersection,
+                                          ),
+                                          _snapMenuItem(
+                                            SnapType.perpendicular,
+                                            'Perpendicular ⟂',
+                                            s.enablePerpendicular,
+                                          ),
+                                          _snapMenuItem(
+                                            SnapType.tangent,
+                                            'Tangent ⊚',
+                                            s.enableTangent,
+                                          ),
+                                          _snapMenuItem(
+                                            SnapType.quadrant,
+                                            'Quadrant 🔷',
+                                            s.enableQuadrant,
+                                          ),
+                                          _snapMenuItem(
+                                            SnapType.nearest,
+                                            'Nearest ⧗',
+                                            s.enableNearest,
+                                          ),
+                                          _snapMenuItem(
+                                            SnapType.grid,
+                                            'Grid Snap ⊞',
+                                            s.enableGrid,
+                                          ),
+                                        ];
+                                      },
+                                    ),
+                                    const SizedBox(width: 3),
+                                    // Ortho Tracking Toggle
+                                    _toolButton(
+                                      icon: Icons.near_me_disabled,
+                                      label:
+                                          viewModel
+                                              .snapSettings
+                                              .enableOrthoTracking
+                                          ? 'Ortho: ON'
+                                          : 'Ortho: OFF',
+                                      active: viewModel
+                                          .snapSettings
+                                          .enableOrthoTracking,
+                                      onTap: viewModel.toggleOrthoTracking,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
+
+                    // 4. Draggable Floating Property Inspector (Line, Punch, Bend, Pattern, Face, Dimension)
+                    if (widget.renderFloatingInspectors &&
+                        (selectedBend != null ||
+                            selectedCut != null ||
+                            selectedPunch != null ||
+                            selectedPattern != null ||
+                            selectedDimension != null ||
+                            selectedArc != null ||
+                            (selectedFace != null && !isToolActive)) &&
+                        viewModel.isPropertyInspectorOpen)
+                      Positioned(
+                        left: effectiveInspectorPos.dx.clamp(
+                          8.0,
+                          math.max(8.0, constraints.maxWidth - 280.0),
+                        ),
+                        top: effectiveInspectorPos.dy.clamp(
+                          8.0,
+                          math.max(8.0, constraints.maxHeight - 120.0),
+                        ),
+                        child: _buildFloatingInspector(
+                          viewModel: viewModel,
+                          effectiveInspectorPos: effectiveInspectorPos,
+                        ),
+                      ),
+
+                    // 4b. Draggable Active Tool Property Inspector (Configured BEFORE stamping)
+                    if (widget.renderFloatingInspectors &&
+                        viewModel.toolMode != StudioToolMode.select &&
+                        viewModel.toolMode != StudioToolMode.pan &&
+                        viewModel.toolMode != StudioToolMode.addBend &&
+                        viewModel.toolMode != StudioToolMode.addFlange &&
+                        viewModel.toolMode != StudioToolMode.addCut &&
+                        viewModel.toolMode != StudioToolMode.setBaseAnchor)
+                      Positioned(
+                        left: effectiveInspectorPos.dx.clamp(
+                          8.0,
+                          math.max(8.0, constraints.maxWidth - 290.0),
+                        ),
+                        top: effectiveInspectorPos.dy.clamp(
+                          8.0,
+                          math.max(8.0, constraints.maxHeight - 120.0),
+                        ),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanStart: (details) {
+                            _dragStartGlobal = details.globalPosition;
+                            _dragStartPanel = effectiveInspectorPos;
+                          },
+                          onPanUpdate: (details) {
+                            if (_dragStartGlobal != null &&
+                                _dragStartPanel != null) {
+                              setState(() {
+                                _inspectorOffset =
+                                    _dragStartPanel! +
+                                    (details.globalPosition -
+                                        _dragStartGlobal!);
+                              });
+                            }
+                          },
+                          child: ActiveToolPropertySheet(
+                            viewModel: viewModel,
+                            onClose: () =>
+                                viewModel.setToolMode(StudioToolMode.select),
+                            onDragStartHeader: (details) {
+                              _dragStartGlobal = details.globalPosition;
+                              _dragStartPanel = effectiveInspectorPos;
+                            },
+                            onDragHeader: (details) {
+                              if (_dragStartGlobal != null &&
+                                  _dragStartPanel != null) {
+                                setState(() {
+                                  _inspectorOffset =
+                                      _dragStartPanel! +
+                                      (details.globalPosition -
+                                          _dragStartGlobal!);
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+
+                    // Floating Reopen Button if Inspector is closed but an item is selected
+                    if (widget.renderFloatingInspectors &&
+                        (selectedBend != null ||
+                            selectedPunch != null ||
+                            selectedPattern != null ||
+                            selectedFace != null) &&
+                        !viewModel.isPropertyInspectorOpen)
+                      Positioned(
+                        top: 12,
+                        right: 180,
+                        child: InkWell(
+                          onTap: () {
+                            viewModel.setPropertyInspectorOpen(true);
+                          },
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: const Color(0xFF0284C7),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.08),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.tune,
+                                  size: 14,
+                                  color: Color(0xFF0284C7),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  selectedBend != null
+                                      ? 'Open ${selectedBend.id} Properties'
+                                      : (selectedPunch != null
+                                            ? 'Open ${selectedPunch.id} Properties'
+                                            : (selectedPattern != null
+                                                  ? 'Open ${selectedPattern.id} Properties'
+                                                  : 'Open ${selectedFace!.id} Properties')),
+                                  style: const TextStyle(
+                                    color: Color(0xFF0284C7),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // 5. Studio Bottom Bar (Floating Navigation Toolstrip & TEXT COMMANDS Prompt)
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: StudioBottomBar(viewModel: viewModel),
                     ),
-                  ),
 
-                // 5. Studio Bottom Bar (Floating Navigation Toolstrip & TEXT COMMANDS Prompt)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: StudioBottomBar(viewModel: viewModel),
+                    // 6. Ultra-Small Micro Layer Legend (Hovers neatly above bottom bar)
+                    Positioned(
+                      bottom: 36,
+                      right: 12,
+                      child: _buildCompactLegend(),
+                    ),
+                  ],
                 ),
-
-                // 6. Ultra-Small Micro Layer Legend (Hovers neatly above bottom bar)
-                Positioned(
-                  bottom: 36,
-                  right: 12,
-                  child: _buildCompactLegend(),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
-  },
-);
-}
+  }
 
-  List<Widget> _buildEdgeContextMenuChildren(SheetMetalStudioViewModel viewModel) {
+  List<Widget> _buildEdgeContextMenuChildren(
+    SheetMetalStudioViewModel viewModel,
+  ) {
     if (_contextMenuP1 == null || _contextMenuP2 == null) return const [];
     final p1 = _contextMenuP1!;
     final p2 = _contextMenuP2!;
     final lenMm = _contextMenuLenMm ?? p1.distanceTo(p2);
     final assigned = viewModel.findAssignedPortForEdge(p1, p2);
-    final meta = viewModel.detectedFittingMetadata ?? DxfFittingMetadata.fromDocument(viewModel.document);
-    final portCount = meta != null ? ProductCatalogService.getPortCount(meta.product, meta.variantName) : 2;
+    final meta =
+        viewModel.detectedFittingMetadata ??
+        DxfFittingMetadata.fromDocument(viewModel.document);
+    final portCount = meta != null
+        ? ProductCatalogService.getPortCount(meta.product, meta.variantName)
+        : 2;
 
     return [
       MenuItemButton(
         onPressed: null,
         child: Text(
           'Edge: ${lenMm.toStringAsFixed(1)} mm${assigned != null ? ' ($assigned)' : ''}',
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF0F172A)),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 11,
+            color: Color(0xFF0F172A),
+          ),
         ),
       ),
       const Divider(height: 1),
@@ -3674,19 +4575,28 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                     );
                     if (err != null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('⚠️ $err'), backgroundColor: const Color(0xFFDC2626)),
+                        SnackBar(
+                          content: Text('⚠️ $err'),
+                          backgroundColor: const Color(0xFFDC2626),
+                        ),
                       );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('✓ Assigned Port $i Width (${lenMm.toStringAsFixed(1)} mm)'),
+                          content: Text(
+                            '✓ Assigned Port $i Width (${lenMm.toStringAsFixed(1)} mm)',
+                          ),
                           backgroundColor: const Color(0xFF0D9488),
                           duration: const Duration(seconds: 2),
                         ),
                       );
                     }
                   },
-                  leadingIcon: const Icon(Icons.straighten, size: 16, color: Color(0xFF0284C7)),
+                  leadingIcon: const Icon(
+                    Icons.straighten,
+                    size: 16,
+                    color: Color(0xFF0284C7),
+                  ),
                   child: const Text('Assign as Width (W) Edge'),
                 ),
                 MenuItemButton(
@@ -3700,33 +4610,51 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                     );
                     if (err != null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('⚠️ $err'), backgroundColor: const Color(0xFFDC2626)),
+                        SnackBar(
+                          content: Text('⚠️ $err'),
+                          backgroundColor: const Color(0xFFDC2626),
+                        ),
                       );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('✓ Assigned Port $i Height Flap (${lenMm.toStringAsFixed(1)} mm)'),
+                          content: Text(
+                            '✓ Assigned Port $i Height Flap (${lenMm.toStringAsFixed(1)} mm)',
+                          ),
                           backgroundColor: const Color(0xFF0D9488),
                           duration: const Duration(seconds: 2),
                         ),
                       );
                     }
                   },
-                  leadingIcon: const Icon(Icons.border_top, size: 16, color: Color(0xFF0D9488)),
+                  leadingIcon: const Icon(
+                    Icons.border_top,
+                    size: 16,
+                    color: Color(0xFF0D9488),
+                  ),
                   child: const Text('Assign as Height (H) Flap Edge'),
                 ),
               ],
               child: Text(
                 i == 1
                     ? 'Port 1 (Inlet)'
-                    : (i == 2 ? 'Port 2 (Outlet)' : (i == 3 ? 'Port 3 (Branch)' : 'Port $i')),
+                    : (i == 2
+                          ? 'Port 2 (Outlet)'
+                          : (i == 3 ? 'Port 3 (Branch)' : 'Port $i')),
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
           ],
         ],
-        leadingIcon: const Icon(Icons.input, size: 16, color: Color(0xFF0284C7)),
-        child: const Text('Assign Port', style: TextStyle(fontWeight: FontWeight.bold)),
+        leadingIcon: const Icon(
+          Icons.input,
+          size: 16,
+          color: Color(0xFF0284C7),
+        ),
+        child: const Text(
+          'Assign Port',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       if (assigned != null) ...[
         const Divider(height: 1),
@@ -3734,11 +4662,21 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
           onPressed: () {
             viewModel.clearAssignedPortEdge(p1, p2);
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Removed assignment from edge ($assigned)'), duration: const Duration(seconds: 2)),
+              SnackBar(
+                content: Text('Removed assignment from edge ($assigned)'),
+                duration: const Duration(seconds: 2),
+              ),
             );
           },
-          leadingIcon: const Icon(Icons.clear, size: 16, color: Color(0xFFEF4444)),
-          child: Text('Clear Assignment ($assigned)', style: const TextStyle(color: Color(0xFFEF4444))),
+          leadingIcon: const Icon(
+            Icons.clear,
+            size: 16,
+            color: Color(0xFFEF4444),
+          ),
+          child: Text(
+            'Clear Assignment ($assigned)',
+            style: const TextStyle(color: Color(0xFFEF4444)),
+          ),
         ),
       ],
       const Divider(height: 1),
@@ -3775,13 +4713,41 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(width: 3.5, height: 3.5, decoration: const BoxDecoration(color: Color(0xFF0F172A), shape: BoxShape.circle)),
+                Container(
+                  width: 3.5,
+                  height: 3.5,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF0F172A),
+                    shape: BoxShape.circle,
+                  ),
+                ),
                 const SizedBox(width: 2.5),
-                Container(width: 3.5, height: 3.5, decoration: const BoxDecoration(color: Color(0xFF0284C7), shape: BoxShape.circle)),
+                Container(
+                  width: 3.5,
+                  height: 3.5,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF0284C7),
+                    shape: BoxShape.circle,
+                  ),
+                ),
                 const SizedBox(width: 2.5),
-                Container(width: 3.5, height: 3.5, decoration: const BoxDecoration(color: Color(0xFFD97706), shape: BoxShape.circle)),
+                Container(
+                  width: 3.5,
+                  height: 3.5,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFD97706),
+                    shape: BoxShape.circle,
+                  ),
+                ),
                 const SizedBox(width: 2.5),
-                Container(width: 3.5, height: 3.5, decoration: const BoxDecoration(color: Color(0xFF059669), shape: BoxShape.circle)),
+                Container(
+                  width: 3.5,
+                  height: 3.5,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF059669),
+                    shape: BoxShape.circle,
+                  ),
+                ),
               ],
             ),
           ),
@@ -3926,7 +4892,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
   void _openPortDimensionEditor(String portBadgeId) {
     // Extract base port id (e.g. 'port1' from 'port1' or 'port1_h_0')
     final portId = portBadgeId.split('_').first;
-    final meta = widget.viewModel.detectedFittingMetadata ??
+    final meta =
+        widget.viewModel.detectedFittingMetadata ??
         DxfFittingMetadata.fromDocument(widget.viewModel.document) ??
         const DxfFittingMetadata();
     final ports = FittingPortAnnotationEngine.detectPortOpenings(
@@ -3936,17 +4903,20 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
     final port = ports.where((p) => p.id == portId).firstOrNull;
     final semantic = meta.semanticPorts?[portId];
 
-    final currentW = (semantic?['width'] as num?)?.toDouble() ??
+    final currentW =
+        (semantic?['width'] as num?)?.toDouble() ??
         port?.widthMm ??
         widget.viewModel.document.parameters['width'] ??
         300.0;
-    final currentHA = (semantic?['heightA'] as num?)?.toDouble() ??
+    final currentHA =
+        (semantic?['heightA'] as num?)?.toDouble() ??
         port?.heightAMm ??
         port?.heightMm ??
         widget.viewModel.document.parameters['heightA'] ??
         widget.viewModel.document.parameters['height'] ??
         50.0;
-    final currentHB = (semantic?['heightB'] as num?)?.toDouble() ??
+    final currentHB =
+        (semantic?['heightB'] as num?)?.toDouble() ??
         port?.heightBMm ??
         port?.heightMm ??
         widget.viewModel.document.parameters['heightB'] ??
@@ -3966,11 +4936,14 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
       _portEditHeightB = currentHB;
       _portHeightsLinked = (_portEditHeightA - _portEditHeightB).abs() < 1e-3;
       _portEditorScreenPos = pos;
-      _portEditBaselineParams = Map<String, double>.from(widget.viewModel.document.parameters);
+      _portEditBaselineParams = Map<String, double>.from(
+        widget.viewModel.document.parameters,
+      );
     });
   }
 
-  ({String widthKey, String heightAKey, String heightBKey}) _resolveParamKeysForPort(
+  ({String widthKey, String heightAKey, String heightBKey})
+  _resolveParamKeysForPort(
     String portId,
     DxfFittingMetadata? meta,
     Map<String, double> params,
@@ -4051,7 +5024,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
 
   void _updateLivePortDimension({double? newW, double? newHA, double? newHB}) {
     if (_activeEditingPortId == null) return;
-    final meta = widget.viewModel.detectedFittingMetadata ??
+    final meta =
+        widget.viewModel.detectedFittingMetadata ??
         DxfFittingMetadata.fromDocument(widget.viewModel.document);
     final keys = _resolveParamKeysForPort(
       _activeEditingPortId!,
@@ -4066,7 +5040,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
     if (newHA != null) {
       _portEditHeightA = newHA;
       widget.viewModel.updateTemplateParameter(keys.heightAKey, newHA);
-      if (keys.heightAKey != 'height' && widget.viewModel.document.parameters.containsKey('height')) {
+      if (keys.heightAKey != 'height' &&
+          widget.viewModel.document.parameters.containsKey('height')) {
         widget.viewModel.updateTemplateParameter('height', newHA);
       }
       if (_portHeightsLinked) {
@@ -4083,7 +5058,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
 
   void _applyPortDimensionEditor() {
     if (_activeEditingPortId == null) return;
-    final meta = widget.viewModel.detectedFittingMetadata ??
+    final meta =
+        widget.viewModel.detectedFittingMetadata ??
         DxfFittingMetadata.fromDocument(widget.viewModel.document) ??
         const DxfFittingMetadata();
 
@@ -4117,7 +5093,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
 
   Widget _buildPortDimensionEditorCard(SheetMetalStudioViewModel viewModel) {
     if (_activeEditingPortId == null) return const SizedBox.shrink();
-    final meta = viewModel.detectedFittingMetadata ??
+    final meta =
+        viewModel.detectedFittingMetadata ??
         DxfFittingMetadata.fromDocument(viewModel.document);
     final ports = FittingPortAnnotationEngine.detectPortOpenings(
       document: viewModel.document,
@@ -4175,7 +5152,10 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                   },
                   borderRadius: BorderRadius.circular(4),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: _portHeightsLinked
                           ? const Color(0xFF10B981).withValues(alpha: 0.2)
@@ -4216,7 +5196,11 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                 const SizedBox(width: 6),
                 InkWell(
                   onTap: _cancelPortDimensionEditor,
-                  child: const Icon(Icons.close, size: 16, color: Colors.white54),
+                  child: const Icon(
+                    Icons.close,
+                    size: 16,
+                    color: Colors.white54,
+                  ),
                 ),
               ],
             ),
@@ -4267,10 +5251,16 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                   onPressed: _cancelPortDimensionEditor,
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.white60,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     visualDensity: VisualDensity.compact,
                   ),
-                  child: const Text('Cancel (Esc)', style: TextStyle(fontSize: 11)),
+                  child: const Text(
+                    'Cancel (Esc)',
+                    style: TextStyle(fontSize: 11),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
@@ -4278,12 +5268,20 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF10B981),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
                     visualDensity: VisualDensity.compact,
                   ),
                   icon: const Icon(Icons.check, size: 14),
-                  label: const Text('Apply (Enter)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  label: const Text(
+                    'Apply (Enter)',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -4309,7 +5307,9 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
         color: Colors.white.withValues(alpha: enabled ? 0.07 : 0.03),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: enabled ? Colors.white12 : Colors.white.withValues(alpha: 0.04),
+          color: enabled
+              ? Colors.white12
+              : Colors.white.withValues(alpha: 0.04),
         ),
       ),
       child: Row(
@@ -4325,17 +5325,23 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
             ),
           ),
           InkWell(
-            onTap: enabled ? () {
-              final next = (value - step).clamp(min, max);
-              onChanged(next);
-            } : null,
+            onTap: enabled
+                ? () {
+                    final next = (value - step).clamp(min, max);
+                    onChanged(next);
+                  }
+                : null,
             child: Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: enabled ? 0.12 : 0.05),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Icon(Icons.remove, size: 13, color: enabled ? Colors.white70 : Colors.white24),
+              child: Icon(
+                Icons.remove,
+                size: 13,
+                color: enabled ? Colors.white70 : Colors.white24,
+              ),
             ),
           ),
           const SizedBox(width: 6),
@@ -4353,17 +5359,23 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
           ),
           const SizedBox(width: 6),
           InkWell(
-            onTap: enabled ? () {
-              final next = (value + step).clamp(min, max);
-              onChanged(next);
-            } : null,
+            onTap: enabled
+                ? () {
+                    final next = (value + step).clamp(min, max);
+                    onChanged(next);
+                  }
+                : null,
             child: Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: enabled ? 0.12 : 0.05),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Icon(Icons.add, size: 13, color: enabled ? Colors.white70 : Colors.white24),
+              child: Icon(
+                Icons.add,
+                size: 13,
+                color: enabled ? Colors.white70 : Colors.white24,
+              ),
             ),
           ),
         ],
@@ -4371,17 +5383,26 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
     );
   }
 
-  Widget _buildWhyDidThisMoveCard(SheetMetalStudioViewModel viewModel, BoxConstraints constraints) {
+  Widget _buildWhyDidThisMoveCard(
+    SheetMetalStudioViewModel viewModel,
+    BoxConstraints constraints,
+  ) {
     final punchId = viewModel.selectedPunchId;
     if (punchId == null) return const SizedBox.shrink();
-    final punch = viewModel.document.punches.where((p) => p.id == punchId).firstOrNull;
+    final punch = viewModel.document.punches
+        .where((p) => p.id == punchId)
+        .firstOrNull;
     if (punch == null) return const SizedBox.shrink();
 
-    final meta = viewModel.detectedFittingMetadata ?? DxfFittingMetadata.fromDocument(viewModel.document);
+    final meta =
+        viewModel.detectedFittingMetadata ??
+        DxfFittingMetadata.fromDocument(viewModel.document);
     String associatedPortName = 'Fitting Zone';
     if (meta?.semanticPorts != null) {
       for (final entry in meta!.semanticPorts!.entries) {
-        final featIds = (entry.value['associatedFeatureIds'] as List?)?.cast<String>() ?? [];
+        final featIds =
+            (entry.value['associatedFeatureIds'] as List?)?.cast<String>() ??
+            [];
         if (featIds.contains(punchId)) {
           associatedPortName = entry.key.toUpperCase();
           break;
@@ -4391,7 +5412,9 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
 
     final sizeDesc = punch.widthMm > 0 && punch.lengthMm > 0
         ? '${punch.lengthMm.toStringAsFixed(0)} × ${punch.widthMm.toStringAsFixed(0)} mm slot'
-        : (punch.diameterMm > 0 ? 'Ø${punch.diameterMm.toStringAsFixed(0)} mm hole' : punch.type.name);
+        : (punch.diameterMm > 0
+              ? 'Ø${punch.diameterMm.toStringAsFixed(0)} mm hole'
+              : punch.type.name);
 
     return Positioned(
       bottom: 50,
@@ -4419,51 +5442,94 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.help_outline, size: 16, color: Color(0xFF38BDF8)),
+                  const Icon(
+                    Icons.help_outline,
+                    size: 16,
+                    color: Color(0xFF38BDF8),
+                  ),
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
                       'Why did this move?',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12.5,
+                      ),
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF059669),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Text('RIGID', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      'RIGID',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 6),
                   InkWell(
                     onTap: () => viewModel.selectPunch(null),
-                    child: const Icon(Icons.close, size: 14, color: Colors.white54),
+                    child: const Icon(
+                      Icons.close,
+                      size: 14,
+                      color: Colors.white54,
+                    ),
                   ),
                 ],
               ),
               const Divider(color: Colors.white24, height: 14),
               Text(
                 'Selected: ${punch.id} ($associatedPortName)',
-                style: const TextStyle(color: Color(0xFFE2E8F0), fontWeight: FontWeight.bold, fontSize: 11),
+                style: const TextStyle(
+                  color: Color(0xFFE2E8F0),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
               ),
               const SizedBox(height: 4),
               const Text(
                 'Driven by:',
-                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               Text(
                 '• $associatedPortName Centerline Alignment\n• Flange Root Longitudinal Reference',
-                style: const TextStyle(color: Colors.white70, fontSize: 10.5, height: 1.3),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10.5,
+                  height: 1.3,
+                ),
               ),
               const SizedBox(height: 6),
               const Text(
                 'Behavior:',
-                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               Text(
                 '✓ Tool size preserved ($sizeDesc)\n✓ Shape invariant (Zero ovalization)\n✓ Spatial position recalculated',
-                style: const TextStyle(color: Color(0xFF34D399), fontSize: 10.5, height: 1.3, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  color: Color(0xFF34D399),
+                  fontSize: 10.5,
+                  height: 1.3,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -4503,7 +5569,20 @@ class _UnfoldedBoardPainter extends CustomPainter {
   final Map<String, Offset> dimensionOffsets;
   final Map<String, double> dimensionLineOffsets;
   final Map<String, Rect>? renderedDimensionBadges;
-  final Map<String, ({Offset pA, Offset pB, double offsetDist, CadPoint2D ptA, CadPoint2D ptB, CadDimensionType type})>? renderedDimensionLines;
+  final Map<
+    String,
+    ({
+      Offset pA,
+      Offset pB,
+      double offsetDist,
+      CadPoint2D ptA,
+      CadPoint2D ptB,
+      CadDimensionType type,
+    })
+  >?
+  renderedDimensionLines;
+  final String? editingDimId;
+  final Map<String, double>? renderedDimensionValues;
   final String? hoveredDimLineId;
   final Map<String, Offset>? portBadgeOffsets;
   final Map<String, Rect>? renderedPortBadges;
@@ -4564,6 +5643,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
     this.dimensionLineOffsets = const {},
     this.renderedDimensionBadges,
     this.renderedDimensionLines,
+    this.editingDimId,
+    this.renderedDimensionValues,
     this.hoveredDimLineId,
     this.portBadgeOffsets,
     this.renderedPortBadges,
@@ -4604,6 +5685,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     if (size.width <= 0 || size.height <= 0) return;
 
     renderedDimensionBadges?.clear();
+    renderedDimensionValues?.clear();
     renderedDimensionLines?.clear();
     renderedPortBadges?.clear();
     renderedConstraintBadges?.clear();
@@ -4697,7 +5779,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
         if (matchedArc != null && targetIdx != -1) {
           final samples = matchedArc.toPolygon(maxStepDeg: 3.0);
-          final orderedSamples = isReversed ? samples.reversed.toList() : samples;
+          final orderedSamples = isReversed
+              ? samples.reversed.toList()
+              : samples;
           for (final s in orderedSamples.skip(1)) {
             final pt = toScreen(s.x, s.y);
             path.lineTo(pt.dx, pt.dy);
@@ -4723,7 +5807,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
       for (final face in facesToDraw) {
         if (face.vertices.length < 3) continue;
 
-        final facePath = buildSmoothPolygonPath(face.vertices)..fillType = PathFillType.evenOdd;
+        final facePath = buildSmoothPolygonPath(face.vertices)
+          ..fillType = PathFillType.evenOdd;
 
         for (final loop in face.holes) {
           if (loop.length >= 3) {
@@ -4784,9 +5869,28 @@ class _UnfoldedBoardPainter extends CustomPainter {
     canvas.drawLine(sOrigin, sOrigin + const Offset(18, 0), originAxisPaint);
     originAxisPaint.color = const Color(0xFF22C55E);
     canvas.drawLine(sOrigin, sOrigin + const Offset(0, 18), originAxisPaint);
-    canvas.drawCircle(sOrigin, 3.5, Paint()..color = Colors.white..style = PaintingStyle.fill);
-    canvas.drawCircle(sOrigin, 3.5, Paint()..color = const Color(0xFF64748B)..style = PaintingStyle.stroke..strokeWidth = 1.0);
-    canvas.drawCircle(sOrigin, 1.5, Paint()..color = const Color(0xFF0F172A)..style = PaintingStyle.fill);
+    canvas.drawCircle(
+      sOrigin,
+      3.5,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawCircle(
+      sOrigin,
+      3.5,
+      Paint()
+        ..color = const Color(0xFF64748B)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0,
+    );
+    canvas.drawCircle(
+      sOrigin,
+      1.5,
+      Paint()
+        ..color = const Color(0xFF0F172A)
+        ..style = PaintingStyle.fill,
+    );
 
     // 2.2 Draw Point Vertices (Arcs display only 2 dots at the ends)
     if (showPoints) {
@@ -4819,7 +5923,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       bool isInsideAnyArc(CadPoint2D pt) {
         for (final arc in doc.arcs) {
-          if (pt.distanceTo(arc.startPoint) <= 1.2 || pt.distanceTo(arc.endPoint) <= 1.2) {
+          if (pt.distanceTo(arc.startPoint) <= 1.2 ||
+              pt.distanceTo(arc.endPoint) <= 1.2) {
             return false;
           }
           if (arc.distanceTo(pt) <= 1.0) {
@@ -4870,8 +5975,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
       ..strokeWidth = 1.6;
 
     for (final cut in doc.cutLines) {
-      final isSelected = cut.id == selectedCutId || selectedEntityIds.contains(cut.id);
-      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(cut.id);
+      final isSelected =
+          cut.id == selectedCutId || selectedEntityIds.contains(cut.id);
+      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(
+        cut.id,
+      );
       final sp1 = toScreen(cut.p1.x, cut.p1.y);
       final sp2 = toScreen(cut.p2.x, cut.p2.y);
 
@@ -4896,7 +6004,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       final mid = Offset((sp1.dx + sp2.dx) / 2.0, (sp1.dy + sp2.dy) / 2.0);
       if (cut.showLabel) {
-        _drawCutBadge(canvas, mid, cut.id, isSelected, lengthMm: cut.length, showLabel: cut.showLabel);
+        _drawCutBadge(
+          canvas,
+          mid,
+          cut.id,
+          isSelected,
+          lengthMm: cut.length,
+          showLabel: cut.showLabel,
+        );
       }
 
       if (isSelected) {
@@ -4907,7 +6022,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
     // 3b. Render First-Class Arcs (SS3: Hover, Selection, Dimension Badge)
     for (final arc in doc.arcs) {
-      final isSelected = arc.id == selectedArcId || selectedEntityIds.contains(arc.id);
+      final isSelected =
+          arc.id == selectedArcId || selectedEntityIds.contains(arc.id);
       final isHovered = arc.id == hoveredArcId && !isSelected;
 
       if (isSelected || isHovered || !arc.isBoundary) {
@@ -4943,7 +6059,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
     // 4. Render Fold Bends & Flanges with Bend Deductions, Role Colors, and Hover Glow
     for (final bend in doc.bends) {
       if (!bend.isVisible) continue;
-      final isSelected = bend.id == selectedBendId || selectedEntityIds.contains(bend.id);
+      final isSelected =
+          bend.id == selectedBendId || selectedEntityIds.contains(bend.id);
       final isHovered = bend.id == hoveredBendId && !isSelected;
       final isUp = bend.direction == FoldDirection.up;
       final isFlange = bend.isFlange;
@@ -4953,9 +6070,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
       if (showDofDiagnostics && dofStateProvider != null) {
         color = dofStateProvider!(bend.id).color;
       } else if (isSelected) {
-        color = isFlange ? const Color(0xFF7C3AED) : const Color(0xFF2563EB); // Vibrant Purple / Royal Blue
+        color = isFlange
+            ? const Color(0xFF7C3AED)
+            : const Color(0xFF2563EB); // Vibrant Purple / Royal Blue
       } else if (isHovered) {
-        color = isFlange ? const Color(0xFFA78BFA) : const Color(0xFF0EA5E9); // Light Purple / Sky-500 hover
+        color = isFlange
+            ? const Color(0xFFA78BFA)
+            : const Color(0xFF0EA5E9); // Light Purple / Sky-500 hover
       } else if (isIncomplete) {
         color = const Color(0xFFD97706); // Amber warning
       } else {
@@ -4964,7 +6085,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
             : (isUp ? const Color(0xFF0284C7) : const Color(0xFFD97706));
       }
 
-      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(bend.id);
+      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(
+        bend.id,
+      );
       final sp1 = toScreen(bend.p1.x, bend.p1.y);
       final sp2 = toScreen(bend.p2.x, bend.p2.y);
 
@@ -5013,7 +6136,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
           ..lineTo(m2a.dx, m2a.dy)
           ..close();
         final zonePaint = Paint()
-          ..color = color.withValues(alpha: isSelected ? 0.18 : (isHovered ? 0.14 : 0.08))
+          ..color = color.withValues(
+            alpha: isSelected ? 0.18 : (isHovered ? 0.14 : 0.08),
+          )
           ..style = PaintingStyle.fill;
         canvas.drawPath(zonePath, zonePaint);
 
@@ -5034,11 +6159,19 @@ class _UnfoldedBoardPainter extends CustomPainter {
             ..strokeWidth = 0.8;
           const notchRadius = 2.8;
           canvas.drawRect(
-            Rect.fromCenter(center: sp1, width: notchRadius * 2, height: notchRadius * 2),
+            Rect.fromCenter(
+              center: sp1,
+              width: notchRadius * 2,
+              height: notchRadius * 2,
+            ),
             reliefPaint,
           );
           canvas.drawRect(
-            Rect.fromCenter(center: sp2, width: notchRadius * 2, height: notchRadius * 2),
+            Rect.fromCenter(
+              center: sp2,
+              width: notchRadius * 2,
+              height: notchRadius * 2,
+            ),
             reliefPaint,
           );
         }
@@ -5070,16 +6203,18 @@ class _UnfoldedBoardPainter extends CustomPainter {
         if (isIncomplete) {
           labelText = '⚠️ ${bend.id} OPEN · $lenStr';
         } else if (isFlange) {
-          labelText = '${bend.id} [FLANGE] ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr · $lenStr';
+          labelText =
+              '${bend.id} [FLANGE] ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr · $lenStr';
         } else {
-          labelText = '${bend.id} ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr · $lenStr';
+          labelText =
+              '${bend.id} ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr · $lenStr';
         }
 
         final textColor = isIncomplete
             ? const Color(0xFFB45309)
             : (isFlange
-                ? const Color(0xFF6D28D9)
-                : (isUp ? const Color(0xFF0369A1) : const Color(0xFFB45309)));
+                  ? const Color(0xFF6D28D9)
+                  : (isUp ? const Color(0xFF0369A1) : const Color(0xFFB45309)));
 
         final textSpan = TextSpan(
           text: labelText,
@@ -5115,7 +6250,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
         final badgeBg = Paint()
           ..color = isIncomplete
               ? const Color(0xFFFEF3C7)
-              : (isSelected ? const Color(0xFFF0F9FF) : Colors.white.withValues(alpha: 0.96))
+              : (isSelected
+                    ? const Color(0xFFF0F9FF)
+                    : Colors.white.withValues(alpha: 0.96))
           ..style = PaintingStyle.fill;
         canvas.drawRRect(badgeRect, badgeBg);
 
@@ -5165,10 +6302,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         // 4f. Render CAM violation icon if detected
         final vResult = bendViolations?[bend.id];
         if (vResult != null && !vResult.isClean) {
-          const camSpan = TextSpan(
-            text: '⚠️',
-            style: TextStyle(fontSize: 9.5),
-          );
+          const camSpan = TextSpan(text: '⚠️', style: TextStyle(fontSize: 9.5));
           final camTp = TextPainter(
             text: camSpan,
             textDirection: TextDirection.ltr,
@@ -5279,7 +6413,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
     Path? unselectedPunchesUnion;
 
     for (final punch in allPunchesList) {
-      final isSelected = punch.id == selectedPunchId ||
+      final isSelected =
+          punch.id == selectedPunchId ||
           selectedEntityIds.contains(punch.id) ||
           selectedEntityIds.any((id) => punch.id.startsWith('${id}_'));
       final isHovered = punch.id == hoveredPunchId && !isSelected;
@@ -5346,11 +6481,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
     }
 
     for (final punch in activePunches) {
-      final isSelected = punch.id == selectedPunchId ||
+      final isSelected =
+          punch.id == selectedPunchId ||
           selectedEntityIds.contains(punch.id) ||
           selectedEntityIds.any((id) => punch.id.startsWith('${id}_'));
       final isHovered = punch.id == hoveredPunchId && !isSelected;
-      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(punch.id);
+      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(
+        punch.id,
+      );
       final poly = punch.toPolygon();
       if (poly.isNotEmpty) {
         final holePath = Path();
@@ -5376,7 +6514,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
             ..color = dof.color
             ..style = PaintingStyle.stroke
             ..strokeWidth = isSelected ? 2.4 : 1.6;
-          canvas.drawPath(holePath, isSelected ? selectedFillPaint : hoveredFillPaint);
+          canvas.drawPath(
+            holePath,
+            isSelected ? selectedFillPaint : hoveredFillPaint,
+          );
           canvas.drawPath(holePath, dofBorder);
         } else if (isSelected) {
           canvas.drawPath(holePath, selectedFillPaint);
@@ -5446,26 +6587,34 @@ class _UnfoldedBoardPainter extends CustomPainter {
           if (punch.type == PunchType.roundHole) {
             sizeStr = 'Ø ${punch.diameterMm.toStringAsFixed(1)} mm';
           } else if (punch.type == PunchType.square) {
-            sizeStr = '${punch.widthMm.toStringAsFixed(1)} × ${punch.widthMm.toStringAsFixed(1)} mm';
+            sizeStr =
+                '${punch.widthMm.toStringAsFixed(1)} × ${punch.widthMm.toStringAsFixed(1)} mm';
           } else {
-            sizeStr = '${punch.widthMm.toStringAsFixed(1)} × ${punch.lengthMm.toStringAsFixed(1)} mm';
+            sizeStr =
+                '${punch.widthMm.toStringAsFixed(1)} × ${punch.lengthMm.toStringAsFixed(1)} mm';
           }
 
           final pSpan = TextSpan(
             text: sizeStr,
             style: TextStyle(
-              color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF047857),
+              color: isSelected
+                  ? const Color(0xFF1D4ED8)
+                  : const Color(0xFF047857),
               fontSize: 9.0,
               fontWeight: FontWeight.bold,
             ),
           );
-          final pTp = TextPainter(text: pSpan, textDirection: TextDirection.ltr)..layout();
+          final pTp = TextPainter(text: pSpan, textDirection: TextDirection.ltr)
+            ..layout();
           final pBadgeRect = Rect.fromCenter(
             center: Offset(centerScreen.dx, centerScreen.dy - 16.0),
             width: pTp.width + 8.0,
             height: pTp.height + 4.0,
           );
-          final pRRect = RRect.fromRectAndRadius(pBadgeRect, const Radius.circular(3.0));
+          final pRRect = RRect.fromRectAndRadius(
+            pBadgeRect,
+            const Radius.circular(3.0),
+          );
           canvas.drawRRect(
             pRRect,
             Paint()
@@ -5475,11 +6624,16 @@ class _UnfoldedBoardPainter extends CustomPainter {
           canvas.drawRRect(
             pRRect,
             Paint()
-              ..color = isSelected ? const Color(0xFF2563EB) : const Color(0xFF10B981)
+              ..color = isSelected
+                  ? const Color(0xFF2563EB)
+                  : const Color(0xFF10B981)
               ..style = PaintingStyle.stroke
               ..strokeWidth = 0.8,
           );
-          pTp.paint(canvas, Offset(pBadgeRect.left + 4.0, pBadgeRect.top + 2.0));
+          pTp.paint(
+            canvas,
+            Offset(pBadgeRect.left + 4.0, pBadgeRect.top + 2.0),
+          );
         }
       }
     }
@@ -5500,7 +6654,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
 
-      if (toolMode == StudioToolMode.addPunchRound || toolMode == StudioToolMode.drawCircle) {
+      if (toolMode == StudioToolMode.addPunchRound ||
+          toolMode == StudioToolMode.drawCircle) {
         final r = (cfg.roundHoleDiameterMm / 2.0) * scale;
         canvas.drawCircle(ghostCenter, r, ghostFill);
         canvas.drawCircle(ghostCenter, r, ghostStroke);
@@ -5527,7 +6682,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
           Offset(ghostCenter.dx, ghostCenter.dy - halfL - 10),
           '${cfg.obroundLengthMm.toStringAsFixed(0)}x${cfg.obroundWidthMm.toStringAsFixed(0)} mm',
         );
-      } else if (toolMode == StudioToolMode.addPunchSquare || toolMode == StudioToolMode.drawRectangle) {
+      } else if (toolMode == StudioToolMode.addPunchSquare ||
+          toolMode == StudioToolMode.drawRectangle) {
         final w = cfg.squareAspectLocked ? cfg.squareSizeMm : cfg.rectWidthMm;
         final h = cfg.squareAspectLocked ? cfg.squareSizeMm : cfg.rectHeightMm;
         final halfW = (w / 2.0) * scale;
@@ -5629,8 +6785,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
       } else if (toolMode == StudioToolMode.addBend ||
           toolMode == StudioToolMode.addFlange) {
         final isFlange = toolMode == StudioToolMode.addFlange;
-        final guideColor =
-            isFlange ? const Color(0xFF8B5CF6) : const Color(0xFF0284C7);
+        final guideColor = isFlange
+            ? const Color(0xFF8B5CF6)
+            : const Color(0xFF0284C7);
 
         // 1. If an auto candidate line has been calculated, draw it cutting across the sheet
         if (autoCandidateLine != null) {
@@ -5644,7 +6801,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
           _drawDashedLine(canvas, g1, g2, autoPaint, dash: 5.0, gap: 3.5);
 
           // Subtle dot glyphs at both endpoints (snapped between opposite dots)
-          final dotPaint = Paint()..color = guideColor..style = PaintingStyle.fill;
+          final dotPaint = Paint()
+            ..color = guideColor
+            ..style = PaintingStyle.fill;
           canvas.drawCircle(g1, 2.2, dotPaint);
           canvas.drawCircle(g2, 2.2, dotPaint);
 
@@ -5652,7 +6811,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
           final lineMid = Offset((g1.dx + g2.dx) / 2.0, (g1.dy + g2.dy) / 2.0);
 
           // Calculate actual candidate feature dimension
-          final candLen = autoCandidateLine!.p1.distanceTo(autoCandidateLine!.p2);
+          final candLen = autoCandidateLine!.p1.distanceTo(
+            autoCandidateLine!.p2,
+          );
           double effDist = isFlange ? 10.0 : candLen;
           if (doc.outerContour.isNotEmpty) {
             double? minD;
@@ -5665,8 +6826,19 @@ class _UnfoldedBoardPainter extends CustomPainter {
               final b = doc.outerContour[(i + 1) % doc.outerContour.length];
               final l2 = (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y);
               if (l2 < 1e-4) continue;
-              final t = math.max(0.0, math.min(1.0, ((cMid.x - a.x) * (b.x - a.x) + (cMid.y - a.y) * (b.y - a.y)) / l2));
-              final proj = CadPoint2D(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y));
+              final t = math.max(
+                0.0,
+                math.min(
+                  1.0,
+                  ((cMid.x - a.x) * (b.x - a.x) +
+                          (cMid.y - a.y) * (b.y - a.y)) /
+                      l2,
+                ),
+              );
+              final proj = CadPoint2D(
+                a.x + t * (b.x - a.x),
+                a.y + t * (b.y - a.y),
+              );
               final d = cMid.distanceTo(proj);
               if (minD == null || d < minD) minD = d;
             }
@@ -5834,9 +7006,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
             fontWeight: FontWeight.bold,
           ),
         );
-        final tpRect =
-            TextPainter(text: rectSpan, textDirection: TextDirection.ltr)
-              ..layout();
+        final tpRect = TextPainter(
+          text: rectSpan,
+          textDirection: TextDirection.ltr,
+        )..layout();
         tpRect.paint(canvas, Offset(p2.dx + 10, p2.dy - 16));
       } else if (toolMode == StudioToolMode.drawCircle) {
         final radiusPx = (p2 - p1).distance;
@@ -5855,9 +7028,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
             fontWeight: FontWeight.bold,
           ),
         );
-        final tpCircle =
-            TextPainter(text: circleSpan, textDirection: TextDirection.ltr)
-              ..layout();
+        final tpCircle = TextPainter(
+          text: circleSpan,
+          textDirection: TextDirection.ltr,
+        )..layout();
         tpCircle.paint(canvas, Offset(p2.dx + 10, p2.dy - 16));
       } else if (toolMode == StudioToolMode.modifyMove) {
         final movePaint = Paint()
@@ -5876,9 +7050,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
             fontWeight: FontWeight.bold,
           ),
         );
-        final tpMove =
-            TextPainter(text: moveSpan, textDirection: TextDirection.ltr)
-              ..layout();
+        final tpMove = TextPainter(
+          text: moveSpan,
+          textDirection: TextDirection.ltr,
+        )..layout();
         tpMove.paint(canvas, Offset(p2.dx + 10, p2.dy - 16));
       } else if (toolMode == StudioToolMode.modifyMirror) {
         final mirrorPaint = Paint()
@@ -5894,11 +7069,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
             fontWeight: FontWeight.bold,
           ),
         );
-        final tpMirror =
-            TextPainter(text: mirrorSpan, textDirection: TextDirection.ltr)
-              ..layout();
+        final tpMirror = TextPainter(
+          text: mirrorSpan,
+          textDirection: TextDirection.ltr,
+        )..layout();
         tpMirror.paint(canvas, Offset(p2.dx + 10, p2.dy - 16));
-      } else if (toolMode == StudioToolMode.addDimension || toolMode == StudioToolMode.dragDimension) {
+      } else if (toolMode == StudioToolMode.addDimension ||
+          toolMode == StudioToolMode.dragDimension) {
         final dimPaint = Paint()
           ..color = const Color(0xFF0284C7)
           ..style = PaintingStyle.stroke
@@ -5915,8 +7092,16 @@ class _UnfoldedBoardPainter extends CustomPainter {
           final tickPaint = Paint()
             ..color = const Color(0xFF0284C7)
             ..strokeWidth = 1.5;
-          canvas.drawLine(Offset(p1.dx - nx, p1.dy - ny), Offset(p1.dx + nx, p1.dy + ny), tickPaint);
-          canvas.drawLine(Offset(p2.dx - nx, p2.dy - ny), Offset(p2.dx + nx, p2.dy + ny), tickPaint);
+          canvas.drawLine(
+            Offset(p1.dx - nx, p1.dy - ny),
+            Offset(p1.dx + nx, p1.dy + ny),
+            tickPaint,
+          );
+          canvas.drawLine(
+            Offset(p2.dx - nx, p2.dy - ny),
+            Offset(p2.dx + nx, p2.dy + ny),
+            tickPaint,
+          );
         }
 
         // Precision end dots on dimension line endpoints
@@ -5935,14 +7120,18 @@ class _UnfoldedBoardPainter extends CustomPainter {
           isAlt = HardwareKeyboard.instance.isAltPressed;
         } catch (_) {}
         final dimSpan = TextSpan(
-          text: ' DIM: ${distMm.toStringAsFixed(1)} mm ${isAlt ? "(Alt Free)" : ""}',
+          text:
+              ' DIM: ${distMm.toStringAsFixed(1)} mm ${isAlt ? "(Alt Free)" : ""}',
           style: const TextStyle(
             color: Color(0xFF0284C7),
             fontSize: 10,
             fontWeight: FontWeight.bold,
           ),
         );
-        final tpDim = TextPainter(text: dimSpan, textDirection: TextDirection.ltr)..layout();
+        final tpDim = TextPainter(
+          text: dimSpan,
+          textDirection: TextDirection.ltr,
+        )..layout();
 
         // Place dimension text closer to the invisible drawn line, centered at midpoint
         final mid = Offset((p1.dx + p2.dx) / 2.0, (p1.dy + p2.dy) / 2.0);
@@ -5954,7 +7143,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
           ),
           const Radius.circular(3.0),
         );
-        canvas.drawRRect(textBgRect, Paint()..color = Colors.white.withValues(alpha: 0.9));
+        canvas.drawRRect(
+          textBgRect,
+          Paint()..color = Colors.white.withValues(alpha: 0.9),
+        );
         canvas.drawRRect(
           textBgRect,
           Paint()
@@ -5962,7 +7154,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.0,
         );
-        tpDim.paint(canvas, Offset(mid.dx - tpDim.width / 2.0, mid.dy - tpDim.height - 4.0));
+        tpDim.paint(
+          canvas,
+          Offset(mid.dx - tpDim.width / 2.0, mid.dy - tpDim.height - 4.0),
+        );
       } else {
         final isCut = toolMode == StudioToolMode.addCut;
         final isFlange = toolMode == StudioToolMode.addFlange;
@@ -6022,14 +7217,19 @@ class _UnfoldedBoardPainter extends CustomPainter {
         // 1. Draw already-placed segments
         for (int i = 0; i < pendingMultiPoints.length - 1; i++) {
           final sA = toScreen(pendingMultiPoints[i].x, pendingMultiPoints[i].y);
-          final sB =
-              toScreen(pendingMultiPoints[i + 1].x, pendingMultiPoints[i + 1].y);
+          final sB = toScreen(
+            pendingMultiPoints[i + 1].x,
+            pendingMultiPoints[i + 1].y,
+          );
           canvas.drawLine(sA, sB, polyStrokePaint);
         }
 
         // 2. Draw placed vertex nodes
         for (int i = 0; i < pendingMultiPoints.length; i++) {
-          final sPt = toScreen(pendingMultiPoints[i].x, pendingMultiPoints[i].y);
+          final sPt = toScreen(
+            pendingMultiPoints[i].x,
+            pendingMultiPoints[i].y,
+          );
           canvas.drawCircle(sPt, 4.5, polyFillNodePaint);
           canvas.drawCircle(sPt, 4.5, polyBorderNodePaint);
           canvas.drawCircle(sPt, 2.0, polyStrokePaint);
@@ -6039,31 +7239,42 @@ class _UnfoldedBoardPainter extends CustomPainter {
         if (rubberBandEndpoint != null) {
           final lastPt = pendingMultiPoints.last;
           final sLast = toScreen(lastPt.x, lastPt.y);
-          final sCursor =
-              toScreen(rubberBandEndpoint!.x, rubberBandEndpoint!.y);
+          final sCursor = toScreen(
+            rubberBandEndpoint!.x,
+            rubberBandEndpoint!.y,
+          );
           final rubberDashPaint = Paint()
             ..color = const Color(0xFF0284C7)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 2.0;
           _drawDashedLine(
-              canvas, sLast, sCursor, rubberDashPaint, dash: 5.0, gap: 4.0);
+            canvas,
+            sLast,
+            sCursor,
+            rubberDashPaint,
+            dash: 5.0,
+            gap: 4.0,
+          );
 
           final segLen = lastPt.distanceTo(rubberBandEndpoint!);
           final dx = rubberBandEndpoint!.x - lastPt.x;
           final dy = rubberBandEndpoint!.y - lastPt.y;
           final angleDeg = (math.atan2(dy, dx) * 180.0 / math.pi).round();
 
-          final isCloseSnap = pendingMultiPoints.length >= 2 &&
-              (rubberBandEndpoint!.distanceTo(pendingMultiPoints.first) < 10.0 ||
+          final isCloseSnap =
+              pendingMultiPoints.length >= 2 &&
+              (rubberBandEndpoint!.distanceTo(pendingMultiPoints.first) <
+                      10.0 ||
                   (activeSnap != null &&
-                      activeSnap!.point
-                              .distanceTo(pendingMultiPoints.first) <
+                      activeSnap!.point.distanceTo(pendingMultiPoints.first) <
                           1.0));
 
           if (isCloseSnap) {
             // Draw close loop preview ring and badge
             final sFirst = toScreen(
-                pendingMultiPoints.first.x, pendingMultiPoints.first.y);
+              pendingMultiPoints.first.x,
+              pendingMultiPoints.first.y,
+            );
             final closeRingPaint = Paint()
               ..color = const Color(0xFF10B981)
               ..style = PaintingStyle.stroke
@@ -6079,9 +7290,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
                 backgroundColor: Color(0xFF059669),
               ),
             );
-            final tpClose =
-                TextPainter(text: closeSpan, textDirection: TextDirection.ltr)
-                  ..layout();
+            final tpClose = TextPainter(
+              text: closeSpan,
+              textDirection: TextDirection.ltr,
+            )..layout();
             tpClose.paint(canvas, Offset(sCursor.dx + 12, sCursor.dy - 18));
           } else {
             final polySpan = TextSpan(
@@ -6093,9 +7305,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
                 fontWeight: FontWeight.bold,
               ),
             );
-            final tpPoly =
-                TextPainter(text: polySpan, textDirection: TextDirection.ltr)
-                  ..layout();
+            final tpPoly = TextPainter(
+              text: polySpan,
+              textDirection: TextDirection.ltr,
+            )..layout();
             tpPoly.paint(canvas, Offset(sCursor.dx + 12, sCursor.dy - 18));
           }
         }
@@ -6110,9 +7323,17 @@ class _UnfoldedBoardPainter extends CustomPainter {
           ..strokeWidth = 1.0;
 
         for (int i = 0; i < pendingMultiPoints.length; i++) {
-          final sPt = toScreen(pendingMultiPoints[i].x, pendingMultiPoints[i].y);
+          final sPt = toScreen(
+            pendingMultiPoints[i].x,
+            pendingMultiPoints[i].y,
+          );
           canvas.drawCircle(
-              sPt, 4.5, Paint()..color = Colors.white..style = PaintingStyle.fill);
+            sPt,
+            4.5,
+            Paint()
+              ..color = Colors.white
+              ..style = PaintingStyle.fill,
+          );
           canvas.drawCircle(sPt, 4.5, arcPaint);
         }
 
@@ -6132,11 +7353,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
               fontWeight: FontWeight.bold,
             ),
           );
-          final tpArc =
-              TextPainter(text: arcSpan, textDirection: TextDirection.ltr)
-                ..layout();
+          final tpArc = TextPainter(
+            text: arcSpan,
+            textDirection: TextDirection.ltr,
+          )..layout();
           tpArc.paint(canvas, Offset(s2.dx + 12, s2.dy - 18));
-        } else if (pendingMultiPoints.length == 2 && rubberBandEndpoint != null) {
+        } else if (pendingMultiPoints.length == 2 &&
+            rubberBandEndpoint != null) {
           final p1 = pendingMultiPoints[0];
           final p2 = pendingMultiPoints[1];
           final p3 = rubberBandEndpoint!;
@@ -6148,8 +7371,12 @@ class _UnfoldedBoardPainter extends CustomPainter {
           _drawDashedLine(canvas, s2, s3, guidePaint, dash: 4.0, gap: 4.0);
 
           try {
-            final previewArc =
-                CadArc2D.from3Points(id: 'preview_arc', p1: p1, p2: p2, p3: p3);
+            final previewArc = CadArc2D.from3Points(
+              id: 'preview_arc',
+              p1: p1,
+              p2: p2,
+              p3: p3,
+            );
             final samples = previewArc.samplePoints(24);
             if (samples.length >= 2) {
               final arcPath = Path();
@@ -6171,9 +7398,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
                 fontWeight: FontWeight.bold,
               ),
             );
-            final tpArc =
-                TextPainter(text: arcSpan, textDirection: TextDirection.ltr)
-                  ..layout();
+            final tpArc = TextPainter(
+              text: arcSpan,
+              textDirection: TextDirection.ltr,
+            )..layout();
             tpArc.paint(canvas, Offset(s3.dx + 12, s3.dy - 18));
           } catch (_) {
             _drawDashedLine(canvas, s1, s3, guidePaint, dash: 4.0, gap: 4.0);
@@ -6261,7 +7489,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
     }
 
     // 8c. Pre-Click Cursor Snap Indicator Dot for all drawing tools
-    final isDrawingTool = toolMode == StudioToolMode.addBend ||
+    final isDrawingTool =
+        toolMode == StudioToolMode.addBend ||
         toolMode == StudioToolMode.addFlange ||
         toolMode == StudioToolMode.addCut ||
         toolMode == StudioToolMode.drawPolyline ||
@@ -6288,7 +7517,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
             ..color = const Color(0xFF0EA5E9).withValues(alpha: 0.45)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.0;
-          _drawDashedLine(canvas, rawScreen, effectiveScreen, tetherPaint, dash: 3.0, gap: 2.0);
+          _drawDashedLine(
+            canvas,
+            rawScreen,
+            effectiveScreen,
+            tetherPaint,
+            dash: 3.0,
+            gap: 2.0,
+          );
         }
 
         // Concentric target halo ring
@@ -6327,7 +7563,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
               fontWeight: FontWeight.bold,
             ),
           );
-          final tpTag = TextPainter(text: tagSpan, textDirection: TextDirection.ltr)..layout();
+          final tpTag = TextPainter(
+            text: tagSpan,
+            textDirection: TextDirection.ltr,
+          )..layout();
           tpTag.paint(canvas, Offset(rawScreen.dx + 8, rawScreen.dy - 14));
         } else {
           // Normal hovering dot on mouse pointer
@@ -6411,14 +7650,25 @@ class _UnfoldedBoardPainter extends CustomPainter {
           final pId = entry.key;
           final pData = entry.value;
           final pNum = pId.replaceAll('port', '');
-          final pName = pId == 'port1' ? 'Port 1' : (pId == 'port2' ? 'Port 2' : 'Port $pNum');
+          final pName = pId == 'port1'
+              ? 'Port 1'
+              : (pId == 'port2' ? 'Port 2' : 'Port $pNum');
 
           final wEdge = pData['widthEdge'] as Map?;
           if (wEdge != null && wEdge['p1'] is List && wEdge['p2'] is List) {
-            final p1List = (wEdge['p1'] as List).map((n) => (n as num).toDouble()).toList();
-            final p2List = (wEdge['p2'] as List).map((n) => (n as num).toDouble()).toList();
+            final p1List = (wEdge['p1'] as List)
+                .map((n) => (n as num).toDouble())
+                .toList();
+            final p2List = (wEdge['p2'] as List)
+                .map((n) => (n as num).toDouble())
+                .toList();
             if (p1List.length >= 2 && p2List.length >= 2) {
-              if (SheetMetalStudioViewModel.isSameCadEdge(hoveredContourEdgeP1!, hoveredContourEdgeP2!, CadPoint2D(p1List[0], p1List[1]), CadPoint2D(p2List[0], p2List[1]))) {
+              if (SheetMetalStudioViewModel.isSameCadEdge(
+                hoveredContourEdgeP1!,
+                hoveredContourEdgeP2!,
+                CadPoint2D(p1List[0], p1List[1]),
+                CadPoint2D(p2List[0], p2List[1]),
+              )) {
                 assignedLabel = '$pName Width';
                 break;
               }
@@ -6429,10 +7679,19 @@ class _UnfoldedBoardPainter extends CustomPainter {
           if (hEdges != null) {
             for (final hEdge in hEdges) {
               if (hEdge is Map && hEdge['p1'] is List && hEdge['p2'] is List) {
-                final p1List = (hEdge['p1'] as List).map((n) => (n as num).toDouble()).toList();
-                final p2List = (hEdge['p2'] as List).map((n) => (n as num).toDouble()).toList();
+                final p1List = (hEdge['p1'] as List)
+                    .map((n) => (n as num).toDouble())
+                    .toList();
+                final p2List = (hEdge['p2'] as List)
+                    .map((n) => (n as num).toDouble())
+                    .toList();
                 if (p1List.length >= 2 && p2List.length >= 2) {
-                  if (SheetMetalStudioViewModel.isSameCadEdge(hoveredContourEdgeP1!, hoveredContourEdgeP2!, CadPoint2D(p1List[0], p1List[1]), CadPoint2D(p2List[0], p2List[1]))) {
+                  if (SheetMetalStudioViewModel.isSameCadEdge(
+                    hoveredContourEdgeP1!,
+                    hoveredContourEdgeP2!,
+                    CadPoint2D(p1List[0], p1List[1]),
+                    CadPoint2D(p2List[0], p2List[1]),
+                  )) {
                     assignedLabel = '$pName Height Flap';
                     break;
                   }
@@ -6449,9 +7708,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       final Color accentColor;
       if (isPickMode) {
-        accentColor = isAssigned ? const Color(0xFFEF4444) : const Color(0xFF0284C7);
+        accentColor = isAssigned
+            ? const Color(0xFFEF4444)
+            : const Color(0xFF0284C7);
       } else {
-        accentColor = isAssigned ? const Color(0xFF0D9488) : const Color(0xFF0284C7);
+        accentColor = isAssigned
+            ? const Color(0xFF0D9488)
+            : const Color(0xFF0284C7);
       }
 
       // 1. Radiant Outer Glow
@@ -6478,13 +7741,18 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       // 4. Floating Callout Dimension Badge
       final hCenter = Offset((hp1.dx + hp2.dx) / 2.0, (hp1.dy + hp2.dy) / 2.0);
-      final lenText = '${hoveredContourEdgeLengthMm?.toStringAsFixed(1) ?? '--'} mm';
+      final lenText =
+          '${hoveredContourEdgeLengthMm?.toStringAsFixed(1) ?? '--'} mm';
 
       final String badgeText;
       if (isPickMode) {
-        badgeText = isAssigned ? ' ⚠️ Already Assigned ($assignedLabel) ' : ' 🎯 Click to Assign: $lenText ';
+        badgeText = isAssigned
+            ? ' ⚠️ Already Assigned ($assignedLabel) '
+            : ' 🎯 Click to Assign: $lenText ';
       } else {
-        badgeText = isAssigned ? ' ✓ $assignedLabel: $lenText ' : ' Edge: $lenText ';
+        badgeText = isAssigned
+            ? ' ✓ $assignedLabel: $lenText '
+            : ' Edge: $lenText ';
       }
 
       final span = TextSpan(
@@ -6495,7 +7763,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
           fontWeight: FontWeight.bold,
         ),
       );
-      final tp = TextPainter(text: span, textDirection: TextDirection.ltr)..layout();
+      final tp = TextPainter(text: span, textDirection: TextDirection.ltr)
+        ..layout();
       final badgeRect = RRect.fromRectAndRadius(
         Rect.fromCenter(
           center: Offset(hCenter.dx, hCenter.dy - 16.0),
@@ -6510,7 +7779,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
       canvas.drawRRect(badgeRect.shift(const Offset(0, 1)), shadowPaint);
       final badgeBgPaint = Paint()..color = accentColor;
       canvas.drawRRect(badgeRect, badgeBgPaint);
-      tp.paint(canvas, Offset(hCenter.dx - tp.width / 2.0, hCenter.dy - 16.0 - tp.height / 2.0));
+      tp.paint(
+        canvas,
+        Offset(
+          hCenter.dx - tp.width / 2.0,
+          hCenter.dy - 16.0 - tp.height / 2.0,
+        ),
+      );
     }
 
     // 11. Live Angle HUD when dragging line endpoints
@@ -6598,11 +7873,20 @@ class _UnfoldedBoardPainter extends CustomPainter {
       ..layout();
     final badgeWidth = tp.width + 6.0;
     final badgeHeight = tp.height + 4.0;
-    final badgeRect = Rect.fromCenter(center: pos, width: badgeWidth, height: badgeHeight);
-    final rrect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(3.0));
+    final badgeRect = Rect.fromCenter(
+      center: pos,
+      width: badgeWidth,
+      height: badgeHeight,
+    );
+    final rrect = RRect.fromRectAndRadius(
+      badgeRect,
+      const Radius.circular(3.0),
+    );
 
     final bgPaint = Paint()
-      ..color = isSelected ? const Color(0xFFEFF6FF) : Colors.white.withValues(alpha: 0.92)
+      ..color = isSelected
+          ? const Color(0xFFEFF6FF)
+          : Colors.white.withValues(alpha: 0.92)
       ..style = PaintingStyle.fill;
     canvas.drawRRect(rrect, bgPaint);
 
@@ -6623,7 +7907,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
     double heightMm,
     bool isSelected,
   ) {
-    final text = '$label: ${widthMm.toStringAsFixed(1)} × ${heightMm.toStringAsFixed(1)} mm';
+    final text =
+        '$label: ${widthMm.toStringAsFixed(1)} × ${heightMm.toStringAsFixed(1)} mm';
     final span = TextSpan(
       text: text,
       style: TextStyle(
@@ -6633,7 +7918,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
         letterSpacing: 0.2,
       ),
     );
-    final tp = TextPainter(text: span, textDirection: TextDirection.ltr)..layout();
+    final tp = TextPainter(text: span, textDirection: TextDirection.ltr)
+      ..layout();
     final badgeWidth = tp.width + 12.0;
     final badgeHeight = tp.height + 6.0;
     final badgeRect = Rect.fromCenter(
@@ -6641,7 +7927,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
       width: badgeWidth,
       height: badgeHeight,
     );
-    final rrect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(4.0));
+    final rrect = RRect.fromRectAndRadius(
+      badgeRect,
+      const Radius.circular(4.0),
+    );
 
     // Drop shadow
     canvas.drawRRect(
@@ -6668,10 +7957,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
       ..strokeWidth = isSelected ? 1.4 : 0.8;
     canvas.drawRRect(rrect, borderPaint);
 
-    tp.paint(
-      canvas,
-      Offset(badgeRect.left + 6.0, badgeRect.top + 3.0),
-    );
+    tp.paint(canvas, Offset(badgeRect.left + 6.0, badgeRect.top + 3.0));
   }
 
   static Set<int> _findIntermediateArcIndices(List<CadPoint2D> pts) {
@@ -6693,7 +7979,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
         final dy = c1.y - c2.y;
         final distC = math.sqrt(dx * dx + dy * dy);
         final diffR = (c1.radius - c2.radius).abs();
-        if (distC < 0.8 && diffR < 0.8 && c1.radius >= 1.0 && c1.radius <= 5000.0) {
+        if (distC < 0.8 &&
+            diffR < 0.8 &&
+            c1.radius >= 1.0 &&
+            c1.radius <= 5000.0) {
           intermediate.add((i + 1) % n);
           intermediate.add((i + 2) % n);
         }
@@ -6707,13 +7996,19 @@ class _UnfoldedBoardPainter extends CustomPainter {
     CadPoint2D p2,
     CadPoint2D p3,
   ) {
-    final d = 2 * (p1.x * (p2.y - p3.y) + p2.x * (p3.y - p1.y) + p3.x * (p1.y - p2.y));
+    final d =
+        2 *
+        (p1.x * (p2.y - p3.y) + p2.x * (p3.y - p1.y) + p3.x * (p1.y - p2.y));
     if (d.abs() < 1e-4) return null;
     final p1Sq = p1.x * p1.x + p1.y * p1.y;
     final p2Sq = p2.x * p2.x + p2.y * p2.y;
     final p3Sq = p3.x * p3.x + p3.y * p3.y;
-    final ux = (p1Sq * (p2.y - p3.y) + p2Sq * (p3.y - p1.y) + p3Sq * (p1.y - p2.y)) / d;
-    final uy = (p1Sq * (p3.x - p2.x) + p2Sq * (p1.x - p3.x) + p3Sq * (p2.x - p1.x)) / d;
+    final ux =
+        (p1Sq * (p2.y - p3.y) + p2Sq * (p3.y - p1.y) + p3Sq * (p1.y - p2.y)) /
+        d;
+    final uy =
+        (p1Sq * (p3.x - p2.x) + p2Sq * (p1.x - p3.x) + p3Sq * (p2.x - p1.x)) /
+        d;
     final rx = ux - p1.x;
     final ry = uy - p1.y;
     final r = math.sqrt(rx * rx + ry * ry);
@@ -6867,19 +8162,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
     tp.paint(canvas, Offset(snapPt.dx + 6, snapPt.dy - 11));
   }
 
-  void _drawSelectionTag(
-    Canvas canvas,
-    Offset pos,
-    String label,
-    Color color,
-  ) {
+  void _drawSelectionTag(Canvas canvas, Offset pos, String label, Color color) {
     final textSpan = TextSpan(
       text: ' $label ',
-      style: TextStyle(
-        color: color,
-        fontSize: 9,
-        fontWeight: FontWeight.bold,
-      ),
+      style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold),
     );
     final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)
       ..layout();
@@ -7025,13 +8311,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
     );
 
     // Key intermediate X coordinates from vertical bends or notches
-    final xBends = doc.bends
-        .where((b) => b.isVisible && (b.p1.x - b.p2.x).abs() < 1e-2)
-        .map((b) => b.p1.x)
-        .where((x) => x > minX + 3.0 && x < maxX - 3.0)
-        .toSet()
-        .toList()
-      ..sort();
+    final xBends =
+        doc.bends
+            .where((b) => b.isVisible && (b.p1.x - b.p2.x).abs() < 1e-2)
+            .map((b) => b.p1.x)
+            .where((x) => x > minX + 3.0 && x < maxX - 3.0)
+            .toSet()
+            .toList()
+          ..sort();
 
     if (xBends.isNotEmpty) {
       double curX = minX;
@@ -7094,13 +8381,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
     );
 
     // Key intermediate Y coordinates from horizontal bends or notches
-    final yBends = doc.bends
-        .where((b) => b.isVisible && (b.p1.y - b.p2.y).abs() < 1e-2)
-        .map((b) => b.p1.y)
-        .where((y) => y > minY + 3.0 && y < maxY - 3.0)
-        .toSet()
-        .toList()
-      ..sort();
+    final yBends =
+        doc.bends
+            .where((b) => b.isVisible && (b.p1.y - b.p2.y).abs() < 1e-2)
+            .map((b) => b.p1.y)
+            .where((y) => y > minY + 3.0 && y < maxY - 3.0)
+            .toSet()
+            .toList()
+          ..sort();
 
     if (yBends.isNotEmpty) {
       double curY = minY;
@@ -7239,7 +8527,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
     for (final dim in doc.dimensions) {
       if (!dim.isVisible) continue;
 
-      final layout = AssociativeDimensionEngine.resolveLayout(dim, doc, scale: scale);
+      final layout = AssociativeDimensionEngine.resolveLayout(
+        dim,
+        doc,
+        scale: scale,
+      );
       final pA = toScreen(layout.dimLineStart.dx, layout.dimLineStart.dy);
       final pB = toScreen(layout.dimLineEnd.dx, layout.dimLineEnd.dy);
       final wA1 = toScreen(layout.witnessAStart.dx, layout.witnessAStart.dy);
@@ -7262,7 +8554,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       final isLineHovered = hoveredDimLineId == dim.id;
 
-      final dimColor = dim.isDriven ? const Color(0xFF0284C7) : const Color(0xFF2563EB);
+      final dimColor = dim.isDriven
+          ? const Color(0xFF0284C7)
+          : const Color(0xFF2563EB);
 
       final witnessPaint = Paint()
         ..color = const Color(0xFF64748B)
@@ -7328,7 +8622,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
         canvas.drawCircle(textPos, 2.5, dotPaint);
       }
 
-      final badgeRect = _drawDimBadge(canvas, effectiveCenter, layout.displayText);
+      renderedDimensionValues?[dim.id] = dim.measuredValue;
+      final badgeRect = _drawDimBadge(
+        canvas,
+        effectiveCenter,
+        layout.displayText,
+        isEditing: editingDimId == dim.id,
+      );
       if (renderedDimensionBadges != null) {
         renderedDimensionBadges![dim.id] = badgeRect;
       }
@@ -7422,7 +8722,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
     final geomCoord = isVertical ? p1Screen.dx : p1Screen.dy;
     final initialOffsetMm = (dimScreenCoord - geomCoord).abs() / (scale ?? 1.0);
-    final userLineOffsetMm = (dimId != null && dimensionLineOffsets.containsKey(dimId))
+    final userLineOffsetMm =
+        (dimId != null && dimensionLineOffsets.containsKey(dimId))
         ? dimensionLineOffsets[dimId]!
         : initialOffsetMm;
 
@@ -7445,9 +8746,19 @@ class _UnfoldedBoardPainter extends CustomPainter {
         pA: pA,
         pB: pB,
         offsetDist: userLineOffsetMm,
-        ptA: ptA ?? (isVertical ? CadPoint2D(p1Screen.dx, p1Screen.dy) : CadPoint2D(p1Screen.dx, p1Screen.dy)),
-        ptB: ptB ?? (isVertical ? CadPoint2D(p2Screen.dx, p2Screen.dy) : CadPoint2D(p2Screen.dx, p2Screen.dy)),
-        type: isVertical ? CadDimensionType.vertical : CadDimensionType.horizontal,
+        ptA:
+            ptA ??
+            (isVertical
+                ? CadPoint2D(p1Screen.dx, p1Screen.dy)
+                : CadPoint2D(p1Screen.dx, p1Screen.dy)),
+        ptB:
+            ptB ??
+            (isVertical
+                ? CadPoint2D(p2Screen.dx, p2Screen.dy)
+                : CadPoint2D(p2Screen.dx, p2Screen.dy)),
+        type: isVertical
+            ? CadDimensionType.vertical
+            : CadDimensionType.horizontal,
       );
     }
 
@@ -7462,11 +8773,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
     }
 
     final witnessPaint = Paint()
-      ..color = const Color(0xFF64748B) // Slate witness line
+      ..color =
+          const Color(0xFF64748B) // Slate witness line
       ..strokeWidth = 0.8;
 
     final dimLinePaint = Paint()
-      ..color = isLineHovered ? const Color(0xFF0284C7) : const Color(0xFF475569) // Dimension line
+      ..color = isLineHovered
+          ? const Color(0xFF0284C7)
+          : const Color(0xFF475569) // Dimension line
       ..strokeWidth = isLineHovered ? 2.0 : 1.0;
 
     const extPast = 5.0; // Extension past dimension line
@@ -7483,7 +8797,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
         fontFamily: 'monospace',
       ),
     );
-    final tpVal = TextPainter(text: textSpanVal, textDirection: TextDirection.ltr)..layout();
+    final tpVal = TextPainter(
+      text: textSpanVal,
+      textDirection: TextDirection.ltr,
+    )..layout();
     final halfTextW = tpVal.width / 2.0 + 3.0;
     final halfTextH = tpVal.height / 2.0 + 2.0;
 
@@ -7519,7 +8836,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
       defaultMid = Offset(midX, effectiveDimCoord);
 
       // Break dimension line with gap for centered text if not manually offset
-      if (userOffset.distance <= 4.0 && (p2Screen.dx - p1Screen.dx).abs() > halfTextW * 2.5) {
+      if (userOffset.distance <= 4.0 &&
+          (p2Screen.dx - p1Screen.dx).abs() > halfTextW * 2.5) {
         final leftX = math.min(p1Screen.dx, p2Screen.dx);
         final rightX = math.max(p1Screen.dx, p2Screen.dx);
         canvas.drawLine(
@@ -7533,11 +8851,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
           dimLinePaint,
         );
       } else {
-        canvas.drawLine(
-          pA,
-          pB,
-          dimLinePaint,
-        );
+        canvas.drawLine(pA, pB, dimLinePaint);
       }
 
       // Arrowheads pointing towards witness lines
@@ -7571,7 +8885,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
       defaultMid = Offset(effectiveDimCoord, midY);
 
       // Break dimension line with gap for centered text if not manually offset
-      if (userOffset.distance <= 4.0 && (p2Screen.dy - p1Screen.dy).abs() > halfTextH * 2.5) {
+      if (userOffset.distance <= 4.0 &&
+          (p2Screen.dy - p1Screen.dy).abs() > halfTextH * 2.5) {
         final topY = math.min(p1Screen.dy, p2Screen.dy);
         final botY = math.max(p1Screen.dy, p2Screen.dy);
         canvas.drawLine(
@@ -7585,21 +8900,23 @@ class _UnfoldedBoardPainter extends CustomPainter {
           dimLinePaint,
         );
       } else {
-        canvas.drawLine(
-          pA,
-          pB,
-          dimLinePaint,
-        );
+        canvas.drawLine(pA, pB, dimLinePaint);
       }
 
       // Arrowheads pointing towards witness lines
       _drawArrow(canvas, Offset(effectiveDimCoord, p1Screen.dy), math.pi / 2.0);
-      _drawArrow(canvas, Offset(effectiveDimCoord, p2Screen.dy), -math.pi / 2.0);
+      _drawArrow(
+        canvas,
+        Offset(effectiveDimCoord, p2Screen.dy),
+        -math.pi / 2.0,
+      );
     }
 
     // End dots on the dimension line endpoints pA and pB
     final endDotPaint = Paint()
-      ..color = isLineHovered ? const Color(0xFF0284C7) : const Color(0xFF475569)
+      ..color = isLineHovered
+          ? const Color(0xFF0284C7)
+          : const Color(0xFF475569)
       ..style = PaintingStyle.fill;
     final endDotCore = Paint()..color = Colors.white;
     canvas.drawCircle(pA, 2.6, endDotPaint);
@@ -7623,7 +8940,21 @@ class _UnfoldedBoardPainter extends CustomPainter {
       canvas.drawCircle(defaultMid, 2.5, dotPaint);
     }
 
-    final badgeRect = _drawDimBadge(canvas, effectiveCenter, valueText);
+    if (dimId != null) {
+      final parsedVal = double.tryParse(
+        valueText.replaceAll(RegExp(r'[^0-9.]'), ''),
+      );
+      if (parsedVal != null) {
+        renderedDimensionValues?[dimId] = parsedVal;
+      }
+    }
+
+    final badgeRect = _drawDimBadge(
+      canvas,
+      effectiveCenter,
+      valueText,
+      isEditing: dimId != null && dimId == editingDimId,
+    );
     if (dimId != null && renderedDimensionBadges != null) {
       renderedDimensionBadges![dimId] = badgeRect;
     }
@@ -7659,7 +8990,12 @@ class _UnfoldedBoardPainter extends CustomPainter {
     canvas.drawPath(path, arrowPaint);
   }
 
-  Rect _drawDimBadge(Canvas canvas, Offset center, String text) {
+  Rect _drawDimBadge(
+    Canvas canvas,
+    Offset center,
+    String text, {
+    bool isEditing = false,
+  }) {
     final span = TextSpan(
       text: text,
       style: const TextStyle(
@@ -7678,11 +9014,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
       height: tp.height + 2,
     );
 
-    // Transparent background per CAD sketch drafting style
-    tp.paint(
-      canvas,
-      Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0),
-    );
+    if (!isEditing) {
+      // Transparent background per CAD sketch drafting style
+      tp.paint(
+        canvas,
+        Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0),
+      );
+    }
     return bgRect;
   }
 
@@ -7861,7 +9199,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
       canvas.drawLine(sp1, sp2, glowPaint);
 
       // 2. Outward normal vector in screen coordinates
-      final sNormPt = toScreen(port.center.x + port.normal.x, port.center.y + port.normal.y);
+      final sNormPt = toScreen(
+        port.center.x + port.normal.x,
+        port.center.y + port.normal.y,
+      );
       final rawDir = sNormPt - sCenter;
       final dirLen = rawDir.distance;
       final Offset normalDir = dirLen > 1e-4
@@ -7878,7 +9219,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
       // 3. Render translucent CAD badge pill for opening Width (W)
       final sideLabel = port.side.displayName;
       final labelText = '${port.label}  [$sideLabel]';
-      final wValStr = (port.widthMm % 1 == 0) ? port.widthMm.toInt().toString() : port.widthMm.toStringAsFixed(1);
+      final wValStr = (port.widthMm % 1 == 0)
+          ? port.widthMm.toInt().toString()
+          : port.widthMm.toStringAsFixed(1);
       final dimText = 'W: $wValStr mm';
 
       final titleSpan = TextSpan(
@@ -7902,7 +9245,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
           ),
         ],
       );
-      final tpTitle = TextPainter(text: titleSpan, textDirection: TextDirection.ltr)..layout();
+      final tpTitle = TextPainter(
+        text: titleSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
 
       final dimSpan = TextSpan(
         text: dimText,
@@ -7913,7 +9259,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
           letterSpacing: 0.2,
         ),
       );
-      final tpDim = TextPainter(text: dimSpan, textDirection: TextDirection.ltr)..layout();
+      final tpDim = TextPainter(text: dimSpan, textDirection: TextDirection.ltr)
+        ..layout();
 
       final badgeW = math.max(tpTitle.width, tpDim.width) + 20.0;
       const badgeH = 38.0;
@@ -7922,7 +9269,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final customOffset = portBadgeOffsets?[port.id] ?? Offset.zero;
       final defaultCenter = badgeAnchor + normalDir * (badgeH / 2.0 + 2.0);
       final badgeCenter = defaultCenter + customOffset;
-      final badgeRect = Rect.fromCenter(center: badgeCenter, width: badgeW, height: badgeH);
+      final badgeRect = Rect.fromCenter(
+        center: badgeCenter,
+        width: badgeW,
+        height: badgeH,
+      );
 
       // Register rendered badge rect for draggable interactions
       renderedPortBadges?[port.id] = badgeRect;
@@ -7935,7 +9286,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
         canvas.drawLine(sCenter, badgeAnchor, leaderPaint);
       }
 
-      final rrect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(6));
+      final rrect = RRect.fromRectAndRadius(
+        badgeRect,
+        const Radius.circular(6),
+      );
 
       // Badge drop shadow
       canvas.drawRRect(
@@ -7968,18 +9322,27 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final manual = meta.manualPortEdges?[port.id];
       final heightEdges = manual?['heightEdges'] as List?;
       if (heightEdges != null && heightEdges.isNotEmpty) {
-        final hValStr = (port.heightMm % 1 == 0) ? port.heightMm.toInt().toString() : port.heightMm.toStringAsFixed(1);
+        final hValStr = (port.heightMm % 1 == 0)
+            ? port.heightMm.toInt().toString()
+            : port.heightMm.toStringAsFixed(1);
         final hDimText = 'H: $hValStr mm';
 
         for (int hIdx = 0; hIdx < heightEdges.length; hIdx++) {
           final hMap = heightEdges[hIdx];
           if (hMap is Map && hMap['p1'] is List && hMap['p2'] is List) {
-            final hp1List = (hMap['p1'] as List).map((n) => (n as num).toDouble()).toList();
-            final hp2List = (hMap['p2'] as List).map((n) => (n as num).toDouble()).toList();
+            final hp1List = (hMap['p1'] as List)
+                .map((n) => (n as num).toDouble())
+                .toList();
+            final hp2List = (hMap['p2'] as List)
+                .map((n) => (n as num).toDouble())
+                .toList();
             if (hp1List.length >= 2 && hp2List.length >= 2) {
               final shp1 = toScreen(hp1List[0], hp1List[1]);
               final shp2 = toScreen(hp2List[0], hp2List[1]);
-              final shCenter = Offset((shp1.dx + shp2.dx) / 2.0, (shp1.dy + shp2.dy) / 2.0);
+              final shCenter = Offset(
+                (shp1.dx + shp2.dx) / 2.0,
+                (shp1.dy + shp2.dy) / 2.0,
+              );
 
               // Unique ID for dragging this specific H badge
               final hBadgeId = '${port.id}_h_$hIdx';
@@ -8012,7 +9375,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
                   ),
                 ],
               );
-              final tpHTitle = TextPainter(text: hTitleSpan, textDirection: TextDirection.ltr)..layout();
+              final tpHTitle = TextPainter(
+                text: hTitleSpan,
+                textDirection: TextDirection.ltr,
+              )..layout();
 
               final hDimSpan = TextSpan(
                 text: hDimText,
@@ -8022,14 +9388,24 @@ class _UnfoldedBoardPainter extends CustomPainter {
                   fontWeight: FontWeight.bold,
                 ),
               );
-              final tpHdim = TextPainter(text: hDimSpan, textDirection: TextDirection.ltr)..layout();
+              final tpHdim = TextPainter(
+                text: hDimSpan,
+                textDirection: TextDirection.ltr,
+              )..layout();
 
               final hBadgeW = math.max(tpHTitle.width, tpHdim.width) + 16.0;
               const hBadgeH = 32.0;
               final defaultHCenter = shCenter + const Offset(0, -26.0);
               final hBadgeCenter = defaultHCenter + hCustomOffset;
-              final hBadgeRect = Rect.fromCenter(center: hBadgeCenter, width: hBadgeW, height: hBadgeH);
-              final hRRect = RRect.fromRectAndRadius(hBadgeRect, const Radius.circular(5));
+              final hBadgeRect = Rect.fromCenter(
+                center: hBadgeCenter,
+                width: hBadgeW,
+                height: hBadgeH,
+              );
+              final hRRect = RRect.fromRectAndRadius(
+                hBadgeRect,
+                const Radius.circular(5),
+              );
 
               // Register badge rect for hit-testing and dragging
               renderedPortBadges?[hBadgeId] = hBadgeRect;
@@ -8048,7 +9424,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
               );
               canvas.drawRRect(
                 hRRect,
-                Paint()..color = const Color(0xFF0F172A).withValues(alpha: 0.62),
+                Paint()
+                  ..color = const Color(0xFF0F172A).withValues(alpha: 0.62),
               );
               canvas.drawRRect(
                 hRRect,
@@ -8058,8 +9435,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
                   ..strokeWidth = 1.0,
               );
 
-              tpHTitle.paint(canvas, Offset(hBadgeRect.left + 8.0, hBadgeRect.top + 3.0));
-              tpHdim.paint(canvas, Offset(hBadgeRect.left + 8.0, hBadgeRect.top + 15.0));
+              tpHTitle.paint(
+                canvas,
+                Offset(hBadgeRect.left + 8.0, hBadgeRect.top + 3.0),
+              );
+              tpHdim.paint(
+                canvas,
+                Offset(hBadgeRect.left + 8.0, hBadgeRect.top + 15.0),
+              );
             }
           }
         }
@@ -8067,9 +9450,15 @@ class _UnfoldedBoardPainter extends CustomPainter {
     }
   }
 
-  void _drawArcBadge(Canvas canvas, Offset screenPos, CadArc2D arc, bool isSelected) {
+  void _drawArcBadge(
+    Canvas canvas,
+    Offset screenPos,
+    CadArc2D arc,
+    bool isSelected,
+  ) {
     if (!arc.showLabel) return;
-    final label = 'Arc: R=${arc.radius.toStringAsFixed(1)} mm • L=${arc.arcLength.toStringAsFixed(1)} mm';
+    final label =
+        'Arc: R=${arc.radius.toStringAsFixed(1)} mm • L=${arc.arcLength.toStringAsFixed(1)} mm';
     final textSpan = TextSpan(
       text: label,
       style: TextStyle(
@@ -8091,14 +9480,19 @@ class _UnfoldedBoardPainter extends CustomPainter {
     );
 
     final bgPaint = Paint()
-      ..color = isSelected ? const Color(0xFF2563EB) : Colors.white.withValues(alpha: 0.94)
+      ..color = isSelected
+          ? const Color(0xFF2563EB)
+          : Colors.white.withValues(alpha: 0.94)
       ..style = PaintingStyle.fill;
     final borderPaint = Paint()
       ..color = isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF94A3B8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
-    final rrect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(4.0));
+    final rrect = RRect.fromRectAndRadius(
+      badgeRect,
+      const Radius.circular(4.0),
+    );
     canvas.drawRRect(rrect, bgPaint);
     canvas.drawRRect(rrect, borderPaint);
     textPainter.paint(
@@ -8235,8 +9629,18 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final headAngle1 = normalAngle + math.pi * 0.85;
     final headAngle2 = normalAngle - math.pi * 0.85;
     const headLength = 10.0;
-    final headP1 = arrowEnd + Offset(math.cos(headAngle1) * headLength, math.sin(headAngle1) * headLength);
-    final headP2 = arrowEnd + Offset(math.cos(headAngle2) * headLength, math.sin(headAngle2) * headLength);
+    final headP1 =
+        arrowEnd +
+        Offset(
+          math.cos(headAngle1) * headLength,
+          math.sin(headAngle1) * headLength,
+        );
+    final headP2 =
+        arrowEnd +
+        Offset(
+          math.cos(headAngle2) * headLength,
+          math.sin(headAngle2) * headLength,
+        );
 
     final headPath = Path()
       ..moveTo(arrowEnd.dx, arrowEnd.dy)
@@ -8302,10 +9706,15 @@ class _UnfoldedBoardPainter extends CustomPainter {
         letterSpacing: 0.2,
       ),
     );
-    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
+    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)
+      ..layout();
     final center = pos + offset;
     final rrect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: center, width: tp.width + 8.0, height: tp.height + 4.0),
+      Rect.fromCenter(
+        center: center,
+        width: tp.width + 8.0,
+        height: tp.height + 4.0,
+      ),
       const Radius.circular(4.0),
     );
     final shadowPaint = Paint()
@@ -8313,7 +9722,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
     canvas.drawRRect(rrect.shift(const Offset(0, 1)), shadowPaint);
     canvas.drawRRect(rrect, Paint()..color = color);
-    tp.paint(canvas, Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0));
+    tp.paint(
+      canvas,
+      Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0),
+    );
   }
 
   @override
@@ -8345,6 +9757,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         oldDelegate.activePortInferenceResult != activePortInferenceResult ||
         oldDelegate.hoverCursorCad != hoverCursorCad ||
         oldDelegate.hoveredDimLineId != hoveredDimLineId ||
+        oldDelegate.editingDimId != editingDimId ||
         oldDelegate.isAltPressed != isAltPressed;
   }
 }

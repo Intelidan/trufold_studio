@@ -23,8 +23,7 @@ class ResolvedDimensionLayout {
   final Offset witnessBEnd;
   final Offset dimLineStart;
   final Offset dimLineEnd;
-  final List<Offset>
-  arrowA; // 3 points forming arrow triangle or 2 points for tick
+  final List<Offset> arrowA; // 3 points forming arrow triangle or 2 points for tick
   final List<Offset> arrowB;
   final Offset textCenter;
   final double textAngle;
@@ -83,9 +82,7 @@ class AssociativeDimensionEngine {
       if ((u.abs() - l.abs()).abs() < 1e-4 && (u != 0.0 || l != 0.0)) {
         buffer.write(' ±${u.abs().toStringAsFixed(2)}');
       } else {
-        buffer.write(
-          ' +${u.toStringAsFixed(2)} / -${l.abs().toStringAsFixed(2)}',
-        );
+        buffer.write(' +${u.toStringAsFixed(2)} / -${l.abs().toStringAsFixed(2)}');
       }
     }
 
@@ -98,10 +95,7 @@ class AssociativeDimensionEngine {
 
   /// Extracts geometric points A and B associated with the dimension references,
   /// or falls back to explicit pointA / pointB
-  static ({CadPoint2D pA, CadPoint2D pB, double value}) resolveAssociation(
-    CadDimension dim,
-    DsfDocument doc,
-  ) {
+  static ({CadPoint2D pA, CadPoint2D pB, double value}) resolveAssociation(CadDimension dim, DsfDocument doc) {
     CadPoint2D? ptA = dim.pointA;
     CadPoint2D? ptB = dim.pointB;
     double measured = dim.measuredValue;
@@ -143,18 +137,14 @@ class AssociativeDimensionEngine {
       case CadDimensionType.bendToEdge:
       case CadDimensionType.bendToBend:
       case CadDimensionType.edgeToEdge:
-        measured = math.sqrt(
-          math.pow(ptB.x - ptA.x, 2) + math.pow(ptB.y - ptA.y, 2),
-        );
+        measured = math.sqrt(math.pow(ptB.x - ptA.x, 2) + math.pow(ptB.y - ptA.y, 2));
         break;
       case CadDimensionType.radius:
       case CadDimensionType.diameter:
       case CadDimensionType.angular:
       case CadDimensionType.arcLength:
       case CadDimensionType.overall:
-        measured = dim.measuredValue > 0
-            ? dim.measuredValue
-            : (ptB.x - ptA.x).abs();
+        measured = dim.measuredValue > 0 ? dim.measuredValue : (ptB.x - ptA.x).abs();
         break;
     }
 
@@ -191,19 +181,13 @@ class AssociativeDimensionEngine {
   }
 
   /// Solves complete 2D layout geometry for rendering and hit-testing
-  static ResolvedDimensionLayout resolveLayout(
-    CadDimension dim,
-    DsfDocument doc, {
-    double scale = 1.0,
-  }) {
+  static ResolvedDimensionLayout resolveLayout(CadDimension dim, DsfDocument doc, {double scale = 1.0}) {
     final assoc = resolveAssociation(dim, doc);
     final pA = assoc.pA;
     final pB = assoc.pB;
     final measured = assoc.value;
 
-    final displayText = formatDimensionText(
-      dim.copyWith(measuredValue: measured),
-    );
+    final displayText = formatDimensionText(dim.copyWith(measuredValue: measured));
 
     final offsetDist = dim.dimensionLineOffset;
     final overshoot = dim.extensionLineOvershoot;
@@ -214,30 +198,18 @@ class AssociativeDimensionEngine {
 
     if (dim.type == CadDimensionType.horizontal) {
       final yDim = (math.min(pA.y, pB.y)) - offsetDist;
-      wAStart = Offset(
-        pA.x,
-        pA.y - (offsetDist > 0 ? witnessGap : -witnessGap),
-      );
+      wAStart = Offset(pA.x, pA.y - (offsetDist > 0 ? witnessGap : -witnessGap));
       wAEnd = Offset(pA.x, yDim - (offsetDist > 0 ? overshoot : -overshoot));
-      wBStart = Offset(
-        pB.x,
-        pB.y - (offsetDist > 0 ? witnessGap : -witnessGap),
-      );
+      wBStart = Offset(pB.x, pB.y - (offsetDist > 0 ? witnessGap : -witnessGap));
       wBEnd = Offset(pB.x, yDim - (offsetDist > 0 ? overshoot : -overshoot));
       dStart = Offset(pA.x, yDim);
       dEnd = Offset(pB.x, yDim);
       textAngle = 0.0;
     } else if (dim.type == CadDimensionType.vertical) {
       final xDim = (math.min(pA.x, pB.x)) - offsetDist;
-      wAStart = Offset(
-        pA.x - (offsetDist > 0 ? witnessGap : -witnessGap),
-        pA.y,
-      );
+      wAStart = Offset(pA.x - (offsetDist > 0 ? witnessGap : -witnessGap), pA.y);
       wAEnd = Offset(xDim - (offsetDist > 0 ? overshoot : -overshoot), pA.y);
-      wBStart = Offset(
-        pB.x - (offsetDist > 0 ? witnessGap : -witnessGap),
-        pB.y,
-      );
+      wBStart = Offset(pB.x - (offsetDist > 0 ? witnessGap : -witnessGap), pB.y);
       wBEnd = Offset(xDim - (offsetDist > 0 ? overshoot : -overshoot), pB.y);
       dStart = Offset(xDim, pA.y);
       dEnd = Offset(xDim, pB.y);
@@ -280,17 +252,10 @@ class AssociativeDimensionEngine {
     final arrowB = _buildArrowHead(dEnd, dStart, 6.0);
 
     // Text position centered with userOffset
-    final midPoint = Offset(
-      (dStart.dx + dEnd.dx) / 2.0 + dim.userOffset.dx,
-      (dStart.dy + dEnd.dy) / 2.0 + dim.userOffset.dy,
-    );
+    final midPoint = Offset((dStart.dx + dEnd.dx) / 2.0 + dim.userOffset.dx, (dStart.dy + dEnd.dy) / 2.0 + dim.userOffset.dy);
 
     // Hitbox for double-click driving & selection
-    final hitBox = Rect.fromCenter(
-      center: midPoint,
-      width: math.max(60.0, displayText.length * 9.0),
-      height: 28.0,
-    );
+    final hitBox = Rect.fromCenter(center: midPoint, width: math.max(60.0, displayText.length * 9.0), height: 28.0);
 
     return ResolvedDimensionLayout(
       dimension: dim,
@@ -309,11 +274,7 @@ class AssociativeDimensionEngine {
     );
   }
 
-  static List<Offset> _buildArrowHead(
-    Offset tip,
-    Offset from,
-    double arrowLength,
-  ) {
+  static List<Offset> _buildArrowHead(Offset tip, Offset from, double arrowLength) {
     final dx = from.dx - tip.dx;
     final dy = from.dy - tip.dy;
     final len = math.sqrt(dx * dx + dy * dy);
@@ -327,14 +288,8 @@ class AssociativeDimensionEngine {
 
     const arrowHalfWidth = 2.0;
     final base = Offset(tip.dx + ux * arrowLength, tip.dy + uy * arrowLength);
-    final p1 = Offset(
-      base.dx + px * arrowHalfWidth,
-      base.dy + py * arrowHalfWidth,
-    );
-    final p2 = Offset(
-      base.dx - px * arrowHalfWidth,
-      base.dy - py * arrowHalfWidth,
-    );
+    final p1 = Offset(base.dx + px * arrowHalfWidth, base.dy + py * arrowHalfWidth);
+    final p2 = Offset(base.dx - px * arrowHalfWidth, base.dy - py * arrowHalfWidth);
 
     return [tip, p1, p2];
   }
