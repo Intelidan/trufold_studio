@@ -121,8 +121,6 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
   _dimensionLineSegments = {};
   String? _hoveredDimLineId;
   String? _draggedDimLineId;
-  DateTime? _lastTapTime;
-  Offset? _lastTapPosition;
   final Map<String, Rect> _portBadgeRects = {};
   String? _draggedPortBadgeId;
   Offset _dragPortBadgeStartOffset = Offset.zero;
@@ -155,15 +153,70 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
   final FocusNode _inPlaceDimFocusNode = FocusNode();
   final FocusNode _canvasFocusNode = FocusNode();
   final Map<String, double> _dimensionBadgeValues = {};
+  DateTime? _lastTapTime;
+  Offset? _lastTapPosition;
+  DsfDocument? _lastDoc;
 
   @override
   void initState() {
     super.initState();
+    _lastDoc = widget.viewModel.document;
     _inPlaceDimFocusNode.addListener(() {
       if (!_inPlaceDimFocusNode.hasFocus && _editingDimId != null) {
         _commitInPlaceDimensionEdit(widget.viewModel);
       }
     });
+    widget.viewModel.addListener(_onViewModelChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant UnfoldedCanvasWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.viewModel != widget.viewModel) {
+      oldWidget.viewModel.removeListener(_onViewModelChanged);
+      widget.viewModel.addListener(_onViewModelChanged);
+      _boxSelectStart = null;
+      _boxSelectCurrent = null;
+      _activeDrag = _DragTarget.none;
+      _draggedBendId = null;
+      _draggedCutId = null;
+      _draggedDimId = null;
+      _draggedDimLineId = null;
+      _draggedPortBadgeId = null;
+      _hoveredDimId = null;
+      _hoveredConstraintId = null;
+      _lastDoc = widget.viewModel.document;
+      setState(() {});
+    }
+  }
+
+  void _onViewModelChanged() {
+    if (_lastDoc != null && !identical(_lastDoc, widget.viewModel.document)) {
+      _boxSelectStart = null;
+      _boxSelectCurrent = null;
+      _activeDrag = _DragTarget.none;
+      _lastDoc = widget.viewModel.document;
+    }
+    final pendingDimId = widget.viewModel.pendingInPlaceEditDimId;
+    if (pendingDimId != null && _editingDimId != pendingDimId) {
+      widget.viewModel.clearPendingInPlaceEdit();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final rect = _dimensionBadgeRects[pendingDimId] ??
+            const Rect.fromLTWH(100, 100, 60, 22);
+        final currentValue = _dimensionBadgeValues[pendingDimId] ??
+            widget.viewModel.document.dimensions
+                .where((d) => d.id == pendingDimId)
+                .firstOrNull
+                ?.measuredValue ??
+            0.0;
+        _startInPlaceDimensionEdit(
+          dimId: pendingDimId,
+          badgeRect: rect,
+          initialValue: currentValue,
+        );
+      });
+    }
   }
 
   bool _isEditingText() {
@@ -178,6 +231,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
 
   @override
   void dispose() {
+    widget.viewModel.removeListener(_onViewModelChanged);
     _inPlaceDimController.dispose();
     _inPlaceDimFocusNode.dispose();
     _canvasFocusNode.dispose();
@@ -248,7 +302,12 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
     final parsed = double.tryParse(text);
     if (parsed != null && parsed > 0) {
       final dimId = _editingDimId!;
-      if (_activeInlineDimPA != null && _activeInlineDimPB != null) {
+      final existingDim = viewModel.document.dimensions
+          .where((d) => d.id == dimId)
+          .firstOrNull;
+      if (existingDim != null || dimId == 'dim_blank_w' || dimId == 'dim_blank_l') {
+        viewModel.driveDimension(dimId, parsed);
+      } else if (_activeInlineDimPA != null && _activeInlineDimPB != null) {
         viewModel.commitInteractiveDimension(
           pA: _activeInlineDimPA!,
           pB: _activeInlineDimPB!,
@@ -771,6 +830,25 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                             }
                           }
                           if (event.logicalKey == LogicalKeyboardKey.escape) {
+                            if (_boxSelectStart != null) {
+                              _boxSelectStart = null;
+                              _boxSelectCurrent = null;
+                              _activeDrag = _DragTarget.none;
+                              setState(() {});
+                              return KeyEventResult.handled;
+                            }
+                            if (_editingDimId != null) {
+                              _cancelInPlaceDimensionEdit();
+                              return KeyEventResult.handled;
+                            }
+                            if (viewModel.selectedConstraintId != null) {
+                              viewModel.selectConstraint(null);
+                              return KeyEventResult.handled;
+                            }
+                            if (viewModel.selectedDimensionId != null) {
+                              viewModel.selectDimension(null);
+                              return KeyEventResult.handled;
+                            }
                             if (viewModel.selectedPunchId != null) {
                               viewModel.selectPunch(null);
                               return KeyEventResult.handled;
@@ -785,6 +863,14 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                           if (event.logicalKey == LogicalKeyboardKey.delete ||
                               event.logicalKey ==
                                   LogicalKeyboardKey.backspace) {
+                            if (viewModel.selectedConstraintId != null) {
+                              viewModel.removeConstraint(viewModel.selectedConstraintId!);
+                              return KeyEventResult.handled;
+                            }
+                            if (viewModel.selectedDimensionId != null) {
+                              viewModel.removeDimension(viewModel.selectedDimensionId!);
+                              return KeyEventResult.handled;
+                            }
                             viewModel.deleteSelectedEntities();
                             return KeyEventResult.handled;
                           }
@@ -911,6 +997,13 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                           }
                         },
                         onPointerMove: (event) {
+                          if ((event.buttons & kPrimaryMouseButton) == 0 &&
+                              _boxSelectStart != null) {
+                            _boxSelectStart = null;
+                            _boxSelectCurrent = null;
+                            _activeDrag = _DragTarget.none;
+                            setState(() {});
+                          }
                           final isMiddleMouse =
                               (event.buttons & kTertiaryButton) != 0;
                           final isSecondaryMouse =
@@ -926,6 +1019,22 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                               (isSpaceHeld &&
                                   (event.buttons & kPrimaryMouseButton) != 0)) {
                             viewModel.pan2DCanvas(event.delta);
+                          }
+                        },
+                        onPointerUp: (event) {
+                          if (_boxSelectStart != null) {
+                            _boxSelectStart = null;
+                            _boxSelectCurrent = null;
+                            _activeDrag = _DragTarget.none;
+                            setState(() {});
+                          }
+                        },
+                        onPointerCancel: (event) {
+                          if (_boxSelectStart != null) {
+                            _boxSelectStart = null;
+                            _boxSelectCurrent = null;
+                            _activeDrag = _DragTarget.none;
+                            setState(() {});
                           }
                         },
                         child: MouseRegion(
@@ -1322,6 +1431,17 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                     if (entry.value
                                         .inflate(4.0)
                                         .contains(touchScreen)) {
+                                      final badge = entry.value;
+                                      final isDeleteRegion =
+                                          touchScreen.dx > (badge.right - 18);
+                                      if (isDeleteRegion) {
+                                        viewModel.removeDimension(entry.key);
+                                        setState(() {
+                                          _hoveredDimId = null;
+                                        });
+                                        found = true;
+                                        break;
+                                      }
                                       _activeDrag = _DragTarget.dimensionBadge;
                                       _draggedDimId = entry.key;
                                       _dragStartScreen = touchScreen;
@@ -1371,11 +1491,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                       final badge = entry.value;
                                       final isDeleteRegion =
                                           touchScreen.dx > (badge.right - 18);
-                                      if (isDeleteRegion &&
-                                          (viewModel.selectedConstraintId ==
-                                                  entry.key ||
-                                              _hoveredConstraintId ==
-                                                  entry.key)) {
+                                      if (isDeleteRegion) {
                                         viewModel.removeConstraint(entry.key);
                                         setState(() {
                                           _hoveredConstraintId = null;
@@ -1413,7 +1529,9 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                     viewModel.toolMode ==
                                         StudioToolMode.addPunchSquare ||
                                     viewModel.toolMode ==
-                                        StudioToolMode.dragDimension;
+                                        StudioToolMode.dragDimension ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addDimension;
 
                                 // 1. Direct hit-test on ANY bend line endpoint (P1 or P2)
                                 if (!found && !isDrawingTool) {
@@ -1691,7 +1809,9 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                         viewModel.toolMode !=
                                             StudioToolMode.drawArc &&
                                         viewModel.toolMode !=
-                                            StudioToolMode.drawPolyline) {
+                                            StudioToolMode.drawPolyline &&
+                                        viewModel.toolMode !=
+                                            StudioToolMode.addDimension) {
                                       viewModel.setPendingBendStart(
                                         effectiveStart,
                                       );
@@ -1741,6 +1861,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                       viewModel.toolMode ==
                                           StudioToolMode.dragDimension ||
                                       viewModel.toolMode ==
+                                          StudioToolMode.addDimension ||
+                                      viewModel.toolMode ==
                                           StudioToolMode.drawPolyline;
 
                                   CadPoint2D effectivePt = cadPt;
@@ -1763,7 +1885,9 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                               StudioToolMode.addCut
                                           ? "CUT"
                                           : (viewModel.toolMode ==
-                                                    StudioToolMode.dragDimension
+                                                    StudioToolMode.dragDimension ||
+                                                viewModel.toolMode ==
+                                                    StudioToolMode.addDimension
                                                 ? "DIM"
                                                 : (viewModel.toolMode ==
                                                           StudioToolMode
@@ -1800,7 +1924,9 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                               StudioToolMode.addCut
                                           ? "CUT"
                                           : (viewModel.toolMode ==
-                                                    StudioToolMode.dragDimension
+                                                    StudioToolMode.dragDimension ||
+                                                viewModel.toolMode ==
+                                                    StudioToolMode.addDimension
                                                 ? "DIM"
                                                 : (viewModel.toolMode ==
                                                           StudioToolMode
@@ -2171,6 +2297,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                         viewModel.toolMode ==
                                             StudioToolMode.dragDimension ||
                                         viewModel.toolMode ==
+                                            StudioToolMode.addDimension ||
+                                        viewModel.toolMode ==
                                             StudioToolMode.drawPolyline;
 
                                     CadPoint2D effectiveEnd = endCad;
@@ -2327,7 +2455,9 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                         StudioToolMode.select,
                                       );
                                     } else if (viewModel.toolMode ==
-                                        StudioToolMode.dragDimension) {
+                                            StudioToolMode.dragDimension ||
+                                        viewModel.toolMode ==
+                                            StudioToolMode.addDimension) {
                                       final start =
                                           _drawDragStartCad ??
                                           viewModel.pendingBendStart ??
@@ -2596,9 +2726,18 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                         if (viewModel.pendingBendStart ==
                                                 null &&
                                             _drawDragStartCad != null) {
-                                          viewModel.setPendingBendStart(
-                                            _drawDragStartCad,
-                                          );
+                                          if (viewModel.toolMode ==
+                                              StudioToolMode.addDimension) {
+                                            viewModel.handleCanvasClick(
+                                              _drawDragStartCad!,
+                                              snapRadiusMm: screenSnapMm,
+                                              autoPlace: false,
+                                            );
+                                          } else {
+                                            viewModel.setPendingBendStart(
+                                              _drawDragStartCad,
+                                            );
+                                          }
                                         }
                                         _drawDragCommitted = true;
                                       }
@@ -2827,6 +2966,45 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                 }
                                 _lastTapTime = now;
                                 _lastTapPosition = touchScreen;
+
+                                // Check direct tap on dimension badge (select or delete)
+                                for (final entry in _dimensionBadgeRects.entries) {
+                                  if (entry.value.inflate(4.0).contains(touchScreen)) {
+                                    final badge = entry.value;
+                                    final isDeleteRegion =
+                                        touchScreen.dx > (badge.right - 18);
+                                    if (isDeleteRegion) {
+                                      viewModel.removeDimension(entry.key);
+                                      setState(() {
+                                        _hoveredDimId = null;
+                                      });
+                                    } else {
+                                      viewModel.selectDimension(entry.key);
+                                      _isInspectorCollapsed = false;
+                                    }
+                                    return;
+                                  }
+                                }
+
+                                // Check direct tap on constraint badge (select or delete)
+                                for (final entry in _constraintBadgeRects.entries) {
+                                  if (entry.value.inflate(4.0).contains(touchScreen)) {
+                                    final badge = entry.value;
+                                    final isDeleteRegion =
+                                        touchScreen.dx > (badge.right - 18);
+                                    if (isDeleteRegion) {
+                                      viewModel.removeConstraint(entry.key);
+                                      setState(() {
+                                        _hoveredConstraintId = null;
+                                        _constraintHoverHighlightedEntityIds
+                                            .clear();
+                                      });
+                                    } else {
+                                      viewModel.selectConstraint(entry.key);
+                                    }
+                                    return;
+                                  }
+                                }
 
                                 // Handling interactive geometric constraint picking
                                 if (viewModel.activeConstraintPickType !=
@@ -3086,6 +3264,9 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget> {
                                             renderedDimensionLines:
                                                 _dimensionLineSegments,
                                             editingDimId: _editingDimId,
+                                            selectedDimensionId:
+                                                viewModel.selectedDimensionId,
+                                            hoveredDimensionId: _hoveredDimId,
                                             renderedDimensionValues:
                                                 _dimensionBadgeValues,
                                             hoveredDimLineId: _hoveredDimLineId,
@@ -5582,6 +5763,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
   >?
   renderedDimensionLines;
   final String? editingDimId;
+  final String? selectedDimensionId;
+  final String? hoveredDimensionId;
   final Map<String, double>? renderedDimensionValues;
   final String? hoveredDimLineId;
   final Map<String, Offset>? portBadgeOffsets;
@@ -5644,6 +5827,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
     this.renderedDimensionBadges,
     this.renderedDimensionLines,
     this.editingDimId,
+    this.selectedDimensionId,
+    this.hoveredDimensionId,
     this.renderedDimensionValues,
     this.hoveredDimLineId,
     this.portBadgeOffsets,
@@ -6402,15 +6587,28 @@ class _UnfoldedBoardPainter extends CustomPainter {
       ..color = const Color(0xFFE0F2FE)
       ..style = PaintingStyle.fill;
 
+    // Distinct styling for Coupler Mounting Slots
+    final couplerHolePaint = Paint()
+      ..color = const Color(0xFF2563EB) // Royal Blue-600
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+
+    final couplerHoleFillPaint = Paint()
+      ..color = const Color(0xFFEFF6FF) // Soft blue fill
+      ..style = PaintingStyle.fill;
+
     // 5. Render Turret Punches & Holes (Both Standalone and Perforation Pattern Holes)
     final unselectedPath = Path();
+    final unselectedCouplerPath = Path();
     bool hasUnselected = false;
+    bool hasUnselectedCoupler = false;
     final activePunches = <CncPunchPrimitive>[];
     final allPunchesList = doc.allPunches;
 
     // For dense punch grids (> 25 holes), batch into single path for 60 FPS rendering
     final useBatching = allPunchesList.length > 25;
     Path? unselectedPunchesUnion;
+    Path? unselectedCouplerUnion;
 
     for (final punch in allPunchesList) {
       final isSelected =
@@ -6421,6 +6619,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
       if (isSelected || isHovered) {
         activePunches.add(punch);
       } else {
+        final isCoupler = punch.role == CncPunchRole.coupler;
         final poly = punch.toPolygon();
         if (poly.isNotEmpty) {
           final pPath = Path();
@@ -6432,17 +6631,32 @@ class _UnfoldedBoardPainter extends CustomPainter {
           }
           pPath.close();
 
-          if (useBatching) {
-            unselectedPath.addPath(pPath, Offset.zero);
-            hasUnselected = true;
+          if (isCoupler) {
+            if (useBatching) {
+              unselectedCouplerPath.addPath(pPath, Offset.zero);
+              hasUnselectedCoupler = true;
+            } else {
+              unselectedCouplerUnion = (unselectedCouplerUnion == null)
+                  ? pPath
+                  : Path.combine(
+                      PathOperation.union,
+                      unselectedCouplerUnion,
+                      pPath,
+                    );
+            }
           } else {
-            unselectedPunchesUnion = (unselectedPunchesUnion == null)
-                ? pPath
-                : Path.combine(
-                    PathOperation.union,
-                    unselectedPunchesUnion,
-                    pPath,
-                  );
+            if (useBatching) {
+              unselectedPath.addPath(pPath, Offset.zero);
+              hasUnselected = true;
+            } else {
+              unselectedPunchesUnion = (unselectedPunchesUnion == null)
+                  ? pPath
+                  : Path.combine(
+                      PathOperation.union,
+                      unselectedPunchesUnion,
+                      pPath,
+                    );
+            }
           }
         }
       }
@@ -6453,10 +6667,34 @@ class _UnfoldedBoardPainter extends CustomPainter {
         canvas.drawPath(unselectedPath, holeFillPaint);
         canvas.drawPath(unselectedPath, holePaint);
       }
+      if (hasUnselectedCoupler) {
+        canvas.drawPath(unselectedCouplerPath, couplerHoleFillPaint);
+        canvas.drawPath(unselectedCouplerPath, couplerHolePaint);
+      }
     } else {
       if (unselectedPunchesUnion != null) {
         canvas.drawPath(unselectedPunchesUnion, holeFillPaint);
         canvas.drawPath(unselectedPunchesUnion, holePaint);
+      }
+      if (unselectedCouplerUnion != null) {
+        canvas.drawPath(unselectedCouplerUnion, couplerHoleFillPaint);
+        canvas.drawPath(unselectedCouplerUnion, couplerHolePaint);
+      }
+    }
+
+    // Distinct visual badge for coupler slots on the 2D sketch
+    if (scale > 0.4) {
+      for (final punch in allPunchesList) {
+        if (punch.role == CncPunchRole.coupler) {
+          final isSelected =
+              punch.id == selectedPunchId ||
+              selectedEntityIds.contains(punch.id) ||
+              selectedEntityIds.any((id) => punch.id.startsWith('${id}_'));
+          final isHovered = punch.id == hoveredPunchId && !isSelected;
+          if (!isSelected && !isHovered && punch.showLabel) {
+            _drawCouplerSlotBadge(canvas, punch, toScreen, scale);
+          }
+        }
       }
     }
 
@@ -6583,15 +6821,17 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
         if (punch.showLabel && (isSelected || isHovered)) {
           final centerScreen = toScreen(punch.center.x, punch.center.y);
+          final isCoupler = punch.role == CncPunchRole.coupler;
+          final prefix = isCoupler ? 'COUPLER • ' : '';
           final String sizeStr;
           if (punch.type == PunchType.roundHole) {
-            sizeStr = 'Ø ${punch.diameterMm.toStringAsFixed(1)} mm';
+            sizeStr = '$prefixØ ${punch.diameterMm.toStringAsFixed(1)} mm';
           } else if (punch.type == PunchType.square) {
             sizeStr =
-                '${punch.widthMm.toStringAsFixed(1)} × ${punch.widthMm.toStringAsFixed(1)} mm';
+                '$prefix${punch.widthMm.toStringAsFixed(1)} × ${punch.widthMm.toStringAsFixed(1)} mm';
           } else {
             sizeStr =
-                '${punch.widthMm.toStringAsFixed(1)} × ${punch.lengthMm.toStringAsFixed(1)} mm';
+                '$prefix${punch.widthMm.toStringAsFixed(1)} × ${punch.lengthMm.toStringAsFixed(1)} mm';
           }
 
           final pSpan = TextSpan(
@@ -7109,6 +7349,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
           ..color = const Color(0xFF0284C7)
           ..style = PaintingStyle.fill;
         final endDotCore = Paint()..color = Colors.white;
+
+        // Locked Entity A halo ring
+        final lockedAHalo = Paint()
+          ..color = const Color(0xFF0284C7).withValues(alpha: 0.35)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0;
+        canvas.drawCircle(p1, 7.0, lockedAHalo);
+
         canvas.drawCircle(p1, 3.5, endDotPaint);
         canvas.drawCircle(p1, 1.3, endDotCore);
         canvas.drawCircle(p2, 3.5, endDotPaint);
@@ -8148,9 +8396,25 @@ class _UnfoldedBoardPainter extends CustomPainter {
       canvas.drawPath(path, strokePaint);
     }
 
-    // Subtle snap label (minor typography)
+    // Subtle snap label with Onshape anchor symbol prefix
+    String symbolPrefix = '';
+    if (type.isCenter) {
+      symbolPrefix = '⊙ ';
+    } else if (type.isMidpoint) {
+      symbolPrefix = '⌖ ';
+    } else if (type.isEndpoint) {
+      symbolPrefix = '• ';
+    } else if (type == SnapType.quadrant) {
+      symbolPrefix = '◇ ';
+    } else if (type == SnapType.perpendicular) {
+      symbolPrefix = '⊥ ';
+    }
+    final displayLabel = symbolPrefix.isNotEmpty && !label.startsWith(symbolPrefix)
+        ? '$symbolPrefix$label'
+        : label;
+
     final textSpan = TextSpan(
-      text: label,
+      text: displayLabel,
       style: TextStyle(
         color: const Color(0xFF0284C7),
         fontSize: 7.5,
@@ -8623,11 +8887,15 @@ class _UnfoldedBoardPainter extends CustomPainter {
       }
 
       renderedDimensionValues?[dim.id] = dim.measuredValue;
+      final isDimSelected = selectedDimensionId == dim.id;
+      final isDimHovered = hoveredDimensionId == dim.id;
       final badgeRect = _drawDimBadge(
         canvas,
         effectiveCenter,
         layout.displayText,
         isEditing: editingDimId == dim.id,
+        isSelected: isDimSelected,
+        isHovered: isDimHovered,
       );
       if (renderedDimensionBadges != null) {
         renderedDimensionBadges![dim.id] = badgeRect;
@@ -8949,11 +9217,15 @@ class _UnfoldedBoardPainter extends CustomPainter {
       }
     }
 
+    final isDimSelected = dimId != null && selectedDimensionId == dimId;
+    final isDimHovered = dimId != null && hoveredDimensionId == dimId;
     final badgeRect = _drawDimBadge(
       canvas,
       effectiveCenter,
       valueText,
       isEditing: dimId != null && dimId == editingDimId,
+      isSelected: isDimSelected,
+      isHovered: isDimHovered,
     );
     if (dimId != null && renderedDimensionBadges != null) {
       renderedDimensionBadges![dimId] = badgeRect;
@@ -8995,13 +9267,21 @@ class _UnfoldedBoardPainter extends CustomPainter {
     Offset center,
     String text, {
     bool isEditing = false,
+    bool isSelected = false,
+    bool isHovered = false,
   }) {
+    final hasDeleteIcon = isSelected || isHovered;
+    final fullText = hasDeleteIcon ? '$text  ✕' : text;
+
     final span = TextSpan(
-      text: text,
-      style: const TextStyle(
-        color: Color(0xFF1E293B),
+      text: fullText,
+      style: TextStyle(
+        color: (isSelected || isHovered)
+            ? const Color(0xFF0284C7)
+            : const Color(0xFF1E293B),
         fontSize: 9.5,
-        fontWeight: FontWeight.w600,
+        fontWeight:
+            (isSelected || isHovered) ? FontWeight.bold : FontWeight.w600,
         fontFamily: 'monospace',
       ),
     );
@@ -9010,12 +9290,49 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
     final bgRect = Rect.fromCenter(
       center: center,
-      width: tp.width + 4,
-      height: tp.height + 2,
+      width: tp.width + (hasDeleteIcon ? 8.0 : 4.0),
+      height: tp.height + 3.0,
     );
 
+    final rrect = RRect.fromRectAndRadius(
+      bgRect,
+      const Radius.circular(3.5),
+    );
+
+    if (isSelected || isHovered) {
+      // Drop shadow
+      canvas.drawRRect(
+        rrect.shift(const Offset(0, 1.5)),
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.15)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+      );
+
+      // Selected / hovered badge background
+      canvas.drawRRect(
+        rrect,
+        Paint()..color = const Color(0xFFF0F9FF),
+      );
+
+      // Blue border
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = isSelected
+              ? const Color(0xFF0284C7)
+              : const Color(0xFF06B6D4)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0,
+      );
+    } else {
+      // Subtle backing to avoid geometry line collision
+      canvas.drawRRect(
+        rrect,
+        Paint()..color = const Color(0xFFF8FAFC).withValues(alpha: 0.85),
+      );
+    }
+
     if (!isEditing) {
-      // Transparent background per CAD sketch drafting style
       tp.paint(
         canvas,
         Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0),
@@ -9726,6 +10043,57 @@ class _UnfoldedBoardPainter extends CustomPainter {
       canvas,
       Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0),
     );
+  }
+
+  void _drawCouplerSlotBadge(
+    Canvas canvas,
+    CncPunchPrimitive punch,
+    Offset Function(double, double) toScreen,
+    double scale,
+  ) {
+    final centerScreen = toScreen(punch.center.x, punch.center.y);
+    final halfSpan = (punch.type == PunchType.obroundSlot || punch.type == PunchType.rectangle)
+        ? (punch.widthMm * 0.5 * scale)
+        : (punch.diameterMm * 0.5 * scale);
+    final badgeCenter = Offset(centerScreen.dx, centerScreen.dy - halfSpan - 8.0);
+
+    const span = TextSpan(
+      text: 'COUPLER',
+      style: TextStyle(
+        color: Color(0xFF1D4ED8), // Royal Blue
+        fontSize: 7.5,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.4,
+      ),
+    );
+    final tp = TextPainter(text: span, textDirection: TextDirection.ltr)..layout();
+    final badgeRect = Rect.fromCenter(
+      center: badgeCenter,
+      width: tp.width + 6.0,
+      height: tp.height + 3.0,
+    );
+    final rrect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(2.5));
+
+    canvas.drawRRect(
+      rrect.shift(const Offset(0, 0.6)),
+      Paint()
+        ..color = const Color(0xFF1E293B).withValues(alpha: 0.10)
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = const Color(0xFFEFF6FF).withValues(alpha: 0.95)
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = const Color(0xFF3B82F6).withValues(alpha: 0.80)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8,
+    );
+    tp.paint(canvas, Offset(badgeRect.left + 3.0, badgeRect.top + 1.5));
   }
 
   @override

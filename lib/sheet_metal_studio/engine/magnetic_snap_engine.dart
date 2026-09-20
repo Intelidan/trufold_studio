@@ -119,6 +119,7 @@ class SnapTarget {
   final CadPoint2D point;
   final SnapType type;
   final String label;
+  final String? entityId;
   final CadPoint2D? segmentStart;
   final CadPoint2D? segmentEnd;
   final CadPoint2D? trackingAnchor;
@@ -128,6 +129,7 @@ class SnapTarget {
     required this.point,
     required this.type,
     required this.label,
+    this.entityId,
     this.segmentStart,
     this.segmentEnd,
     this.trackingAnchor,
@@ -144,7 +146,7 @@ class MagneticSnapEngine {
     final targets = <SnapTarget>[];
 
     // Collect all linear segments for intersections and snaps
-    final segments = <({CadPoint2D p1, CadPoint2D p2, String label})>[];
+    final segments = <({CadPoint2D p1, CadPoint2D p2, String label, String? entityId})>[];
 
     bool isIntermediateOfAnyArc(CadPoint2D pt) {
       for (final a in doc.arcs) {
@@ -164,11 +166,11 @@ class MagneticSnapEngine {
       final next = doc.outerContour[(i + 1) % doc.outerContour.length];
       final isChordSegment = isIntermediateOfAnyArc(pt) && isIntermediateOfAnyArc(next);
       if (!isChordSegment) {
-        segments.add((p1: pt, p2: next, label: 'Contour'));
+        segments.add((p1: pt, p2: next, label: 'Contour', entityId: 'CONTOUR_EDGE_$i'));
       }
 
       if (settings.enableEndpoint && !isIntermediateOfAnyArc(pt)) {
-        targets.add(SnapTarget(point: pt, type: SnapType.cornerVertex, label: 'Corner (${pt.x.toStringAsFixed(1)}, ${pt.y.toStringAsFixed(1)})'));
+        targets.add(SnapTarget(point: pt, type: SnapType.cornerVertex, label: 'Corner (${pt.x.toStringAsFixed(1)}, ${pt.y.toStringAsFixed(1)})', entityId: 'CONTOUR_VERTEX_$i'));
       }
 
       if (settings.enableMidpoint && !isChordSegment) {
@@ -178,6 +180,7 @@ class MagneticSnapEngine {
             point: mid,
             type: SnapType.edgeMidpoint,
             label: 'Midpoint (${mid.x.toStringAsFixed(1)}, ${mid.y.toStringAsFixed(1)})',
+            entityId: 'CONTOUR_EDGE_$i',
             segmentStart: pt,
             segmentEnd: next,
           ),
@@ -188,59 +191,59 @@ class MagneticSnapEngine {
     // 1b. CAD Arc endpoints, midpoints & centers
     for (final arc in doc.arcs) {
       if (settings.enableEndpoint) {
-        targets.add(SnapTarget(point: arc.startPoint, type: SnapType.endpoint, label: '${arc.id} Arc Start'));
-        targets.add(SnapTarget(point: arc.endPoint, type: SnapType.endpoint, label: '${arc.id} Arc End'));
+        targets.add(SnapTarget(point: arc.startPoint, type: SnapType.endpoint, label: '${arc.id} Arc Start', entityId: arc.id));
+        targets.add(SnapTarget(point: arc.endPoint, type: SnapType.endpoint, label: '${arc.id} Arc End', entityId: arc.id));
       }
       if (settings.enableMidpoint) {
-        targets.add(SnapTarget(point: arc.midpoint, type: SnapType.midpoint, label: '${arc.id} Arc Midpoint'));
+        targets.add(SnapTarget(point: arc.midpoint, type: SnapType.midpoint, label: '${arc.id} Arc Midpoint', entityId: arc.id));
       }
       if (settings.enableCenter) {
-        targets.add(SnapTarget(point: arc.center, type: SnapType.center, label: '${arc.id} Arc Center'));
+        targets.add(SnapTarget(point: arc.center, type: SnapType.center, label: '${arc.id} Arc Center', entityId: arc.id));
       }
     }
 
     // 2. Bend line endpoints, midpoints & segments
     for (final bend in doc.bends) {
-      segments.add((p1: bend.p1, p2: bend.p2, label: bend.id));
+      segments.add((p1: bend.p1, p2: bend.p2, label: bend.id, entityId: bend.id));
 
       if (settings.enableEndpoint) {
-        targets.add(SnapTarget(point: bend.p1, type: SnapType.bendEndpoint, label: '${bend.id} Endpoint'));
-        targets.add(SnapTarget(point: bend.p2, type: SnapType.bendEndpoint, label: '${bend.id} Endpoint'));
+        targets.add(SnapTarget(point: bend.p1, type: SnapType.bendEndpoint, label: '${bend.id} Endpoint', entityId: bend.id));
+        targets.add(SnapTarget(point: bend.p2, type: SnapType.bendEndpoint, label: '${bend.id} Endpoint', entityId: bend.id));
       }
 
       if (settings.enableMidpoint) {
-        targets.add(SnapTarget(point: bend.midpoint, type: SnapType.edgeMidpoint, label: '${bend.id} Midpoint', segmentStart: bend.p1, segmentEnd: bend.p2));
+        targets.add(SnapTarget(point: bend.midpoint, type: SnapType.edgeMidpoint, label: '${bend.id} Midpoint', entityId: bend.id, segmentStart: bend.p1, segmentEnd: bend.p2));
       }
     }
 
     // 3. Punch centers & quadrants
     for (final punch in doc.punches) {
       if (settings.enableCenter) {
-        targets.add(SnapTarget(point: punch.center, type: SnapType.punchCenter, label: '${punch.id} Center'));
+        targets.add(SnapTarget(point: punch.center, type: SnapType.punchCenter, label: '${punch.id} Center', entityId: punch.id));
       }
 
       if (settings.enableQuadrant) {
         final r = punch.widthMm / 2.0;
         if (punch.type == PunchType.roundHole) {
-          targets.add(SnapTarget(point: CadPoint2D(punch.center.x + r, punch.center.y), type: SnapType.quadrant, label: '${punch.id} 0° Quadrant'));
-          targets.add(SnapTarget(point: CadPoint2D(punch.center.x, punch.center.y + r), type: SnapType.quadrant, label: '${punch.id} 90° Quadrant'));
-          targets.add(SnapTarget(point: CadPoint2D(punch.center.x - r, punch.center.y), type: SnapType.quadrant, label: '${punch.id} 180° Quadrant'));
-          targets.add(SnapTarget(point: CadPoint2D(punch.center.x, punch.center.y - r), type: SnapType.quadrant, label: '${punch.id} 270° Quadrant'));
+          targets.add(SnapTarget(point: CadPoint2D(punch.center.x + r, punch.center.y), type: SnapType.quadrant, label: '${punch.id} 0° Quadrant', entityId: punch.id));
+          targets.add(SnapTarget(point: CadPoint2D(punch.center.x, punch.center.y + r), type: SnapType.quadrant, label: '${punch.id} 90° Quadrant', entityId: punch.id));
+          targets.add(SnapTarget(point: CadPoint2D(punch.center.x - r, punch.center.y), type: SnapType.quadrant, label: '${punch.id} 180° Quadrant', entityId: punch.id));
+          targets.add(SnapTarget(point: CadPoint2D(punch.center.x, punch.center.y - r), type: SnapType.quadrant, label: '${punch.id} 270° Quadrant', entityId: punch.id));
         }
       }
     }
 
     // 4. Cut line endpoints, midpoints & segments
     for (final cut in doc.cutLines) {
-      segments.add((p1: cut.p1, p2: cut.p2, label: cut.id));
+      segments.add((p1: cut.p1, p2: cut.p2, label: cut.id, entityId: cut.id));
 
       if (settings.enableEndpoint) {
-        targets.add(SnapTarget(point: cut.p1, type: SnapType.endpoint, label: '${cut.id} Cut Endpoint'));
-        targets.add(SnapTarget(point: cut.p2, type: SnapType.endpoint, label: '${cut.id} Cut Endpoint'));
+        targets.add(SnapTarget(point: cut.p1, type: SnapType.endpoint, label: '${cut.id} Cut Endpoint', entityId: cut.id));
+        targets.add(SnapTarget(point: cut.p2, type: SnapType.endpoint, label: '${cut.id} Cut Endpoint', entityId: cut.id));
       }
 
       if (settings.enableMidpoint) {
-        targets.add(SnapTarget(point: cut.midpoint, type: SnapType.midpoint, label: '${cut.id} Cut Midpoint', segmentStart: cut.p1, segmentEnd: cut.p2));
+        targets.add(SnapTarget(point: cut.midpoint, type: SnapType.midpoint, label: '${cut.id} Cut Midpoint', entityId: cut.id, segmentStart: cut.p1, segmentEnd: cut.p2));
       }
     }
 
@@ -263,7 +266,14 @@ class MagneticSnapEngine {
           final foot = projectPerpendicularFoot(anchorPoint, seg.p1, seg.p2);
           if (foot != null) {
             targets.add(
-              SnapTarget(point: foot, type: SnapType.perpendicular, label: 'Perpendicular to ${seg.label}', segmentStart: seg.p1, segmentEnd: seg.p2),
+              SnapTarget(
+                point: foot,
+                type: SnapType.perpendicular,
+                label: 'Perpendicular to ${seg.label}',
+                entityId: seg.entityId,
+                segmentStart: seg.p1,
+                segmentEnd: seg.p2,
+              ),
             );
           }
         }

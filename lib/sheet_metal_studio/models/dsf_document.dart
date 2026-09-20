@@ -21,6 +21,7 @@ import 'cad_constraint.dart';
 import 'constraints/constraint_definition.dart';
 import 'constraints/reference_geometry.dart';
 import 'template_parameter_definition.dart';
+import 'cms/cms_product_contract.dart';
 
 class DsfDocument {
   static const String currentFormat = 'DANISH_SHEET_FOLD';
@@ -384,7 +385,18 @@ class DsfDocument {
     outerContourLayer: json['outerContourLayer'] as String? ?? 'OUTLINE',
     bends: (json['bends'] as List? ?? []).map((e) => FoldBendLine.fromJson(e as Map<String, dynamic>)).toList(),
     faces: (json['faces'] as List? ?? []).map((e) => PlanarSheetFace.fromJson(e as Map<String, dynamic>)).toList(),
-    punches: (json['punches'] as List? ?? []).map((e) => CncPunchPrimitive.fromJson(e as Map<String, dynamic>)).toList(),
+    punches: () {
+      final meta = json['metadata'] as Map<String, dynamic>? ?? {};
+      final cmsTemplate = meta['cmsTemplate'] as Map<String, dynamic>?;
+      final couplerSlotIds = (cmsTemplate?['couplerSlotPunchIds'] as List?)?.map((e) => e.toString()).toSet() ?? {};
+      final raw = (json['punches'] as List? ?? []).map((e) => CncPunchPrimitive.fromJson(e as Map<String, dynamic>)).toList();
+      return raw.map((p) {
+        if (couplerSlotIds.contains(p.id) && p.role != CncPunchRole.coupler) {
+          return p.copyWith(role: CncPunchRole.coupler);
+        }
+        return p;
+      }).toList();
+    }(),
     perforationPatterns: (json['perforationPatterns'] as List? ?? []).map((e) => PerforationPattern.fromJson(e as Map<String, dynamic>)).toList(),
     corners: (json['corners'] as List? ?? []).map((e) => CornerTreatment.fromJson(e as Map<String, dynamic>)).toList(),
     cutLines: (json['cutLines'] as List? ?? []).map((e) => CadLineSegment.fromJson(e as Map<String, dynamic>)).toList(),
@@ -473,4 +485,38 @@ class DsfDocument {
 
   /// Creates a DsfDocument from a semantic CadDocument model
   factory DsfDocument.fromCadDocument(CadDocument cadDoc) => cadDoc.toDsfDocument();
+
+  /// Whether this document represents a Cable Management System (CMS) fitting/accessory drawing.
+  bool get isCmsDrawing {
+    // 1. Explicit CMS template / workflow metadata
+    if (metadata.containsKey('cmsTemplate') ||
+        metadata.containsKey('cms_template') ||
+        metadata.containsKey('cmsWorkflow') ||
+        metadata.containsKey('cms_workflow') ||
+        metadata.containsKey('cms_product_contract') ||
+        metadata.containsKey('cmsPorts') ||
+        metadata.containsKey('cms_ports')) {
+      return true;
+    }
+
+    // 2. Explicit fitting metadata indicating an accessory / fitting
+    final fittingMeta = metadata['fittingMetadata'];
+    if (fittingMeta is Map) {
+      final cat = fittingMeta['category']?.toString() ?? '';
+      final prod = fittingMeta['product']?.toString() ?? '';
+      if (cat.isNotEmpty && cat != 'None' && prod.isNotEmpty && prod != 'None') {
+        return true;
+      }
+    }
+
+    // 3. Document productType / itemName maps to a known CMS Product Contract
+    final contract = CmsProductContract.lookup(productType, itemName) ??
+        CmsProductContract.lookup(null, itemName) ??
+        CmsProductContract.lookup(null, productType);
+    if (contract != null) {
+      return true;
+    }
+
+    return false;
+  }
 }

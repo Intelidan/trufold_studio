@@ -130,6 +130,38 @@ class DimensionPropertySheet extends StatelessWidget {
             const Divider(height: 1, color: Color(0xFFE2E8F0)),
             const SizedBox(height: 8),
 
+            // Orientation / Alignment Selector
+            Row(
+              children: [
+                _buildOrientationOption(
+                  label: 'Horizontal ↔',
+                  isSelected: dimension.type == CadDimensionType.horizontal,
+                  onTap: () {
+                    viewModel.updateDimension(dimension.copyWith(type: CadDimensionType.horizontal));
+                  },
+                ),
+                const SizedBox(width: 4),
+                _buildOrientationOption(
+                  label: 'Vertical ↕',
+                  isSelected: dimension.type == CadDimensionType.vertical,
+                  onTap: () {
+                    viewModel.updateDimension(dimension.copyWith(type: CadDimensionType.vertical));
+                  },
+                ),
+                const SizedBox(width: 4),
+                _buildOrientationOption(
+                  label: 'Aligned ⤢',
+                  isSelected: dimension.type == CadDimensionType.aligned ||
+                      dimension.type == CadDimensionType.holeToHole ||
+                      dimension.type == CadDimensionType.holeToEdge,
+                  onTap: () {
+                    viewModel.updateDimension(dimension.copyWith(type: CadDimensionType.aligned));
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
             // Dimension Value & Driving Status
             Row(
               children: [
@@ -388,6 +420,39 @@ class DimensionPropertySheet extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildOrientationOption({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          height: 24,
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFFE0F2FE) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: isSelected ? const Color(0xFF38BDF8) : const Color(0xFFCBD5E1),
+              width: 0.8,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 9.0,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF475569),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

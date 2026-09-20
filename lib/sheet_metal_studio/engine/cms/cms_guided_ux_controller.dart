@@ -22,7 +22,6 @@ import '../../models/cms/cms_product_contract.dart';
 import '../../models/cms/cms_ux_state.dart';
 import '../kinematic_fold_engine.dart';
 import '../planar_face_decomposer.dart';
-import '../dxf_auto_fold_engine.dart';
 import 'cms_3d_opening_detector.dart';
 import 'cms_opening_plane_analyzer.dart';
 import 'cms_port_matcher.dart';
@@ -109,37 +108,32 @@ class CmsGuidedUxController extends ChangeNotifier {
         } catch (_) {}
       }
 
-      // 2. Fallback to geometric candidate extraction if no companion template found
-      if (suggestions.isEmpty) {
-        final candidates = DxfAutoFoldEngine.detectCandidateLines(document.outerContour);
-        int bendIdx = 1;
-        int flangeIdx = 1;
-
-        for (final cand in candidates) {
-          final isFlange = cand.isFlange;
-          final id = isFlange ? 'FL$flangeIdx' : 'B$bendIdx';
-          if (isFlange) {
-            flangeIdx++;
-          } else {
-            bendIdx++;
-          }
-
-          suggestions.add(CmsSuggestedBend(id: id, p1: cand.p1, p2: cand.p2, isFlange: isFlange, label: cand.label, targetAngleDeg: 90.0, radiusMm: 1.5));
-        }
+      // NOTE: Removed DxfAutoFoldEngine.detectCandidateLines!
+      // In Stage 1, if no companion template exists, the user authoritatively
+      // marks bend lines & flanges on the 2D canvas.
+      if (suggestions.isNotEmpty) {
+        _addMilestone('Companion Template Located', 'Loaded ${suggestions.length} pre-defined bend/flange lines for ${contract.displayName}.');
+        _updateState(
+          _state.copyWith(
+            phase: CmsUxPhase.suggestingBends,
+            suggestedBends: suggestions,
+            stageTitle: 'Stage 1: Review Bend Structure',
+            stageSubtitle: 'Verify suggested lines from template or customize on canvas.',
+            progress: 0.28,
+          ),
+        );
+      } else {
+        _addMilestone('Stage 1: Awaiting User Bends', 'No pre-existing bends. Mark ${contract.expectedStructuralBends} bends and ${contract.expectedFlanges} flanges on canvas.');
+        _updateState(
+          _state.copyWith(
+            phase: CmsUxPhase.suggestingBends,
+            suggestedBends: const [],
+            stageTitle: 'Stage 1: Define Bends & Flanges',
+            stageSubtitle: 'Please mark bend lines (B) and flange lines on canvas for ${contract.displayName}.',
+            progress: 0.20,
+          ),
+        );
       }
-
-      _addMilestone('Flat Geometry Inspected', 'Located ${suggestions.length} candidate bend/flange lines for ${contract.displayName}.');
-
-      // Pause here: Bend lines are authoritative and user-defined!
-      _updateState(
-        _state.copyWith(
-          phase: CmsUxPhase.suggestingBends,
-          suggestedBends: suggestions,
-          stageTitle: 'Stage 2 of 7: Bend Structure',
-          stageSubtitle: 'Review suggested bend lines or mark manually on canvas.',
-          progress: 0.28,
-        ),
-      );
       return;
     }
 
@@ -153,7 +147,7 @@ class CmsGuidedUxController extends ChangeNotifier {
       _updateState(
         _state.copyWith(
           phase: CmsUxPhase.confirmingBends,
-          stageTitle: 'Review Bend Structure',
+          stageTitle: 'Stage 1: Review Bend Structure',
           stageSubtitle: 'Found ${structuralBends.length} bends, but ${contract.displayName} expects ${contract.expectedStructuralBends}.',
           progress: 0.28,
         ),
@@ -161,9 +155,57 @@ class CmsGuidedUxController extends ChangeNotifier {
       return;
     }
 
-    _addMilestone('Stage 2: Bend Structure Verified', '${structuralBends.length} structural bends and ${flanges.length} return flanges verified.');
+    _addMilestone('Stage 1: Manufacturing Definition Verified', '${structuralBends.length} structural bends and ${flanges.length} return flanges verified.');
 
-    // Proceed to folding
+    // Proceed to folding and port discovery (Stage 2)
+    await continueFoldingAndDiscovery(document: document, stepDelay: stepDelay);
+  }
+
+  /// Sets up controller state when reopening an existing Stage 1 DSF (bends defined, ports pending).
+  void resumeAtStage1({required DsfDocument document, required CmsProductContract contract}) {
+    final structuralBends = document.bends.where((b) => b.role != BendLineRole.flange).toList();
+    final flanges = document.bends.where((b) => b.role == BendLineRole.flange).toList();
+    _state = CmsUxState(
+      phase: CmsUxPhase.confirmingBends,
+      contract: contract,
+      stageTitle: 'Stage 1: Bends Defined',
+      stageSubtitle: '${structuralBends.length} bends, ${flanges.length} flanges. Ready for automatic port mapping.',
+      progress: 0.33,
+      learnedMilestones: [
+        CmsLearnedMilestone(
+          title: 'Stage 1 Loaded',
+          detail: '${structuralBends.length} structural bends and ${flanges.length} return flanges loaded from DSF.',
+        ),
+      ],
+    );
+    notifyListeners();
+  }
+
+  /// Sets up controller state when reopening an existing Stage 2 DSF (ports mapped, scaling pending).
+  void resumeAtStage2({required DsfDocument document, required CmsProductContract contract, required List<CmsPhysicalPort> ports}) {
+    _state = CmsUxState(
+      phase: CmsUxPhase.complete,
+      contract: contract,
+      discoveredPorts: ports,
+      stageTitle: 'Stage 2: Ports Mapped',
+      stageSubtitle: '${ports.length} physical channel ports verified. Ready for Teach Scaling.',
+      progress: 0.66,
+      learnedMilestones: [
+        CmsLearnedMilestone(
+          title: 'Stage 2 Loaded',
+          detail: '${ports.length} ports loaded from DSF. Invariant coupler features locked.',
+        ),
+      ],
+    );
+    notifyListeners();
+  }
+
+  /// Directly starts Stage 2: Automatic Port Mapping using user-defined bends on [document].
+  Future<void> startStage2PortMapping({required DsfDocument document, Duration stepDelay = Duration.zero}) async {
+    final contract = _state.contract ?? CmsProductContract.lookup(null, document.itemName) ?? CmsProductContract.bend45;
+    if (_state.contract == null) {
+      _state = _state.copyWith(contract: contract);
+    }
     await continueFoldingAndDiscovery(document: document, stepDelay: stepDelay);
   }
 
@@ -201,7 +243,22 @@ class CmsGuidedUxController extends ChangeNotifier {
     );
     if (stepDelay > Duration.zero) await Future.delayed(stepDelay);
 
-    final foldResult = KinematicFoldEngine.foldDocument(document, foldProgress: 1.0);
+    DsfDocument docToFold = document;
+    if (docToFold.bends.isNotEmpty && docToFold.faces.isEmpty) {
+      final decomp = PlanarFaceDecomposer.decompose(
+        outerContour: docToFold.outerContour,
+        bends: docToFold.bends,
+        cutLines: docToFold.cutLines,
+        preferredBaseFaceId: docToFold.baseFaceId,
+      );
+      docToFold = docToFold.copyWith(
+        bends: decomp.connectedBends,
+        faces: decomp.faces,
+        baseFaceId: decomp.baseFaceId,
+      );
+    }
+
+    final foldResult = KinematicFoldEngine.foldDocument(docToFold, foldProgress: 1.0);
 
     // HARD GUARD: Prohibit 3D port discovery on flat or unbent geometry!
     if (foldResult.polygons.length <= 1) {
@@ -231,9 +288,9 @@ class CmsGuidedUxController extends ChangeNotifier {
     if (stepDelay > Duration.zero) await Future.delayed(stepDelay);
 
     // HARD GUARD: Port discovery strictly operates on the 3D folded representation
-    final rawOpenings = Cms3DOpeningDetector.detectOpenings(document: document, foldResult: foldResult);
+    final rawOpenings = Cms3DOpeningDetector.detectOpenings(document: docToFold, foldResult: foldResult);
 
-    final measured = rawOpenings.map((r) => CmsOpeningPlaneAnalyzer.analyze(raw: r, document: document, foldResult: foldResult)).toList();
+    final measured = rawOpenings.map((r) => CmsOpeningPlaneAnalyzer.analyze(raw: r, document: docToFold, foldResult: foldResult)).toList();
     final candidates = measured.map((m) => m.toCandidate()).toList();
 
     _addMilestone('Stage 4: 3D Openings Located', 'Identified ${rawOpenings.length} terminal boundary loops on the folded 3D model.');
@@ -275,8 +332,8 @@ class CmsGuidedUxController extends ChangeNotifier {
     // -------------------------------------------------------------------------
     // Stage 5: Feature Protection (Coupler Fasteners)
     // -------------------------------------------------------------------------
-    final structuralBends = document.bends.where((b) => b.role != BendLineRole.flange).map((b) => b.id).toList();
-    final flanges = document.bends.where((b) => b.role == BendLineRole.flange).map((b) => b.id).toList();
+    final structuralBends = docToFold.bends.where((b) => b.role != BendLineRole.flange).map((b) => b.id).toList();
+    final flanges = docToFold.bends.where((b) => b.role == BendLineRole.flange).map((b) => b.id).toList();
 
     _updateState(
       _state.copyWith(
@@ -291,7 +348,7 @@ class CmsGuidedUxController extends ChangeNotifier {
     );
     if (stepDelay > Duration.zero) await Future.delayed(stepDelay);
 
-    final classification = CmsCouplerClassifier.classify(document: document, contract: contract, ports: matchedPorts);
+    final classification = CmsCouplerClassifier.classify(document: docToFold, contract: contract, ports: matchedPorts);
 
     final couplerIds = classification.couplerSlots.map((p) => p.id).toList();
     _addMilestone('Stage 5: Coupler Fasteners Protected', '${classification.couplerSlots.length} rigid 8×12mm slots locked to ports (Invariant to scaling).');
@@ -342,9 +399,10 @@ class CmsGuidedUxController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Finalizes and closes the guided CMS authoring session.
+  /// Finalizes and marks the guided CMS authoring session as complete.
   void completeSession() {
-    reset();
+    _state = _state.copyWith(phase: CmsUxPhase.complete);
+    notifyListeners();
   }
 
   /// Resets controller state.

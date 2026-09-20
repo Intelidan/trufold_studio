@@ -56,15 +56,15 @@ class CadPropertyInspector extends StatelessWidget {
       );
     }
 
-    // 1. Dimension selected
-    if (viewModel.selectedDimensionId != null) {
-      final dim = viewModel.document.dimensions
-          .where((d) => d.id == viewModel.selectedDimensionId)
+    // 1. Punch selected
+    if (viewModel.selectedPunchId != null) {
+      final punch = viewModel.document.allPunchesRaw
+          .where((p) => p.id == viewModel.selectedPunchId)
           .firstOrNull;
-      if (dim != null) {
-        return DimensionPropertySheet(
+      if (punch != null) {
+        return PunchPropertySheet(
           viewModel: viewModel,
-          dimension: dim,
+          punch: punch,
           isCollapsed: isCollapsed,
           onToggleCollapse: onToggleCollapse,
           onClose: onClose,
@@ -128,25 +128,7 @@ class CadPropertyInspector extends StatelessWidget {
       }
     }
 
-    // 4. Punch selected
-    if (viewModel.selectedPunchId != null) {
-      final punch = viewModel.document.allPunchesRaw
-          .where((p) => p.id == viewModel.selectedPunchId)
-          .firstOrNull;
-      if (punch != null) {
-        return PunchPropertySheet(
-          viewModel: viewModel,
-          punch: punch,
-          isCollapsed: isCollapsed,
-          onToggleCollapse: onToggleCollapse,
-          onClose: onClose,
-          onDragStartHeader: onDragStartHeader,
-          onDragHeader: onDragHeader,
-        );
-      }
-    }
-
-    // 5. Pattern selected
+    // 4. Pattern selected
     if (viewModel.selectedPatternId != null) {
       final pattern = viewModel.document.perforationPatterns
           .where((p) => p.id == viewModel.selectedPatternId)
@@ -165,7 +147,7 @@ class CadPropertyInspector extends StatelessWidget {
       }
     }
 
-    // 6. Face selected
+    // 5. Face selected
     if (viewModel.selectedFaceId != null) {
       final face = viewModel.document.faces
           .where((f) => f.id == viewModel.selectedFaceId)
@@ -174,6 +156,24 @@ class CadPropertyInspector extends StatelessWidget {
         return FacePropertySheet(
           viewModel: viewModel,
           face: face,
+          isCollapsed: isCollapsed,
+          onToggleCollapse: onToggleCollapse,
+          onClose: onClose,
+          onDragStartHeader: onDragStartHeader,
+          onDragHeader: onDragHeader,
+        );
+      }
+    }
+
+    // 6. Dimension selected
+    if (viewModel.selectedDimensionId != null) {
+      final dim = viewModel.document.dimensions
+          .where((d) => d.id == viewModel.selectedDimensionId)
+          .firstOrNull;
+      if (dim != null) {
+        return DimensionPropertySheet(
+          viewModel: viewModel,
+          dimension: dim,
           isCollapsed: isCollapsed,
           onToggleCollapse: onToggleCollapse,
           onClose: onClose,

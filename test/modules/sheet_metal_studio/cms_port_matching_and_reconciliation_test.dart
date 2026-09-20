@@ -55,12 +55,13 @@ void main() {
       final p1 = matchResult.matchedPorts[0];
       final p2 = matchResult.matchedPorts[1];
 
+      final expectedWidth = doc.parameters['width'] ?? 100.0;
       expect(p1.id, equals('PORT_1'));
-      expect(p1.width, closeTo(100.0, 5.0));
+      expect(p1.width, closeTo(expectedWidth, 5.0));
       expect(p1.suggestedRole, equals(CmsPortRole.bidirectional));
 
       expect(p2.id, equals('PORT_2'));
-      expect(p2.width, closeTo(100.0, 5.0));
+      expect(p2.width, closeTo(expectedWidth, 5.0));
       expect(p2.suggestedRole, equals(CmsPortRole.bidirectional));
     });
 

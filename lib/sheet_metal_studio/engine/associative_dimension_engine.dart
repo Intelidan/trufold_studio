@@ -93,12 +93,84 @@ class AssociativeDimensionEngine {
     return buffer.toString();
   }
 
+  /// Projects point [p] perpendicularly onto the line segment passing through [e1] and [e2].
+  static CadPoint2D projectPointToSegmentLine(CadPoint2D p, CadPoint2D e1, CadPoint2D e2) {
+    final dx = e2.x - e1.x;
+    final dy = e2.y - e1.y;
+    final lenSq = dx * dx + dy * dy;
+    if (lenSq < 1e-9) return e1;
+    final t = ((p.x - e1.x) * dx + (p.y - e1.y) * dy) / lenSq;
+    return CadPoint2D(e1.x + t * dx, e1.y + t * dy);
+  }
+
+  /// Resolves the two endpoints of an edge entity (bend, cut line, contour segment, or face edge).
+  static (CadPoint2D, CadPoint2D)? resolveEdgeSegment(String? edgeId, DsfDocument doc) {
+    if (edgeId == null) return null;
+
+    // Check bends
+    for (final b in doc.bends) {
+      if (b.id == edgeId) return (b.p1, b.p2);
+    }
+    // Check cut lines
+    for (final c in doc.cutLines) {
+      if (c.id == edgeId) return (c.p1, c.p2);
+    }
+    // Check outer contour edges (format CONTOUR_EDGE_i)
+    if (edgeId.startsWith('CONTOUR_EDGE_')) {
+      final index = int.tryParse(edgeId.replaceFirst('CONTOUR_EDGE_', ''));
+      if (index != null && index >= 0 && index < doc.outerContour.length) {
+        final p1 = doc.outerContour[index];
+        final p2 = doc.outerContour[(index + 1) % doc.outerContour.length];
+        return (p1, p2);
+      }
+    }
+    // Fallback: check faces
+    for (final f in doc.faces) {
+      if (f.id == edgeId && f.vertices.length >= 2) {
+        return (f.vertices[0], f.vertices[1]);
+      }
+    }
+    return null;
+  }
+
   /// Extracts geometric points A and B associated with the dimension references,
   /// or falls back to explicit pointA / pointB
   static ({CadPoint2D pA, CadPoint2D pB, double value}) resolveAssociation(CadDimension dim, DsfDocument doc) {
     CadPoint2D? ptA = dim.pointA;
     CadPoint2D? ptB = dim.pointB;
     double measured = dim.measuredValue;
+
+    // Special handling for punch-to-edge dimensions:
+    // Project the punch center perpendicularly onto the edge segment so the setback
+    // is strictly perpendicular to the edge rather than snapping to the edge midpoint.
+    final punchId = dim.referenceAId != null && doc.punches.any((p) => p.id == dim.referenceAId)
+        ? dim.referenceAId
+        : (dim.referenceBId != null && doc.punches.any((p) => p.id == dim.referenceBId) ? dim.referenceBId : null);
+    final edgeId = punchId == dim.referenceAId ? dim.referenceBId : dim.referenceAId;
+
+    if (punchId != null && edgeId != null) {
+      final punch = doc.punches.where((p) => p.id == punchId).firstOrNull;
+      final edgeSeg = resolveEdgeSegment(edgeId, doc);
+      if (punch != null && edgeSeg != null) {
+        final punchCenter = punch.center;
+        final proj = projectPointToSegmentLine(punchCenter, edgeSeg.$1, edgeSeg.$2);
+        if (dim.referenceAId == punchId) {
+          ptA = punchCenter;
+          ptB = proj;
+        } else {
+          ptA = proj;
+          ptB = punchCenter;
+        }
+        if (dim.type == CadDimensionType.horizontal) {
+          measured = (ptB.x - ptA.x).abs();
+        } else if (dim.type == CadDimensionType.vertical) {
+          measured = (ptB.y - ptA.y).abs();
+        } else {
+          measured = punchCenter.distanceTo(proj);
+        }
+        return (pA: ptA, pB: ptB, value: measured);
+      }
+    }
 
     // Resolve reference A
     if (dim.referenceAId != null) {
@@ -130,10 +202,20 @@ class AssociativeDimensionEngine {
       case CadDimensionType.vertical:
         measured = (ptB.y - ptA.y).abs();
         break;
+      case CadDimensionType.holeToHole:
+        final dx = (ptB.x - ptA.x).abs();
+        final dy = (ptB.y - ptA.y).abs();
+        if (dx > 1.4 * dy) {
+          measured = dx;
+        } else if (dy > 1.4 * dx) {
+          measured = dy;
+        } else {
+          measured = math.sqrt(dx * dx + dy * dy);
+        }
+        break;
       case CadDimensionType.aligned:
       case CadDimensionType.centerToCenter:
       case CadDimensionType.holeToEdge:
-      case CadDimensionType.holeToHole:
       case CadDimensionType.bendToEdge:
       case CadDimensionType.bendToBend:
       case CadDimensionType.edgeToEdge:
@@ -177,6 +259,16 @@ class AssociativeDimensionEngine {
         return doc.outerContour[index];
       }
     }
+    // Check outer contour edges (format CONTOUR_EDGE_i)
+    if (id.startsWith('CONTOUR_EDGE_')) {
+      final edgeSeg = resolveEdgeSegment(id, doc);
+      if (edgeSeg != null) {
+        return CadPoint2D(
+          (edgeSeg.$1.x + edgeSeg.$2.x) / 2.0,
+          (edgeSeg.$1.y + edgeSeg.$2.y) / 2.0,
+        );
+      }
+    }
     return null;
   }
 
@@ -196,7 +288,31 @@ class AssociativeDimensionEngine {
     Offset wAStart, wAEnd, wBStart, wBEnd, dStart, dEnd;
     double textAngle = 0.0;
 
-    if (dim.type == CadDimensionType.horizontal) {
+    // Determine effective dimension orientation
+    bool isHorizontal = dim.type == CadDimensionType.horizontal;
+    bool isVertical = dim.type == CadDimensionType.vertical;
+
+    if (!isHorizontal && !isVertical) {
+      if (dim.type == CadDimensionType.holeToEdge) {
+        final dy = (pB.y - pA.y).abs();
+        final dx = (pB.x - pA.x).abs();
+        if (dy < 0.05 || (dx > 0 && dy / dx < 0.1)) {
+          isHorizontal = true;
+        } else if (dx < 0.05 || (dy > 0 && dx / dy < 0.1)) {
+          isVertical = true;
+        }
+      } else if (dim.type == CadDimensionType.holeToHole) {
+        final dx = (pB.x - pA.x).abs();
+        final dy = (pB.y - pA.y).abs();
+        if (dx > 1.4 * dy) {
+          isHorizontal = true;
+        } else if (dy > 1.4 * dx) {
+          isVertical = true;
+        }
+      }
+    }
+
+    if (isHorizontal) {
       final yDim = (math.min(pA.y, pB.y)) - offsetDist;
       wAStart = Offset(pA.x, pA.y - (offsetDist > 0 ? witnessGap : -witnessGap));
       wAEnd = Offset(pA.x, yDim - (offsetDist > 0 ? overshoot : -overshoot));
@@ -205,7 +321,7 @@ class AssociativeDimensionEngine {
       dStart = Offset(pA.x, yDim);
       dEnd = Offset(pB.x, yDim);
       textAngle = 0.0;
-    } else if (dim.type == CadDimensionType.vertical) {
+    } else if (isVertical) {
       final xDim = (math.min(pA.x, pB.x)) - offsetDist;
       wAStart = Offset(pA.x - (offsetDist > 0 ? witnessGap : -witnessGap), pA.y);
       wAEnd = Offset(xDim - (offsetDist > 0 ? overshoot : -overshoot), pA.y);
@@ -215,7 +331,7 @@ class AssociativeDimensionEngine {
       dEnd = Offset(xDim, pB.y);
       textAngle = -math.pi / 2.0;
     } else {
-      // Aligned / center-to-center / hole-to-edge / generic
+      // Aligned / center-to-center / oblique
       final dx = pB.x - pA.x;
       final dy = pB.y - pA.y;
       final len = math.sqrt(dx * dx + dy * dy);

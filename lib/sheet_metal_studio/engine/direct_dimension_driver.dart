@@ -14,6 +14,7 @@ import '../models/dsf_document.dart';
 import '../models/cnc_punch_primitive.dart';
 import '../models/fold_bend_line.dart';
 import 'planar_face_decomposer.dart';
+import 'associative_dimension_engine.dart';
 
 class DirectDimensionDriveResult {
   final DsfDocument updatedDocument;
@@ -78,13 +79,27 @@ class DirectDimensionDriver {
       return _driveBlankDimension(document, dimension, newValue);
     }
 
-    // 2. Punch / Hole Dimension (Diameter, Radius, Slot Length/Width, Center Position)
-    if (dimension.referenceAId != null) {
-      final punchMatch = document.punches.where((p) => p.id == dimension.referenceAId).firstOrNull;
-      if (punchMatch != null) {
-        return _drivePunchDimension(document, dimension, punchMatch, newValue);
-      }
+    // 2. Punch / Hole Dimension (Diameter, Radius, Slot Length/Width, Center Position, Pitch, Setback)
+    final punchA = document.punches.where((p) => p.id == dimension.referenceAId).firstOrNull;
+    final punchB = document.punches.where((p) => p.id == dimension.referenceBId).firstOrNull;
 
+    if (punchA != null && punchB != null) {
+      return _drivePunchToPunchDimension(document, dimension, punchA, punchB, newValue);
+    } else if (punchA != null) {
+      if (dimension.type == CadDimensionType.holeToEdge) {
+        final edgePt = dimension.pointB ?? dimension.pointA ?? punchA.center;
+        return _drivePunchToEdgeDimension(document, dimension, punchA, edgePt, newValue);
+      }
+      return _drivePunchDimension(document, dimension, punchA, newValue);
+    } else if (punchB != null) {
+      if (dimension.type == CadDimensionType.holeToEdge) {
+        final edgePt = dimension.pointA ?? dimension.pointB ?? punchB.center;
+        return _drivePunchToEdgeDimension(document, dimension, punchB, edgePt, newValue);
+      }
+      return _drivePunchDimension(document, dimension, punchB, newValue);
+    }
+
+    if (dimension.referenceAId != null) {
       // Check Bend line
       final bendMatch = document.bends.where((b) => b.id == dimension.referenceAId).firstOrNull;
       if (bendMatch != null) {
@@ -114,6 +129,163 @@ class DirectDimensionDriver {
       success: true,
       modifiedEntityIds: [dimension.id],
     );
+  }
+
+  static DirectDimensionDriveResult _drivePunchToPunchDimension(
+    DsfDocument doc,
+    CadDimension dim,
+    CncPunchPrimitive punchA,
+    CncPunchPrimitive punchB,
+    double newValue,
+  ) {
+    // Default to moving punchB unless drivenEntityId explicitly specifies punchA.id
+    final isBDriven = dim.drivenEntityId != punchA.id;
+    final refPunch = isBDriven ? punchA : punchB;
+    final drivenPunch = isBDriven ? punchB : punchA;
+
+    final dx = drivenPunch.center.x - refPunch.center.x;
+    final dy = drivenPunch.center.y - refPunch.center.y;
+    final currentDist = math.sqrt(dx * dx + dy * dy);
+
+    CadPoint2D newDrivenCenter = drivenPunch.center;
+    CadPoint2D delta = const CadPoint2D(0, 0);
+
+    if (dim.type == CadDimensionType.horizontal) {
+      final sign = dx >= 0 ? 1.0 : -1.0;
+      newDrivenCenter = CadPoint2D(refPunch.center.x + sign * newValue, drivenPunch.center.y);
+      delta = CadPoint2D(newDrivenCenter.x - drivenPunch.center.x, 0);
+    } else if (dim.type == CadDimensionType.vertical) {
+      final sign = dy >= 0 ? 1.0 : -1.0;
+      newDrivenCenter = CadPoint2D(drivenPunch.center.x, refPunch.center.y + sign * newValue);
+      delta = CadPoint2D(0, newDrivenCenter.y - drivenPunch.center.y);
+    } else {
+      if (currentDist > 1e-4) {
+        final factor = newValue / currentDist;
+        newDrivenCenter = CadPoint2D(
+          refPunch.center.x + dx * factor,
+          refPunch.center.y + dy * factor,
+        );
+        delta = CadPoint2D(
+          newDrivenCenter.x - drivenPunch.center.x,
+          newDrivenCenter.y - drivenPunch.center.y,
+        );
+      }
+    }
+
+    final updatedDrivenPunch = drivenPunch.copyWith(center: newDrivenCenter);
+    var updatedPunches = doc.punches.map((p) => p.id == drivenPunch.id ? updatedDrivenPunch : p).toList();
+
+    // Propagate motion along dependent punch chains
+    if (delta.x.abs() > 1e-4 || delta.y.abs() > 1e-4) {
+      updatedPunches = _propagatePunchMotion(updatedPunches, doc.dimensions, drivenPunch.id, delta);
+    }
+
+    final updatedDim = dim.copyWith(
+      pointA: isBDriven ? refPunch.center : newDrivenCenter,
+      pointB: isBDriven ? newDrivenCenter : refPunch.center,
+      measuredValue: newValue,
+      isDriven: false,
+      isDriving: true,
+    );
+    final updatedDims = doc.dimensions.map((d) => d.id == dim.id ? updatedDim : d).toList();
+
+    return DirectDimensionDriveResult(
+      updatedDocument: doc.copyWith(punches: updatedPunches, dimensions: updatedDims),
+      updatedDimension: updatedDim,
+      success: true,
+      modifiedEntityIds: [drivenPunch.id],
+    );
+  }
+
+  static DirectDimensionDriveResult _drivePunchToEdgeDimension(
+    DsfDocument doc,
+    CadDimension dim,
+    CncPunchPrimitive punch,
+    CadPoint2D edgePoint,
+    double newValue,
+  ) {
+    final edgeId = dim.referenceAId == punch.id ? dim.referenceBId : dim.referenceAId;
+    CadPoint2D effectiveEdgePoint = edgePoint;
+    final edgeSeg = AssociativeDimensionEngine.resolveEdgeSegment(edgeId, doc);
+    if (edgeSeg != null) {
+      effectiveEdgePoint = AssociativeDimensionEngine.projectPointToSegmentLine(punch.center, edgeSeg.$1, edgeSeg.$2);
+    }
+
+    final dx = punch.center.x - effectiveEdgePoint.x;
+    final dy = punch.center.y - effectiveEdgePoint.y;
+    final currentDist = math.sqrt(dx * dx + dy * dy);
+
+    CadPoint2D newPunchCenter = punch.center;
+    CadPoint2D delta = const CadPoint2D(0, 0);
+
+    if (currentDist > 1e-4) {
+      final factor = newValue / currentDist;
+      newPunchCenter = CadPoint2D(
+        effectiveEdgePoint.x + dx * factor,
+        effectiveEdgePoint.y + dy * factor,
+      );
+      delta = CadPoint2D(
+        newPunchCenter.x - punch.center.x,
+        newPunchCenter.y - punch.center.y,
+      );
+    }
+
+    final updatedPunch = punch.copyWith(center: newPunchCenter);
+    var updatedPunches = doc.punches.map((p) => p.id == punch.id ? updatedPunch : p).toList();
+
+    // Propagate motion along dependent punch chains
+    if (delta.x.abs() > 1e-4 || delta.y.abs() > 1e-4) {
+      updatedPunches = _propagatePunchMotion(updatedPunches, doc.dimensions, punch.id, delta);
+    }
+
+    final updatedDim = dim.copyWith(
+      pointA: dim.referenceAId == punch.id ? newPunchCenter : effectiveEdgePoint,
+      pointB: dim.referenceAId == punch.id ? effectiveEdgePoint : newPunchCenter,
+      measuredValue: newValue,
+      isDriven: false,
+      isDriving: true,
+    );
+    final updatedDims = doc.dimensions.map((d) => d.id == dim.id ? updatedDim : d).toList();
+
+    return DirectDimensionDriveResult(
+      updatedDocument: doc.copyWith(punches: updatedPunches, dimensions: updatedDims),
+      updatedDimension: updatedDim,
+      success: true,
+      modifiedEntityIds: [punch.id],
+    );
+  }
+
+  static List<CncPunchPrimitive> _propagatePunchMotion(
+    List<CncPunchPrimitive> punches,
+    List<CadDimension> dimensions,
+    String movedPunchId,
+    CadPoint2D delta,
+  ) {
+    if (delta.x.abs() < 1e-4 && delta.y.abs() < 1e-4) return punches;
+    final movedPunchIds = <String>{movedPunchId};
+    final queue = <String>[movedPunchId];
+    final updatedPunches = {for (final p in punches) p.id: p};
+
+    while (queue.isNotEmpty) {
+      final currentId = queue.removeAt(0);
+      for (final d in dimensions) {
+        if (!d.isDriving) continue;
+        if (d.type == CadDimensionType.holeToHole || d.type == CadDimensionType.centerToCenter) {
+          final childId = (d.referenceAId == currentId)
+              ? d.referenceBId
+              : (d.referenceEntityId == currentId ? d.drivenEntityId : null);
+          if (childId != null && !movedPunchIds.contains(childId) && updatedPunches.containsKey(childId)) {
+            final childPunch = updatedPunches[childId]!;
+            final newCenter = CadPoint2D(childPunch.center.x + delta.x, childPunch.center.y + delta.y);
+            updatedPunches[childId] = childPunch.copyWith(center: newCenter);
+            movedPunchIds.add(childId);
+            queue.add(childId);
+          }
+        }
+      }
+    }
+
+    return punches.map((p) => updatedPunches[p.id] ?? p).toList();
   }
 
   static DirectDimensionDriveResult _driveBlankDimension(

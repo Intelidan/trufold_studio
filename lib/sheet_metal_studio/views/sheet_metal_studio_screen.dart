@@ -222,13 +222,21 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
       } else {
         final items = StudioFileService.parseContent(file.content, fileName: file.fileName, filePath: file.filePath);
         for (final item in items) {
+          final vm = SheetMetalStudioViewModel(initialDocument: item.document);
           final tab = StudioTab(
             id: 'TAB_${DateTime.now().microsecondsSinceEpoch}_${_tabs.length}',
             title: item.fileName,
             filePath: item.filePath,
-            viewModel: SheetMetalStudioViewModel(initialDocument: item.document),
+            viewModel: vm,
           );
           _tabs.add(tab);
+
+          // Start the auto port process only if the dsf file is a cms drawing
+          if (item.document.isCmsDrawing &&
+              item.document.bends.isNotEmpty &&
+              (vm.persistentCmsPorts.isEmpty || item.document.metadata['cmsWorkflow']?['stageIndex'] == 1)) {
+            vm.continueCmsPortMapping();
+          }
         }
         if (mounted && _tabs.isNotEmpty) {
           setState(() {
@@ -937,10 +945,12 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                           CmsGuidedStageCard(
                                             controller: cmsCtrl,
                                             onStartAnalysis: () => _viewModel.startCleanCmsDiscovery(contract: cmsCtrl.state.contract),
+                                            onContinueToPortMapping: () => _viewModel.continueCmsPortMapping(),
                                             onUseSuggestedBends: () => _viewModel.applyUserBends(),
                                             onEditBendsManually: () => _viewModel.setToolMode(StudioToolMode.addBend),
                                             onFinalizeTemplate: () => _viewModel.finalizeCmsTemplate(),
                                             onStartTeachScaling: () => _viewModel.startTeachScaling(),
+                                            onIdentifyCouplers: () => _viewModel.autoIdentifyCouplerSlots(),
                                             onDismiss: () => cmsCtrl.reset(),
                                           ),
                                           const SizedBox(height: 10.0),

@@ -15,20 +15,24 @@ import '../branding/trufold_3d_icon.dart';
 class CmsGuidedStageCard extends StatelessWidget {
   final CmsGuidedUxController controller;
   final VoidCallback? onStartAnalysis;
+  final VoidCallback? onContinueToPortMapping;
   final VoidCallback? onUseSuggestedBends;
   final VoidCallback? onEditBendsManually;
   final VoidCallback? onFinalizeTemplate;
   final VoidCallback? onStartTeachScaling;
+  final VoidCallback? onIdentifyCouplers;
   final VoidCallback? onDismiss;
 
   const CmsGuidedStageCard({
     super.key,
     required this.controller,
     this.onStartAnalysis,
+    this.onContinueToPortMapping,
     this.onUseSuggestedBends,
     this.onEditBendsManually,
     this.onFinalizeTemplate,
     this.onStartTeachScaling,
+    this.onIdentifyCouplers,
     this.onDismiss,
   });
 
@@ -162,8 +166,29 @@ class CmsGuidedStageCard extends StatelessWidget {
                     ),
                   ),
 
-                // Stage Action Row: Stage 2 Use Suggested Bends (User-Authorized)
-                if (state.phase == CmsUxPhase.suggestingBends)
+                // Stage Action Row: Stage 1 Empty Suggestions (Awaiting manual marking)
+                if (state.phase == CmsUxPhase.suggestingBends && state.suggestedBends.isEmpty)
+                  Row(
+                    children: [
+                      if (onEditBendsManually != null)
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0284C7),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                              padding: const EdgeInsets.symmetric(vertical: 10.0),
+                            ),
+                            icon: const Icon(Icons.edit, size: 18.0),
+                            label: const Text('Mark Bends on Canvas (B)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.0)),
+                            onPressed: onEditBendsManually,
+                          ),
+                        ),
+                    ],
+                  ),
+
+                // Stage Action Row: Stage 1 Suggestions from Template
+                if (state.phase == CmsUxPhase.suggestingBends && state.suggestedBends.isNotEmpty)
                   Row(
                     children: [
                       Expanded(
@@ -195,37 +220,114 @@ class CmsGuidedStageCard extends StatelessWidget {
                     ],
                   ),
 
-                // Stage Action Row: Stage 7 Finalize & Teach Scaling
-                if (state.phase == CmsUxPhase.complete)
-                  Row(
+                // Stage Action Row: Stage 1 Bends Defined -> Proceed to Stage 2 Port Mapping
+                if (state.phase == CmsUxPhase.confirmingBends)
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (onFinalizeTemplate != null)
-                        Expanded(
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0284C7),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                                padding: const EdgeInsets.symmetric(vertical: 10.0),
+                              ),
+                              icon: const Icon(Icons.hub_outlined, size: 18.0),
+                              label: const Text('Auto-Map Ports (Stage 2) →', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.0)),
+                              onPressed: onContinueToPortMapping ?? onStartAnalysis,
+                            ),
+                          ),
+                          if (onEditBendsManually != null) ...[
+                            const SizedBox(width: 8.0),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF475569),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                                padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 12.0),
+                              ),
+                              icon: const Icon(Icons.edit, size: 16.0),
+                              label: const Text('Edit Bends (B)', style: TextStyle(fontSize: 12.0)),
+                              onPressed: onEditBendsManually,
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (onIdentifyCouplers != null) ...[
+                        const SizedBox(height: 8.0),
+                        SizedBox(
+                          width: double.infinity,
                           child: OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF059669),
-                              side: const BorderSide(color: Color(0xFF10B981), width: 1.2),
+                              foregroundColor: const Color(0xFF2563EB),
+                              side: const BorderSide(color: Color(0xFF93C5FD)),
+                              backgroundColor: const Color(0xFFEFF6FF),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                              padding: const EdgeInsets.symmetric(vertical: 10.0),
+                              padding: const EdgeInsets.symmetric(vertical: 8.0),
                             ),
-                            icon: const Icon(Icons.check, size: 16.0),
-                            label: const Text('Finalize & Save', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.0)),
-                            onPressed: onFinalizeTemplate,
+                            icon: const Icon(Icons.handshake_outlined, size: 16.0),
+                            label: const Text('Identify Couplers', style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.w600)),
+                            onPressed: onIdentifyCouplers,
                           ),
                         ),
-                      if (onStartTeachScaling != null) ...[
-                        const SizedBox(width: 8.0),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0284C7),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                              padding: const EdgeInsets.symmetric(vertical: 10.0),
+                      ],
+                    ],
+                  ),
+
+                // Stage Action Row: Stage 2 Complete -> Finalize & Teach Scaling (Stage 3)
+                if (state.phase == CmsUxPhase.complete)
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          if (onFinalizeTemplate != null)
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF059669),
+                                  side: const BorderSide(color: Color(0xFF10B981), width: 1.2),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10.0),
+                                ),
+                                icon: const Icon(Icons.check, size: 16.0),
+                                label: const Text('Finalize & Save', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.0)),
+                                onPressed: onFinalizeTemplate,
+                              ),
                             ),
-                            icon: const Icon(Icons.tune, size: 16.0),
-                            label: const Text('Teach Scaling →', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.0)),
-                            onPressed: onStartTeachScaling,
+                          if (onStartTeachScaling != null) ...[
+                            const SizedBox(width: 8.0),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0284C7),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10.0),
+                                ),
+                                icon: const Icon(Icons.tune, size: 16.0),
+                                label: const Text('Teach Scaling →', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.0)),
+                                onPressed: onStartTeachScaling,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (onIdentifyCouplers != null) ...[
+                        const SizedBox(height: 6.0),
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextButton.icon(
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF2563EB),
+                              padding: const EdgeInsets.symmetric(vertical: 4.0),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            icon: const Icon(Icons.handshake_outlined, size: 14.0),
+                            label: const Text('Review / Identify Couplers', style: TextStyle(fontSize: 11.0, fontWeight: FontWeight.w600)),
+                            onPressed: onIdentifyCouplers,
                           ),
                         ),
                       ],
@@ -246,23 +348,23 @@ class CmsGuidedStageCard extends StatelessWidget {
       case CmsUxPhase.productSelected:
         return 'STAGE 1: PRODUCT INTENT';
       case CmsUxPhase.analyzingFlatGeometry:
-        return 'STAGE 2: FLAT GEOMETRY';
+        return 'STAGE 1: CHECKING GEOMETRY';
       case CmsUxPhase.suggestingBends:
-        return 'STAGE 2: BEND SUGGESTIONS';
+        return 'STAGE 1: DEFINE BENDS';
       case CmsUxPhase.confirmingBends:
-        return 'STAGE 2: BEND REVIEW';
+        return 'STAGE 1: BENDS DEFINED';
       case CmsUxPhase.folding:
-        return 'STAGE 3: 3D KINEMATICS';
+        return 'STAGE 2: 3D KINEMATICS';
       case CmsUxPhase.detectingOpenings:
-        return 'STAGE 4: 3D OPENINGS';
+        return 'STAGE 2: 3D OPENINGS';
       case CmsUxPhase.matchingPorts:
-        return 'STAGE 4: PORT MATCHING';
+        return 'STAGE 2: PORT MATCHING';
       case CmsUxPhase.classifyingCouplers:
-        return 'STAGE 5: FASTENERS';
+        return 'STAGE 2: FASTENERS';
       case CmsUxPhase.buildingConstraints:
-        return 'STAGE 6: SMART SCALING';
+        return 'STAGE 2: SMART SCALING';
       case CmsUxPhase.complete:
-        return 'STAGE 7: VERIFIED';
+        return 'STAGE 2: PORTS VERIFIED';
       case CmsUxPhase.ambiguityRequired:
         return 'RESOLUTION NEEDED';
       case CmsUxPhase.error:

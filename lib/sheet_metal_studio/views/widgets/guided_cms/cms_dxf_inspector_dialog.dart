@@ -42,14 +42,7 @@ class CmsDxfInspectorDialog extends StatefulWidget {
 class _CmsDxfInspectorDialogState extends State<CmsDxfInspectorDialog> {
   late CmsProductContract _selectedContract;
 
-  final List<CmsProductContract> _availableContracts = const [
-    CmsProductContract.bend45,
-    CmsProductContract.bend90,
-    CmsProductContract.equalTee,
-    CmsProductContract.unequalTee,
-    CmsProductContract.equalCross,
-    CmsProductContract.straightTray,
-  ];
+  final List<CmsProductContract> _availableContracts = CmsProductContract.allContracts;
 
   @override
   void initState() {
@@ -58,26 +51,7 @@ class _CmsDxfInspectorDialogState extends State<CmsDxfInspectorDialog> {
   }
 
   CmsProductContract _inferContractFromFileName(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('45') && (lower.contains('bend') || lower.contains('elbow'))) {
-      return CmsProductContract.bend45;
-    }
-    if (lower.contains('90') && (lower.contains('bend') || lower.contains('elbow'))) {
-      return CmsProductContract.bend90;
-    }
-    if (lower.contains('unequal') && lower.contains('tee')) {
-      return CmsProductContract.unequalTee;
-    }
-    if (lower.contains('tee')) {
-      return CmsProductContract.equalTee;
-    }
-    if (lower.contains('cross')) {
-      return CmsProductContract.equalCross;
-    }
-    if (lower.contains('tray') || lower.contains('trunking')) {
-      return CmsProductContract.straightTray;
-    }
-    return CmsProductContract.bend45;
+    return CmsProductContract.lookup(null, name) ?? CmsProductContract.bend45;
   }
 
   @override

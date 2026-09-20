@@ -11,6 +11,7 @@
 
 import 'package:flutter/material.dart';
 import '../../../engine/cms/cms_scaling_controller.dart';
+import '../../../models/cms/cms_product_contract.dart';
 import '../../../models/cms/cms_scaling_model.dart';
 
 class CmsTeachScalingOverlay extends StatelessWidget {
@@ -118,6 +119,32 @@ class CmsTeachScalingOverlay extends StatelessWidget {
                     height: 1.3,
                   ),
                 ),
+                const SizedBox(height: 8.0),
+
+                // Active Profile Indicator Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(6.0),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.architecture, size: 13.0, color: Color(0xFF15803D)),
+                      const SizedBox(width: 5.0),
+                      Text(
+                        'Profile: ${controller.effectiveScalingProfile == CmsScalingProfile.insideRiser ? "45° Inside Riser (Floor Web & Cheeks)" : controller.effectiveScalingProfile.displayName}',
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF15803D),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 14.0),
 
                 // Parameter Selector Tabs (e.g. Width vs Height)
@@ -200,6 +227,16 @@ class CmsTeachScalingOverlay extends StatelessWidget {
                             'Baseline: ${baselineVal.toStringAsFixed(0)} mm',
                             style: const TextStyle(fontSize: 10.0, color: Color(0xFF64748B)),
                           ),
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF0284C7),
+                              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            icon: const Icon(Icons.restart_alt, size: 13.0),
+                            label: const Text('Reset', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            onPressed: () => controller.resetToBaseline(),
+                          ),
                           Text(
                             'Max: ${param.maxValidMm.toStringAsFixed(0)} mm',
                             style: const TextStyle(fontSize: 10.0, color: Color(0xFF64748B)),
@@ -276,6 +313,7 @@ class CmsTeachScalingOverlay extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
+                      flex: 3,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF059669),
@@ -292,11 +330,23 @@ class CmsTeachScalingOverlay extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8.0),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF0284C7),
+                        side: const BorderSide(color: Color(0xFF0284C7)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                        padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 12.0),
+                      ),
+                      icon: const Icon(Icons.restart_alt, size: 16.0),
+                      label: const Text('Reset Dimensions', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                      onPressed: () => controller.resetToBaseline(),
+                    ),
+                    const SizedBox(width: 8.0),
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFF475569),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                        padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 14.0),
+                        padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 12.0),
                       ),
                       onPressed: onCancel,
                       child: const Text('Cancel', style: TextStyle(fontSize: 12.5)),

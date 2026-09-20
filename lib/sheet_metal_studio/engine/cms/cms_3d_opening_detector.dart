@@ -47,92 +47,106 @@ class Cms3DOpeningDetector {
   }) {
     if (document.faces.isEmpty || foldResult.polygons.isEmpty) return const [];
 
-    // 1. Identify the Floor Web face (anchor or largest horizontal base)
-    final floorFace = _identifyFloorFace(document, foldResult);
-    if (floorFace == null) return const [];
+    // 1. Identify all Floor Web faces (anchor base + connected riser segments)
+    final floorFaces = _identifyFloorFaces(document, foldResult);
+    if (floorFaces.isEmpty) return const [];
 
     // 2. Identify 3D standing sidewall faces connected to the floor via 90° structural bends
-    final sidewallFaces = _findSidewalls(document, floorFace, foldResult);
+    final sidewallFaces = _findSidewalls(document, floorFaces, foldResult);
 
-    // 3. Find open terminal edges of the floor that have NO bend lines attached
-    final candidateFloorEdges = _findOpenFloorEdges(document, floorFace);
-
-    // 4. Construct 3D opening loops for each open floor edge
+    // 3. For each floor face, find open terminal edges (filtering out bend lines and cheek cuts)
     final rawOpenings = <CmsRaw3DOpening>[];
     int index = 1;
 
-    for (final floorEdge in candidateFloorEdges) {
-      final p1Flat = floorEdge.p1;
-      final p2Flat = floorEdge.p2;
+    for (final floorFace in floorFaces) {
+      final candidateFloorEdges = _findOpenFloorEdges(document, floorFace, sidewallFaces, foldResult);
 
-      // Transform flat floor edge to 3D using floor polygon vertices
-      final floor3DPoly = foldResult.polygons.firstWhere(
-        (p) => p.faceId == floorFace.id,
-        orElse: () => foldResult.polygons.first,
-      );
+      for (final floorEdge in candidateFloorEdges) {
+        final p1Flat = floorEdge.p1;
+        final p2Flat = floorEdge.p2;
 
-      final p1_3d = _mapFlatTo3D(p1Flat, floorFace.vertices, floor3DPoly.vertices);
-      final p2_3d = _mapFlatTo3D(p2Flat, floorFace.vertices, floor3DPoly.vertices);
+        // Transform flat floor edge to 3D using floor polygon vertices
+        final floor3DPoly = foldResult.polygons.firstWhere(
+          (p) => p.faceId == floorFace.id,
+          orElse: () => foldResult.polygons.first,
+        );
 
-      // Compute outward normal vector along the floor plane (Z = 0)
-      final edgeDx = p2_3d.x - p1_3d.x;
-      final edgeDy = p2_3d.y - p1_3d.y;
-      final edgeLen = math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
-      if (edgeLen < 1e-4) continue;
+        final p1_3d = _mapFlatTo3D(p1Flat, floorFace.vertices, floor3DPoly.vertices);
+        final p2_3d = _mapFlatTo3D(p2Flat, floorFace.vertices, floor3DPoly.vertices);
 
-      // Inward vector towards floor center to determine outward normal
-      final mid3D = CadPoint3D((p1_3d.x + p2_3d.x) / 2.0, (p1_3d.y + p2_3d.y) / 2.0, p1_3d.z);
-      final floorCenter = _polygonCenter3D(floor3DPoly.vertices);
+        // Compute outward normal vector along the floor plane in true 3D
+        final edgeDx = p2_3d.x - p1_3d.x;
+        final edgeDy = p2_3d.y - p1_3d.y;
+        final edgeDz = p2_3d.z - p1_3d.z;
+        final edgeLen = math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy + edgeDz * edgeDz);
+        if (edgeLen < 1e-4) continue;
 
-      // Perpendicular normal: (-edgeDy, edgeDx) or (edgeDy, -edgeDx)
-      var normX = -edgeDy / edgeLen;
-      var normY = edgeDx / edgeLen;
+        final uW = CadPoint3D(edgeDx / edgeLen, edgeDy / edgeLen, edgeDz / edgeLen);
+        final floorNorm = floor3DPoly.normal;
 
-      // Ensure normal points AWAY from floor center
-      final toMidX = mid3D.x - floorCenter.x;
-      final toMidY = mid3D.y - floorCenter.y;
-      if (normX * toMidX + normY * toMidY < 0) {
-        normX = -normX;
-        normY = -normY;
+        // In-plane perpendicular: uW x floorNorm
+        var normX = uW.y * floorNorm.z - uW.z * floorNorm.y;
+        var normY = uW.z * floorNorm.x - uW.x * floorNorm.z;
+        var normZ = uW.x * floorNorm.y - uW.y * floorNorm.x;
+        final normLen = math.sqrt(normX * normX + normY * normY + normZ * normZ);
+        if (normLen > 1e-4) {
+          normX /= normLen;
+          normY /= normLen;
+          normZ /= normLen;
+        }
+
+        // Ensure outward normal points AWAY from floor center
+        final mid3D = CadPoint3D(
+          (p1_3d.x + p2_3d.x) / 2.0,
+          (p1_3d.y + p2_3d.y) / 2.0,
+          (p1_3d.z + p2_3d.z) / 2.0,
+        );
+        final floorCenter = _polygonCenter3D(floor3DPoly.vertices);
+        final toMidX = mid3D.x - floorCenter.x;
+        final toMidY = mid3D.y - floorCenter.y;
+        final toMidZ = mid3D.z - floorCenter.z;
+        if (normX * toMidX + normY * toMidY + normZ * toMidZ < 0) {
+          normX = -normX;
+          normY = -normY;
+          normZ = -normZ;
+        }
+        final outwardNormal = CadPoint3D(normX, normY, normZ);
+
+        // Find sidewall faces adjacent to p1 and p2
+        final adjacentSidewallIds = <String>[];
+        for (final sw in sidewallFaces) {
+          adjacentSidewallIds.add(sw.id);
+        }
+
+        // Collect loop vertices (Floor edge P1 -> P2)
+        final loop3D = <CadPoint3D>[p1_3d, p2_3d];
+
+        rawOpenings.add(CmsRaw3DOpening(
+          openingId: 'raw_opening_$index',
+          boundary3DVertices: loop3D,
+          floorEdgeP1: p1_3d,
+          floorEdgeP2: p2_3d,
+          flatFloorEdgeP1: p1Flat,
+          flatFloorEdgeP2: p2Flat,
+          floorFaceId: floorFace.id,
+          sidewallFaceIds: adjacentSidewallIds,
+          outwardNormal: outwardNormal,
+        ));
+        index++;
       }
-      final outwardNormal = CadPoint3D(normX, normY, 0.0);
-
-      // Find sidewall faces adjacent to p1 and p2
-      final adjacentSidewallIds = <String>[];
-      for (final sw in sidewallFaces) {
-        adjacentSidewallIds.add(sw.id);
-      }
-
-      // Collect loop vertices (Floor edge P1 -> P2 -> Wall P2 -> Wall P1)
-      final loop3D = <CadPoint3D>[p1_3d, p2_3d];
-
-      rawOpenings.add(CmsRaw3DOpening(
-        openingId: 'raw_opening_$index',
-        boundary3DVertices: loop3D,
-        floorEdgeP1: p1_3d,
-        floorEdgeP2: p2_3d,
-        flatFloorEdgeP1: p1Flat,
-        flatFloorEdgeP2: p2Flat,
-        floorFaceId: floorFace.id,
-        sidewallFaceIds: adjacentSidewallIds,
-        outwardNormal: outwardNormal,
-      ));
-      index++;
     }
 
     return rawOpenings;
   }
 
-  static PlanarSheetFace? _identifyFloorFace(DsfDocument doc, FoldedMeshResult mesh) {
-    if (doc.faces.isEmpty) return null;
+  static List<PlanarSheetFace> _identifyFloorFaces(DsfDocument doc, FoldedMeshResult mesh) {
+    if (doc.faces.isEmpty) return const [];
 
-    // Rank candidate faces by structural connectivity, horizontal alignment, and area.
-    // The true floor/web connects to the most structural 90-degree sidewall bends.
-    PlanarSheetFace? bestFace;
+    // 1. Rank candidate faces by structural connectivity (attached to 90° structural sidewall bends) + area
+    PlanarSheetFace? baseFace;
     double bestScore = -1.0;
 
     for (final face in doc.faces) {
-      // Count structural bends attached to this face
       int structuralBends = 0;
       for (final b in doc.bends) {
         if (b.role != BendLineRole.flange &&
@@ -146,54 +160,134 @@ class Cms3DOpeningDetector {
       final polyMatches = mesh.polygons.where((p) => p.faceId == face.id);
       final isHorizontal = polyMatches.isNotEmpty && polyMatches.first.normal.z.abs() > 0.7;
 
-      // Hard rule: A folded channel floor web MUST be horizontal (|normal.z| > 0.7)
       if (mesh.polygons.isNotEmpty && !isHorizontal) {
         continue;
       }
 
-      // Score: high weight for structural sidewall bends + area
-      double score = structuralBends * 10000.0;
-      score += face.areaMm2;
-
-      // Modest anchor bonus that does not override structural connectivity
+      double score = structuralBends * 10000.0 + face.areaMm2;
       if (face.isBaseAnchor || face.id == doc.baseFaceId) {
         score += 500.0;
       }
 
       if (score > bestScore) {
         bestScore = score;
-        bestFace = face;
+        baseFace = face;
       }
     }
 
-    return bestFace ?? doc.faces.first;
+    baseFace ??= doc.faces.first;
+
+    // 2. Identify initial sidewalls attached to baseFace via 90° bends
+    final sidewallIds = <String>{};
+    for (final b in doc.bends) {
+      if ((b.parentFaceId == baseFace.id || b.childFaceId == baseFace.id) &&
+          b.role != BendLineRole.flange &&
+          (b.targetAngleDeg.abs() - 90.0).abs() < 15.0) {
+        final otherId = b.parentFaceId == baseFace.id ? b.childFaceId : b.parentFaceId;
+        sidewallIds.add(otherId);
+      }
+    }
+
+    // 3. Traverse connected floor faces (e.g. angled riser segments or stepped transitions)
+    final floorFaceMap = <String, PlanarSheetFace>{baseFace.id: baseFace};
+    final queue = <PlanarSheetFace>[baseFace];
+
+    while (queue.isNotEmpty) {
+      final curr = queue.removeAt(0);
+      for (final b in doc.bends) {
+        final connects = b.parentFaceId == curr.id || b.childFaceId == curr.id;
+        if (!connects || b.role == BendLineRole.flange) continue;
+
+        final otherId = b.parentFaceId == curr.id ? b.childFaceId : b.parentFaceId;
+        if (floorFaceMap.containsKey(otherId) || sidewallIds.contains(otherId)) continue;
+
+        final otherFace = doc.faces.firstWhere(
+          (f) => f.id == otherId,
+          orElse: () => PlanarSheetFace(id: otherId, vertices: const []),
+        );
+        if (otherFace.vertices.isEmpty) continue;
+
+        // Ensure this face is not a sidewall or flange
+        // Sidewalls have 90° bends to base and stand vertical (|normal.z| < 0.3)
+        final polyMatches = mesh.polygons.where((p) => p.faceId == otherId);
+        final isVerticalWall = polyMatches.isNotEmpty && polyMatches.first.normal.z.abs() < 0.3;
+        if (!isVerticalWall) {
+          floorFaceMap[otherId] = otherFace;
+          queue.add(otherFace);
+        }
+      }
+    }
+
+    return floorFaceMap.values.toList();
   }
 
-
-  static List<PlanarSheetFace> _findSidewalls(DsfDocument doc, PlanarSheetFace floor, FoldedMeshResult mesh) {
+  static List<PlanarSheetFace> _findSidewalls(DsfDocument doc, List<PlanarSheetFace> floorFaces, FoldedMeshResult mesh) {
     final sidewalls = <PlanarSheetFace>[];
+    final floorFaceIds = floorFaces.map((f) => f.id).toSet();
 
     for (final bend in doc.bends) {
-      final connectsToFloor = bend.parentFaceId == floor.id || bend.childFaceId == floor.id;
-      if (!connectsToFloor || bend.role == BendLineRole.flange) continue;
+      final parentIsFloor = floorFaceIds.contains(bend.parentFaceId);
+      final childIsFloor = floorFaceIds.contains(bend.childFaceId);
+      if (!parentIsFloor && !childIsFloor) continue;
+      if (bend.role == BendLineRole.flange) continue;
 
-      final otherFaceId = bend.parentFaceId == floor.id ? bend.childFaceId : bend.parentFaceId;
+      final otherFaceId = parentIsFloor ? bend.childFaceId : bend.parentFaceId;
+      if (floorFaceIds.contains(otherFaceId)) continue;
+
       final otherFace = doc.faces.firstWhere(
         (f) => f.id == otherFaceId,
         orElse: () => PlanarSheetFace(id: otherFaceId, vertices: const []),
       );
 
-      if (otherFace.vertices.isNotEmpty && (bend.targetAngleDeg - 90.0).abs() < 15.0) {
-        sidewalls.add(otherFace);
+      if (otherFace.vertices.isNotEmpty && (bend.targetAngleDeg.abs() - 90.0).abs() < 15.0) {
+        if (!sidewalls.any((s) => s.id == otherFace.id)) {
+          sidewalls.add(otherFace);
+        }
       }
     }
     return sidewalls;
   }
 
-  static List<({CadPoint2D p1, CadPoint2D p2})> _findOpenFloorEdges(DsfDocument doc, PlanarSheetFace floor) {
+  static bool _isEdgeAlongSidewall(
+    CadPoint3D p1,
+    CadPoint3D p2,
+    List<PlanarSheetFace> sidewalls,
+    FoldedMeshResult foldResult,
+  ) {
+    for (final sw in sidewalls) {
+      final swPolys = foldResult.polygons.where((p) => p.faceId == sw.id);
+      if (swPolys.isEmpty) continue;
+      final swPoly = swPolys.first;
+      if (swPoly.vertices.isEmpty) continue;
+
+      // Check distance of p1 and p2 to sidewall plane
+      final v0 = swPoly.vertices.first;
+      final norm = swPoly.normal;
+      final d1 = ((p1.x - v0.x) * norm.x + (p1.y - v0.y) * norm.y + (p1.z - v0.z) * norm.z).abs();
+      final d2 = ((p2.x - v0.x) * norm.x + (p2.y - v0.y) * norm.y + (p2.z - v0.z) * norm.z).abs();
+
+      if (d1 < 3.0 && d2 < 3.0) {
+        // Both endpoints lie in the plane of this single sidewall (cheek cut/seam)
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static List<({CadPoint2D p1, CadPoint2D p2})> _findOpenFloorEdges(
+    DsfDocument doc,
+    PlanarSheetFace floor,
+    List<PlanarSheetFace> sidewalls,
+    FoldedMeshResult mesh,
+  ) {
     final openEdges = <({CadPoint2D p1, CadPoint2D p2})>[];
     final verts = floor.vertices;
     if (verts.length < 3) return openEdges;
+
+    final floor3DPoly = mesh.polygons.firstWhere(
+      (p) => p.faceId == floor.id,
+      orElse: () => mesh.polygons.first,
+    );
 
     final n = verts.length;
     for (int i = 0; i < n; i++) {
@@ -210,10 +304,17 @@ class Cms3DOpeningDetector {
           break;
         }
       }
+      if (hasBend) continue;
 
-      if (!hasBend) {
-        openEdges.add((p1: p1, p2: p2));
+      // Check if edge is a cheek cut running along a single sidewall
+      final p1_3d = _mapFlatTo3D(p1, floor.vertices, floor3DPoly.vertices);
+      final p2_3d = _mapFlatTo3D(p2, floor.vertices, floor3DPoly.vertices);
+
+      if (_isEdgeAlongSidewall(p1_3d, p2_3d, sidewalls, mesh)) {
+        continue; // Cheek cut along sidewall seam, not a channel mouth
       }
+
+      openEdges.add((p1: p1, p2: p2));
     }
     return openEdges;
   }

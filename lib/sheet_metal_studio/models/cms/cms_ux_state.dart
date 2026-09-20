@@ -195,6 +195,42 @@ class CmsUxState {
     }
   }
 
+  /// High-level 3-Stage CMS Workflow Stage (1: Manufacturing Definition, 2: Automatic Port Mapping, 3: Teach Scaling)
+  int get workflowStageIndex {
+    switch (phase) {
+      case CmsUxPhase.idle:
+      case CmsUxPhase.productSelected:
+      case CmsUxPhase.analyzingFlatGeometry:
+      case CmsUxPhase.suggestingBends:
+      case CmsUxPhase.confirmingBends:
+        return 1;
+      case CmsUxPhase.folding:
+      case CmsUxPhase.detectingOpenings:
+      case CmsUxPhase.matchingPorts:
+      case CmsUxPhase.ambiguityRequired:
+      case CmsUxPhase.classifyingCouplers:
+      case CmsUxPhase.buildingConstraints:
+      case CmsUxPhase.complete:
+        return 2;
+      case CmsUxPhase.error:
+        return 0;
+    }
+  }
+
+  /// User-facing name for the high-level 3-Stage CMS Workflow.
+  String get workflowStageName {
+    switch (workflowStageIndex) {
+      case 1:
+        return 'Stage 1: Manufacturing Definition';
+      case 2:
+        return 'Stage 2: Automatic Port Mapping';
+      case 3:
+        return 'Stage 3: Teach Scaling';
+      default:
+        return 'Error';
+    }
+  }
+
   CmsUxState copyWith({
     CmsUxPhase? phase,
     CmsProductContract? contract,

@@ -24,7 +24,6 @@ import '../../models/cms/cms_physical_port.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../../engine/kinematic_fold_engine.dart';
 import 'studio/studio_view_cube.dart';
-import 'guided_cms/cms_3d_opening_callout.dart';
 
 class Viewport3dWidget extends StatelessWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -36,7 +35,6 @@ class Viewport3dWidget extends StatelessWidget {
     return ClipRect(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final size = Size(constraints.maxWidth, constraints.maxHeight);
           return Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -96,6 +94,7 @@ class Viewport3dWidget extends StatelessWidget {
                       hoveredBendId: viewModel.hoveredBendId,
                       hoveredFaceId: viewModel.hoveredFaceId,
                       activePorts: viewModel.activeCmsPorts,
+                      focusedPortId: viewModel.cmsGuidedController.state.focus.activePortId,
                     ),
                   ),
                 ),
@@ -320,54 +319,7 @@ class Viewport3dWidget extends StatelessWidget {
               ),
             ),
 
-            // 5. 3D Opening Callouts for Discovered & Verified CMS Ports
-            AnimatedBuilder(
-              animation: Listenable.merge([viewModel, viewModel.cmsGuidedController]),
-              builder: (context, _) {
-                final ports = viewModel.activeCmsPorts;
-                final mesh = viewModel.currentMesh;
-                if (ports.isEmpty || size.width <= 0 || size.height <= 0 || mesh.polygons.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-
-                final cx = size.width / 2.0 + viewModel.pan3D.dx;
-                final cy = size.height / 2.0 + viewModel.pan3D.dy;
-                final azRad = viewModel.azimuthDeg * math.pi / 180.0;
-                final elRad = viewModel.elevationDeg * math.pi / 180.0;
-                final cosAz = math.cos(azRad);
-                final sinAz = math.sin(azRad);
-                final cosEl = math.cos(elRad);
-                final sinEl = math.sin(elRad);
-                final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
-                final fitDim = maxDim > 0 ? maxDim : 200.0;
-                final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
-                final scale = baseScale * viewModel.cameraZoom;
-                final pivot = mesh.center;
-
-                return Stack(
-                  children: ports.map((port) {
-                    final anchor = port.calloutAnchor ?? port.center;
-                    final rx = anchor.x - pivot.x;
-                    final ry = anchor.y - pivot.y;
-                    final rz = anchor.z - pivot.z;
-                    final x1 = rx * cosAz - ry * sinAz;
-                    final y1 = rx * sinAz + ry * cosAz;
-                    final z1 = rz;
-                    final x2 = x1;
-                    final y2 = y1 * cosEl - z1 * sinEl;
-                    final sx = cx + x2 * scale;
-                    final sy = cy - y2 * scale;
-                    final isFocused = port.id == viewModel.cmsGuidedController.state.focus.activePortId;
-
-                    return Cms3DOpeningCallout(
-                      port: port,
-                      anchorScreenPosition: Offset(sx, sy),
-                      isFocused: isFocused,
-                    );
-                  }).toList(),
-                );
-              },
-            ),
+            // 5. Port tags are rendered coplanar directly on the aperture face in _Viewport3dPainter PASS 3
           ],
         ),
       );
@@ -580,6 +532,7 @@ class _Viewport3dPainter extends CustomPainter {
   final String? hoveredBendId;
   final String? hoveredFaceId;
   final List<CmsPhysicalPort> activePorts;
+  final String? focusedPortId;
 
   _Viewport3dPainter({
     required this.mesh,
@@ -596,6 +549,7 @@ class _Viewport3dPainter extends CustomPainter {
     this.hoveredBendId,
     this.hoveredFaceId,
     this.activePorts = const [],
+    this.focusedPortId,
   });
 
   @override
@@ -1096,6 +1050,92 @@ class _Viewport3dPainter extends CustomPainter {
           ..strokeWidth = 3.0
           ..color = const Color(0xFF0284C7);
         canvas.drawLine(p0, p3, floorThresholdPaint);
+
+        // --- Sleeping Coplanar Port Tag Pill (laying flat on the glassy face) ---
+        final faceCenter = Offset(
+          (p0.dx + p1.dx + p2.dx + p3.dx) / 4.0,
+          (p0.dy + p1.dy + p2.dy + p3.dy) / 4.0,
+        );
+        final vWidth = Offset(
+          (p3.dx - p0.dx + p2.dx - p1.dx) / 2.0,
+          (p3.dy - p0.dy + p2.dy - p1.dy) / 2.0,
+        );
+        var tagAngle = math.atan2(vWidth.dy, vWidth.dx);
+        if (tagAngle > math.pi / 2.0) tagAngle -= math.pi;
+        if (tagAngle < -math.pi / 2.0) tagAngle += math.pi;
+
+        final isFocused = port.id == focusedPortId;
+        const pillWidth = 114.0;
+        const pillHeight = 32.0;
+        final pillRRect = RRect.fromRectAndRadius(
+          Rect.fromCenter(center: Offset.zero, width: pillWidth, height: pillHeight),
+          const Radius.circular(6.0),
+        );
+
+        canvas.save();
+        canvas.translate(faceCenter.dx, faceCenter.dy);
+        canvas.rotate(tagAngle);
+
+        // Ambient glow
+        final glowPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0
+          ..color = (isFocused ? const Color(0xFF00E5FF) : const Color(0xFF0284C7)).withValues(alpha: 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+        canvas.drawRRect(pillRRect, glowPaint);
+
+        // Semi-translucent dark frosted pill body
+        final pillFill = Paint()
+          ..style = PaintingStyle.fill
+          ..color = const Color(0xFF0F172A).withValues(alpha: 0.88);
+        canvas.drawRRect(pillRRect, pillFill);
+
+        // Crisp accent border
+        final pillBorder = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = isFocused ? 1.8 : 1.2
+          ..color = isFocused ? const Color(0xFF00E5FF) : const Color(0xFF38BDF8).withValues(alpha: 0.8);
+        canvas.drawRRect(pillRRect, pillBorder);
+
+        // Status indicator dot
+        final dotPaint = Paint()
+          ..style = PaintingStyle.fill
+          ..color = isFocused ? const Color(0xFF00E5FF) : const Color(0xFF34D399);
+        canvas.drawCircle(const Offset(-pillWidth / 2.0 + 11.0, 0.0), 3.0, dotPaint);
+
+        // Port ID (top line)
+        final idSpan = TextSpan(
+          text: port.id,
+          style: TextStyle(
+            fontSize: 9.5,
+            fontWeight: FontWeight.w800,
+            color: isFocused ? const Color(0xFF00E5FF) : const Color(0xFF38BDF8),
+            letterSpacing: 0.5,
+          ),
+        );
+        final idPainter = TextPainter(
+          text: idSpan,
+          textDirection: TextDirection.ltr,
+        )..layout();
+        idPainter.paint(canvas, Offset(-pillWidth / 2.0 + 20.0, -pillHeight / 2.0 + 4.0));
+
+        // Dimensions (bottom line)
+        final dimSpan = TextSpan(
+          text: '${port.width.toStringAsFixed(1)} × ${port.height.toStringAsFixed(1)} mm',
+          style: const TextStyle(
+            fontSize: 9.0,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+            fontFamily: 'monospace',
+          ),
+        );
+        final dimPainter = TextPainter(
+          text: dimSpan,
+          textDirection: TextDirection.ltr,
+        )..layout();
+        dimPainter.paint(canvas, Offset(-pillWidth / 2.0 + 20.0, -pillHeight / 2.0 + 16.5));
+
+        canvas.restore();
       }
     }
   }
@@ -1173,6 +1213,7 @@ class _Viewport3dPainter extends CustomPainter {
         oldDelegate.hoveredPunchId != hoveredPunchId ||
         oldDelegate.hoveredBendId != hoveredBendId ||
         oldDelegate.hoveredFaceId != hoveredFaceId ||
-        oldDelegate.activePorts != activePorts;
+        oldDelegate.activePorts != activePorts ||
+        oldDelegate.focusedPortId != focusedPortId;
   }
 }

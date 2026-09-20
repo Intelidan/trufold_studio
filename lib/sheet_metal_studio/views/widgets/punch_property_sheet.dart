@@ -111,6 +111,66 @@ class PunchPropertySheet extends StatelessWidget {
             if (!isCollapsed) ...[
               const SizedBox(height: 10),
 
+              // Coupler Mounting Slot Toggle (Section 9 & 10.3)
+              Container(
+                margin: const EdgeInsets.only(bottom: 10.0),
+                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                decoration: BoxDecoration(
+                  color: punch.role == CncPunchRole.coupler
+                      ? const Color(0xFFEFF6FF)
+                      : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(6.0),
+                  border: Border.all(
+                    color: punch.role == CncPunchRole.coupler
+                        ? const Color(0xFF3B82F6)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.handshake_outlined,
+                            size: 15.0,
+                            color: punch.role == CncPunchRole.coupler
+                                ? const Color(0xFF2563EB)
+                                : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 6.0),
+                          Flexible(
+                            child: Text(
+                              'Coupler Mounting Slot',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11.0,
+                                fontWeight: FontWeight.w600,
+                                color: punch.role == CncPunchRole.coupler
+                                    ? const Color(0xFF1E40AF)
+                                    : const Color(0xFF334155),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Transform.scale(
+                      scale: 0.8,
+                      child: Switch(
+                        value: punch.role == CncPunchRole.coupler,
+                        activeThumbColor: const Color(0xFF2563EB),
+                        activeTrackColor: const Color(0xFF93C5FD),
+                        onChanged: (val) {
+                          viewModel.markPunchAsCoupler(punch.id, isCoupler: val);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
               // Overlapping Holes Merge Option
               if (overlapping.isNotEmpty) ...[
                 Container(

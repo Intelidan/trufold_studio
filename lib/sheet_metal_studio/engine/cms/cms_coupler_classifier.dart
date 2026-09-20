@@ -70,13 +70,23 @@ class CmsCouplerClassifier {
     }
 
     for (final p in allPunches) {
-      // Check if dimensions match standard coupler slot (nominal 8x12 mm or obround)
-      final isSlotShape = p.type == PunchType.obroundSlot ||
-          p.type == PunchType.rectangle;
+      // 1. Explicit semantic role or COUPLER layer takes highest precedence
+      final isExplicitCoupler = p.role == CncPunchRole.coupler ||
+          p.layer.toUpperCase() == 'COUPLER';
 
-      final lenMatches = (p.lengthMm - contract.couplerSlotLengthMm).abs() <= 2.0;
-      final widMatches = (p.widthMm - contract.couplerSlotWidthMm).abs() <= 2.0;
-      final isCouplerCandidate = isSlotShape && lenMatches && widMatches;
+      // 2. Automatic candidate heuristic:
+      // Standard cable tray / trunking obround slots typically have:
+      // Width: 6 to 11 mm (nominally 8-9mm)
+      // Length: 10 to 35 mm (nominally 12, 16, 20, 25, 30mm)
+      final isSlotShape = p.isSlot ||
+          p.type == PunchType.obroundSlot ||
+          p.type == PunchType.rectangle;
+      final isStandardSlotDim = p.widthMm >= 5.5 &&
+          p.widthMm <= 11.5 &&
+          p.lengthMm >= 9.5 &&
+          p.lengthMm <= 36.0;
+
+      final isCouplerCandidate = isExplicitCoupler || (isSlotShape && isStandardSlotDim);
 
       if (isCouplerCandidate) {
         // Associate with closest physical port

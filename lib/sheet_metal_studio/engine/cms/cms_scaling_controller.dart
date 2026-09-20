@@ -14,6 +14,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../../models/cad_primitives.dart';
 import '../../models/dsf_document.dart';
+import '../../models/fold_bend_line.dart';
 import '../../models/planar_sheet_face.dart';
 import '../../models/cnc_punch_primitive.dart';
 import '../../models/cms/cms_physical_port.dart';
@@ -26,6 +27,7 @@ import '../topological_zone_morpher.dart';
 import 'cms_3d_opening_detector.dart';
 import 'cms_opening_plane_analyzer.dart';
 import 'cms_port_matcher.dart';
+import 'cms_punch_constraint_engine.dart';
 
 /// Result of evaluating a parametric dimension on the 2D blank and folding to 3D.
 class CmsScalingPreviewResult {
@@ -118,10 +120,20 @@ class CmsScalingController extends ChangeNotifier {
     final delta = targetValue - baselineVal;
 
     // 1. Generate updated canonical 2D sheet geometry
-    final scaledDoc = _generateScaled2DDocument(
+    var scaledDoc = _generateScaled2DDocument(
       baseline: baselineDocument,
       paramId: _activeParameterId,
       delta: delta,
+    );
+    final targetW = _activeParameterId == 'width' ? targetValue : (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
+    final targetH = _activeParameterId == 'height' ? targetValue : (baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0);
+    scaledDoc = scaledDoc.copyWith(
+      parameters: {
+        ...scaledDoc.parameters,
+        'width': targetW,
+        'height': targetH,
+        _activeParameterId: targetValue,
+      },
     );
 
     // 2. Fold the modified 2D sheet through the KinematicFoldEngine
@@ -132,13 +144,37 @@ class CmsScalingController extends ChangeNotifier {
       document: scaledDoc,
       foldResult: mesh,
     );
-    final measured = rawOpenings.map(
+    final initialMeasured = rawOpenings.map(
       (r) => CmsOpeningPlaneAnalyzer.analyze(
         raw: r,
         document: scaledDoc,
         foldResult: mesh,
+        defaultHeight: targetH,
       ),
     ).toList();
+
+    // Reconcile channel height across ports (ports of the same fitting share channel cross-section)
+    double? detectedChannelHeight;
+    for (final m in initialMeasured) {
+      if (m.height > 15.0) {
+        if (detectedChannelHeight == null || m.height > detectedChannelHeight) {
+          detectedChannelHeight = m.height;
+        }
+      }
+    }
+
+    final measured = initialMeasured.map((m) {
+      if (detectedChannelHeight != null && (m.height - detectedChannelHeight).abs() > 3.0) {
+        return CmsOpeningPlaneAnalyzer.analyze(
+          raw: rawOpenings.firstWhere((r) => r.openingId == m.openingId),
+          document: scaledDoc,
+          foldResult: mesh,
+          defaultHeight: detectedChannelHeight,
+          fallbackHeight: detectedChannelHeight,
+        );
+      }
+      return m;
+    }).toList();
 
     final matchResult = CmsPortMatcher.match(
       measuredOpenings: measured,
@@ -211,24 +247,146 @@ class CmsScalingController extends ChangeNotifier {
     return finalDoc;
   }
 
-  /// Cancels preview and reverts to baseline.
-  void cancelPreview() {
+  /// Restores all active parameters and the preview back to baseline dimensions (Section 6).
+  void resetToBaseline() {
+    final newParams = <String, CmsScalingParameter>{};
+    for (final entry in _model.parameters.entries) {
+      newParams[entry.key] = entry.value.copyWith(
+        currentValue: entry.value.baselineValue,
+      );
+    }
+    _model = _model.copyWith(parameters: newParams);
+
+    final activeBase = _model.parameters[_activeParameterId]?.baselineValue ?? 100.0;
+    _previewMorphValue = activeBase;
+
+    evaluateMorph(activeBase);
+  }
+
+  /// Reverts any preview changes back to the unscaled baseline.
+  void cancelScaling() {
+    _currentPreview = null;
+    final baseVal = baselineDocument.parameters[_activeParameterId] ??
+        (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
+    _previewMorphValue = baseVal;
     final param = activeParameter;
     if (param != null && param.teachingState == CmsParameterTeachingState.learning) {
-      final reverted = param.copyWith(teachingState: CmsParameterTeachingState.untaught);
+      final reverted = param.copyWith(
+        currentValue: param.baselineValue,
+        teachingState: CmsParameterTeachingState.untaught,
+      );
       final newParams = Map<String, CmsScalingParameter>.from(_model.parameters);
-      newParams[_activeParameterId] = reverted;
+      newParams[param.id] = reverted;
       _model = _model.copyWith(parameters: newParams);
     }
-    _previewMorphValue = param?.baselineValue ?? 100.0;
     evaluateMorph(_previewMorphValue);
   }
 
+  /// Cancels preview and reverts to baseline.
+  void cancelPreview() => cancelScaling();
+
+  /// Geometrically detects if a document has the topology of an inside riser:
+  /// Two parallel ~90° bends with a transverse bend connecting between them.
+  static bool isInsideRiserGeometry(DsfDocument doc) {
+    if (doc.bends.length < 2) return false;
+
+    final bends90 = doc.bends.where((b) {
+      final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
+      return is90 && b.role != BendLineRole.flange;
+    }).toList();
+
+    if (bends90.length < 2) return false;
+
+    for (int i = 0; i < bends90.length; i++) {
+      for (int j = i + 1; j < bends90.length; j++) {
+        final b1 = bends90[i];
+        final b2 = bends90[j];
+        final dx1 = (b1.p2.x - b1.p1.x).abs();
+        final dy1 = (b1.p2.y - b1.p1.y).abs();
+        final dx2 = (b2.p2.x - b2.p1.x).abs();
+        final dy2 = (b2.p2.y - b2.p1.y).abs();
+
+        final b1IsVertical = dy1 > dx1 * 1.5;
+        final b2IsVertical = dy2 > dx2 * 1.5;
+        final b1IsHorizontal = dx1 > dy1 * 1.5;
+        final b2IsHorizontal = dx2 > dy2 * 1.5;
+
+        if ((b1IsVertical && b2IsVertical) || (b1IsHorizontal && b2IsHorizontal)) {
+          final hasTransverseBend = doc.bends.any((b) {
+            if (b.id == b1.id || b.id == b2.id) return false;
+            final dx = (b.p2.x - b.p1.x).abs();
+            final dy = (b.p2.y - b.p1.y).abs();
+            if (b1IsVertical) {
+              return dx > dy * 1.5;
+            } else {
+              return dy > dx * 1.5;
+            }
+          });
+
+          if (hasTransverseBend) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Resolves the true scaling profile, ensuring risers are never misclassified as flat bends.
+  CmsScalingProfile get effectiveScalingProfile {
+    if (contract.scalingProfile == CmsScalingProfile.insideRiser ||
+        contract.scalingProfile == CmsScalingProfile.outsideRiser) {
+      return contract.scalingProfile;
+    }
+
+    // Inspect baseline document itself to prevent fallback misrouting
+    final docType = '${baselineDocument.productType} ${baselineDocument.itemName}'.toLowerCase();
+    if (docType.contains('inside') && (docType.contains('riser') || docType.contains('rise'))) {
+      return CmsScalingProfile.insideRiser;
+    }
+    if (docType.contains('outside') && (docType.contains('riser') || docType.contains('rise'))) {
+      return CmsScalingProfile.outsideRiser;
+    }
+    if (docType.contains('riser')) {
+      return CmsScalingProfile.insideRiser;
+    }
+
+    final contractStr = '${contract.productType} ${contract.variationName}'.toLowerCase();
+    if (contractStr.contains('inside') && (contractStr.contains('riser') || contractStr.contains('rise'))) {
+      return CmsScalingProfile.insideRiser;
+    }
+    if (contractStr.contains('outside') && (contractStr.contains('riser') || contractStr.contains('rise'))) {
+      return CmsScalingProfile.outsideRiser;
+    }
+    if (contractStr.contains('riser')) {
+      return CmsScalingProfile.insideRiser;
+    }
+
+    // Geometrically detect riser topology directly from document features
+    if (isInsideRiserGeometry(baselineDocument)) {
+      return CmsScalingProfile.insideRiser;
+    }
+
+    return contract.scalingProfile;
+  }
+
   // ---------------------------------------------------------------------------
-  // Canonical 2D Geometry Scaling Engine
+  // Canonical 2D Sheet Scaling Math (Section 13)
   // ---------------------------------------------------------------------------
 
   DsfDocument _generateScaled2DDocument({
+    required DsfDocument baseline,
+    required String paramId,
+    required double delta,
+  }) {
+    final morphed = _morph2DBlank(baseline: baseline, paramId: paramId, delta: delta);
+    return CmsPunchConstraintEngine.reconcile(
+      baseline: baseline,
+      scaled: morphed,
+      paramId: paramId,
+      delta: delta,
+    );
+  }
+
+  DsfDocument _morph2DBlank({
     required DsfDocument baseline,
     required String paramId,
     required double delta,
@@ -240,11 +398,31 @@ class CmsScalingController extends ChangeNotifier {
     final targetW = paramId == 'width' ? baseW + delta : baseW;
     final targetH = paramId == 'height' ? baseH + delta : baseH;
 
-    // Check if TopologicalZoneMorpher handles this fitting
-    final prod = '${contract.productType} ${contract.variationName} ${baseline.productType}'.toLowerCase();
-    if (prod.contains('45') || prod.contains('90') || prod.contains('tee') || prod.contains('straight')) {
+    final profile = effectiveScalingProfile;
+
+    // 1. Dedicated Riser Scaling Profile (Section 2, 3, 4)
+    if (profile == CmsScalingProfile.insideRiser ||
+        profile == CmsScalingProfile.outsideRiser ||
+        isInsideRiserGeometry(baseline)) {
+      if (paramId == 'width') {
+        return _scaleRiserWidth2D(baseline, delta);
+      } else if (paramId == 'height') {
+        return _scaleRiserHeight2D(baseline, delta);
+      }
+      return baseline;
+    }
+
+    // 2. Flat Bends and Tees via TopologicalZoneMorpher
+    if (profile == CmsScalingProfile.flatBend45 ||
+        profile == CmsScalingProfile.flatBend90 ||
+        profile == CmsScalingProfile.tee ||
+        profile == CmsScalingProfile.straight) {
       final templateDef = TemplateParameterDefinition(
-        templateId: prod.contains('45') ? '45_deg_bend' : (prod.contains('90') ? '90_deg_bend' : 'equal_tee'),
+        templateId: profile == CmsScalingProfile.flatBend45
+            ? '45_deg_bend'
+            : (profile == CmsScalingProfile.flatBend90
+                ? '90_deg_bend'
+                : 'equal_tee'),
         name: contract.variationName,
         category: contract.productType,
         productType: contract.productType,
@@ -269,6 +447,405 @@ class CmsScalingController extends ChangeNotifier {
       return _scaleHeight2D(baseline, delta);
     }
     return baseline;
+  }
+
+  /// Dedicated 2D Riser Width Scaling:
+  /// - Floor web between B1 and B2 expands by delta.
+  /// - Left cheek translates rigidly outward by -delta/2.
+  /// - Right cheek translates rigidly outward by +delta/2.
+  /// - Coupler slots translate with their host cheek with zero distortion.
+  DsfDocument _scaleRiserWidth2D(DsfDocument baseline, double delta) {
+    if (baseline.bends.isEmpty) return baseline;
+
+    final longBends = baseline.bends.where((b) {
+      final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
+      final isStructural = b.role != BendLineRole.flange;
+      return is90 && isStructural;
+    }).toList();
+
+    if (longBends.length < 2) return _scaleWidth2D(baseline, delta);
+
+    final x1 = math.min(longBends[0].p1.x, longBends[1].p1.x);
+    final x2 = math.max(longBends[0].p1.x, longBends[1].p1.x);
+    final floorSpan = x2 - x1;
+    if (floorSpan < 10.0) return _scaleWidth2D(baseline, delta);
+
+    final halfDelta = delta / 2.0;
+
+    CadPoint2D transformPt(CadPoint2D pt) {
+      if (pt.x <= x1 + 0.5) {
+        return CadPoint2D(pt.x - halfDelta, pt.y);
+      } else if (pt.x >= x2 - 0.5) {
+        return CadPoint2D(pt.x + halfDelta, pt.y);
+      } else {
+        final u = (pt.x - x1) / floorSpan;
+        final newX = (x1 - halfDelta) + u * (floorSpan + delta);
+        return CadPoint2D(newX, pt.y);
+      }
+    }
+
+    final newContour = baseline.outerContour.map(transformPt).toList();
+
+    final newBends = baseline.bends.map((b) {
+      return b.copyWith(
+        p1: transformPt(b.p1),
+        p2: transformPt(b.p2),
+      );
+    }).toList();
+
+    final newFaces = baseline.faces.map((f) {
+      final newVerts = f.vertices.map(transformPt).toList();
+      return f.copyWith(vertices: newVerts);
+    }).toList();
+
+    final newPunches = baseline.punches.map((p) {
+      return p.copyWith(
+        center: transformPt(p.center),
+      );
+    }).toList();
+
+    final newCutLines = baseline.cutLines.map((cl) {
+      return cl.copyWith(
+        p1: transformPt(cl.p1),
+        p2: transformPt(cl.p2),
+      );
+    }).toList();
+
+    final newArcs = baseline.arcs.map((a) {
+      final newCenter = transformPt(a.center);
+      final dx = newCenter.x - a.center.x;
+      final dy = newCenter.y - a.center.y;
+      return a.translate(dx, dy);
+    }).toList();
+
+    final decomp = PlanarFaceDecomposer.decompose(
+      outerContour: newContour,
+      bends: newBends,
+      cutLines: newCutLines,
+    );
+
+    final doc = baseline.copyWith(
+      outerContour: newContour,
+      bends: newBends,
+      faces: newFaces.isNotEmpty ? newFaces : decomp.faces,
+      baseFaceId: baseline.baseFaceId,
+      punches: newPunches,
+      cutLines: newCutLines,
+      arcs: newArcs,
+    );
+
+    final b3 = baseline.bends.firstWhere(
+      (b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0,
+      orElse: () => baseline.bends.first,
+    );
+    final yB3 = b3.p1.y;
+
+    return _normalizeRiserTopology(doc, x1 - halfDelta, x2 + halfDelta, yB3);
+  }
+
+  /// Dedicated 2D Riser Height Scaling:
+  /// Dedicated 2D Riser Height Scaling:
+  /// - Sidewall cheeks expand outward along X by delta.
+  /// - 45° riser prongs shift outward along both X and Y (±delta, +delta), preserving
+  ///   the exact 45° miter angle (dy / dx = 1.0) so they touch the 45° bottom flap bend F_1 in 3D.
+  /// - Coupler slots translate rigidly on both the 45° prongs and straight sidewalls,
+  ///   preserving their exact shape, pitch spacing, and rotation with zero distortion.
+  /// - Floor web and bends B1, B2, B3 remain fixed.
+  /// - Floor length along Y is never lengthened.
+  DsfDocument _scaleRiserHeight2D(DsfDocument baseline, double delta) {
+    if (baseline.bends.isEmpty) return baseline;
+
+    final longBends = baseline.bends.where((b) {
+      final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
+      final isStructural = b.role != BendLineRole.flange;
+      return is90 && isStructural;
+    }).toList();
+
+    if (longBends.length < 2) return _scaleHeight2D(baseline, delta);
+
+    final x1 = math.min(longBends[0].p1.x, longBends[1].p1.x);
+    final x2 = math.max(longBends[0].p1.x, longBends[1].p1.x);
+
+    double minX = x1;
+    double maxX = x2;
+    for (final pt in baseline.outerContour) {
+      if (pt.x < minX) minX = pt.x;
+      if (pt.x > maxX) maxX = pt.x;
+    }
+
+    final leftHeight = x1 - minX;
+    final rightHeight = maxX - x2;
+    if (leftHeight < 10.0 || rightHeight < 10.0) return _scaleHeight2D(baseline, delta);
+
+    // Find B3 transverse bend to establish the base junction Y (y ≈ 128.65)
+    final b3 = baseline.bends.firstWhere(
+      (b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0,
+      orElse: () => baseline.bends.first,
+    );
+    final yB3 = b3.p1.y;
+
+    // Threshold Y separating the straight run from the 45° riser prong (notch at y ≈ 85.6 - 88.6)
+    final yProngThreshold = yB3 - (yB3 - 30.0) * 0.45; // ≈ 86.0 mm
+
+    // Determine the stretch threshold X for left and right cheek:
+    // Left cheek: inner corner arc ARC_BND_3 is near B1 (x1). The stretch zone is between ARC_BND_3 and ARC_BND_4.
+    // Right cheek: inner corner arc ARC_BND_2 is near B2 (x2). The stretch zone is between ARC_BND_2 and ARC_BND_1.
+    double xLeftStretch = x1 - 10.0;
+    double xRightStretch = x2 + 10.0;
+
+    for (final a in baseline.arcs) {
+      if (a.center.y < yProngThreshold) {
+        if ((a.center.x - x1).abs() <= 20.0) {
+          xLeftStretch = math.min(xLeftStretch, a.center.x);
+        }
+        if ((a.center.x - x2).abs() <= 20.0) {
+          xRightStretch = math.max(xRightStretch, a.center.x);
+        }
+      }
+    }
+
+    CadPoint2D transformPt(CadPoint2D pt) {
+      // 1. Floor web and bottom floor (between x1 and x2)
+      if (pt.x >= x1 - 0.5 && pt.x <= x2 + 0.5) {
+        if (pt.y <= yB3 + 0.5) {
+          // Central floor web remains fixed
+          return pt;
+        } else {
+          // Bottom 45° flap (F_1) grows along Y by delta * sqrt(2) so that its
+          // 3D displacement (dy = delta, dz = delta) exactly matches the 3D displacement
+          // of the 45° riser sidewall prongs, keeping the 3D distance between the flap's open
+          // edge and the prongs' tip edge strictly constant with zero drift.
+          final flapGrowth = delta * math.sqrt(2);
+          return CadPoint2D(pt.x, pt.y + flapGrowth);
+        }
+      }
+
+      // 2. Left Cheek (x < x1)
+      if (pt.x < x1 - 0.5) {
+        if (pt.y > yProngThreshold) {
+          // 45° Riser Prong:
+          // Shifts outward along X by -delta and upward along Y by +delta.
+          // This ensures the 45° miter line (from (x1, yB3) to outer end) has slope
+          // dy / (-dx) = (42.01 + delta) / (42.01 + delta) = 1.0 (EXACTLY 45°).
+          // In 3D, dz / dy = 1.0, touching the 45° flap bend F_1 perfectly with zero gap.
+          return CadPoint2D(pt.x - delta, pt.y + delta);
+        } else {
+          // Straight sidewall section:
+          // Inner corner (x >= xLeftStretch - 0.5) remains fixed with B1 and PORT_1.
+          // Outer sidewall (x < xLeftStretch - 0.5) translates rigidly outward by -delta.
+          // The horizontal edge between them expands by delta, keeping all corner arcs and chamfers 100% invariant.
+          if (pt.x >= xLeftStretch - 0.5) {
+            return pt;
+          } else {
+            return CadPoint2D(pt.x - delta, pt.y);
+          }
+        }
+      }
+
+      // 3. Right Cheek (x > x2)
+      if (pt.x > x2 + 0.5) {
+        if (pt.y > yProngThreshold) {
+          // 45° Riser Prong:
+          // Shifts outward along X by +delta and upward along Y by +delta.
+          // Preserves the 45° miter line (dy / dx = 1.0) so it touches F_1 in 3D.
+          return CadPoint2D(pt.x + delta, pt.y + delta);
+        } else {
+          // Straight sidewall section:
+          // Inner corner (x <= xRightStretch + 0.5) remains fixed with B2 and PORT_1.
+          // Outer sidewall (x > xRightStretch + 0.5) translates rigidly outward by +delta.
+          // The horizontal edge between them expands by delta, keeping all corner arcs and chamfers 100% invariant.
+          if (pt.x <= xRightStretch + 0.5) {
+            return pt;
+          } else {
+            return CadPoint2D(pt.x + delta, pt.y);
+          }
+        }
+      }
+
+      return pt;
+    }
+
+    CadPoint2D transformPunchCenter(CadPoint2D pt) {
+      // 1. Floor punches: fixed (or bottom flap if y > yB3)
+      if (pt.x >= x1 - 0.5 && pt.x <= x2 + 0.5) {
+        if (pt.y > yB3 + 0.5) {
+          final flapGrowth = delta * math.sqrt(2);
+          return CadPoint2D(pt.x, pt.y + flapGrowth);
+        }
+        return pt;
+      }
+
+      // 2. Left Cheek punches
+      if (pt.x < x1 - 0.5) {
+        if (pt.y > yProngThreshold) {
+          // Coupler slots on 45° prong (SLOT_3, SLOT_4):
+          // Translate rigidly with the prong by (-delta, +delta).
+          // Pitch spacing, angle relative to edge, and orientation are 100% preserved.
+          return CadPoint2D(pt.x - delta, pt.y + delta);
+        } else {
+          // Coupler slots on straight sidewall (SLOT_7, SLOT_8):
+          // Inner slot (SLOT_7) is anchored to inner edge near B1 (fixed dx = 0).
+          // Outer slot (SLOT_8) is anchored to outer edge (translates dx = -delta).
+          // Both maintain their exact 23.0 mm mounting edge setback.
+          final xLeftMid = (minX + x1) / 2.0;
+          if (pt.x > xLeftMid) {
+            return pt;
+          } else {
+            return CadPoint2D(pt.x - delta, pt.y);
+          }
+        }
+      }
+
+      // 3. Right Cheek punches
+      if (pt.x > x2 + 0.5) {
+        if (pt.y > yProngThreshold) {
+          // Coupler slots on 45° prong (SLOT_1, SLOT_2):
+          // Translate rigidly with the prong by (+delta, +delta).
+          return CadPoint2D(pt.x + delta, pt.y + delta);
+        } else {
+          // Coupler slots on straight sidewall (SLOT_5, SLOT_6):
+          // Inner slot (SLOT_5) is anchored to inner edge near B2 (fixed dx = 0).
+          // Outer slot (SLOT_6) is anchored to outer edge (translates dx = +delta).
+          // Both maintain their exact 23.0 mm mounting edge setback.
+          final xRightMid = (x2 + maxX) / 2.0;
+          if (pt.x < xRightMid) {
+            return pt;
+          } else {
+            return CadPoint2D(pt.x + delta, pt.y);
+          }
+        }
+      }
+
+      return pt;
+    }
+
+    final newContour = baseline.outerContour.map(transformPt).toList();
+
+    final newBends = baseline.bends.map((b) {
+      return b.copyWith(
+        p1: transformPt(b.p1),
+        p2: transformPt(b.p2),
+      );
+    }).toList();
+
+    final newFaces = baseline.faces.map((f) {
+      final newVerts = f.vertices.map(transformPt).toList();
+      return f.copyWith(vertices: newVerts);
+    }).toList();
+
+    final newPunches = baseline.punches.map((p) {
+      return p.copyWith(
+        center: transformPunchCenter(p.center),
+      );
+    }).toList();
+
+    final newCutLines = baseline.cutLines.map((cl) {
+      return cl.copyWith(
+        p1: transformPt(cl.p1),
+        p2: transformPt(cl.p2),
+      );
+    }).toList();
+
+    final newArcs = baseline.arcs.map((a) {
+      final newCenter = transformPt(a.center);
+      final dx = newCenter.x - a.center.x;
+      final dy = newCenter.y - a.center.y;
+      return a.translate(dx, dy);
+    }).toList();
+
+    final decomp = PlanarFaceDecomposer.decompose(
+      outerContour: newContour,
+      bends: newBends,
+      cutLines: newCutLines,
+    );
+
+    final doc = baseline.copyWith(
+      outerContour: newContour,
+      bends: newBends,
+      faces: newFaces.isNotEmpty ? newFaces : decomp.faces,
+      baseFaceId: baseline.baseFaceId,
+      punches: newPunches,
+      cutLines: newCutLines,
+      arcs: newArcs,
+    );
+
+    return _normalizeRiserTopology(doc, x1, x2, yB3);
+  }
+
+  /// Normalizes kinematic DAG topology for 45° Inside Riser fittings:
+  /// - Central Floor Web (between B1 and B2, y < yB3) is the base anchor (Root of DAG, FaceRole.baseFloor).
+  /// - Bottom Flap is child of Floor Web via B3 (45° bend UP).
+  /// - Left Cheek is child of Floor Web via B1 (90° bend UP).
+  /// - Right Cheek is child of Floor Web via B2 (90° bend UP).
+  /// - Ensures exact 3D touching along the 45° miter line with zero separation.
+  DsfDocument _normalizeRiserTopology(DsfDocument doc, double x1, double x2, double yB3) {
+    final floorFace = doc.faces.firstWhere(
+      (f) {
+        final cx = f.centroid.x;
+        return cx >= x1 - 5.0 && cx <= x2 + 5.0 && f.centroid.y < yB3;
+      },
+      orElse: () => doc.faces.firstWhere((f) => f.id == 'F_2', orElse: () => doc.faces.first),
+    );
+
+    final flapFace = doc.faces.firstWhere(
+      (f) => f.id != floorFace.id && f.centroid.x >= x1 - 5.0 && f.centroid.x <= x2 + 5.0,
+      orElse: () => doc.faces.firstWhere((f) => f.id == 'F_1', orElse: () => doc.faces.first),
+    );
+
+    final leftCheek = doc.faces.firstWhere(
+      (f) => f.centroid.x < x1 - 5.0,
+      orElse: () => doc.faces.firstWhere((f) => f.id == 'F_0', orElse: () => doc.faces.first),
+    );
+
+    final rightCheek = doc.faces.firstWhere(
+      (f) => f.centroid.x > x2 + 5.0,
+      orElse: () => doc.faces.firstWhere((f) => f.id == 'F_3', orElse: () => doc.faces.first),
+    );
+
+    final normalizedFaces = doc.faces.map((f) {
+      if (f.id == floorFace.id) {
+        return f.copyWith(isBaseAnchor: true, role: FaceRole.baseFloor, label: 'Floor Web');
+      } else if (f.id == flapFace.id) {
+        return f.copyWith(isBaseAnchor: false, role: FaceRole.sideWall, label: 'Bottom Flap');
+      } else if (f.id == leftCheek.id) {
+        return f.copyWith(isBaseAnchor: false, role: FaceRole.sideWall, label: 'Left Sidewall Cheek');
+      } else if (f.id == rightCheek.id) {
+        return f.copyWith(isBaseAnchor: false, role: FaceRole.sideWall, label: 'Right Sidewall Cheek');
+      }
+      return f.copyWith(isBaseAnchor: false);
+    }).toList();
+
+    final normalizedBends = doc.bends.map((b) {
+      if ((b.targetAngleDeg.abs() - 45.0).abs() < 15.0) {
+        return b.copyWith(
+          parentFaceId: floorFace.id,
+          childFaceId: flapFace.id,
+          direction: BendDirection.up,
+        );
+      } else if ((b.targetAngleDeg.abs() - 90.0).abs() < 15.0) {
+        final midX = (b.p1.x + b.p2.x) / 2.0;
+        if (midX <= (x1 + x2) / 2.0) {
+          return b.copyWith(
+            parentFaceId: floorFace.id,
+            childFaceId: leftCheek.id,
+            direction: BendDirection.up,
+          );
+        } else {
+          return b.copyWith(
+            parentFaceId: floorFace.id,
+            childFaceId: rightCheek.id,
+            direction: BendDirection.up,
+          );
+        }
+      }
+      return b;
+    }).toList();
+
+    return doc.copyWith(
+      baseFaceId: floorFace.id,
+      faces: normalizedFaces,
+      bends: normalizedBends,
+    );
   }
 
   /// Scales the canonical 2D flat blank for Width:
@@ -306,7 +883,7 @@ class CmsScalingController extends ChangeNotifier {
     final floorCenterX = floorFace.vertices.isNotEmpty ? sumX / floorFace.vertices.length : 0.0;
 
     final halfDelta = delta / 2.0;
-    final is45Bend = contract.productType.contains('45') || contract.variationName.contains('45') || doc.productType.contains('45');
+    final is45Bend = contract.scalingProfile == CmsScalingProfile.flatBend45;
 
     CadPoint2D transformPt(CadPoint2D pt) {
       final dx = pt.x - floorCenterX;
@@ -377,14 +954,29 @@ class CmsScalingController extends ChangeNotifier {
   /// - Flanges translate outward.
   /// - Floor stays fixed.
   DsfDocument _scaleHeight2D(DsfDocument baseline, double delta) {
-    if (baseline.faces.isEmpty) return baseline;
+    if (baseline.faces.isEmpty && baseline.outerContour.isEmpty) return baseline;
 
     // Shift sidewall outer edges and return flanges along Y
     final halfDelta = delta / 2.0;
 
+    // Compute dynamic split line along Y
+    double minY = double.infinity;
+    double maxY = -double.infinity;
+    for (final pt in baseline.outerContour) {
+      if (pt.y < minY) minY = pt.y;
+      if (pt.y > maxY) maxY = pt.y;
+    }
+    for (final b in baseline.bends) {
+      if (b.p1.y < minY) minY = b.p1.y;
+      if (b.p2.y < minY) minY = b.p2.y;
+      if (b.p1.y > maxY) maxY = b.p1.y;
+      if (b.p2.y > maxY) maxY = b.p2.y;
+    }
+    final midY = (minY.isFinite && maxY.isFinite) ? (minY + maxY) / 2.0 : 0.0;
+
     CadPoint2D transformPt(CadPoint2D pt) {
-      // Points in upper flange region shift +halfDelta, lower shift -halfDelta
-      final shift = pt.y > 100.0 ? halfDelta : -halfDelta;
+      // Points in upper region shift +halfDelta, lower shift -halfDelta
+      final shift = pt.y >= midY ? halfDelta : -halfDelta;
       return CadPoint2D(pt.x, pt.y + shift);
     }
 

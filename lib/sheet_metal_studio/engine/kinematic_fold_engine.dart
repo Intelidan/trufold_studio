@@ -111,6 +111,7 @@ class KinematicFoldEngine {
       punches: doc.allPunches,
       cutLines: doc.cutLines,
       bends: doc.bends,
+      arcs: doc.arcs,
       thicknessMm: doc.material.thicknessMm,
       edgeChamfers: doc.edgeChamfers,
       defaultEdgeChamferMm: doc.material.edgeChamferMm,
@@ -221,6 +222,7 @@ class KinematicFoldEngine {
     required List<CncPunchPrimitive> punches,
     required List<CadLineSegment> cutLines,
     required List<FoldBendLine> bends,
+    List<CadArc2D> arcs = const [],
     double thicknessMm = 0.0,
     Map<String, double> edgeChamfers = const {},
     double defaultEdgeChamferMm = 0.0,
@@ -455,20 +457,27 @@ class KinematicFoldEngine {
       }
     }
 
-    // Transform all vertices of this face into 3D
-    final vertices3D = node.face.vertices
+    // Transform all vertices of this face into 3D (with smooth arc expansion)
+    final faceVerts = _expandFaceWithArcs(node.face.vertices, arcs);
+    final vertices3D = faceVerts
         .map((v) => currentTransform.transformPoint(CadPoint3D(v.x, v.y, 0.0)))
         .toList();
 
     // Compute surface normal
     CadPoint3D normal = const CadPoint3D(0, 0, 1);
     if (vertices3D.length >= 3) {
-      final v0 = vertices3D[0];
-      final v1 = vertices3D[1];
-      final v2 = vertices3D[2];
-      final d1 = v1 - v0;
-      final d2 = v2 - v0;
-      normal = d1.cross(d2).normalized();
+      for (int i = 0; i < vertices3D.length; i++) {
+        final v0 = vertices3D[i];
+        final v1 = vertices3D[(i + 1) % vertices3D.length];
+        final v2 = vertices3D[(i + 2) % vertices3D.length];
+        final d1 = v1 - v0;
+        final d2 = v2 - v0;
+        final cross = d1.cross(d2);
+        if (cross.length > 1e-4) {
+          normal = cross.normalized();
+          break;
+        }
+      }
     }
 
     // Assign color by role (calibrated for light CAD background)
@@ -545,7 +554,6 @@ class KinematicFoldEngine {
     }
 
     // SS1 Fix: Generate true exposed boundary lines for top surface (excluding bend seams and clipped against holes)
-    final faceVerts = node.face.vertices;
     final numVerts = faceVerts.length;
     final boundaryLines3D = <List<CadPoint3D>>[];
     for (int i = 0; i < numVerts; i++) {
@@ -583,7 +591,7 @@ class KinematicFoldEngine {
 
     // Apply Physical Sheet Metal Thickness
     if (thicknessMm > 0.05) {
-      final vertices3DBot = node.face.vertices.reversed
+      final vertices3DBot = faceVerts.reversed
           .map(
             (v) => currentTransform.transformPoint(
               CadPoint3D(v.x, v.y, -thicknessMm),
@@ -691,7 +699,7 @@ class KinematicFoldEngine {
               final clippedSegments = _clipSegmentToPolygon(
                 p1,
                 p2,
-                node.face.vertices,
+                faceVerts,
               );
               for (int segIdx = 0; segIdx < clippedSegments.length; segIdx++) {
                 final (faceSegA, faceSegB) = clippedSegments[segIdx];
@@ -1081,6 +1089,7 @@ class KinematicFoldEngine {
         punches: punches,
         cutLines: cutLines,
         bends: bends,
+        arcs: arcs,
         thicknessMm: thicknessMm,
         edgeChamfers: edgeChamfers,
         defaultEdgeChamferMm: defaultEdgeChamferMm,
@@ -1512,5 +1521,79 @@ class KinematicFoldEngine {
     }
 
     return solidIntervals;
+  }
+
+  /// Expands face boundary chord segments into smooth arc samples if they match doc.arcs.
+  static List<CadPoint2D> _expandFaceWithArcs(
+    List<CadPoint2D> vertices,
+    List<CadArc2D> arcs, {
+    double maxStepDeg = 8.0,
+  }) {
+    if (vertices.length < 3 || arcs.isEmpty) return vertices;
+    final n = vertices.length;
+    final expanded = <CadPoint2D>[];
+
+    int i = 0;
+    while (i < n) {
+      final current = vertices[i];
+      CadArc2D? matchedArc;
+      int targetIdx = -1;
+      bool isReversed = false;
+
+      for (final arc in arcs) {
+        final isAtStart = current.distanceTo(arc.startPoint) < 2.0;
+        final isAtEnd = current.distanceTo(arc.endPoint) < 2.0;
+
+        if (isAtStart || isAtEnd) {
+          final targetPoint = isAtStart ? arc.endPoint : arc.startPoint;
+          final nextIdx = (i + 1) % n;
+          if (vertices[nextIdx].distanceTo(targetPoint) < 2.0) {
+            matchedArc = arc;
+            targetIdx = nextIdx;
+            isReversed = isAtEnd;
+            break;
+          }
+
+          // Fallback for discretized polygons: check if an arc spans up to 16 chord vertices
+          for (int k = 2; k <= math.min(16, n - 1); k++) {
+            final checkIdx = (i + k) % n;
+            if (vertices[checkIdx].distanceTo(targetPoint) < 2.0) {
+              bool allOnArc = true;
+              for (int m = 1; m < k; m++) {
+                final midPt = vertices[(i + m) % n];
+                if (arc.distanceTo(midPt) > 2.5) {
+                  allOnArc = false;
+                  break;
+                }
+              }
+              if (allOnArc) {
+                matchedArc = arc;
+                targetIdx = checkIdx;
+                isReversed = isAtEnd;
+                break;
+              }
+            }
+          }
+          if (matchedArc != null) break;
+        }
+      }
+
+      if (matchedArc != null && targetIdx != -1) {
+        final samples = matchedArc.toPolygon(maxStepDeg: maxStepDeg);
+        final orderedSamples = isReversed ? samples.reversed.toList() : samples;
+        for (int s = 0; s < orderedSamples.length - 1; s++) {
+          expanded.add(orderedSamples[s]);
+        }
+        if (targetIdx <= i) {
+          // Wrapped around to start of loop
+          break;
+        }
+        i = targetIdx;
+      } else {
+        expanded.add(current);
+        i++;
+      }
+    }
+    return expanded.length >= 3 ? expanded : vertices;
   }
 }

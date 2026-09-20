@@ -73,6 +73,7 @@ class CmsOpeningPlaneAnalyzer {
     FoldedMeshResult? foldResult,
     double defaultHeight = 100.0,
     double defaultFlange = 15.0,
+    double? fallbackHeight,
   }) {
     final p1 = raw.floorEdgeP1;
     final p2 = raw.floorEdgeP2;
@@ -87,33 +88,99 @@ class CmsOpeningPlaneAnalyzer {
     final invW = measuredWidth > 1e-4 ? 1.0 / measuredWidth : 1.0;
     final widthDirection = CadPoint3D(dx * invW, dy * invW, dz * invW);
 
-    // 3. Normal vector (outward horizontal)
+    // 3. Normal vector (outward 3D)
     final normal = raw.outwardNormal;
 
-    // 4. Vertical height direction (perpendicular to floor plane)
-    const heightDirection = CadPoint3D(0, 0, 1);
+    // 4. Vertical height direction (perpendicular to floor plane and edge)
+    var hx = normal.y * widthDirection.z - normal.z * widthDirection.y;
+    var hy = normal.z * widthDirection.x - normal.x * widthDirection.z;
+    var hz = normal.x * widthDirection.y - normal.y * widthDirection.x;
+    final hLen = math.sqrt(hx * hx + hy * hy + hz * hz);
+    if (hLen > 1e-4) {
+      hx /= hLen;
+      hy /= hLen;
+      hz /= hLen;
+    }
+    // Ensure heightDirection points UP (+Z)
+    if (hz < -1e-4) {
+      hx = -hx;
+      hy = -hy;
+      hz = -hz;
+    }
+    final heightDirection = CadPoint3D(hx, hy, hz);
 
-    // 5. Measure height and find top lip Z from 3D folded mesh
-    double measuredHeight = defaultHeight;
+    // 5. Measure height and find top lip from 3D folded mesh
+    // Determine nominal height from parameters or file name if available
+    double? nominalH = fallbackHeight ?? (document.parameters['height'] as num?)?.toDouble();
+    if (nominalH == null || nominalH <= 15.0) {
+      final match = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
+      if (match != null) {
+        nominalH = double.tryParse(match.group(2)!);
+      }
+    }
+
+    double measuredHeight = fallbackHeight ?? nominalH ?? defaultHeight;
     double measuredFlange = defaultFlange;
-    double? lipZ;
 
     if (foldResult != null && foldResult.polygons.isNotEmpty && raw.sidewallFaceIds.isNotEmpty) {
+      final candidateHeights = <double>[];
       for (final poly in foldResult.polygons) {
         if (raw.sidewallFaceIds.contains(poly.faceId)) {
           for (final v in poly.vertices) {
-            if (lipZ == null || (v.z - p1.z).abs() > (lipZ - p1.z).abs()) {
-              lipZ = v.z;
+            // Distance perpendicular to the mouth plane
+            final distNormal = ((v.x - p1.x) * normal.x +
+                                (v.y - p1.y) * normal.y +
+                                (v.z - p1.z) * normal.z).abs();
+            if (distNormal > 5.5) continue; // Must be on or near the mouth plane
+
+            // Distance along the width axis (must be within the mouth span)
+            final t = (v.x - p1.x) * widthDirection.x +
+                      (v.y - p1.y) * widthDirection.y +
+                      (v.z - p1.z) * widthDirection.z;
+            if (t < -5.0 || t > measuredWidth + 5.0) continue;
+
+            // Projection along height direction
+            final projH = (v.x - p1.x) * heightDirection.x +
+                          (v.y - p1.y) * heightDirection.y +
+                          (v.z - p1.z) * heightDirection.z;
+
+            if (projH > 15.0) {
+              candidateHeights.add(projH);
             }
           }
         }
       }
-      if (lipZ != null && (lipZ - p1.z).abs() > 15.0) {
-        measuredHeight = (lipZ - p1.z).abs();
+
+      if (candidateHeights.isNotEmpty) {
+        candidateHeights.sort();
+        if (nominalH != null && nominalH > 15.0) {
+          // If nominal height is known (e.g. 100mm), choose the candidate closest to nominal height
+          // that does not exceed nominal (to avoid picking up flange/coupler tabs that stick above the channel)
+          final validCandidates = candidateHeights.where((h) => h <= nominalH! * 1.05).toList();
+          if (validCandidates.isNotEmpty) {
+            measuredHeight = validCandidates.last;
+          } else {
+            measuredHeight = candidateHeights.first;
+          }
+        } else {
+          // If multiple candidate heights exist (e.g. channel rim vs flange tab),
+          // the channel rim is typically the lower plateau.
+          // If candidates differ by a flange tab (8-16mm), pick the rim.
+          double bestH = candidateHeights.last;
+          for (int i = 0; i < candidateHeights.length - 1; i++) {
+            final h = candidateHeights[i];
+            final diff = candidateHeights.last - h;
+            if (diff >= 7.0 && diff <= 16.0 && h >= 35.0) {
+              bestH = h;
+              break;
+            }
+          }
+          measuredHeight = bestH;
+        }
       }
     }
 
-    if (lipZ == null) {
+    if (measuredHeight <= 15.0) {
       // Fallback: estimate height from flat face vertices
       if (raw.sidewallFaceIds.isNotEmpty) {
         double maxWallH = 0.0;
@@ -127,26 +194,56 @@ class CmsOpeningPlaneAnalyzer {
         }
         if (maxWallH > 20.0) measuredHeight = maxWallH;
       }
-      lipZ = p1.z + measuredHeight;
+    }
+
+    // Clamp measuredHeight if derived mouth corners would protrude beyond the folded part boundary
+    if (foldResult != null && foldResult.polygons.isNotEmpty) {
+      double maxZ = -double.infinity;
+      for (final poly in foldResult.polygons) {
+        for (final v in poly.vertices) {
+          if (v.z > maxZ) maxZ = v.z;
+        }
+      }
+      if (maxZ.isFinite && maxZ > 0) {
+        final currentMaxZ = math.max(
+          p1.z + measuredHeight * heightDirection.z,
+          p2.z + measuredHeight * heightDirection.z,
+        );
+        if (currentMaxZ > maxZ + 1.5 && heightDirection.z.abs() > 1e-4) {
+          final excessZ = currentMaxZ - maxZ;
+          final clampedHeight = measuredHeight - excessZ / heightDirection.z.abs();
+          if (clampedHeight > 15.0) {
+            measuredHeight = clampedHeight;
+          }
+        }
+      }
     }
 
     // 6. Derived 4 corners of the channel mouth [P1 (floor), P3 (lip), P4 (lip), P2 (floor)]
-    final p3 = CadPoint3D(p1.x, p1.y, lipZ);
-    final p4 = CadPoint3D(p2.x, p2.y, lipZ);
+    final p3 = CadPoint3D(
+      p1.x + measuredHeight * heightDirection.x,
+      p1.y + measuredHeight * heightDirection.y,
+      p1.z + measuredHeight * heightDirection.z,
+    );
+    final p4 = CadPoint3D(
+      p2.x + measuredHeight * heightDirection.x,
+      p2.y + measuredHeight * heightDirection.y,
+      p2.z + measuredHeight * heightDirection.z,
+    );
     final derivedMouthCorners = [p1, p3, p4, p2];
 
     // 7. True mouth centroid (midpoint of floor & top lip)
     final center = CadPoint3D(
-      (p1.x + p2.x) / 2.0,
-      (p1.y + p2.y) / 2.0,
-      (p1.z + lipZ) / 2.0,
+      (p1.x + p2.x) / 2.0 + (measuredHeight / 2.0) * heightDirection.x,
+      (p1.y + p2.y) / 2.0 + (measuredHeight / 2.0) * heightDirection.y,
+      (p1.z + p2.z) / 2.0 + (measuredHeight / 2.0) * heightDirection.z,
     );
 
     // 8. Callout anchor pinned directly on top rim mouth center
     final calloutAnchor = CadPoint3D(
-      (p1.x + p2.x) / 2.0,
-      (p1.y + p2.y) / 2.0,
-      lipZ,
+      (p1.x + p2.x) / 2.0 + measuredHeight * heightDirection.x,
+      (p1.y + p2.y) / 2.0 + measuredHeight * heightDirection.y,
+      (p1.z + p2.z) / 2.0 + measuredHeight * heightDirection.z,
     );
 
     return CmsMeasuredOpening(

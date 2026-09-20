@@ -9,6 +9,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dsf_document.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/fold_bend_line.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/planar_face_decomposer.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/kinematic_fold_engine.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/cms/cms_3d_opening_detector.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/cms/cms_opening_plane_analyzer.dart';
@@ -43,15 +46,17 @@ void main() {
 
       expect(measuredList.length, equals(2));
 
+      final expectedWidth = (doc.parameters['width'] as num?)?.toDouble() ?? 100.0;
+
       // Verify Opening 1
       final op1 = measuredList[0];
-      expect(op1.width, closeTo(100.0, 5.0), reason: 'Nominal width is 100 mm');
+      expect(op1.width, closeTo(expectedWidth, 5.0), reason: 'Nominal width is $expectedWidth mm');
       expect(op1.height, greaterThanOrEqualTo(50.0), reason: 'Sidewall height is positive');
       expect(op1.normal.z.abs(), closeTo(0.0, 0.05), reason: 'Normal must be horizontal');
 
       // Verify Opening 2
       final op2 = measuredList[1];
-      expect(op2.width, closeTo(100.0, 5.0), reason: 'Nominal width is 100 mm');
+      expect(op2.width, closeTo(expectedWidth, 5.0), reason: 'Nominal width is $expectedWidth mm');
       expect(op2.height, greaterThanOrEqualTo(50.0), reason: 'Sidewall height is positive');
       expect(op2.normal.z.abs(), closeTo(0.0, 0.05), reason: 'Normal must be horizontal');
 
@@ -62,7 +67,79 @@ void main() {
       // Convert to clean candidate objects
       final cand1 = op1.toCandidate();
       expect(cand1.isReliefOrNotch, isFalse);
-      expect(cand1.width, closeTo(100.0, 5.0));
+      expect(cand1.width, closeTo(expectedWidth, 5.0));
+    });
+
+    test('2. Discovers both physical openings on 45_deg_inside_riser_100x100 with 3 bends', () async {
+      final file = File('assets/dxf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
+      expect(file.existsSync(), isTrue);
+
+      final content = await file.readAsString();
+      final json = jsonDecode(content) as Map<String, dynamic>;
+      var doc = DsfDocument.fromJson(json);
+
+      // Define 3 bends matching SS1/SS2
+      // B1: Left sidewall 90°
+      // B2: Right sidewall 90°
+      // B3: Floor riser 45°
+      final bends = [
+        FoldBendLine(
+          id: 'B1',
+          p1: const CadPoint2D(109.5, 30.0),
+          p2: const CadPoint2D(109.5, 128.65),
+          targetAngleDeg: 90.0,
+          role: BendLineRole.bend,
+        ),
+        FoldBendLine(
+          id: 'B2',
+          p1: const CadPoint2D(205.5, 30.0),
+          p2: const CadPoint2D(205.5, 128.65),
+          targetAngleDeg: 90.0,
+          role: BendLineRole.bend,
+        ),
+        FoldBendLine(
+          id: 'B3',
+          p1: const CadPoint2D(109.5, 128.65),
+          p2: const CadPoint2D(205.5, 128.65),
+          targetAngleDeg: 45.0,
+          role: BendLineRole.bend,
+        ),
+      ];
+
+      final decomp = PlanarFaceDecomposer.decompose(
+        outerContour: doc.outerContour,
+        bends: bends,
+        cutLines: doc.cutLines,
+      );
+
+      doc = doc.copyWith(
+        bends: decomp.connectedBends,
+        faces: decomp.faces,
+        baseFaceId: decomp.baseFaceId,
+      );
+
+      final foldResult = KinematicFoldEngine.foldDocument(doc, foldProgress: 1.0);
+      expect(foldResult.polygons.isNotEmpty, isTrue);
+
+      final rawOpenings = Cms3DOpeningDetector.detectOpenings(
+        document: doc,
+        foldResult: foldResult,
+      );
+
+      // 45° Inside Riser must discover BOTH physical openings:
+      // Port 1: Top horizontal opening
+      // Port 2: Bottom 45° angled opening
+      expect(rawOpenings.length, equals(2), reason: 'Must detect exactly 2 openings for inside riser');
+
+      final measuredList = rawOpenings.map((raw) {
+        return CmsOpeningPlaneAnalyzer.analyze(raw: raw, document: doc, foldResult: foldResult);
+      }).toList();
+
+      expect(measuredList.length, equals(2));
+      for (final op in measuredList) {
+        expect(op.width, closeTo(96.0, 5.0), reason: 'Width should be ~96mm');
+        expect(op.height, closeTo(98.0, 5.0), reason: 'Height must match physical channel sidewall (~96-100mm) without extending over the cheek');
+      }
     });
   });
 }

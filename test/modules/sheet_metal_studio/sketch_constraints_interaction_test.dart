@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cad_constraint.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/cad_dimension.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/cnc_punch_primitive.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/constraints/entity_constraint_state.dart';
 import 'package:trufold_studio/sheet_metal_studio/viewmodels/sheet_metal_studio_viewmodel.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/canvas/floating_sketch_constraint_bar.dart';
@@ -162,5 +164,60 @@ void main() {
       vm.setShowDofDiagnostics(false);
       expect(vm.showDofDiagnostics, isFalse);
     });
+
+    test('8. 2-click punch-to-punch dimension creation in addDimension mode without selecting punches', () {
+      const p1 = CncPunchPrimitive(
+        id: 'P_TEST_1',
+        type: PunchType.roundHole,
+        center: CadPoint2D(50.0, 50.0),
+        diameterMm: 8.0,
+      );
+      const p2 = CncPunchPrimitive(
+        id: 'P_TEST_2',
+        type: PunchType.roundHole,
+        center: CadPoint2D(100.0, 50.0),
+        diameterMm: 8.0,
+      );
+      vm.addPunch(p1);
+      vm.addPunch(p2);
+      vm.clearSelection();
+
+      final initialDimCount = vm.document.dimensions.length;
+      vm.setToolMode(StudioToolMode.addDimension);
+
+      // Click 1: P1 center
+      vm.handleCanvasClick(const CadPoint2D(50.0, 50.0));
+      expect(vm.pendingBendStart, equals(const CadPoint2D(50.0, 50.0)));
+      expect(vm.selectedPunchId, isNull); // punch was not selected instead of dimensioning
+
+      // Click 2: P2 center
+      vm.handleCanvasClick(const CadPoint2D(100.0, 50.0));
+      expect(vm.pendingBendStart, isNull);
+      expect(vm.document.dimensions.length, equals(initialDimCount + 1));
+
+      final dim = vm.document.dimensions.last;
+      expect(dim.type, equals(CadDimensionType.holeToHole));
+      expect(dim.referenceAId, equals('P_TEST_1'));
+      expect(dim.referenceBId, equals('P_TEST_2'));
+      expect(dim.measuredValue, closeTo(50.0, 0.01));
+    });
+
+    test('9. Geometric fallback hit-test detects punch when activeSnap is null', () {
+      const p1 = CncPunchPrimitive(
+        id: 'P_TEST_SNAP',
+        type: PunchType.roundHole,
+        center: CadPoint2D(200.0, 150.0),
+        diameterMm: 12.0,
+      );
+      vm.addPunch(p1);
+      vm.clearSelection();
+      vm.setToolMode(StudioToolMode.addDimension);
+
+      // Click 3mm away from punch center (within radius + margin)
+      vm.handleCanvasClick(const CadPoint2D(203.0, 150.0));
+      // Should snap directly to punch center and record it
+      expect(vm.pendingBendStart, equals(const CadPoint2D(200.0, 150.0)));
+    });
   });
 }
+
