@@ -20,6 +20,7 @@ import 'cad_number_spinner.dart';
 class PunchPropertySheet extends StatelessWidget {
   final SheetMetalStudioViewModel viewModel;
   final CncPunchPrimitive punch;
+  final List<CncPunchPrimitive>? punches;
   final bool isCollapsed;
   final VoidCallback? onToggleCollapse;
   final VoidCallback? onClose;
@@ -30,6 +31,7 @@ class PunchPropertySheet extends StatelessWidget {
     super.key,
     required this.viewModel,
     required this.punch,
+    this.punches,
     this.isCollapsed = false,
     this.onToggleCollapse,
     this.onClose,
@@ -40,6 +42,13 @@ class PunchPropertySheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const themeColor = Color(0xFF059669); // Emerald green for punches
+    final punchList = punches ?? [punch];
+    final isMulti = punchList.length > 1;
+    final punchIds = punchList.map((p) => p.id).toList();
+    final allVisible = punchList.every((p) => p.isVisible);
+    final isCoupler = punchList.every((p) => p.role == CncPunchRole.coupler);
+    final allShowLabel = punchList.every((p) => p.showLabel);
+
     final constraints = CncTurretEngine.computeConstraints(punch: punch, doc: viewModel.document);
     final overlapping = viewModel.findOverlappingPunches(punch.id);
 
@@ -73,27 +82,35 @@ class PunchPropertySheet extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    '${punch.id} (${punch.type.name.toUpperCase()})',
+                    isMulti
+                        ? '${punchList.length} HOLES (${punch.type.name.toUpperCase()})'
+                        : '${punch.id} (${punch.type.name.toUpperCase()})',
                     style: TextStyle(
-                      color: punch.isVisible ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                      color: allVisible ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.8,
-                      decoration: punch.isVisible ? null : TextDecoration.lineThrough,
+                      decoration: allVisible ? null : TextDecoration.lineThrough,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 IconButton(
                   icon: Icon(
-                    punch.isVisible ? Icons.visibility : Icons.visibility_off,
+                    allVisible ? Icons.visibility : Icons.visibility_off,
                     size: 16,
-                    color: punch.isVisible ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
+                    color: allVisible ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
                   ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-                  onPressed: () => viewModel.togglePunchVisibility(punch.id),
-                  tooltip: punch.isVisible ? 'Hide / Suppress Punch (Temp Delete)' : 'Show / Unsuppress Punch',
+                  onPressed: () {
+                    if (isMulti) {
+                      viewModel.toggleSelectedPunchesVisibility(punchIds: punchIds, isVisible: !allVisible);
+                    } else {
+                      viewModel.togglePunchVisibility(punch.id);
+                    }
+                  },
+                  tooltip: allVisible ? 'Hide / Suppress (Temp Delete)' : 'Show / Unsuppress',
                 ),
                 if (onToggleCollapse != null) ...[
                   InkWell(
@@ -103,7 +120,13 @@ class PunchPropertySheet extends StatelessWidget {
                   const SizedBox(width: 4),
                 ],
                 InkWell(
-                  onTap: onClose ?? () => viewModel.selectPunch(null),
+                  onTap: onClose ?? () {
+                    if (isMulti) {
+                      viewModel.clearSelection();
+                    } else {
+                      viewModel.selectPunch(null);
+                    }
+                  },
                   child: const Icon(Icons.close, size: 16, color: Color(0xFF64748B)),
                 ),
               ],
@@ -116,13 +139,13 @@ class PunchPropertySheet extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 10.0),
                 padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                 decoration: BoxDecoration(
-                  color: punch.role == CncPunchRole.coupler
-                      ? const Color(0xFFEFF6FF)
+                  color: isCoupler
+                      ? const Color(0xFFFAF5FF)
                       : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(6.0),
                   border: Border.all(
-                    color: punch.role == CncPunchRole.coupler
-                        ? const Color(0xFF3B82F6)
+                    color: isCoupler
+                        ? const Color(0xFF7C3AED)
                         : const Color(0xFFE2E8F0),
                   ),
                 ),
@@ -135,20 +158,20 @@ class PunchPropertySheet extends StatelessWidget {
                           Icon(
                             Icons.handshake_outlined,
                             size: 15.0,
-                            color: punch.role == CncPunchRole.coupler
-                                ? const Color(0xFF2563EB)
+                            color: isCoupler
+                                ? const Color(0xFF7C3AED)
                                 : const Color(0xFF64748B),
                           ),
                           const SizedBox(width: 6.0),
                           Flexible(
                             child: Text(
-                              'Coupler Mounting Slot',
+                              isMulti ? 'Coupler Mounting Slots (${punchList.length})' : 'Coupler Mounting Slot',
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 11.0,
                                 fontWeight: FontWeight.w600,
-                                color: punch.role == CncPunchRole.coupler
-                                    ? const Color(0xFF1E40AF)
+                                color: isCoupler
+                                    ? const Color(0xFF6D28D9)
                                     : const Color(0xFF334155),
                               ),
                             ),
@@ -159,11 +182,15 @@ class PunchPropertySheet extends StatelessWidget {
                     Transform.scale(
                       scale: 0.8,
                       child: Switch(
-                        value: punch.role == CncPunchRole.coupler,
-                        activeThumbColor: const Color(0xFF2563EB),
-                        activeTrackColor: const Color(0xFF93C5FD),
+                        value: isCoupler,
+                        activeThumbColor: const Color(0xFF7C3AED),
+                        activeTrackColor: const Color(0xFFDDD6FE),
                         onChanged: (val) {
-                          viewModel.markPunchAsCoupler(punch.id, isCoupler: val);
+                          if (isMulti) {
+                            viewModel.toggleSelectedPunchCouplerRole(isCoupler: val);
+                          } else {
+                            viewModel.markPunchAsCoupler(punch.id, isCoupler: val);
+                          }
                         },
                       ),
                     ),
@@ -171,8 +198,8 @@ class PunchPropertySheet extends StatelessWidget {
                 ),
               ),
 
-              // Overlapping Holes Merge Option
-              if (overlapping.isNotEmpty) ...[
+              // Overlapping Holes Merge Option (single-selection only)
+              if (!isMulti && overlapping.isNotEmpty) ...[
                 Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.all(8),
@@ -234,7 +261,11 @@ class PunchPropertySheet extends StatelessWidget {
                       suffix: 'mm',
                       width: 105,
                       onChanged: (val) {
-                        viewModel.updatePunch(punch.copyWith(diameterMm: val));
+                        if (isMulti) {
+                          viewModel.updateSelectedPunches(punchIds: punchIds, diameterMm: val);
+                        } else {
+                          viewModel.updatePunch(punch.copyWith(diameterMm: val));
+                        }
                       },
                     ),
                   ],
@@ -242,10 +273,34 @@ class PunchPropertySheet extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    _presetSizeChip('M4 (4.5)', 4.5, () => viewModel.updatePunch(punch.copyWith(diameterMm: 4.5))),
-                    _presetSizeChip('M6 (6.6)', 6.6, () => viewModel.updatePunch(punch.copyWith(diameterMm: 6.6))),
-                    _presetSizeChip('M8 (9.0)', 9.0, () => viewModel.updatePunch(punch.copyWith(diameterMm: 9.0))),
-                    _presetSizeChip('M10 (11)', 11.0, () => viewModel.updatePunch(punch.copyWith(diameterMm: 11.0))),
+                    _presetSizeChip('M4 (4.5)', 4.5, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, diameterMm: 4.5);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(diameterMm: 4.5));
+                      }
+                    }),
+                    _presetSizeChip('M6 (6.6)', 6.6, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, diameterMm: 6.6);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(diameterMm: 6.6));
+                      }
+                    }),
+                    _presetSizeChip('M8 (9.0)', 9.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, diameterMm: 9.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(diameterMm: 9.0));
+                      }
+                    }),
+                    _presetSizeChip('M10 (11)', 11.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, diameterMm: 11.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(diameterMm: 11.0));
+                      }
+                    }),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -263,14 +318,27 @@ class PunchPropertySheet extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                     ),
                     onPressed: () {
-                      viewModel.updatePunch(
-                        punch.copyWith(
-                          type: PunchType.ellipse,
-                          lengthMm: (punch.diameterMm * 1.5).roundToDouble(),
-                          widthMm: punch.diameterMm,
-                          rotationDeg: 0.0,
-                        ),
-                      );
+                      if (isMulti) {
+                        for (final p in punchList) {
+                          viewModel.updatePunch(
+                            p.copyWith(
+                              type: PunchType.ellipse,
+                              lengthMm: (p.diameterMm * 1.5).roundToDouble(),
+                              widthMm: p.diameterMm,
+                              rotationDeg: 0.0,
+                            ),
+                          );
+                        }
+                      } else {
+                        viewModel.updatePunch(
+                          punch.copyWith(
+                            type: PunchType.ellipse,
+                            lengthMm: (punch.diameterMm * 1.5).roundToDouble(),
+                            widthMm: punch.diameterMm,
+                            rotationDeg: 0.0,
+                          ),
+                        );
+                      }
                     },
                   ),
                 ),
@@ -304,7 +372,15 @@ class PunchPropertySheet extends StatelessWidget {
                         decimals: 1,
                         suffix: 'mm',
                         onChanged: (val) {
-                          viewModel.updatePunch(punch.copyWith(lengthMm: val, widthMm: punch.type == PunchType.square ? val : punch.widthMm));
+                          if (isMulti) {
+                            viewModel.updateSelectedPunches(
+                              punchIds: punchIds,
+                              lengthMm: val,
+                              widthMm: punch.type == PunchType.square ? val : null,
+                            );
+                          } else {
+                            viewModel.updatePunch(punch.copyWith(lengthMm: val, widthMm: punch.type == PunchType.square ? val : punch.widthMm));
+                          }
                         },
                       ),
                     ),
@@ -319,7 +395,15 @@ class PunchPropertySheet extends StatelessWidget {
                         decimals: 1,
                         suffix: 'mm',
                         onChanged: (val) {
-                          viewModel.updatePunch(punch.copyWith(widthMm: val, lengthMm: punch.type == PunchType.square ? val : punch.lengthMm));
+                          if (isMulti) {
+                            viewModel.updateSelectedPunches(
+                              punchIds: punchIds,
+                              widthMm: val,
+                              lengthMm: punch.type == PunchType.square ? val : null,
+                            );
+                          } else {
+                            viewModel.updatePunch(punch.copyWith(widthMm: val, lengthMm: punch.type == PunchType.square ? val : punch.lengthMm));
+                          }
                         },
                       ),
                     ),
@@ -328,11 +412,41 @@ class PunchPropertySheet extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    _presetSizeChip('10x10', 10.0, () => viewModel.updatePunch(punch.copyWith(lengthMm: 10.0, widthMm: 10.0))),
-                    _presetSizeChip('15x15', 15.0, () => viewModel.updatePunch(punch.copyWith(lengthMm: 15.0, widthMm: 15.0))),
-                    _presetSizeChip('20x20', 20.0, () => viewModel.updatePunch(punch.copyWith(lengthMm: 20.0, widthMm: 20.0))),
-                    _presetSizeChip('25x25', 25.0, () => viewModel.updatePunch(punch.copyWith(lengthMm: 25.0, widthMm: 25.0))),
-                    _presetSizeChip('30x30', 30.0, () => viewModel.updatePunch(punch.copyWith(lengthMm: 30.0, widthMm: 30.0))),
+                    _presetSizeChip('10x10', 10.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, lengthMm: 10.0, widthMm: 10.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(lengthMm: 10.0, widthMm: 10.0));
+                      }
+                    }),
+                    _presetSizeChip('15x15', 15.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, lengthMm: 15.0, widthMm: 15.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(lengthMm: 15.0, widthMm: 15.0));
+                      }
+                    }),
+                    _presetSizeChip('20x20', 20.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, lengthMm: 20.0, widthMm: 20.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(lengthMm: 20.0, widthMm: 20.0));
+                      }
+                    }),
+                    _presetSizeChip('25x25', 25.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, lengthMm: 25.0, widthMm: 25.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(lengthMm: 25.0, widthMm: 25.0));
+                      }
+                    }),
+                    _presetSizeChip('30x30', 30.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, lengthMm: 30.0, widthMm: 30.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(lengthMm: 30.0, widthMm: 30.0));
+                      }
+                    }),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -386,7 +500,11 @@ class PunchPropertySheet extends StatelessWidget {
                     divisions: math.max(1, ((math.max(60.0, punch.lengthMm) - 2.0) * 2).round()),
                     onChanged: (val) {
                       final rounded = (val * 2).round() / 2.0;
-                      viewModel.updatePunch(punch.copyWith(lengthMm: rounded));
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, lengthMm: rounded);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(lengthMm: rounded));
+                      }
                     },
                   ),
                 ),
@@ -422,15 +540,37 @@ class PunchPropertySheet extends StatelessWidget {
                     divisions: math.max(1, ((math.max(60.0, punch.widthMm) - 2.0) * 2).round()),
                     onChanged: (val) {
                       final rounded = (val * 2).round() / 2.0;
-                      viewModel.updatePunch(punch.copyWith(widthMm: rounded));
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, widthMm: rounded);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(widthMm: rounded));
+                      }
                     },
                   ),
                 ),
                 Row(
                   children: [
-                    _presetSizeChip('18x12', 18.0, () => viewModel.updatePunch(punch.copyWith(lengthMm: 18.0, widthMm: 12.0))),
-                    _presetSizeChip('25x15', 25.0, () => viewModel.updatePunch(punch.copyWith(lengthMm: 25.0, widthMm: 15.0))),
-                    _presetSizeChip('30x20', 30.0, () => viewModel.updatePunch(punch.copyWith(lengthMm: 30.0, widthMm: 20.0))),
+                    _presetSizeChip('18x12', 18.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, lengthMm: 18.0, widthMm: 12.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(lengthMm: 18.0, widthMm: 12.0));
+                      }
+                    }),
+                    _presetSizeChip('25x15', 25.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, lengthMm: 25.0, widthMm: 15.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(lengthMm: 25.0, widthMm: 15.0));
+                      }
+                    }),
+                    _presetSizeChip('30x20', 30.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, lengthMm: 30.0, widthMm: 20.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(lengthMm: 30.0, widthMm: 20.0));
+                      }
+                    }),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -448,7 +588,15 @@ class PunchPropertySheet extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                     ),
                     onPressed: () {
-                      viewModel.updatePunch(punch.copyWith(type: PunchType.roundHole, diameterMm: punch.widthMm, rotationDeg: 0.0));
+                      if (isMulti) {
+                        for (final p in punchList) {
+                          viewModel.updatePunch(
+                            p.copyWith(type: PunchType.roundHole, diameterMm: p.widthMm, rotationDeg: 0.0),
+                          );
+                        }
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(type: PunchType.roundHole, diameterMm: punch.widthMm, rotationDeg: 0.0));
+                      }
                     },
                   ),
                 ),
@@ -472,46 +620,66 @@ class PunchPropertySheet extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    _presetSizeChip('7x25', 7.0, () => viewModel.updatePunch(punch.copyWith(widthMm: 7.0, lengthMm: 25.0))),
-                    _presetSizeChip('9x25', 9.0, () => viewModel.updatePunch(punch.copyWith(widthMm: 9.0, lengthMm: 25.0))),
-                    _presetSizeChip('9x35', 9.0, () => viewModel.updatePunch(punch.copyWith(widthMm: 9.0, lengthMm: 35.0))),
+                    _presetSizeChip('7x25', 7.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, widthMm: 7.0, lengthMm: 25.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(widthMm: 7.0, lengthMm: 25.0));
+                      }
+                    }),
+                    _presetSizeChip('9x25', 9.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, widthMm: 9.0, lengthMm: 25.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(widthMm: 9.0, lengthMm: 25.0));
+                      }
+                    }),
+                    _presetSizeChip('9x35', 9.0, () {
+                      if (isMulti) {
+                        viewModel.updateSelectedPunches(punchIds: punchIds, widthMm: 9.0, lengthMm: 35.0);
+                      } else {
+                        viewModel.updatePunch(punch.copyWith(widthMm: 9.0, lengthMm: 35.0));
+                      }
+                    }),
                   ],
                 ),
               ],
               const SizedBox(height: 12),
 
-              // Constraint Readout & Positioning
-              const Text(
-                'EDGE CONSTRAINTS (MM)',
-                style: TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: _constraintBox(
-                      label: 'Left Edge (X)',
-                      value: constraints.distFromLeftMm,
-                      onChanged: (newX) => viewModel.setPunchEdgeConstraint(punchId: punch.id, referenceEdge: 'Left', targetDistanceMm: newX),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _constraintBox(
-                      label: 'Bottom Edge (Y)',
-                      value: constraints.distFromBottomMm,
-                      onChanged: (newY) => viewModel.setPunchEdgeConstraint(punchId: punch.id, referenceEdge: 'Bottom', targetDistanceMm: newY),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              if (constraints.distToNearestBendMm != null)
-                Text(
-                  'Nearest Bend (${constraints.nearestBendId}): ${constraints.distToNearestBendMm!.toStringAsFixed(1)} mm',
-                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 10, fontFamily: 'monospace'),
+              // Constraint Readout & Positioning (only for individual selection)
+              if (!isMulti) ...[
+                const Text(
+                  'EDGE CONSTRAINTS (MM)',
+                  style: TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.bold),
                 ),
-              const SizedBox(height: 10),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _constraintBox(
+                        label: 'Left Edge (X)',
+                        value: constraints.distFromLeftMm,
+                        onChanged: (newX) => viewModel.setPunchEdgeConstraint(punchId: punch.id, referenceEdge: 'Left', targetDistanceMm: newX),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: _constraintBox(
+                        label: 'Bottom Edge (Y)',
+                        value: constraints.distFromBottomMm,
+                        onChanged: (newY) => viewModel.setPunchEdgeConstraint(punchId: punch.id, referenceEdge: 'Bottom', targetDistanceMm: newY),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if (constraints.distToNearestBendMm != null)
+                  Text(
+                    'Nearest Bend (${constraints.nearestBendId}): ${constraints.distToNearestBendMm!.toStringAsFixed(1)} mm',
+                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 10, fontFamily: 'monospace'),
+                  ),
+                const SizedBox(height: 10),
+              ],
 
               // Rotation: Interactive dial for obround, ellipse, and other non-circular punches (SS2)
               // Note: Circles are rotationally invariant, so rotation is omitted for round holes
@@ -519,7 +687,13 @@ class PunchPropertySheet extends StatelessWidget {
                 RotationDialWidget(
                   angleDeg: punch.rotationDeg,
                   label: 'Rotation Dial',
-                  onAngleChanged: (newAngle) => viewModel.updatePunch(punch.copyWith(rotationDeg: newAngle)),
+                  onAngleChanged: (newAngle) {
+                    if (isMulti) {
+                      viewModel.updateSelectedPunches(punchIds: punchIds, rotationDeg: newAngle);
+                    } else {
+                      viewModel.updatePunch(punch.copyWith(rotationDeg: newAngle));
+                    }
+                  },
                 ),
                 const SizedBox(height: 10),
               ],
@@ -536,15 +710,21 @@ class PunchPropertySheet extends StatelessWidget {
                   ),
                   IconButton(
                     icon: Icon(
-                      punch.showLabel ? Icons.visibility : Icons.visibility_off,
+                      allShowLabel ? Icons.visibility : Icons.visibility_off,
                       size: 16,
-                      color: punch.showLabel ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
+                      color: allShowLabel ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
                     ),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
                     splashRadius: 14,
-                    tooltip: punch.showLabel ? 'Hide Size Dimension' : 'Show Size Dimension',
-                    onPressed: () => viewModel.togglePunchLabel(punch.id),
+                    tooltip: allShowLabel ? 'Hide Size Dimension' : 'Show Size Dimension',
+                    onPressed: () {
+                      if (isMulti) {
+                        viewModel.toggleSelectedPunchesLabel(punchIds: punchIds, showLabel: !allShowLabel);
+                      } else {
+                        viewModel.togglePunchLabel(punch.id);
+                      }
+                    },
                   ),
                 ],
               ),
@@ -554,13 +734,22 @@ class PunchPropertySheet extends StatelessWidget {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.delete_outline, size: 14, color: Color(0xFFDC2626)),
-                  label: const Text('Delete Punch', style: TextStyle(color: Color(0xFFDC2626), fontSize: 11)),
+                  label: Text(
+                    isMulti ? 'Delete ${punchList.length} Punches' : 'Delete Punch',
+                    style: const TextStyle(color: Color(0xFFDC2626), fontSize: 11),
+                  ),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Color(0xFFDC2626), width: 0.8),
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                   ),
-                  onPressed: () => viewModel.deleteSelectedPunch(),
+                  onPressed: () {
+                    if (isMulti) {
+                      viewModel.deleteSelectedEntities();
+                    } else {
+                      viewModel.deleteSelectedPunch();
+                    }
+                  },
                 ),
               ),
             ],

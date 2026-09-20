@@ -602,6 +602,26 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
         const SingleActivator(LogicalKeyboardKey.keyS, meta: true): _handleSaveActiveFile,
         const SingleActivator(LogicalKeyboardKey.keyS, control: true, shift: true): _handleSaveAsActiveFile,
         const SingleActivator(LogicalKeyboardKey.keyS, meta: true, shift: true): _handleSaveAsActiveFile,
+        const SingleActivator(LogicalKeyboardKey.digit1, control: true): () {
+          _viewModel.togglePropertyInspector();
+          setState(() {});
+        },
+        const SingleActivator(LogicalKeyboardKey.digit1, meta: true): () {
+          _viewModel.togglePropertyInspector();
+          setState(() {});
+        },
+        const SingleActivator(LogicalKeyboardKey.keyI, control: true): () {
+          _viewModel.togglePropertyInspector();
+          setState(() {});
+        },
+        const SingleActivator(LogicalKeyboardKey.keyI, meta: true): () {
+          _viewModel.togglePropertyInspector();
+          setState(() {});
+        },
+        const SingleActivator(LogicalKeyboardKey.f4): () {
+          _viewModel.togglePropertyInspector();
+          setState(() {});
+        },
       },
       child: Focus(
         focusNode: _focusNode,
@@ -666,6 +686,16 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
 
             if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyA) {
               _viewModel.selectAll();
+              setState(() {});
+              return KeyEventResult.handled;
+            }
+
+            // Toggle CAD Properties Inspector (Ctrl+1 / Ctrl+I / F4)
+            if ((isCtrl &&
+                    (event.logicalKey == LogicalKeyboardKey.digit1 ||
+                        event.logicalKey == LogicalKeyboardKey.keyI)) ||
+                event.logicalKey == LogicalKeyboardKey.f4) {
+              _viewModel.togglePropertyInspector();
               setState(() {});
               return KeyEventResult.handled;
             }
@@ -820,7 +850,12 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                       child: ClipRect(
                                         child: Stack(
                                           children: [
-                                            UnfoldedCanvasWidget(viewModel: _viewModel, renderFloatingInspectors: false, showInCanvasToolRibbon: false),
+                                            UnfoldedCanvasWidget(
+                                              key: const ValueKey('unfolded_canvas_viewport'),
+                                              viewModel: _viewModel,
+                                              renderFloatingInspectors: false,
+                                              showInCanvasToolRibbon: false,
+                                            ),
                                             _buildCanvasTopTipBanner(_viewModel),
                                           ],
                                         ),
@@ -1005,19 +1040,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                 ),
 
                                 // Draggable Floating CAD Property Inspector (Spans across 2D and 3D viewports)
-                                if (_viewModel.isPropertyInspectorOpen &&
-                                    (_viewModel.selectedBendId != null ||
-                                        _viewModel.selectedCutId != null ||
-                                        _viewModel.selectedPunchId != null ||
-                                        _viewModel.selectedPatternId != null ||
-                                        _viewModel.selectedDimensionId != null ||
-                                        _viewModel.selectedArcId != null ||
-                                        _viewModel.selectedFaceId != null ||
-                                        (_viewModel.isTemplateActive && _viewModel.activeTemplate != null) ||
-                                        (_viewModel.toolMode != StudioToolMode.select &&
-                                            _viewModel.toolMode != StudioToolMode.pan &&
-                                            _viewModel.toolMode != StudioToolMode.addCut &&
-                                            _viewModel.toolMode != StudioToolMode.setBaseAnchor)))
+                                if (_viewModel.isPropertyInspectorOpen)
                                   Positioned(
                                     left: _inspectorPosition.dx.clamp(8.0, math.max(8.0, totalW - 290.0)),
                                     top: _inspectorPosition.dy.clamp(8.0, math.max(8.0, totalH - 120.0)),
@@ -1060,15 +1083,8 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                     ),
                                   ),
 
-                                // Floating Reopen Button if Inspector is closed but an item is selected
-                                if (!_viewModel.isPropertyInspectorOpen &&
-                                    (_viewModel.selectedBendId != null ||
-                                        _viewModel.selectedCutId != null ||
-                                        _viewModel.selectedPunchId != null ||
-                                        _viewModel.selectedPatternId != null ||
-                                        _viewModel.selectedDimensionId != null ||
-                                        _viewModel.selectedArcId != null ||
-                                        _viewModel.selectedFaceId != null))
+                                // Floating Reopen Button if Inspector is closed
+                                if (!_viewModel.isPropertyInspectorOpen)
                                   Positioned(
                                     top: 12,
                                     right: 180,
@@ -1091,7 +1107,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                             Icon(Icons.tune, size: 14, color: Color(0xFF0284C7)),
                                             SizedBox(width: 4),
                                             Text(
-                                              'Properties',
+                                              'Properties (Ctrl+1)',
                                               style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
                                             ),
                                           ],

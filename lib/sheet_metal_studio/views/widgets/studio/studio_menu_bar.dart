@@ -374,6 +374,16 @@ class StudioMenuBar extends StatelessWidget {
       ),
       const PopupMenuDivider(),
       _buildItem(
+        icon: Icons.tune,
+        title: 'Properties Inspector',
+        subtitle: vm.isPropertyInspectorOpen
+            ? 'Hide floating properties panel'
+            : 'Show properties for active selection',
+        shortcut: 'Ctrl+1',
+        themeColor: col,
+        onTap: vm.togglePropertyInspector,
+      ),
+      _buildItem(
         icon: Icons.select_all,
         title: 'Select All',
         subtitle: 'Select all entities on canvas',
@@ -806,17 +816,20 @@ class StudioMenuBar extends StatelessWidget {
       _buildMenuHeader('Workspace & Inspectors', col),
       _buildItem(
         icon: Icons.tune,
+        title: 'CAD Properties Inspector',
+        subtitle: vm.isPropertyInspectorOpen
+            ? 'Hide floating properties panel'
+            : 'Inspect & edit part/selection parameters',
+        shortcut: 'Ctrl+1',
+        themeColor: col,
+        onTap: vm.togglePropertyInspector,
+      ),
+      _buildItem(
+        icon: Icons.auto_awesome,
         title: 'DSF Parameter Inspector',
         subtitle: 'Auto-fold rules and metadata inspector',
         themeColor: col,
         onTap: onFittingDetails ?? () => vm.setFittingInspectorOpen(true),
-      ),
-      _buildItem(
-        icon: Icons.view_sidebar,
-        title: 'Feature Properties Inspector',
-        subtitle: 'Inspect & edit selected line/bend parameters',
-        themeColor: col,
-        onTap: () => vm.setPropertyInspectorOpen(true),
       ),
       const PopupMenuDivider(),
       _buildItem(

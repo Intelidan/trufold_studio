@@ -314,6 +314,9 @@ class StudioCommandDelta {
       if (actionType == 'add_arc') {
         return current.copyWith(arcs: current.arcs.where((a) => a.id != targetId).toList());
       }
+      if (actionType == 'add_cut') {
+        return current.copyWith(cutLines: current.cutLines.where((c) => c.id != targetId).toList());
+      }
     }
 
     return current;
@@ -440,6 +443,9 @@ class StudioCommandDelta {
 
   /// Reconstructs a StudioCommandDelta from a legacy featureHistory audit log entry
   factory StudioCommandDelta.fromLegacyHistoryEntry(Map<String, dynamic> entry) {
+    if (entry['delta'] is Map<String, dynamic>) {
+      return StudioCommandDelta.fromJson(entry['delta'] as Map<String, dynamic>);
+    }
     final action = entry['action'] as String? ?? 'modify';
     final desc = entry['description'] as String? ?? 'Historical Action';
     final targetId = entry['targetId'] as String?;

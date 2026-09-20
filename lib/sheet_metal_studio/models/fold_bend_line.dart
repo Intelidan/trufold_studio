@@ -222,6 +222,50 @@ class FoldBendLine {
         allowanceOverride: (json['allowanceOverride'] as num?)?.toDouble(),
         deductionOverride: (json['deductionOverride'] as num?)?.toDouble(),
       );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FoldBendLine &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          p1 == other.p1 &&
+          p2 == other.p2 &&
+          direction == other.direction &&
+          (targetAngleDeg - other.targetAngleDeg).abs() < 1e-6 &&
+          (radiusMm - other.radiusMm).abs() < 1e-6 &&
+          role == other.role &&
+          layer == other.layer &&
+          parentFaceId == other.parentFaceId &&
+          childFaceId == other.childFaceId &&
+          showLabel == other.showLabel &&
+          isVisible == other.isVisible &&
+          kFactor == other.kFactor &&
+          reliefType == other.reliefType &&
+          reliefWidthMm == other.reliefWidthMm &&
+          reliefDepthMm == other.reliefDepthMm &&
+          allowanceOverride == other.allowanceOverride &&
+          deductionOverride == other.deductionOverride;
+
+  @override
+  int get hashCode => Object.hash(
+        id,
+        p1,
+        p2,
+        direction,
+        targetAngleDeg,
+        radiusMm,
+        role,
+        layer,
+        parentFaceId,
+        childFaceId,
+        showLabel,
+        isVisible,
+        kFactor,
+        reliefType,
+        reliefWidthMm,
+        reliefDepthMm,
+      );
 }
 
 typedef FoldDirection = BendDirection;

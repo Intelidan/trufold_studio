@@ -185,5 +185,19 @@ class CadLineSegment {
   );
 
   @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CadLineSegment &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          p1 == other.p1 &&
+          p2 == other.p2 &&
+          layer == other.layer &&
+          showLabel == other.showLabel;
+
+  @override
+  int get hashCode => Object.hash(id, p1, p2, layer, showLabel);
+
+  @override
   String toString() => 'CadLineSegment($id, p1: $p1, p2: $p2, layer: $layer, showLabel: $showLabel)';
 }

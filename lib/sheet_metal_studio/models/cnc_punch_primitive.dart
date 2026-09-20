@@ -337,4 +337,44 @@ class CncPunchPrimitive {
     associatedPortId: json['associatedPortId'] as String?,
     customBoundary: (json['customBoundary'] as List<dynamic>?)?.map((e) => CadPoint2D.fromJson(e as Map<String, dynamic>)).toList(),
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CncPunchPrimitive &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          type == other.type &&
+          center == other.center &&
+          (widthMm - other.widthMm).abs() < 1e-6 &&
+          (lengthMm - other.lengthMm).abs() < 1e-6 &&
+          (diameterMm - other.diameterMm).abs() < 1e-6 &&
+          (rotationDeg - other.rotationDeg).abs() < 1e-6 &&
+          role == other.role &&
+          layer == other.layer &&
+          showLabel == other.showLabel &&
+          isVisible == other.isVisible &&
+          (spacingX - other.spacingX).abs() < 1e-6 &&
+          (spacingY - other.spacingY).abs() < 1e-6 &&
+          countX == other.countX &&
+          countY == other.countY &&
+          parentFaceId == other.parentFaceId &&
+          associatedPortId == other.associatedPortId;
+
+  @override
+  int get hashCode => Object.hash(
+        id,
+        type,
+        center,
+        widthMm,
+        lengthMm,
+        diameterMm,
+        rotationDeg,
+        role,
+        layer,
+        showLabel,
+        isVisible,
+        parentFaceId,
+        associatedPortId,
+      );
 }

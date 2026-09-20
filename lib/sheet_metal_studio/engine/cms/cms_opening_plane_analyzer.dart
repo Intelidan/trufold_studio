@@ -101,8 +101,53 @@ class CmsOpeningPlaneAnalyzer {
       hy /= hLen;
       hz /= hLen;
     }
-    // Ensure heightDirection points UP (+Z)
-    if (hz < -1e-4) {
+
+    // Determine the true height direction towards the standing channel walls.
+    // 1st Priority: Check projection of 3D sidewall vertices in foldResult.
+    bool orientedBySidewalls = false;
+    if (foldResult != null && foldResult.polygons.isNotEmpty && raw.sidewallFaceIds.isNotEmpty) {
+      double dotSum = 0.0;
+      int count = 0;
+      for (final poly in foldResult.polygons) {
+        if (raw.sidewallFaceIds.contains(poly.faceId)) {
+          for (final v in poly.vertices) {
+            final proj = (v.x - p1.x) * hx + (v.y - p1.y) * hy + (v.z - p1.z) * hz;
+            if (proj.abs() > 2.0) {
+              dotSum += proj;
+              count++;
+            }
+          }
+        }
+      }
+      if (count > 0 && dotSum.abs() > 1e-3) {
+        if (dotSum < 0) {
+          hx = -hx;
+          hy = -hy;
+          hz = -hz;
+        }
+        orientedBySidewalls = true;
+      }
+    }
+
+    // 2nd Priority: Check floor face normal in 3D (walls fold toward the floor face normal).
+    if (!orientedBySidewalls && foldResult != null && foldResult.polygons.isNotEmpty) {
+      final floorPoly = foldResult.polygons.where((p) => p.faceId == raw.floorFaceId).firstOrNull;
+      if (floorPoly != null) {
+        final floorNorm = floorPoly.normal;
+        final align = hx * floorNorm.x + hy * floorNorm.y + hz * floorNorm.z;
+        if (align.abs() > 0.1) {
+          if (align < 0) {
+            hx = -hx;
+            hy = -hy;
+            hz = -hz;
+          }
+          orientedBySidewalls = true;
+        }
+      }
+    }
+
+    // 3rd Priority / Fallback: If no mesh available, default to +Z
+    if (!orientedBySidewalls && hz < -1e-4) {
       hx = -hx;
       hy = -hy;
       hz = -hz;
@@ -198,22 +243,40 @@ class CmsOpeningPlaneAnalyzer {
 
     // Clamp measuredHeight if derived mouth corners would protrude beyond the folded part boundary
     if (foldResult != null && foldResult.polygons.isNotEmpty) {
+      double minZ = double.infinity;
       double maxZ = -double.infinity;
       for (final poly in foldResult.polygons) {
         for (final v in poly.vertices) {
+          if (v.z < minZ) minZ = v.z;
           if (v.z > maxZ) maxZ = v.z;
         }
       }
-      if (maxZ.isFinite && maxZ > 0) {
-        final currentMaxZ = math.max(
-          p1.z + measuredHeight * heightDirection.z,
-          p2.z + measuredHeight * heightDirection.z,
-        );
-        if (currentMaxZ > maxZ + 1.5 && heightDirection.z.abs() > 1e-4) {
-          final excessZ = currentMaxZ - maxZ;
-          final clampedHeight = measuredHeight - excessZ / heightDirection.z.abs();
-          if (clampedHeight > 15.0) {
-            measuredHeight = clampedHeight;
+      if (maxZ.isFinite && minZ.isFinite) {
+        // Check +Z protrusion
+        if (heightDirection.z > 1e-4) {
+          final currentMaxZ = math.max(
+            p1.z + measuredHeight * heightDirection.z,
+            p2.z + measuredHeight * heightDirection.z,
+          );
+          if (currentMaxZ > maxZ + 1.5) {
+            final excessZ = currentMaxZ - maxZ;
+            final clampedHeight = measuredHeight - excessZ / heightDirection.z;
+            if (clampedHeight > 15.0) {
+              measuredHeight = clampedHeight;
+            }
+          }
+        } else if (heightDirection.z < -1e-4) {
+          // Check -Z protrusion
+          final currentMinZ = math.min(
+            p1.z + measuredHeight * heightDirection.z,
+            p2.z + measuredHeight * heightDirection.z,
+          );
+          if (currentMinZ < minZ - 1.5) {
+            final excessZ = minZ - currentMinZ;
+            final clampedHeight = measuredHeight - excessZ / (-heightDirection.z);
+            if (clampedHeight > 15.0) {
+              measuredHeight = clampedHeight;
+            }
           }
         }
       }
