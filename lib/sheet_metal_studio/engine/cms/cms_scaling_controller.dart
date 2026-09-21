@@ -361,11 +361,38 @@ class CmsScalingController extends ChangeNotifier {
     }
 
     // Geometrically detect riser topology directly from document features
+    if (isOutsideRiserGeometry(baselineDocument)) {
+      return CmsScalingProfile.outsideRiser;
+    }
     if (isInsideRiserGeometry(baselineDocument)) {
       return CmsScalingProfile.insideRiser;
     }
 
     return contract.scalingProfile;
+  }
+
+  /// Geometrically detects whether [doc] is an Outside Riser.
+  /// Outside risers have parallel vertical cheek bends (B1, B2) and flange bends (FL1, FL2)
+  /// or 'outside' keywords, with no transverse floor bend across the central floor web.
+  bool isOutsideRiserGeometry(DsfDocument doc) {
+    final docType = '${doc.productType} ${doc.itemName}'.toLowerCase();
+    if (docType.contains('outside') && (docType.contains('riser') || docType.contains('rise'))) {
+      return true;
+    }
+
+    final vertBends = doc.bends.where((b) {
+      final dx = (b.p2.x - b.p1.x).abs();
+      final dy = (b.p2.y - b.p1.y).abs();
+      return dy > dx * 1.5;
+    }).toList();
+
+    final hasTransverseBend = doc.bends.any((b) {
+      final dx = (b.p2.x - b.p1.x).abs();
+      final dy = (b.p2.y - b.p1.y).abs();
+      return dx > dy * 1.5;
+    });
+
+    return vertBends.length >= 2 && !hasTransverseBend && docType.contains('outside');
   }
 
   // ---------------------------------------------------------------------------
@@ -400,10 +427,18 @@ class CmsScalingController extends ChangeNotifier {
 
     final profile = effectiveScalingProfile;
 
-    // 1. Dedicated Riser Scaling Profile (Section 2, 3, 4)
-    if (profile == CmsScalingProfile.insideRiser ||
-        profile == CmsScalingProfile.outsideRiser ||
-        isInsideRiserGeometry(baseline)) {
+    // 1. Dedicated Outside Riser Scaling Profile
+    if (profile == CmsScalingProfile.outsideRiser || isOutsideRiserGeometry(baseline)) {
+      if (paramId == 'width') {
+        return _scaleOutsideRiserWidth2D(baseline, delta);
+      } else if (paramId == 'height') {
+        return _scaleOutsideRiserHeight2D(baseline, delta);
+      }
+      return baseline;
+    }
+
+    // 2. Dedicated Inside Riser Scaling Profile
+    if (profile == CmsScalingProfile.insideRiser || isInsideRiserGeometry(baseline)) {
       if (paramId == 'width') {
         return _scaleRiserWidth2D(baseline, delta);
       } else if (paramId == 'height') {
@@ -457,16 +492,33 @@ class CmsScalingController extends ChangeNotifier {
   DsfDocument _scaleRiserWidth2D(DsfDocument baseline, double delta) {
     if (baseline.bends.isEmpty) return baseline;
 
-    final longBends = baseline.bends.where((b) {
-      final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
-      final isStructural = b.role != BendLineRole.flange;
-      return is90 && isStructural;
-    }).toList();
+    final b45 = baseline.bends.firstWhere(
+      (b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0,
+      orElse: () => baseline.bends.first,
+    );
+    final has45 = (b45.targetAngleDeg.abs() - 45.0).abs() < 15.0;
 
-    if (longBends.length < 2) return _scaleWidth2D(baseline, delta);
+    double x1;
+    double x2;
+    if (has45 && (b45.p2.x - b45.p1.x).abs() > 20.0) {
+      x1 = math.min(b45.p1.x, b45.p2.x);
+      x2 = math.max(b45.p1.x, b45.p2.x);
+    } else {
+      final vertBends = baseline.bends
+          .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0)
+          .toList()
+        ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+      if (vertBends.length >= 4) {
+        x1 = math.min((vertBends[1].p1.x + vertBends[1].p2.x) / 2.0, (vertBends[vertBends.length - 2].p1.x + vertBends[vertBends.length - 2].p2.x) / 2.0);
+        x2 = math.max((vertBends[1].p1.x + vertBends[1].p2.x) / 2.0, (vertBends[vertBends.length - 2].p1.x + vertBends[vertBends.length - 2].p2.x) / 2.0);
+      } else if (vertBends.length >= 2) {
+        x1 = math.min((vertBends.first.p1.x + vertBends.first.p2.x) / 2.0, (vertBends.last.p1.x + vertBends.last.p2.x) / 2.0);
+        x2 = math.max((vertBends.first.p1.x + vertBends.first.p2.x) / 2.0, (vertBends.last.p1.x + vertBends.last.p2.x) / 2.0);
+      } else {
+        return _scaleWidth2D(baseline, delta);
+      }
+    }
 
-    final x1 = math.min(longBends[0].p1.x, longBends[1].p1.x);
-    final x2 = math.max(longBends[0].p1.x, longBends[1].p1.x);
     final floorSpan = x2 - x1;
     if (floorSpan < 10.0) return _scaleWidth2D(baseline, delta);
 
@@ -528,23 +580,366 @@ class CmsScalingController extends ChangeNotifier {
       outerContour: newContour,
       bends: newBends,
       faces: newFaces.isNotEmpty ? newFaces : decomp.faces,
+      baseFaceId: baseline.baseFaceId.isNotEmpty ? baseline.baseFaceId : decomp.baseFaceId,
+      punches: newPunches,
+      cutLines: newCutLines,
+      arcs: newArcs,
+    );
+
+    // If baseline topology is already established and complete, preserve it directly!
+    final hasCompleteTopology = baseline.faces.isNotEmpty &&
+        baseline.bends.isNotEmpty &&
+        baseline.bends.every((b) => b.parentFaceId.isNotEmpty);
+
+    if (hasCompleteTopology) {
+      return doc;
+    }
+
+    final yB3 = has45 ? b45.p1.y : 128.65;
+    return _normalizeRiserTopology(doc, x1 - halfDelta, x2 + halfDelta, yB3);
+  }
+
+  /// Dedicated 2D Outside Riser Width Scaling:
+  /// - Floor web between B1 and B2 expands symmetrically along X by delta.
+  /// - B1 and Left Cheek & Flange translate rigidly outward by -delta/2.
+  /// - B2 and Right Cheek & Flange translate rigidly outward by +delta/2.
+  /// - Flared cheek mouth prongs above the floor web (y > yFloorTop) are partitioned
+  ///   strictly by centerline (xMid), ensuring the inner throat cuts and 45° mouths
+  ///   translate rigidly with zero skewing, tearing, or angular distortion.
+  /// - Coupler slots translate rigidly with their host cheek with zero distortion.
+  DsfDocument _scaleOutsideRiserWidth2D(DsfDocument baseline, double delta) {
+    if (baseline.bends.isEmpty) return baseline;
+
+    final vertBends = baseline.bends
+        .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
+        .toList()
+      ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+
+    if (vertBends.length < 2) return _scaleWidth2D(baseline, delta);
+
+    final b1 = vertBends.first;
+    final b2 = vertBends.last;
+    final x1 = math.min((b1.p1.x + b1.p2.x) / 2.0, (b2.p1.x + b2.p2.x) / 2.0);
+    final x2 = math.max((b1.p1.x + b1.p2.x) / 2.0, (b2.p1.x + b2.p2.x) / 2.0);
+    final xMid = (x1 + x2) / 2.0;
+    final floorSpan = x2 - x1;
+    if (floorSpan < 10.0) return _scaleWidth2D(baseline, delta);
+
+    final halfDelta = delta / 2.0;
+    final yFloorTop = math.max(math.max(b1.p1.y, b1.p2.y), math.max(b2.p1.y, b2.p2.y));
+
+    CadPoint2D transformPt(CadPoint2D pt) {
+      // 1. Above floor web (flared cheek prongs):
+      // The cheek throat notch reaches inward into x1 < x < x2.
+      // Partition strictly by midX so that each cheek translates 100% rigidly.
+      if (pt.y > yFloorTop + 0.5) {
+        return pt.x < xMid
+            ? CadPoint2D(pt.x - halfDelta, pt.y)
+            : CadPoint2D(pt.x + halfDelta, pt.y);
+      }
+
+      // 2. Straight sidewall cheeks and flanges
+      if (pt.x <= x1 + 0.5) {
+        return CadPoint2D(pt.x - halfDelta, pt.y);
+      } else if (pt.x >= x2 - 0.5) {
+        return CadPoint2D(pt.x + halfDelta, pt.y);
+      } else {
+        // 3. Central Floor Web: expands symmetrically along X
+        final u = (pt.x - x1) / floorSpan;
+        final newX = (x1 - halfDelta) + u * (floorSpan + delta);
+        return CadPoint2D(newX, pt.y);
+      }
+    }
+
+    final newContour = baseline.outerContour.map(transformPt).toList();
+
+    final newBends = baseline.bends.map((b) {
+      return b.copyWith(
+        p1: transformPt(b.p1),
+        p2: transformPt(b.p2),
+      );
+    }).toList();
+
+    final newFaces = baseline.faces.map((f) {
+      final newVerts = f.vertices.map(transformPt).toList();
+      return f.copyWith(vertices: newVerts);
+    }).toList();
+
+    final newPunches = baseline.punches.map((p) {
+      return p.copyWith(
+        center: transformPt(p.center),
+      );
+    }).toList();
+
+    final newCutLines = baseline.cutLines.map((cl) {
+      return cl.copyWith(
+        p1: transformPt(cl.p1),
+        p2: transformPt(cl.p2),
+      );
+    }).toList();
+
+    final newArcs = baseline.arcs.map((a) {
+      final newCenter = transformPt(a.center);
+      final dx = newCenter.x - a.center.x;
+      final dy = newCenter.y - a.center.y;
+      return a.translate(dx, dy);
+    }).toList();
+
+    final decomp = PlanarFaceDecomposer.decompose(
+      outerContour: newContour,
+      bends: newBends,
+      cutLines: newCutLines,
+    );
+
+    final doc = baseline.copyWith(
+      outerContour: newContour,
+      bends: newBends,
+      faces: newFaces.isNotEmpty ? newFaces : decomp.faces,
       baseFaceId: baseline.baseFaceId,
       punches: newPunches,
       cutLines: newCutLines,
       arcs: newArcs,
     );
 
-    final b3 = baseline.bends.firstWhere(
-      (b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0,
-      orElse: () => baseline.bends.first,
-    );
-    final yB3 = b3.p1.y;
+    // If baseline topology is already established and complete, preserve it directly!
+    final hasCompleteTopology = baseline.faces.isNotEmpty &&
+        baseline.bends.isNotEmpty &&
+        baseline.bends.every((b) => b.parentFaceId.isNotEmpty);
 
-    return _normalizeRiserTopology(doc, x1 - halfDelta, x2 + halfDelta, yB3);
+    if (hasCompleteTopology) {
+      return doc;
+    }
+
+    return _normalizeRiserTopology(doc, x1 - halfDelta, x2 + halfDelta, yFloorTop);
   }
 
-  /// Dedicated 2D Riser Height Scaling:
-  /// Dedicated 2D Riser Height Scaling:
+  /// Dedicated 2D Outside Riser Height Scaling:
+  /// - Central Floor Web (between x1 and x2) and vertical bend lines B1 and B2 remain 100% stationary and parallel.
+  /// - Sidewall cheeks expand outward along X by delta (FL1 shifts by -delta, FL2 shifts by +delta).
+  /// - Port 2 45° cheek mouth edges expand strictly along the 45° vector (±delta / sqrt(2), +delta / sqrt(2)),
+  ///   preserving the exact 45° miter angle (dy / dx = ±1.0) with zero angular distortion.
+  /// - Top miter cuts meet outer flanges at y + delta * (sqrt(2) - 1.0), preserving the 45° miter slope.
+  /// - Coupler slots translate rigidly on both straight mouths and 45° mouths, preserving mounting setbacks
+  ///   and orientations (0°, 45°, 135°) with zero distortion.
+  DsfDocument _scaleOutsideRiserHeight2D(DsfDocument baseline, double delta) {
+    if (baseline.bends.isEmpty) return baseline;
+
+    // Identify vertical bends
+    final vertBends = baseline.bends
+        .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0)
+        .toList()
+      ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+
+    double x1;
+    double x2;
+    double xFL1;
+    double xFL2;
+
+    if (vertBends.length >= 4) {
+      xFL1 = (vertBends[0].p1.x + vertBends[0].p2.x) / 2.0;
+      x1 = (vertBends[1].p1.x + vertBends[1].p2.x) / 2.0;
+      x2 = (vertBends[vertBends.length - 2].p1.x + vertBends[vertBends.length - 2].p2.x) / 2.0;
+      xFL2 = (vertBends.last.p1.x + vertBends.last.p2.x) / 2.0;
+    } else if (vertBends.length >= 2) {
+      x1 = (vertBends.first.p1.x + vertBends.first.p2.x) / 2.0;
+      x2 = (vertBends.last.p1.x + vertBends.last.p2.x) / 2.0;
+      final fl1Bends = baseline.bends.where((b) => b.p1.x < x1 - 10.0);
+      final fl2Bends = baseline.bends.where((b) => b.p1.x > x2 + 10.0);
+      xFL1 = fl1Bends.isNotEmpty ? fl1Bends.first.p1.x : x1 - 96.0;
+      xFL2 = fl2Bends.isNotEmpty ? fl2Bends.first.p1.x : x2 + 96.0;
+    } else {
+      return _scaleHeight2D(baseline, delta);
+    }
+
+    final b1Bend = vertBends.firstWhere(
+      (b) => ((b.p1.x + b.p2.x) / 2.0 - x1).abs() < 10.0,
+      orElse: () => vertBends.first,
+    );
+    final yFloorBottom = math.min(b1Bend.p1.y, b1Bend.p2.y);
+    final yFloorTop = math.max(b1Bend.p1.y, b1Bend.p2.y);
+    final xMid = (x1 + x2) / 2.0;
+
+    final dX45 = delta / math.sqrt(2);
+    final dY45 = delta / math.sqrt(2);
+    final dYStep = delta * (math.sqrt(2) - 1.0);
+
+    CadPoint2D transformPt(CadPoint2D pt) {
+      // 1. Central Floor Web & B1/B2 (between x1 and x2)
+      if (pt.x >= x1 - 0.5 && pt.x <= x2 + 0.5 && pt.y <= yFloorTop + 0.5) {
+        return pt;
+      }
+
+      // Throat inner relief notches (pt near throat apex between x1 and x2)
+      if (pt.y >= yFloorTop - 5.0 && pt.y <= yFloorTop + 30.0) {
+        if (pt.x > x1 - 0.5 && pt.x < xMid) {
+          return pt;
+        }
+        if (pt.x > xMid && pt.x < x2 + 0.5) {
+          return pt;
+        }
+      }
+
+      // 2. Left Cheek (pt.x <= x1)
+      if (pt.x <= x1 + 0.5) {
+        // Return flange and outer flange FL1 (x <= xFL1)
+        if (pt.x <= xFL1 + 0.5) {
+          if (pt.y <= yFloorBottom + 0.5) {
+            return CadPoint2D(pt.x - delta, pt.y);
+          } else {
+            return CadPoint2D(pt.x - delta, pt.y + dYStep);
+          }
+        }
+
+        // Port 1 mouth at bottom (y <= yFloorBottom)
+        if (pt.y <= yFloorBottom + 0.5) {
+          if (pt.x <= xFL1 + 5.5) {
+            return CadPoint2D(pt.x - delta, pt.y);
+          }
+          if (pt.x >= x1 - 5.5) {
+            return pt;
+          }
+          final t = (pt.x - (xFL1 + 5.0)) / (x1 - 5.0 - (xFL1 + 5.0));
+          final newX = (xFL1 + 5.0 - delta) + t * (x1 - 5.0 - (xFL1 + 5.0) + delta);
+          return CadPoint2D(newX, pt.y);
+        }
+
+        // Port 2 45° mouth outer corner and tip chamfer
+        if (pt.y > yFloorTop + 20.0) {
+          return CadPoint2D(pt.x - dX45, pt.y + dY45);
+        }
+      }
+
+      // 3. Right Cheek (pt.x >= x2)
+      if (pt.x >= x2 - 0.5) {
+        // Return flange and outer flange FL2 (x >= xFL2)
+        if (pt.x >= xFL2 - 0.5) {
+          if (pt.y <= yFloorBottom + 0.5) {
+            return CadPoint2D(pt.x + delta, pt.y);
+          } else {
+            return CadPoint2D(pt.x + delta, pt.y + dYStep);
+          }
+        }
+
+        // Port 1 mouth at bottom (y <= yFloorBottom)
+        if (pt.y <= yFloorBottom + 0.5) {
+          if (pt.x >= xFL2 - 5.5) {
+            return CadPoint2D(pt.x + delta, pt.y);
+          }
+          if (pt.x <= x2 + 5.5) {
+            return pt;
+          }
+          final t = (pt.x - (x2 + 5.0)) / (xFL2 - 5.0 - (x2 + 5.0));
+          final newX = (x2 + 5.0) + t * (xFL2 - 5.0 - (x2 + 5.0) + delta);
+          return CadPoint2D(newX, pt.y);
+        }
+
+        // Port 2 45° mouth outer corner and tip chamfer
+        if (pt.y > yFloorTop + 20.0) {
+          return CadPoint2D(pt.x + dX45, pt.y + dY45);
+        }
+      }
+
+      return pt;
+    }
+
+    CadPoint2D transformPunchCenter(CncPunchPrimitive p) {
+      final cx = p.center.x;
+      final cy = p.center.y;
+      if (cx < xMid) {
+        // Left Cheek
+        if (p.rotationDeg == 0.0) {
+          final xLeftMid = (xFL1 + x1) / 2.0;
+          if (cx <= xLeftMid) {
+            return CadPoint2D(cx - delta, cy); // SLOT_7 (outer)
+          } else {
+            return CadPoint2D(cx, cy); // SLOT_8 (inner)
+          }
+        } else {
+          if (cy >= yFloorTop + 35.0) {
+            return CadPoint2D(cx - dX45, cy + dY45); // SLOT_2 (outer)
+          } else {
+            return CadPoint2D(cx, cy); // SLOT_1 (inner)
+          }
+        }
+      } else {
+        // Right Cheek
+        if (p.rotationDeg == 0.0) {
+          final xRightMid = (x2 + xFL2) / 2.0;
+          if (cx >= xRightMid) {
+            return CadPoint2D(cx + delta, cy); // SLOT_5 (outer)
+          } else {
+            return CadPoint2D(cx, cy); // SLOT_6 (inner)
+          }
+        } else {
+          if (cy >= yFloorTop + 35.0) {
+            return CadPoint2D(cx + dX45, cy + dY45); // SLOT_4 (outer)
+          } else {
+            return CadPoint2D(cx, cy); // SLOT_3 (inner)
+          }
+        }
+      }
+    }
+
+    final newContour = baseline.outerContour.map(transformPt).toList();
+
+    final newBends = baseline.bends.map((b) {
+      if (b.role == BendLineRole.flange || b.id.toUpperCase().startsWith('FL')) {
+        final isLeft = ((b.p1.x + b.p2.x) / 2.0) < xMid;
+        final shiftX = isLeft ? -delta : delta;
+        final p1 = b.p1.y <= yFloorBottom + 1.0
+            ? CadPoint2D(b.p1.x + shiftX, b.p1.y)
+            : CadPoint2D(b.p1.x + shiftX, b.p1.y + dYStep);
+        final p2 = b.p2.y <= yFloorBottom + 1.0
+            ? CadPoint2D(b.p2.x + shiftX, b.p2.y)
+            : CadPoint2D(b.p2.x + shiftX, b.p2.y + dYStep);
+        return b.copyWith(p1: p1, p2: p2);
+      }
+      return b;
+    }).toList();
+
+    final newFaces = baseline.faces.map((f) {
+      final newVerts = f.vertices.map(transformPt).toList();
+      return f.copyWith(vertices: newVerts);
+    }).toList();
+
+    final newPunches = baseline.punches.map((p) {
+      return p.copyWith(
+        center: transformPunchCenter(p),
+      );
+    }).toList();
+
+    final newCutLines = baseline.cutLines.map((cl) {
+      return cl.copyWith(
+        p1: transformPt(cl.p1),
+        p2: transformPt(cl.p2),
+      );
+    }).toList();
+
+    final newArcs = baseline.arcs.map((a) {
+      final newCenter = transformPt(a.center);
+      final dx = newCenter.x - a.center.x;
+      final dy = newCenter.y - a.center.y;
+      return a.translate(dx, dy);
+    }).toList();
+
+    final decomp = PlanarFaceDecomposer.decompose(
+      outerContour: newContour,
+      bends: newBends,
+      cutLines: newCutLines,
+    );
+
+    return baseline.copyWith(
+      outerContour: newContour,
+      bends: decomp.connectedBends.isNotEmpty ? decomp.connectedBends : newBends,
+      faces: newFaces.isNotEmpty ? newFaces : decomp.faces,
+      baseFaceId: decomp.baseFaceId.isNotEmpty ? decomp.baseFaceId : baseline.baseFaceId,
+      punches: newPunches,
+      cutLines: newCutLines,
+      arcs: newArcs,
+    );
+  }
+
+  /// Dedicated 2D Inside Riser Height Scaling:
   /// - Sidewall cheeks expand outward along X by delta.
   /// - 45° riser prongs shift outward along both X and Y (±delta, +delta), preserving
   ///   the exact 45° miter angle (dy / dx = 1.0) so they touch the 45° bottom flap bend F_1 in 3D.
@@ -555,16 +950,32 @@ class CmsScalingController extends ChangeNotifier {
   DsfDocument _scaleRiserHeight2D(DsfDocument baseline, double delta) {
     if (baseline.bends.isEmpty) return baseline;
 
-    final longBends = baseline.bends.where((b) {
-      final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
-      final isStructural = b.role != BendLineRole.flange;
-      return is90 && isStructural;
-    }).toList();
+    final b45 = baseline.bends.firstWhere(
+      (b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0,
+      orElse: () => baseline.bends.first,
+    );
+    final has45 = (b45.targetAngleDeg.abs() - 45.0).abs() < 15.0;
 
-    if (longBends.length < 2) return _scaleHeight2D(baseline, delta);
-
-    final x1 = math.min(longBends[0].p1.x, longBends[1].p1.x);
-    final x2 = math.max(longBends[0].p1.x, longBends[1].p1.x);
+    double x1;
+    double x2;
+    if (has45 && (b45.p2.x - b45.p1.x).abs() > 20.0) {
+      x1 = math.min(b45.p1.x, b45.p2.x);
+      x2 = math.max(b45.p1.x, b45.p2.x);
+    } else {
+      final vertBends = baseline.bends
+          .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0)
+          .toList()
+        ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+      if (vertBends.length >= 4) {
+        x1 = math.min((vertBends[1].p1.x + vertBends[1].p2.x) / 2.0, (vertBends[vertBends.length - 2].p1.x + vertBends[vertBends.length - 2].p2.x) / 2.0);
+        x2 = math.max((vertBends[1].p1.x + vertBends[1].p2.x) / 2.0, (vertBends[vertBends.length - 2].p1.x + vertBends[vertBends.length - 2].p2.x) / 2.0);
+      } else if (vertBends.length >= 2) {
+        x1 = math.min((vertBends.first.p1.x + vertBends.first.p2.x) / 2.0, (vertBends.last.p1.x + vertBends.last.p2.x) / 2.0);
+        x2 = math.max((vertBends.first.p1.x + vertBends.first.p2.x) / 2.0, (vertBends.last.p1.x + vertBends.last.p2.x) / 2.0);
+      } else {
+        return _scaleHeight2D(baseline, delta);
+      }
+    }
 
     double minX = x1;
     double maxX = x2;
@@ -584,60 +995,74 @@ class CmsScalingController extends ChangeNotifier {
     );
     final yB3 = b3.p1.y;
 
-    // Threshold Y separating the straight run from the 45° riser prong (notch at y ≈ 85.6 - 88.6)
-    final yProngThreshold = yB3 - (yB3 - 30.0) * 0.45; // ≈ 86.0 mm
+    // Threshold Y separating the straight run (including vertical flange lines FL1/FL2 ending at y = 85.64)
+    // from the 45° riser prong and relief notch (y >= 88.64).
+    // yProngThreshold = 87.0 ensures FL1/FL2 remain strictly vertical, while the mouth and its notch
+    // move rigidly along the 45° mouth direction (-d45, -d45) / (+d45, -d45).
+    final yProngThreshold = 87.0;
 
     // Determine the stretch threshold X for left and right cheek:
     // Left cheek: inner corner arc ARC_BND_3 is near B1 (x1). The stretch zone is between ARC_BND_3 and ARC_BND_4.
     // Right cheek: inner corner arc ARC_BND_2 is near B2 (x2). The stretch zone is between ARC_BND_2 and ARC_BND_1.
-    double xLeftStretch = x1 - 10.0;
-    double xRightStretch = x2 + 10.0;
+    double xLeftStretch = x1 - 5.0;
+    double xRightStretch = x2 + 5.0;
 
     for (final a in baseline.arcs) {
       if (a.center.y < yProngThreshold) {
         if ((a.center.x - x1).abs() <= 20.0) {
-          xLeftStretch = math.min(xLeftStretch, a.center.x);
+          xLeftStretch = math.min(xLeftStretch, a.center.x - 0.5);
         }
         if ((a.center.x - x2).abs() <= 20.0) {
-          xRightStretch = math.max(xRightStretch, a.center.x);
+          xRightStretch = math.max(xRightStretch, a.center.x + a.radius + 0.5);
         }
       }
     }
 
+    final deltaH = delta;
+    final d45 = deltaH / math.sqrt(2);
+    final deltaYB3 = 44.35 * (deltaH / 100.0);
+    final deltaYFlapTop = 86.60 * (deltaH / 100.0);
+    final deltaYProngTip = (244.70 - 170.66) * (deltaH / 100.0); // ~74.04 * (deltaH / 100.0)
+
     CadPoint2D transformPt(CadPoint2D pt) {
-      // 1. Floor web and bottom floor (between x1 and x2)
+      // 1. Floor web and bottom flap (between x1 and x2)
       if (pt.x >= x1 - 0.5 && pt.x <= x2 + 0.5) {
-        if (pt.y <= yB3 + 0.5) {
-          // Central floor web remains fixed
-          return pt;
+        if (pt.y < yB3 - 0.5) {
+          // Floor web: fixed at bottom throat (y ~ 30), stretches in Y up to B3
+          final ratio = (pt.y - 30.0) / (yB3 - 30.0);
+          return CadPoint2D(pt.x, pt.y + deltaYB3 * ratio.clamp(0.0, 1.0));
         } else {
-          // Bottom 45° flap (F_1) grows along Y by delta * sqrt(2) so that its
-          // 3D displacement (dy = delta, dz = delta) exactly matches the 3D displacement
-          // of the 45° riser sidewall prongs, keeping the 3D distance between the flap's open
-          // edge and the prongs' tip edge strictly constant with zero drift.
-          final flapGrowth = delta * math.sqrt(2);
-          return CadPoint2D(pt.x, pt.y + flapGrowth);
+          // Bottom flap: shifts with B3, and expands in length to maintain 0 miter gap in 3D
+          final flapLen = 167.70 - yB3; // ~39.05 mm
+          final ratio = flapLen > 0.1 ? (pt.y - yB3) / flapLen : 1.0;
+          final flapGrowth = deltaYFlapTop - deltaYB3; // ~42.25 mm per 100mm deltaH
+          return CadPoint2D(pt.x, pt.y + deltaYB3 + flapGrowth * ratio.clamp(0.0, 1.0));
         }
       }
 
       // 2. Left Cheek (x < x1)
       if (pt.x < x1 - 0.5) {
         if (pt.y > yProngThreshold) {
-          // 45° Riser Prong:
-          // Shifts outward along X by -delta and upward along Y by +delta.
-          // This ensures the 45° miter line (from (x1, yB3) to outer end) has slope
-          // dy / (-dx) = (42.01 + delta) / (42.01 + delta) = 1.0 (EXACTLY 45°).
-          // In 3D, dz / dy = 1.0, touching the 45° flap bend F_1 perfectly with zero gap.
-          return CadPoint2D(pt.x - delta, pt.y + delta);
+          // 45° Riser Prong & Miter Cut:
+          // Outer corner & notch (x <= 25.0, or y ~ 116.92) translate horizontally with the outer wall (-deltaH, 0).
+          // Inner mouth tip (y ~ 170.66) extends upward and inward by (-deltaH + d45, deltaYProngTip).
+          // This keeps the mouth cut completely above FL1 without cutting into the return flange.
+          if (pt.x <= 25.0) {
+            return CadPoint2D(pt.x - deltaH, pt.y);
+          }
+          final t = ((pt.y - 116.92) / (170.66 - 116.92)).clamp(0.0, 1.0);
+          final dx = -deltaH + t * d45;
+          final dy = t * deltaYProngTip;
+          return CadPoint2D(pt.x + dx, pt.y + dy);
         } else {
           // Straight sidewall section:
           // Inner corner (x >= xLeftStretch - 0.5) remains fixed with B1 and PORT_1.
-          // Outer sidewall (x < xLeftStretch - 0.5) translates rigidly outward by -delta.
-          // The horizontal edge between them expands by delta, keeping all corner arcs and chamfers 100% invariant.
+          // Outer sidewall (x < xLeftStretch - 0.5) translates rigidly outward by -deltaH.
+          // The horizontal edge between them expands by deltaH, keeping all corner arcs and chamfers 100% invariant.
           if (pt.x >= xLeftStretch - 0.5) {
             return pt;
           } else {
-            return CadPoint2D(pt.x - delta, pt.y);
+            return CadPoint2D(pt.x - deltaH, pt.y);
           }
         }
       }
@@ -645,19 +1070,24 @@ class CmsScalingController extends ChangeNotifier {
       // 3. Right Cheek (x > x2)
       if (pt.x > x2 + 0.5) {
         if (pt.y > yProngThreshold) {
-          // 45° Riser Prong:
-          // Shifts outward along X by +delta and upward along Y by +delta.
-          // Preserves the 45° miter line (dy / dx = 1.0) so it touches F_1 in 3D.
-          return CadPoint2D(pt.x + delta, pt.y + delta);
+          // 45° Riser Prong & Miter Cut:
+          // Outer corner & notch translate horizontally with the outer wall (+deltaH, 0).
+          // Inner mouth tip (y ~ 170.66) extends upward and inward by (+deltaH - d45, deltaYProngTip).
+          if (pt.x >= maxX - 25.0) {
+            return CadPoint2D(pt.x + deltaH, pt.y);
+          }
+          final t = ((pt.y - 116.92) / (170.66 - 116.92)).clamp(0.0, 1.0);
+          final dx = deltaH - t * d45;
+          final dy = t * deltaYProngTip;
+          return CadPoint2D(pt.x + dx, pt.y + dy);
         } else {
           // Straight sidewall section:
           // Inner corner (x <= xRightStretch + 0.5) remains fixed with B2 and PORT_1.
-          // Outer sidewall (x > xRightStretch + 0.5) translates rigidly outward by +delta.
-          // The horizontal edge between them expands by delta, keeping all corner arcs and chamfers 100% invariant.
+          // Outer sidewall (x > xRightStretch + 0.5) translates rigidly outward by +deltaH.
           if (pt.x <= xRightStretch + 0.5) {
             return pt;
           } else {
-            return CadPoint2D(pt.x + delta, pt.y);
+            return CadPoint2D(pt.x + deltaH, pt.y);
           }
         }
       }
@@ -666,32 +1096,29 @@ class CmsScalingController extends ChangeNotifier {
     }
 
     CadPoint2D transformPunchCenter(CadPoint2D pt) {
-      // 1. Floor punches: fixed (or bottom flap if y > yB3)
+      // 1. Floor punches: fixed
       if (pt.x >= x1 - 0.5 && pt.x <= x2 + 0.5) {
-        if (pt.y > yB3 + 0.5) {
-          final flapGrowth = delta * math.sqrt(2);
-          return CadPoint2D(pt.x, pt.y + flapGrowth);
-        }
         return pt;
       }
 
       // 2. Left Cheek punches
       if (pt.x < x1 - 0.5) {
         if (pt.y > yProngThreshold) {
-          // Coupler slots on 45° prong (SLOT_3, SLOT_4):
-          // Translate rigidly with the prong by (-delta, +delta).
-          // Pitch spacing, angle relative to edge, and orientation are 100% preserved.
-          return CadPoint2D(pt.x - delta, pt.y + delta);
+          // Coupler slots on 45° prong:
+          // Outer slot (SLOT_4, y < 120) tracks outer mouth corner (-deltaH, 0)
+          // Inner slot (SLOT_3, y >= 120) tracks inner mouth tip (-deltaH + d45, d45)
+          if (pt.y < 120.0) {
+            return CadPoint2D(pt.x - deltaH, pt.y);
+          } else {
+            return CadPoint2D(pt.x - deltaH + d45, pt.y + d45);
+          }
         } else {
-          // Coupler slots on straight sidewall (SLOT_7, SLOT_8):
-          // Inner slot (SLOT_7) is anchored to inner edge near B1 (fixed dx = 0).
-          // Outer slot (SLOT_8) is anchored to outer edge (translates dx = -delta).
-          // Both maintain their exact 23.0 mm mounting edge setback.
+          // Coupler slots on straight sidewall:
           final xLeftMid = (minX + x1) / 2.0;
           if (pt.x > xLeftMid) {
             return pt;
           } else {
-            return CadPoint2D(pt.x - delta, pt.y);
+            return CadPoint2D(pt.x - deltaH, pt.y);
           }
         }
       }
@@ -699,19 +1126,21 @@ class CmsScalingController extends ChangeNotifier {
       // 3. Right Cheek punches
       if (pt.x > x2 + 0.5) {
         if (pt.y > yProngThreshold) {
-          // Coupler slots on 45° prong (SLOT_1, SLOT_2):
-          // Translate rigidly with the prong by (+delta, +delta).
-          return CadPoint2D(pt.x + delta, pt.y + delta);
+          // Coupler slots on 45° prong:
+          // Outer slot (SLOT_2, y < 120) tracks outer mouth corner (+deltaH, 0)
+          // Inner slot (SLOT_1, y >= 120) tracks inner mouth tip (+deltaH - d45, d45)
+          if (pt.y < 120.0) {
+            return CadPoint2D(pt.x + deltaH, pt.y);
+          } else {
+            return CadPoint2D(pt.x + deltaH - d45, pt.y + d45);
+          }
         } else {
-          // Coupler slots on straight sidewall (SLOT_5, SLOT_6):
-          // Inner slot (SLOT_5) is anchored to inner edge near B2 (fixed dx = 0).
-          // Outer slot (SLOT_6) is anchored to outer edge (translates dx = +delta).
-          // Both maintain their exact 23.0 mm mounting edge setback.
+          // Coupler slots on straight sidewall:
           final xRightMid = (x2 + maxX) / 2.0;
           if (pt.x < xRightMid) {
             return pt;
           } else {
-            return CadPoint2D(pt.x + delta, pt.y);
+            return CadPoint2D(pt.x + deltaH, pt.y);
           }
         }
       }
@@ -747,9 +1176,9 @@ class CmsScalingController extends ChangeNotifier {
     }).toList();
 
     final newArcs = baseline.arcs.map((a) {
-      final newCenter = transformPt(a.center);
-      final dx = newCenter.x - a.center.x;
-      final dy = newCenter.y - a.center.y;
+      final newStart = transformPt(a.startPoint);
+      final dx = newStart.x - a.startPoint.x;
+      final dy = newStart.y - a.startPoint.y;
       return a.translate(dx, dy);
     }).toList();
 
@@ -769,14 +1198,24 @@ class CmsScalingController extends ChangeNotifier {
       arcs: newArcs,
     );
 
+    // If baseline topology is already established and complete, preserve it directly!
+    final hasCompleteTopology = baseline.faces.isNotEmpty &&
+        baseline.bends.isNotEmpty &&
+        baseline.bends.every((b) => b.parentFaceId.isNotEmpty);
+
+    if (hasCompleteTopology) {
+      return doc;
+    }
+
     return _normalizeRiserTopology(doc, x1, x2, yB3);
   }
 
   /// Normalizes kinematic DAG topology for 45° Inside Riser fittings:
-  /// - Central Floor Web (between B1 and B2, y < yB3) is the base anchor (Root of DAG, FaceRole.baseFloor).
+  /// - Central Floor Web (between x1 and x2, y < yB3) is the base anchor (Root of DAG, FaceRole.baseFloor).
   /// - Bottom Flap is child of Floor Web via B3 (45° bend UP).
-  /// - Left Cheek is child of Floor Web via B1 (90° bend UP).
-  /// - Right Cheek is child of Floor Web via B2 (90° bend UP).
+  /// - Left Cheek is child of Floor Web via inner 90° bend UP.
+  /// - Right Cheek is child of Floor Web via inner 90° bend UP.
+  /// - Left/Right Flanges (if present) are children of Left/Right Cheeks via outer 90° bends UP.
   /// - Ensures exact 3D touching along the 45° miter line with zero separation.
   DsfDocument _normalizeRiserTopology(DsfDocument doc, double x1, double x2, double yB3) {
     final floorFace = doc.faces.firstWhere(
@@ -784,36 +1223,64 @@ class CmsScalingController extends ChangeNotifier {
         final cx = f.centroid.x;
         return cx >= x1 - 5.0 && cx <= x2 + 5.0 && f.centroid.y < yB3;
       },
-      orElse: () => doc.faces.firstWhere((f) => f.id == 'F_2', orElse: () => doc.faces.first),
+      orElse: () => doc.faces.firstWhere((f) => f.id == 'F_4' || f.id == 'F_2', orElse: () => doc.faces.first),
     );
 
     final flapFace = doc.faces.firstWhere(
       (f) => f.id != floorFace.id && f.centroid.x >= x1 - 5.0 && f.centroid.x <= x2 + 5.0,
-      orElse: () => doc.faces.firstWhere((f) => f.id == 'F_1', orElse: () => doc.faces.first),
+      orElse: () => doc.faces.firstWhere((f) => f.id == 'F_3' || f.id == 'F_1', orElse: () => doc.faces.first),
     );
 
-    final leftCheek = doc.faces.firstWhere(
-      (f) => f.centroid.x < x1 - 5.0,
-      orElse: () => doc.faces.firstWhere((f) => f.id == 'F_0', orElse: () => doc.faces.first),
-    );
+    // Left faces: x < x1 - 5.0, sorted descending by centroid.x (cheek is closest to x1, flange is outer)
+    final leftFaces = doc.faces.where((f) => f.centroid.x < x1 - 5.0).toList()
+      ..sort((a, b) => b.centroid.x.compareTo(a.centroid.x));
+    final leftCheek = leftFaces.isNotEmpty ? leftFaces.first : null;
+    final leftFlange = leftFaces.length > 1 ? leftFaces.last : null;
 
-    final rightCheek = doc.faces.firstWhere(
-      (f) => f.centroid.x > x2 + 5.0,
-      orElse: () => doc.faces.firstWhere((f) => f.id == 'F_3', orElse: () => doc.faces.first),
-    );
+    // Right faces: x > x2 + 5.0, sorted ascending by centroid.x (cheek is closest to x2, flange is outer)
+    final rightFaces = doc.faces.where((f) => f.centroid.x > x2 + 5.0).toList()
+      ..sort((a, b) => a.centroid.x.compareTo(b.centroid.x));
+    final rightCheek = rightFaces.isNotEmpty ? rightFaces.first : null;
+    final rightFlange = rightFaces.length > 1 ? rightFaces.last : null;
 
     final normalizedFaces = doc.faces.map((f) {
       if (f.id == floorFace.id) {
         return f.copyWith(isBaseAnchor: true, role: FaceRole.baseFloor, label: 'Floor Web');
       } else if (f.id == flapFace.id) {
         return f.copyWith(isBaseAnchor: false, role: FaceRole.sideWall, label: 'Bottom Flap');
-      } else if (f.id == leftCheek.id) {
+      } else if (leftCheek != null && f.id == leftCheek.id) {
         return f.copyWith(isBaseAnchor: false, role: FaceRole.sideWall, label: 'Left Sidewall Cheek');
-      } else if (f.id == rightCheek.id) {
+      } else if (rightCheek != null && f.id == rightCheek.id) {
         return f.copyWith(isBaseAnchor: false, role: FaceRole.sideWall, label: 'Right Sidewall Cheek');
+      } else if (leftFlange != null && f.id == leftFlange.id) {
+        return f.copyWith(isBaseAnchor: false, role: FaceRole.returnFlange, label: 'Left Return Flange');
+      } else if (rightFlange != null && f.id == rightFlange.id) {
+        return f.copyWith(isBaseAnchor: false, role: FaceRole.returnFlange, label: 'Right Return Flange');
       }
       return f.copyWith(isBaseAnchor: false);
     }).toList();
+
+    // Partition 90° bends into left and right
+    final midWebX = (x1 + x2) / 2.0;
+    final left90Bends = doc.bends.where((b) {
+      final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
+      final midX = (b.p1.x + b.p2.x) / 2.0;
+      return is90 && midX <= midWebX;
+    }).toList()
+      ..sort((a, b) => ((b.p1.x + b.p2.x) / 2.0).compareTo((a.p1.x + a.p2.x) / 2.0)); // Inner bend first
+
+    final right90Bends = doc.bends.where((b) {
+      final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
+      final midX = (b.p1.x + b.p2.x) / 2.0;
+      return is90 && midX > midWebX;
+    }).toList()
+      ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0)); // Inner bend first
+
+    final leftInnerBendId = left90Bends.isNotEmpty ? left90Bends.first.id : null;
+    final leftOuterBendId = left90Bends.length > 1 ? left90Bends.last.id : null;
+
+    final rightInnerBendId = right90Bends.isNotEmpty ? right90Bends.first.id : null;
+    final rightOuterBendId = right90Bends.length > 1 ? right90Bends.last.id : null;
 
     final normalizedBends = doc.bends.map((b) {
       if ((b.targetAngleDeg.abs() - 45.0).abs() < 15.0) {
@@ -822,21 +1289,30 @@ class CmsScalingController extends ChangeNotifier {
           childFaceId: flapFace.id,
           direction: BendDirection.up,
         );
-      } else if ((b.targetAngleDeg.abs() - 90.0).abs() < 15.0) {
-        final midX = (b.p1.x + b.p2.x) / 2.0;
-        if (midX <= (x1 + x2) / 2.0) {
-          return b.copyWith(
-            parentFaceId: floorFace.id,
-            childFaceId: leftCheek.id,
-            direction: BendDirection.up,
-          );
-        } else {
-          return b.copyWith(
-            parentFaceId: floorFace.id,
-            childFaceId: rightCheek.id,
-            direction: BendDirection.up,
-          );
-        }
+      } else if (b.id == leftInnerBendId && leftCheek != null) {
+        return b.copyWith(
+          parentFaceId: floorFace.id,
+          childFaceId: leftCheek.id,
+          direction: BendDirection.up,
+        );
+      } else if (b.id == leftOuterBendId && leftCheek != null && leftFlange != null) {
+        return b.copyWith(
+          parentFaceId: leftCheek.id,
+          childFaceId: leftFlange.id,
+          direction: BendDirection.up,
+        );
+      } else if (b.id == rightInnerBendId && rightCheek != null) {
+        return b.copyWith(
+          parentFaceId: floorFace.id,
+          childFaceId: rightCheek.id,
+          direction: BendDirection.up,
+        );
+      } else if (b.id == rightOuterBendId && rightCheek != null && rightFlange != null) {
+        return b.copyWith(
+          parentFaceId: rightCheek.id,
+          childFaceId: rightFlange.id,
+          direction: BendDirection.up,
+        );
       }
       return b;
     }).toList();

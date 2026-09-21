@@ -567,12 +567,101 @@ class CmsPunchConstraintEngine {
   }) {
     final pt = punch.center;
 
-    // Detect if this is an inside or outside riser with standing sidewall cheeks
-    final isRiser = baseline.productType.toLowerCase().contains('riser') ||
-        (baseline.bends.where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange).length >= 2 &&
-            baseline.bends.any((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0));
+    // 1. Outside Riser Dedicated Punch Scaling
+    final isOutsideRiser = baseline.productType.toLowerCase().contains('outside') ||
+        baseline.itemName.toLowerCase().contains('outside') ||
+        (!baseline.bends.any((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0) &&
+            baseline.bends.where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange).length >= 2 &&
+            (baseline.productType.toLowerCase().contains('riser') || baseline.itemName.toLowerCase().contains('riser')));
 
-    if (isRiser && paramId == 'height') {
+    if (isOutsideRiser && paramId == 'width') {
+      final vertBends = baseline.bends.where((b) {
+        final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
+        return is90 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL');
+      }).toList()
+        ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+
+      if (vertBends.length >= 2) {
+        final x1 = math.min(vertBends.first.p1.x, vertBends.last.p1.x);
+        final x2 = math.max(vertBends.first.p1.x, vertBends.last.p1.x);
+        final xMid = (x1 + x2) / 2.0;
+        final halfDelta = delta / 2.0;
+
+        if (pt.x >= x1 - 0.5 && pt.x <= x2 + 0.5) {
+          return const CadPoint2D(0.0, 0.0);
+        }
+        if (pt.x < xMid) {
+          return CadPoint2D(-halfDelta, 0.0);
+        } else {
+          return CadPoint2D(halfDelta, 0.0);
+        }
+      }
+    }
+
+    if (isOutsideRiser && paramId == 'height') {
+      final longBends = baseline.bends.where((b) {
+        final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
+        return is90 && b.role != BendLineRole.flange;
+      }).toList();
+
+      if (longBends.length >= 2) {
+        final x1 = math.min(longBends[0].p1.x, longBends[1].p1.x);
+        final x2 = math.max(longBends[0].p1.x, longBends[1].p1.x);
+        final xMid = (x1 + x2) / 2.0;
+        final yFloorTop = math.max(longBends[0].p2.y, longBends[1].p2.y);
+        final d45 = delta / math.sqrt(2);
+
+        // Central Floor punches: fixed
+        if (pt.x >= x1 - 0.5 && pt.x <= x2 + 0.5) {
+          return const CadPoint2D(0.0, 0.0);
+        }
+
+        // Left Cheek punches
+        if (pt.x < xMid) {
+          if (punch.rotationDeg == 0.0) {
+            // Port 1 mouth: outer slot (SLOT_7) moves with FL1, inner slot (SLOT_8) fixed
+            final flBends = baseline.bends.where((b) => b.p1.x < x1 - 10.0);
+            final xFL1 = flBends.isNotEmpty ? flBends.first.p1.x : x1 - 96.0;
+            final xLeftMid = (xFL1 + x1) / 2.0;
+            if (pt.x <= xLeftMid) {
+              return CadPoint2D(-delta, 0.0);
+            }
+            return const CadPoint2D(0.0, 0.0);
+          } else {
+            // Port 2 45° mouth: outer slot (SLOT_2) moves with 45° outer mouth, inner slot (SLOT_1) fixed
+            if (pt.y >= yFloorTop + 35.0) {
+              return CadPoint2D(-d45, d45);
+            }
+            return const CadPoint2D(0.0, 0.0);
+          }
+        } else {
+          // Right Cheek punches
+          if (punch.rotationDeg == 0.0) {
+            // Port 1 mouth: outer slot (SLOT_5) moves with FL2, inner slot (SLOT_6) fixed
+            final flBends = baseline.bends.where((b) => b.p1.x > x2 + 10.0);
+            final xFL2 = flBends.isNotEmpty ? flBends.first.p1.x : x2 + 96.0;
+            final xRightMid = (x2 + xFL2) / 2.0;
+            if (pt.x >= xRightMid) {
+              return CadPoint2D(delta, 0.0);
+            }
+            return const CadPoint2D(0.0, 0.0);
+          } else {
+            // Port 2 45° mouth: outer slot (SLOT_4) moves with 45° outer mouth, inner slot (SLOT_3) fixed
+            if (pt.y >= yFloorTop + 35.0) {
+              return CadPoint2D(d45, d45);
+            }
+            return const CadPoint2D(0.0, 0.0);
+          }
+        }
+      }
+    }
+
+    // 2. Inside Riser Dedicated Punch Scaling
+    final isInsideRiser = !isOutsideRiser && (baseline.productType.toLowerCase().contains('riser') ||
+        (baseline.bends.where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange).length >= 2 &&
+            baseline.bends.any((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0)));
+
+    if (isInsideRiser && paramId == 'height') {
       final longBends = baseline.bends.where((b) {
         final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
         return is90 && b.role != BendLineRole.flange;
@@ -589,19 +678,25 @@ class CmsPunchConstraintEngine {
         final yB3 = b3.p1.y;
         final yProngThreshold = yB3 - (yB3 - 30.0) * 0.45;
 
-        // 1. Floor punches
+        final deltaH = delta;
+        final d45 = deltaH / math.sqrt(2);
+
+        // 1. Floor punches: fixed
         if (pt.x >= x1 - 0.5 && pt.x <= x2 + 0.5) {
-          if (pt.y > yB3 + 0.5) {
-            return CadPoint2D(0.0, delta * math.sqrt(2));
-          }
           return const CadPoint2D(0.0, 0.0);
         }
 
         // 2. Left Cheek punches
         if (pt.x < x1 - 0.5) {
           if (pt.y > yProngThreshold) {
-            // 45° diagonal prong: rigidly shifts with prong
-            return CadPoint2D(-delta, delta);
+            // 45° diagonal prong:
+            // Outer slot (y < 120) tracks outer mouth corner (-deltaH, 0)
+            // Inner slot (y >= 120) tracks inner mouth tip (-deltaH + d45, d45)
+            if (pt.y < 120.0) {
+              return CadPoint2D(-deltaH, 0.0);
+            } else {
+              return CadPoint2D(-deltaH + d45, d45);
+            }
           } else {
             // Straight sidewall section:
             // Find nearest vertical edge in baseline outerContour
@@ -630,15 +725,21 @@ class CmsPunchConstraintEngine {
               if (p.x < minContourX) minContourX = p.x;
             }
             final xLeftMid = (minContourX + x1) / 2.0;
-            return pt.x > xLeftMid ? const CadPoint2D(0.0, 0.0) : CadPoint2D(-delta, 0.0);
+            return pt.x > xLeftMid ? const CadPoint2D(0.0, 0.0) : CadPoint2D(-deltaH, 0.0);
           }
         }
 
         // 3. Right Cheek punches
         if (pt.x > x2 + 0.5) {
           if (pt.y > yProngThreshold) {
-            // 45° diagonal prong: rigidly shifts with prong
-            return CadPoint2D(delta, delta);
+            // 45° diagonal prong:
+            // Outer slot (y < 120) tracks outer mouth corner (+deltaH, 0)
+            // Inner slot (y >= 120) tracks inner mouth tip (+deltaH - d45, d45)
+            if (pt.y < 120.0) {
+              return CadPoint2D(deltaH, 0.0);
+            } else {
+              return CadPoint2D(deltaH - d45, d45);
+            }
           } else {
             // Straight sidewall section:
             // Find nearest vertical edge in baseline outerContour
@@ -742,10 +843,15 @@ class CmsPunchConstraintEngine {
         final yB3 = b3.p1.y;
         final yProngThreshold = yB3 - (yB3 - 30.0) * 0.45;
 
+        final deltaH = delta;
+        final d45 = deltaH / math.sqrt(2);
+        final deltaYProngTip = (244.70 - 170.66) * (deltaH / 100.0);
+
         if (groupMid.x > x2 + 0.5) {
           // Right Cheek:
           if (groupMid.y > yProngThreshold) {
-            return CadPoint2D(delta, delta);
+            final t = ((groupMid.y - 116.92) / (170.66 - 116.92)).clamp(0.0, 1.0);
+            return CadPoint2D(deltaH - t * d45, t * deltaYProngTip);
           } else {
             // Find outer vertical edge of the cheek tab (x > x2 + 20.0, y <= yProngThreshold)
             double bestDist = double.infinity;
@@ -773,7 +879,8 @@ class CmsPunchConstraintEngine {
         } else if (groupMid.x < x1 - 0.5) {
           // Left Cheek:
           if (groupMid.y > yProngThreshold) {
-            return CadPoint2D(-delta, delta);
+            final t = ((groupMid.y - 116.92) / (170.66 - 116.92)).clamp(0.0, 1.0);
+            return CadPoint2D(-deltaH + t * d45, t * deltaYProngTip);
           } else {
             // Find outer vertical edge of the cheek tab (x < x1 - 20.0, y <= yProngThreshold)
             double bestDist = double.infinity;

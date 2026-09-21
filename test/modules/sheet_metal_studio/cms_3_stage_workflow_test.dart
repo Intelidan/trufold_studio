@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/dxf_dsf_importer.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_product_contract.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_ux_state.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dsf_document.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/fold_bend_line.dart';
 import 'package:trufold_studio/sheet_metal_studio/viewmodels/sheet_metal_studio_viewmodel.dart';
 
 void main() {
@@ -40,10 +43,12 @@ void main() {
         final outRiser45 = CmsProductContract.lookup('Outside Riser', '45 Deg Outside Riser');
         expect(outRiser45, isNotNull);
         expect(outRiser45!.variationName, '45_deg_outside_riser');
+        expect(outRiser45.expectedStructuralBends, 2);
 
         final outRiser90 = CmsProductContract.lookup('Outside Riser', '90 Deg Outside Riser');
         expect(outRiser90, isNotNull);
         expect(outRiser90!.variationName, '90_deg_outside_riser');
+        expect(outRiser90.expectedStructuralBends, 2);
       });
     });
 
@@ -136,10 +141,12 @@ void main() {
         expect(vm.cmsGuidedController.state.stageTitle, contains('Ports Mapped'));
       });
 
-      test('45 deg inside riser discovers 2 ports without ambiguity', () async {
+      test('45 deg inside riser discovers 2 ports without ambiguity even if baseFaceId was previously cheek', () async {
         final riserFile = File('assets/dxf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
         final json = jsonDecode(riserFile.readAsStringSync()) as Map<String, dynamic>;
-        final riserDoc = DsfDocument.fromJson(json);
+        var riserDoc = DsfDocument.fromJson(json);
+        // Simulate previous stale/bad base face assignment to left cheek
+        riserDoc = riserDoc.copyWith(baseFaceId: 'F_0');
 
         final vm = SheetMetalStudioViewModel(initialDocument: riserDoc);
         await vm.continueCmsPortMapping();
@@ -147,6 +154,85 @@ void main() {
         expect(vm.verifiedCmsPorts.length, 2);
         expect(vm.cmsGuidedController.state.hasAmbiguity, isFalse);
         expect(vm.cmsGuidedController.state.workflowStageIndex, 2);
+
+        final p1 = vm.verifiedCmsPorts[0];
+        final p2 = vm.verifiedCmsPorts[1];
+
+        expect(p1.id, 'PORT_1');
+        expect(p1.normal.y, closeTo(-1.0, 0.1), reason: 'PORT_1 is top mouth pointing in -Y');
+        expect(p1.width, closeTo(96.0, 5.0));
+
+        expect(p2.id, 'PORT_2');
+        expect(p2.normal.y, closeTo(0.707, 0.1), reason: 'PORT_2 is 45° angled bottom mouth');
+        expect(p2.normal.z, closeTo(0.707, 0.1));
+        expect(p2.width, closeTo(96.0, 5.0));
+      });
+
+      test('45 deg outside riser discovers 2 ports without ambiguity even if baseFaceId was previously cheek', () async {
+        final dxfFile = File('assets/dxf_templates/trunking_accessories/45_deg_outside_riser_100x100.dxf');
+        expect(dxfFile.existsSync(), isTrue);
+        final dxfContent = dxfFile.readAsStringSync();
+
+        var outDoc = DxfDsfImporter.importDxf(
+          dxfContent,
+          productType: 'outside_riser',
+          itemName: '45_deg_outside_riser_100x100',
+        );
+
+        final b1 = FoldBendLine(
+          id: 'B1',
+          p1: const CadPoint2D(106.0, 30.0),
+          p2: const CadPoint2D(106.0, 93.65),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.up,
+          role: BendLineRole.bend,
+        );
+        final b2 = FoldBendLine(
+          id: 'B2',
+          p1: const CadPoint2D(203.0, 30.0),
+          p2: const CadPoint2D(203.0, 93.65),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.up,
+          role: BendLineRole.bend,
+        );
+        final fl1 = FoldBendLine(
+          id: 'FL1',
+          p1: const CadPoint2D(10.0, 30.0),
+          p2: const CadPoint2D(10.0, 123.42),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.up,
+          role: BendLineRole.flange,
+        );
+        final fl2 = FoldBendLine(
+          id: 'FL2',
+          p1: const CadPoint2D(299.0, 30.0),
+          p2: const CadPoint2D(299.0, 123.40),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.up,
+          role: BendLineRole.flange,
+        );
+
+        // Simulate user defined bends with stale cheek baseFaceId
+        outDoc = outDoc.copyWith(
+          bends: [b1, b2, fl1, fl2],
+          baseFaceId: 'F_1',
+        );
+
+        final vm = SheetMetalStudioViewModel(initialDocument: outDoc);
+        await vm.continueCmsPortMapping();
+
+        expect(vm.verifiedCmsPorts.length, 2);
+        expect(vm.cmsGuidedController.state.hasAmbiguity, isFalse);
+        expect(vm.cmsGuidedController.state.workflowStageIndex, 2);
+
+        final p1 = vm.verifiedCmsPorts[0];
+        final p2 = vm.verifiedCmsPorts[1];
+
+        expect(p1.id, 'PORT_1');
+        expect(p1.width, closeTo(97.0, 5.0));
+
+        expect(p2.id, 'PORT_2');
+        expect(p2.width, closeTo(97.0, 5.0));
       });
     });
 

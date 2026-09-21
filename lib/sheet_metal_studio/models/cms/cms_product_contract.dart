@@ -212,7 +212,7 @@ class CmsProductContract {
     displayName: '45° Outside Riser',
     scalingProfile: CmsScalingProfile.outsideRiser,
     expectedPortCount: 2,
-    expectedStructuralBends: 3,
+    expectedStructuralBends: 2,
     expectedFlanges: 2,
     expectedCouplerSlotsPerPort: 4,
   );
@@ -223,7 +223,7 @@ class CmsProductContract {
     displayName: '90° Outside Riser',
     scalingProfile: CmsScalingProfile.outsideRiser,
     expectedPortCount: 2,
-    expectedStructuralBends: 3,
+    expectedStructuralBends: 2,
     expectedFlanges: 2,
     expectedCouplerSlotsPerPort: 4,
   );

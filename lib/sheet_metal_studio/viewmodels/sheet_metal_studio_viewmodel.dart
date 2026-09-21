@@ -657,7 +657,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier
   /// Continues the 3-Stage workflow by auto-mapping ports from existing/user-defined bends.
   Future<void> continueCmsPortMapping() async {
     if (!isCmsDrawing) return;
-    if (_document.bends.isNotEmpty && _document.faces.isEmpty) {
+    if (_document.bends.isNotEmpty) {
       final decomp = PlanarFaceDecomposer.decompose(
         outerContour: _document.outerContour,
         bends: _document.bends,
@@ -718,7 +718,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier
 
   void _initCmsStateFromDocument() {
     // Ensure faces are decomposed if bends exist
-    if (_document.bends.isNotEmpty && _document.faces.isEmpty) {
+    if (_document.bends.isNotEmpty) {
       final decomp = PlanarFaceDecomposer.decompose(
         outerContour: _document.outerContour,
         bends: _document.bends,
@@ -809,6 +809,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier
           .whereType<Map>()
           .map((p) => CmsPhysicalPort.fromJson(Map<String, dynamic>.from(p)))
           .toList();
+      _syncPersistentCmsPortsWithCurrentMesh();
       return _persistentCmsPorts;
     }
     return const [];
@@ -9614,6 +9615,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier
               );
             }
             _persistentCmsPorts = updated;
+            cmsGuidedController.updateDiscoveredPorts(updated);
             final meta = Map<String, dynamic>.from(_document.metadata);
             final cms = Map<String, dynamic>.from(meta['cmsTemplate'] as Map);
             cms['ports'] = updated.map((p) => p.toJson()).toList();

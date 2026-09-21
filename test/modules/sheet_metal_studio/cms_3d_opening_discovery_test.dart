@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dsf_document.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/fold_bend_line.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/dxf_dsf_importer.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/planar_face_decomposer.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/kinematic_fold_engine.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/cms/cms_3d_opening_detector.dart';
@@ -78,33 +79,7 @@ void main() {
       final json = jsonDecode(content) as Map<String, dynamic>;
       var doc = DsfDocument.fromJson(json);
 
-      // Define 3 bends matching SS1/SS2
-      // B1: Left sidewall 90°
-      // B2: Right sidewall 90°
-      // B3: Floor riser 45°
-      final bends = [
-        FoldBendLine(
-          id: 'B1',
-          p1: const CadPoint2D(109.5, 30.0),
-          p2: const CadPoint2D(109.5, 128.65),
-          targetAngleDeg: 90.0,
-          role: BendLineRole.bend,
-        ),
-        FoldBendLine(
-          id: 'B2',
-          p1: const CadPoint2D(205.5, 30.0),
-          p2: const CadPoint2D(205.5, 128.65),
-          targetAngleDeg: 90.0,
-          role: BendLineRole.bend,
-        ),
-        FoldBendLine(
-          id: 'B3',
-          p1: const CadPoint2D(109.5, 128.65),
-          p2: const CadPoint2D(205.5, 128.65),
-          targetAngleDeg: 45.0,
-          role: BendLineRole.bend,
-        ),
-      ];
+      final bends = doc.bends;
 
       final decomp = PlanarFaceDecomposer.decompose(
         outerContour: doc.outerContour,
@@ -138,7 +113,87 @@ void main() {
       expect(measuredList.length, equals(2));
       for (final op in measuredList) {
         expect(op.width, closeTo(96.0, 5.0), reason: 'Width should be ~96mm');
-        expect(op.height, closeTo(98.0, 5.0), reason: 'Height must match physical channel sidewall (~96-100mm) without extending over the cheek');
+        expect(op.height, closeTo(100.0, 5.0), reason: 'Height must match physical channel sidewall (~96-104mm) without extending over the cheek');
+      }
+    });
+
+    test('3. Discovers both physical openings on 45_deg_outside_riser_100x100 with 2 bends & 2 flanges', () async {
+      final dxfFile = File('assets/dxf_templates/trunking_accessories/45_deg_outside_riser_100x100.dxf');
+      expect(dxfFile.existsSync(), isTrue);
+      final dxfContent = dxfFile.readAsStringSync();
+
+      var doc = DxfDsfImporter.importDxf(
+        dxfContent,
+        productType: 'outside_riser',
+        itemName: '45_deg_outside_riser_100x100',
+      );
+
+      final bends = [
+        FoldBendLine(
+          id: 'B1',
+          p1: const CadPoint2D(106.0, 30.0),
+          p2: const CadPoint2D(106.0, 93.65),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.up,
+          role: BendLineRole.bend,
+        ),
+        FoldBendLine(
+          id: 'B2',
+          p1: const CadPoint2D(203.0, 30.0),
+          p2: const CadPoint2D(203.0, 93.65),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.up,
+          role: BendLineRole.bend,
+        ),
+        FoldBendLine(
+          id: 'FL1',
+          p1: const CadPoint2D(10.0, 30.0),
+          p2: const CadPoint2D(10.0, 123.42),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.up,
+          role: BendLineRole.flange,
+        ),
+        FoldBendLine(
+          id: 'FL2',
+          p1: const CadPoint2D(299.0, 30.0),
+          p2: const CadPoint2D(299.0, 123.40),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.up,
+          role: BendLineRole.flange,
+        ),
+      ];
+
+      final decomp = PlanarFaceDecomposer.decompose(
+        outerContour: doc.outerContour,
+        bends: bends,
+        cutLines: doc.cutLines,
+        preferredBaseFaceId: 'F_1', // Intentionally stale cheek
+      );
+
+      doc = doc.copyWith(
+        bends: decomp.connectedBends,
+        faces: decomp.faces,
+        baseFaceId: decomp.baseFaceId,
+      );
+
+      final foldResult = KinematicFoldEngine.foldDocument(doc, foldProgress: 1.0);
+      expect(foldResult.polygons.isNotEmpty, isTrue);
+
+      final rawOpenings = Cms3DOpeningDetector.detectOpenings(
+        document: doc,
+        foldResult: foldResult,
+      );
+
+      expect(rawOpenings.length, equals(2), reason: 'Must detect exactly 2 openings for outside riser');
+
+      final measuredList = rawOpenings.map((raw) {
+        return CmsOpeningPlaneAnalyzer.analyze(raw: raw, document: doc, foldResult: foldResult);
+      }).toList();
+
+      expect(measuredList.length, equals(2));
+      for (final op in measuredList) {
+        expect(op.width, closeTo(97.0, 5.0), reason: 'Width should be ~97mm');
+        expect(op.height, closeTo(98.0, 5.0), reason: 'Height should match sidewall height ~96-100mm');
       }
     });
   });

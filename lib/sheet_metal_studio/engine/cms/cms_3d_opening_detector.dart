@@ -266,7 +266,7 @@ class Cms3DOpeningDetector {
       final d1 = ((p1.x - v0.x) * norm.x + (p1.y - v0.y) * norm.y + (p1.z - v0.z) * norm.z).abs();
       final d2 = ((p2.x - v0.x) * norm.x + (p2.y - v0.y) * norm.y + (p2.z - v0.z) * norm.z).abs();
 
-      if (d1 < 3.0 && d2 < 3.0) {
+      if (d1 < 5.0 && d2 < 5.0) {
         // Both endpoints lie in the plane of this single sidewall (cheek cut/seam)
         return true;
       }
@@ -323,14 +323,14 @@ class Cms3DOpeningDetector {
     final bp1 = bend.p1;
     final bp2 = bend.p2;
 
-    // Check distance of endpoints to bend line
+    // Check distance of endpoints to bend line (tolerant of corner relief notches)
     final d1 = _distPointToSeg(p1, bp1, bp2);
     final d2 = _distPointToSeg(p2, bp1, bp2);
-    if (d1 < 2.5 && d2 < 2.5) return true;
+    if (d1 < 5.0 && d2 < 5.0) return true;
 
     final bd1 = _distPointToSeg(bp1, p1, p2);
     final bd2 = _distPointToSeg(bp2, p1, p2);
-    if (bd1 < 2.5 && bd2 < 2.5) return true;
+    if (bd1 < 5.0 && bd2 < 5.0) return true;
 
     return false;
   }

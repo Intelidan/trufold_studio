@@ -244,7 +244,7 @@ class CmsGuidedUxController extends ChangeNotifier {
     if (stepDelay > Duration.zero) await Future.delayed(stepDelay);
 
     DsfDocument docToFold = document;
-    if (docToFold.bends.isNotEmpty && docToFold.faces.isEmpty) {
+    if (docToFold.bends.isNotEmpty) {
       final decomp = PlanarFaceDecomposer.decompose(
         outerContour: docToFold.outerContour,
         bends: docToFold.bends,
@@ -408,6 +408,12 @@ class CmsGuidedUxController extends ChangeNotifier {
   /// Resets controller state.
   void reset() {
     _state = const CmsUxState();
+    notifyListeners();
+  }
+
+  /// Updates the discovered ports list (e.g. when resynchronizing from 3D mesh).
+  void updateDiscoveredPorts(List<CmsPhysicalPort> ports) {
+    _state = _state.copyWith(discoveredPorts: ports);
     notifyListeners();
   }
 

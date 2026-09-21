@@ -142,26 +142,27 @@ class PlanarFaceDecomposer {
 
     // 4. Determine the Base Anchor Face (Root of DAG)
     // Select face with most structural bends (floor web connecting sidewalls) or largest 2D area
-    String baseId = preferredBaseFaceId ?? '';
-    if (baseId.isEmpty || !faces.any((f) => f.id == baseId)) {
-      PlanarSheetFace best = faces.first;
-      double bestScore = -1.0;
-      for (final f in faces) {
-        int structuralBends = 0;
-        for (final b in updatedBends) {
-          if (b.role != BendLineRole.flange && (b.parentFaceId == f.id || b.childFaceId == f.id)) {
-            structuralBends++;
-          }
-        }
-        final a = _computePolygonArea(f.vertices).abs();
-        final score = structuralBends * 10000.0 + a;
-        if (score > bestScore) {
-          bestScore = score;
-          best = f;
+    PlanarSheetFace best = faces.first;
+    double bestScore = -1.0;
+    for (final f in faces) {
+      int structuralBends = 0;
+      for (final b in updatedBends) {
+        if (b.role != BendLineRole.flange && (b.parentFaceId == f.id || b.childFaceId == f.id)) {
+          structuralBends++;
         }
       }
-      baseId = best.id;
+      final a = _computePolygonArea(f.vertices).abs();
+      // Give preferredBaseFaceId a priority bonus (+50000.0), but ensure structural bends
+      // weight (structuralBends * 1000000.0) strictly dominates so that a 1-bend cheek/flange never
+      // overrides a 2- or 3-bend central floor web regardless of 2D surface area.
+      final prefBonus = (preferredBaseFaceId != null && f.id == preferredBaseFaceId) ? 50000.0 : 0.0;
+      final score = structuralBends * 1000000.0 + prefBonus + a;
+      if (score > bestScore) {
+        bestScore = score;
+        best = f;
+      }
     }
+    final baseId = best.id;
 
     // 5. Direct the bend connections from Base Face outward (Parent -> Child DAG)
     final directedBends = _orientBendsFromBase(baseId, updatedBends, faces);
