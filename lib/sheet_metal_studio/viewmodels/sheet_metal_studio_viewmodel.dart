@@ -122,6 +122,7 @@ import '../engine/constraints/geometric_constraint_solver.dart';
 import '../engine/port_inference_engine.dart';
 import '../engine/constraints/expression_parser_engine.dart';
 import '../models/constraints/entity_constraint_state.dart';
+import '../models/canvas_display_settings.dart';
 
 enum StudioToolMode {
   select, // Click on bend line, face, cut, or punch to inspect/drag
@@ -466,6 +467,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier
   bool _isGlassMode = false;
 
   bool _showDimensions = true;
+
+  CanvasDisplaySettings _canvasDisplaySettings = const CanvasDisplaySettings();
 
   bool _isPlayingAnimation = false;
 
@@ -1053,6 +1056,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier
   bool get isGlassMode => _isGlassMode;
 
   bool get showDimensions => _showDimensions;
+
+  CanvasDisplaySettings get canvasDisplaySettings => _canvasDisplaySettings;
 
   bool get isPlayingAnimation => _isPlayingAnimation;
 
@@ -1950,7 +1955,19 @@ class SheetMetalStudioViewModel extends ChangeNotifier
 
   void toggleDimensions() {
     _showDimensions = !_showDimensions;
+    _canvasDisplaySettings = _canvasDisplaySettings.copyWith(
+      showDimensions: _showDimensions,
+    );
+    notifyListeners();
+  }
 
+  /// Replaces the canvas display settings and triggers a repaint.
+  void updateCanvasDisplaySettings(CanvasDisplaySettings settings) {
+    if (_canvasDisplaySettings == settings) return;
+    _canvasDisplaySettings = settings;
+    // Keep the legacy _showDimensions field in sync so existing
+    // callsites (e.g. ribbon toolbar toggle) continue to work.
+    _showDimensions = settings.showDimensions;
     notifyListeners();
   }
 

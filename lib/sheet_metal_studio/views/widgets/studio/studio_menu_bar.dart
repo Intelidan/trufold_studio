@@ -17,6 +17,7 @@ import '../punch_tooling_selector_dialog.dart';
 import '../template_library_gallery_dialog.dart';
 import '../template_authoring_wizard_dialog.dart';
 import '../branding/trufold_app_icon_painter.dart';
+import '../canvas/canvas_display_settings_dialog.dart';
 
 class StudioMenuBar extends StatelessWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -867,6 +868,15 @@ class StudioMenuBar extends StatelessWidget {
         subtitle: 'Plan view looking down on sheet metal',
         themeColor: col,
         onTap: () => vm.setPresetView(azimuth: 0, elevation: 89),
+      ),
+      const PopupMenuDivider(),
+      _buildItem(
+        icon: Icons.display_settings_outlined,
+        title: 'Canvas Display Settings\u2026',
+        subtitle: 'UOM, label styles, font sizes, colours & canvas options',
+        shortcut: 'Ctrl+,',
+        themeColor: col,
+        onTap: () => showCanvasDisplaySettingsDialog(context, vm),
       ),
     ];
   }

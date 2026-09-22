@@ -81,6 +81,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
   final PortInferenceResult? activePortInferenceResult;
   final CadPoint2D? hoverCursorCad;
   final bool isAltPressed;
+  final CanvasDisplaySettings canvasSettings;
 
   _UnfoldedBoardPainter({
     required this.doc,
@@ -147,6 +148,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     this.activePortInferenceResult,
     this.hoverCursorCad,
     this.isAltPressed = false,
+    this.canvasSettings = const CanvasDisplaySettings(),
   });
 
   final String? selectedArcId;
@@ -299,6 +301,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
         canvas.drawPath(facePath, borderPaint);
 
         if (face.showLabel && face.isVisible && face.vertices.isNotEmpty) {
+          // --- Zoom-adaptive face label declutter ---
+          if (!canvasSettings.faceLabel.visible) continue;
           double fMinX = face.vertices.first.x, fMaxX = face.vertices.first.x;
           double fMinY = face.vertices.first.y, fMaxY = face.vertices.first.y;
           for (final v in face.vertices) {
@@ -310,15 +314,21 @@ class _UnfoldedBoardPainter extends CustomPainter {
           final fWidth = fMaxX - fMinX;
           final fHeight = fMaxY - fMinY;
           if (fWidth > 5.0 && fHeight > 5.0) {
-            final sCenter = toScreen(face.centroid.x, face.centroid.y);
-            _drawFaceSizeBadge(
-              canvas,
-              sCenter,
-              face.label.isNotEmpty ? face.label : face.id,
-              fWidth,
-              fHeight,
-              face.id == selectedFaceId,
-            );
+            // Suppress label if the face is too small on-screen.
+            final screenW = fWidth * zoom;
+            final screenH = fHeight * zoom;
+            if (screenW >= canvasSettings.faceLabelMinScreenSize ||
+                screenH >= canvasSettings.faceLabelMinScreenSize) {
+              final sCenter = toScreen(face.centroid.x, face.centroid.y);
+              _drawFaceSizeBadge(
+                canvas,
+                sCenter,
+                face.label.isNotEmpty ? face.label : face.id,
+                fWidth,
+                fHeight,
+                face.id == selectedFaceId,
+              );
+            }
           }
         }
       }
@@ -520,11 +530,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
           canvas.drawPath(arcPath, arcPaint);
         }
 
-        if ((isHovered || isSelected) && arc.showLabel) {
-          final midCad = arc.midpoint;
-          final sMid = toScreen(midCad.x, midCad.y);
-          _drawArcBadge(canvas, sMid, arc, isSelected);
-        }
+      }
+      // Draw arc badge if arcLabel is visible and arc.showLabel, OR if hovered/selected
+      final showArcBadge = arc.showLabel &&
+          (canvasSettings.arcLabel.visible || isHovered || isSelected);
+      if (showArcBadge) {
+        final midCad = arc.midpoint;
+        final sMid = toScreen(midCad.x, midCad.y);
+        _drawArcBadge(canvas, sMid, arc, isSelected);
       }
     }
 
@@ -669,19 +682,28 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final mid = Offset((sp1.dx + sp2.dx) / 2.0, (sp1.dy + sp2.dy) / 2.0);
 
       if (bend.showLabel) {
+        // --- Zoom-adaptive bend label declutter ---
+        final effectivelyVisible = canvasSettings.bendLabel.visible &&
+            zoom >= canvasSettings.bendLabelHideZoomThreshold;
+        if (!effectivelyVisible) {
+          // Skip label entirely when very zoomed out
+        } else {
+        final bool compactMode =
+            zoom < canvasSettings.bendLabelCompactZoomThreshold;
+
         final arrowStr = isUp ? '↑' : '↓';
-        final lenStr = '${bend.length.toStringAsFixed(1)}mm';
+        final lenStr = compactMode
+            ? ''
+            : ' · ${formatMeasure(bend.length, canvasSettings)}';
         final String labelText;
         if (isIncomplete) {
-          labelText = '⚠️ ${bend.id} OPEN · $lenStr';
-        } else if (isFlange) {
-          labelText =
-              '${bend.id} ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr · $lenStr';
+          labelText = '⚠️ ${bend.id} OPEN$lenStr';
         } else {
           labelText =
-              '${bend.id} ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr · $lenStr';
+              '${bend.id} ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr$lenStr';
         }
 
+        final bendLabelStyle = canvasSettings.bendLabel;
         final textColor = isIncomplete
             ? const Color(0xFFB45309)
             : (isFlange
@@ -692,8 +714,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
           text: labelText,
           style: TextStyle(
             color: textColor,
-            fontSize: 10.0,
-            fontWeight: FontWeight.bold,
+            fontSize: bendLabelStyle.fontSize,
+            fontWeight: bendLabelStyle.fontWeight,
             letterSpacing: 0.2,
           ),
         );
@@ -784,6 +806,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
             Offset(mid.dx + badgeWidth / 2.0 + 3, mid.dy - camTp.height / 2.0),
           );
         }
+      }
       }
 
       // Warning rings around open endpoints
@@ -2498,14 +2521,15 @@ class _UnfoldedBoardPainter extends CustomPainter {
     double heightMm,
     bool isSelected,
   ) {
-    final text =
-        '$label: ${widthMm.toStringAsFixed(1)} × ${heightMm.toStringAsFixed(1)} mm';
+    final style = canvasSettings.faceLabel;
+    final dimStr = formatDimPair(widthMm, heightMm, canvasSettings);
+    final text = '$label: $dimStr';
     final span = TextSpan(
       text: text,
       style: TextStyle(
-        color: isSelected ? const Color(0xFF1E3A8A) : const Color(0xFF334155),
-        fontSize: 9.5,
-        fontWeight: FontWeight.w600,
+        color: isSelected ? const Color(0xFF1E3A8A) : style.color,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
         letterSpacing: 0.2,
       ),
     );
@@ -2848,12 +2872,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
   }
 
   void _drawDimText(Canvas canvas, Offset pos, String text) {
+    if (!canvasSettings.dimTextLabel.visible) return;
+    final style = canvasSettings.dimTextLabel;
     final textSpan = TextSpan(
       text: text,
-      style: const TextStyle(
-        color: Color(0xFFD97706),
-        fontSize: 9,
-        fontWeight: FontWeight.bold,
+      style: TextStyle(
+        color: style.color,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
       ),
     );
     final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)
@@ -2896,221 +2922,223 @@ class _UnfoldedBoardPainter extends CustomPainter {
     // Draw Crosshairs on all circular punches
     _drawHoleCrosshairs(canvas, doc, toScreen, scale);
 
-    // Dimension lines styling
-    const dimChain1 = 26.0; // Inner step dimension chain offset
-    const dimChain2 = 54.0; // Outer overall dimension chain offset
+    if (canvasSettings.outsideDimLabel.visible && canvasSettings.showDimensions) {
+      // Dimension lines styling
+      const dimChain1 = 26.0; // Inner step dimension chain offset
+      const dimChain2 = 54.0; // Outer overall dimension chain offset
 
-    // --- BOTTOM DIMENSION CHAIN (X Axis Widths) ---
-    final bScreenY1 = toScreen(0, minY).dy + dimChain1;
-    final bScreenY2 = toScreen(0, minY).dy + dimChain2;
+      // --- BOTTOM DIMENSION CHAIN (X Axis Widths) ---
+      final bScreenY1 = toScreen(0, minY).dy + dimChain1;
+      final bScreenY2 = toScreen(0, minY).dy + dimChain2;
 
-    // Overall Blank Width (Bottom outer line)
-    _drawLinearDimension(
-      canvas,
-      p1Screen: toScreen(minX, minY),
-      p2Screen: toScreen(maxX, minY),
-      dimScreenCoord: bScreenY2 + 8.0,
-      isVertical: false,
-      valueText: blankW.toStringAsFixed(2),
-      dimId: 'dim_blank_w',
-      ptA: CadPoint2D(minX, minY),
-      ptB: CadPoint2D(maxX, minY),
-      scale: scale,
-    );
+      // Overall Blank Width (Bottom outer line)
+      _drawLinearDimension(
+        canvas,
+        p1Screen: toScreen(minX, minY),
+        p2Screen: toScreen(maxX, minY),
+        dimScreenCoord: bScreenY2 + 8.0,
+        isVertical: false,
+        valueText: formatMeasure(blankW, canvasSettings),
+        dimId: 'dim_blank_w',
+        ptA: CadPoint2D(minX, minY),
+        ptB: CadPoint2D(maxX, minY),
+        scale: scale,
+      );
 
-    // Key intermediate X coordinates from vertical bends or notches
-    final xBends =
-        doc.bends
-            .where((b) => b.isVisible && (b.p1.x - b.p2.x).abs() < 1e-2)
-            .map((b) => b.p1.x)
-            .where((x) => x > minX + 3.0 && x < maxX - 3.0)
-            .toSet()
-            .toList()
-          ..sort();
+      // Key intermediate X coordinates from vertical bends or notches
+      final xBends =
+          doc.bends
+              .where((b) => b.isVisible && (b.p1.x - b.p2.x).abs() < 1e-2)
+              .map((b) => b.p1.x)
+              .where((x) => x > minX + 3.0 && x < maxX - 3.0)
+              .toSet()
+              .toList()
+            ..sort();
 
-    if (xBends.isNotEmpty) {
-      double curX = minX;
-      int stepIdx = 0;
-      for (final bx in xBends) {
-        final stepW = bx - curX;
-        if (stepW > 3.0) {
-          // Automatic smart vertical staggering for narrow steps so adjacent badges never collide!
+      if (xBends.isNotEmpty) {
+        double curX = minX;
+        int stepIdx = 0;
+        for (final bx in xBends) {
+          final stepW = bx - curX;
+          if (stepW > 3.0) {
+            // Automatic smart vertical staggering for narrow steps so adjacent badges never collide!
+            final stagger = (stepIdx % 2 == 1) ? 18.0 : 0.0;
+            _drawLinearDimension(
+              canvas,
+              p1Screen: toScreen(curX, minY),
+              p2Screen: toScreen(bx, minY),
+              dimScreenCoord: bScreenY1 + stagger,
+              isVertical: false,
+              valueText: formatMeasure(stepW, canvasSettings),
+              dimId: 'dim_step_x_$stepIdx',
+              ptA: CadPoint2D(curX, minY),
+              ptB: CadPoint2D(bx, minY),
+              scale: scale,
+            );
+            curX = bx;
+            stepIdx++;
+          }
+        }
+        final remW = maxX - curX;
+        if (remW > 3.0) {
           final stagger = (stepIdx % 2 == 1) ? 18.0 : 0.0;
           _drawLinearDimension(
             canvas,
             p1Screen: toScreen(curX, minY),
-            p2Screen: toScreen(bx, minY),
+            p2Screen: toScreen(maxX, minY),
             dimScreenCoord: bScreenY1 + stagger,
             isVertical: false,
-            valueText: stepW.toStringAsFixed(2),
+            valueText: formatMeasure(remW, canvasSettings),
             dimId: 'dim_step_x_$stepIdx',
             ptA: CadPoint2D(curX, minY),
-            ptB: CadPoint2D(bx, minY),
+            ptB: CadPoint2D(maxX, minY),
             scale: scale,
           );
-          curX = bx;
-          stepIdx++;
         }
       }
-      final remW = maxX - curX;
-      if (remW > 3.0) {
-        final stagger = (stepIdx % 2 == 1) ? 18.0 : 0.0;
-        _drawLinearDimension(
-          canvas,
-          p1Screen: toScreen(curX, minY),
-          p2Screen: toScreen(maxX, minY),
-          dimScreenCoord: bScreenY1 + stagger,
-          isVertical: false,
-          valueText: remW.toStringAsFixed(2),
-          dimId: 'dim_step_x_$stepIdx',
-          ptA: CadPoint2D(curX, minY),
-          ptB: CadPoint2D(maxX, minY),
-          scale: scale,
-        );
-      }
-    }
 
-    // --- LEFT DIMENSION CHAIN (Y Axis Lengths/Heights) ---
-    final lScreenX1 = toScreen(minX, 0).dx - dimChain1;
-    final lScreenX2 = toScreen(minX, 0).dx - dimChain2;
+      // --- LEFT DIMENSION CHAIN (Y Axis Lengths/Heights) ---
+      final lScreenX1 = toScreen(minX, 0).dx - dimChain1;
+      final lScreenX2 = toScreen(minX, 0).dx - dimChain2;
 
-    // Overall Blank Length (Left outer line)
-    _drawLinearDimension(
-      canvas,
-      p1Screen: toScreen(minX, minY),
-      p2Screen: toScreen(minX, maxY),
-      dimScreenCoord: lScreenX2 - 8.0,
-      isVertical: true,
-      valueText: blankL.toStringAsFixed(2),
-      dimId: 'dim_blank_l',
-      ptA: CadPoint2D(minX, minY),
-      ptB: CadPoint2D(minX, maxY),
-      scale: scale,
-    );
+      // Overall Blank Length (Left outer line)
+      _drawLinearDimension(
+        canvas,
+        p1Screen: toScreen(minX, minY),
+        p2Screen: toScreen(minX, maxY),
+        dimScreenCoord: lScreenX2 - 8.0,
+        isVertical: true,
+        valueText: formatMeasure(blankL, canvasSettings),
+        dimId: 'dim_blank_l',
+        ptA: CadPoint2D(minX, minY),
+        ptB: CadPoint2D(minX, maxY),
+        scale: scale,
+      );
 
-    // Key intermediate Y coordinates from horizontal bends or notches
-    final yBends =
-        doc.bends
-            .where((b) => b.isVisible && (b.p1.y - b.p2.y).abs() < 1e-2)
-            .map((b) => b.p1.y)
-            .where((y) => y > minY + 3.0 && y < maxY - 3.0)
-            .toSet()
-            .toList()
-          ..sort();
+      // Key intermediate Y coordinates from horizontal bends or notches
+      final yBends =
+          doc.bends
+              .where((b) => b.isVisible && (b.p1.y - b.p2.y).abs() < 1e-2)
+              .map((b) => b.p1.y)
+              .where((y) => y > minY + 3.0 && y < maxY - 3.0)
+              .toSet()
+              .toList()
+            ..sort();
 
-    if (yBends.isNotEmpty) {
-      double curY = minY;
-      int stepIdx = 0;
-      for (final by in yBends) {
-        final stepH = by - curY;
-        if (stepH > 3.0) {
+      if (yBends.isNotEmpty) {
+        double curY = minY;
+        int stepIdx = 0;
+        for (final by in yBends) {
+          final stepH = by - curY;
+          if (stepH > 3.0) {
+            final stagger = (stepIdx % 2 == 1) ? -18.0 : 0.0;
+            _drawLinearDimension(
+              canvas,
+              p1Screen: toScreen(minX, curY),
+              p2Screen: toScreen(minX, by),
+              dimScreenCoord: lScreenX1 + stagger,
+              isVertical: true,
+              valueText: formatMeasure(stepH, canvasSettings),
+              dimId: 'dim_step_y_$stepIdx',
+              ptA: CadPoint2D(minX, curY),
+              ptB: CadPoint2D(minX, by),
+              scale: scale,
+            );
+            curY = by;
+            stepIdx++;
+          }
+        }
+        final remH = maxY - curY;
+        if (remH > 3.0) {
           final stagger = (stepIdx % 2 == 1) ? -18.0 : 0.0;
           _drawLinearDimension(
             canvas,
             p1Screen: toScreen(minX, curY),
-            p2Screen: toScreen(minX, by),
+            p2Screen: toScreen(minX, maxY),
             dimScreenCoord: lScreenX1 + stagger,
             isVertical: true,
-            valueText: stepH.toStringAsFixed(2),
+            valueText: formatMeasure(remH, canvasSettings),
             dimId: 'dim_step_y_$stepIdx',
             ptA: CadPoint2D(minX, curY),
-            ptB: CadPoint2D(minX, by),
+            ptB: CadPoint2D(minX, maxY),
             scale: scale,
           );
-          curY = by;
-          stepIdx++;
         }
       }
-      final remH = maxY - curY;
-      if (remH > 3.0) {
-        final stagger = (stepIdx % 2 == 1) ? -18.0 : 0.0;
-        _drawLinearDimension(
-          canvas,
-          p1Screen: toScreen(minX, curY),
-          p2Screen: toScreen(minX, maxY),
-          dimScreenCoord: lScreenX1 + stagger,
-          isVertical: true,
-          valueText: remH.toStringAsFixed(2),
-          dimId: 'dim_step_y_$stepIdx',
-          ptA: CadPoint2D(minX, curY),
-          ptB: CadPoint2D(minX, maxY),
-          scale: scale,
-        );
-      }
-    }
 
-    // --- RIGHT DIMENSION CHAIN (Hole centers & feature spacing) ---
-    // Parametric patterns: dimensions shown for ONLY 1 SET (first pitch interval) + margins
-    final punchesWithUniqueY =
-        doc.allPunches.map((p) => p.center.y).toSet().toList()..sort();
-    if (punchesWithUniqueY.isNotEmpty) {
-      final rScreenX = toScreen(maxX, 0).dx + dimChain1;
+      // --- RIGHT DIMENSION CHAIN (Hole centers & feature spacing) ---
+      // Parametric patterns: dimensions shown for ONLY 1 SET (first pitch interval) + margins
+      final punchesWithUniqueY =
+          doc.allPunches.map((p) => p.center.y).toSet().toList()..sort();
+      if (punchesWithUniqueY.isNotEmpty) {
+        final rScreenX = toScreen(maxX, 0).dx + dimChain1;
 
-      // 1. Margin from bottom edge to first punch
-      final firstY = punchesWithUniqueY.first;
-      final bottomMargin = firstY - minY;
-      if (bottomMargin > 3.0) {
-        _drawLinearDimension(
-          canvas,
-          p1Screen: toScreen(maxX, minY),
-          p2Screen: toScreen(maxX, firstY),
-          dimScreenCoord: rScreenX,
-          isVertical: true,
-          valueText: bottomMargin.toStringAsFixed(2),
-          dimId: 'dim_punch_margin_bottom',
-          ptA: CadPoint2D(maxX, minY),
-          ptB: CadPoint2D(maxX, firstY),
-          scale: scale,
-        );
-      }
-
-      // 2. Punch step dimensions: ONLY 1 set for repeating pattern pitches!
-      double? lastDrawnDy;
-      int pitchSetCount = 0;
-      for (int i = 0; i < punchesWithUniqueY.length - 1; i++) {
-        final y1 = punchesWithUniqueY[i];
-        final y2 = punchesWithUniqueY[i + 1];
-        final dy = y2 - y1;
-        if (dy <= 3.0) continue;
-
-        // If this dy is identical to the previous step (e.g. repeating pattern pitch 25mm),
-        // skip it so we only show 1 set for the pattern!
-        if (lastDrawnDy != null && (dy - lastDrawnDy).abs() < 0.5) {
-          continue;
+        // 1. Margin from bottom edge to first punch
+        final firstY = punchesWithUniqueY.first;
+        final bottomMargin = firstY - minY;
+        if (bottomMargin > 3.0) {
+          _drawLinearDimension(
+            canvas,
+            p1Screen: toScreen(maxX, minY),
+            p2Screen: toScreen(maxX, firstY),
+            dimScreenCoord: rScreenX,
+            isVertical: true,
+            valueText: formatMeasure(bottomMargin, canvasSettings),
+            dimId: 'dim_punch_margin_bottom',
+            ptA: CadPoint2D(maxX, minY),
+            ptB: CadPoint2D(maxX, firstY),
+            scale: scale,
+          );
         }
 
-        _drawLinearDimension(
-          canvas,
-          p1Screen: toScreen(maxX, y1),
-          p2Screen: toScreen(maxX, y2),
-          dimScreenCoord: rScreenX,
-          isVertical: true,
-          valueText: dy.toStringAsFixed(2),
-          dimId: 'dim_punch_pitch_$pitchSetCount',
-          ptA: CadPoint2D(maxX, y1),
-          ptB: CadPoint2D(maxX, y2),
-          scale: scale,
-        );
-        lastDrawnDy = dy;
-        pitchSetCount++;
-      }
+        // 2. Punch step dimensions: ONLY 1 set for repeating pattern pitches!
+        double? lastDrawnDy;
+        int pitchSetCount = 0;
+        for (int i = 0; i < punchesWithUniqueY.length - 1; i++) {
+          final y1 = punchesWithUniqueY[i];
+          final y2 = punchesWithUniqueY[i + 1];
+          final dy = y2 - y1;
+          if (dy <= 3.0) continue;
 
-      // 3. Margin from last punch to top edge
-      final lastY = punchesWithUniqueY.last;
-      final topMargin = maxY - lastY;
-      if (topMargin > 3.0) {
-        _drawLinearDimension(
-          canvas,
-          p1Screen: toScreen(maxX, lastY),
-          p2Screen: toScreen(maxX, maxY),
-          dimScreenCoord: rScreenX,
-          isVertical: true,
-          valueText: topMargin.toStringAsFixed(2),
-          dimId: 'dim_punch_margin_top',
-          ptA: CadPoint2D(maxX, lastY),
-          ptB: CadPoint2D(maxX, maxY),
-          scale: scale,
-        );
+          // If this dy is identical to the previous step (e.g. repeating pattern pitch 25mm),
+          // skip it so we only show 1 set for the pattern!
+          if (lastDrawnDy != null && (dy - lastDrawnDy).abs() < 0.5) {
+            continue;
+          }
+
+          _drawLinearDimension(
+            canvas,
+            p1Screen: toScreen(maxX, y1),
+            p2Screen: toScreen(maxX, y2),
+            dimScreenCoord: rScreenX,
+            isVertical: true,
+            valueText: formatMeasure(dy, canvasSettings),
+            dimId: 'dim_punch_pitch_$pitchSetCount',
+            ptA: CadPoint2D(maxX, y1),
+            ptB: CadPoint2D(maxX, y2),
+            scale: scale,
+          );
+          lastDrawnDy = dy;
+          pitchSetCount++;
+        }
+
+        // 3. Margin from last punch to top edge
+        final lastY = punchesWithUniqueY.last;
+        final topMargin = maxY - lastY;
+        if (topMargin > 3.0) {
+          _drawLinearDimension(
+            canvas,
+            p1Screen: toScreen(maxX, lastY),
+            p2Screen: toScreen(maxX, maxY),
+            dimScreenCoord: rScreenX,
+            isVertical: true,
+            valueText: formatMeasure(topMargin, canvasSettings),
+            dimId: 'dim_punch_margin_top',
+            ptA: CadPoint2D(maxX, lastY),
+            ptB: CadPoint2D(maxX, maxY),
+            scale: scale,
+          );
+        }
       }
     }
 
@@ -3131,6 +3159,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     double scale,
   ) {
     if (doc.dimensions.isEmpty) return;
+    if (!canvasSettings.dimTextLabel.visible) return;
 
     for (final dim in doc.dimensions) {
       if (!dim.isVisible) continue;
@@ -3139,6 +3168,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         dim,
         doc,
         scale: scale,
+        settings: canvasSettings,
       );
       final pA = toScreen(layout.dimLineStart.dx, layout.dimLineStart.dy);
       final pB = toScreen(layout.dimLineEnd.dx, layout.dimLineEnd.dy);
@@ -3240,6 +3270,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         isEditing: editingDimId == dim.id,
         isSelected: isDimSelected,
         isHovered: isDimHovered,
+        style: canvasSettings.dimTextLabel,
       );
       if (renderedDimensionBadges != null) {
         renderedDimensionBadges![dim.id] = badgeRect;
@@ -3400,12 +3431,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
     final Offset defaultMid;
 
+    final style = canvasSettings.outsideDimLabel;
     final textSpanVal = TextSpan(
       text: valueText,
-      style: const TextStyle(
-        color: Color(0xFF1E293B),
-        fontSize: 9.5,
-        fontWeight: FontWeight.w600,
+      style: TextStyle(
+        color: style.color,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
         fontFamily: 'monospace',
       ),
     );
@@ -3570,6 +3602,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
       isEditing: dimId != null && dimId == editingDimId,
       isSelected: isDimSelected,
       isHovered: isDimHovered,
+      style: canvasSettings.outsideDimLabel,
     );
     if (dimId != null && renderedDimensionBadges != null) {
       renderedDimensionBadges![dimId] = badgeRect;
@@ -3613,7 +3646,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
     bool isEditing = false,
     bool isSelected = false,
     bool isHovered = false,
+    LabelStyle? style,
   }) {
+    final effectiveStyle = style ?? canvasSettings.dimTextLabel;
     final hasDeleteIcon = isSelected || isHovered;
     final fullText = hasDeleteIcon ? '$text  ✕' : text;
 
@@ -3622,11 +3657,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
       style: TextStyle(
         color: (isSelected || isHovered)
             ? const Color(0xFF0284C7)
-            : const Color(0xFF1E293B),
-        fontSize: 9.5,
+            : effectiveStyle.color,
+        fontSize: effectiveStyle.fontSize,
         fontWeight: (isSelected || isHovered)
             ? FontWeight.bold
-            : FontWeight.w600,
+            : effectiveStyle.fontWeight,
         fontFamily: 'monospace',
       ),
     );
@@ -3734,6 +3769,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     Offset Function(double x, double y) toScreen,
     double scale,
   ) {
+    if (!canvasSettings.dimTextLabel.visible) return;
     final roundPunches = doc.allPunches
         .where((p) => p.type == PunchType.roundHole && p.diameterMm > 0)
         .toList();
@@ -3756,9 +3792,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final list = entry.value;
       final diam = list.first.diameterMm;
       final count = list.length;
+      final dStr = formatMeasure(diam, canvasSettings);
       final label = (count > 1)
-          ? '$count * Ø${diam.toStringAsFixed(2)}'
-          : 'Ø${diam.toStringAsFixed(2)}';
+          ? '$count × Ø$dStr'
+          : 'Ø$dStr';
 
       // Pick top-right-most punch in this group
       list.sort(
@@ -3790,12 +3827,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
       _drawArrow(canvas, Offset(rimX, rimY), leaderAngle + math.pi);
 
       // Text callout badge
+      final style = canvasSettings.dimTextLabel;
       final span = TextSpan(
         text: ' $label ',
-        style: const TextStyle(
-          color: Color(0xFF0F172A),
-          fontSize: 9.5,
-          fontWeight: FontWeight.bold,
+        style: TextStyle(
+          color: style.color,
+          fontSize: style.fontSize,
+          fontWeight: style.fontWeight,
         ),
       );
       final tp = TextPainter(text: span, textDirection: TextDirection.ltr)
@@ -3817,6 +3855,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
     final openings = meta.getPortOpenings(doc, onlyAssigned: true);
     if (openings.isEmpty) return;
+    if (!canvasSettings.portBadgeLabel.visible) return;
 
     final glowPaint = Paint()
       ..style = PaintingStyle.stroke
@@ -3875,10 +3914,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
       // 3. Render translucent CAD badge pill for opening Width (W)
       final sideLabel = port.side.displayName;
       final labelText = '${port.label}  [$sideLabel]';
-      final wValStr = (port.widthMm % 1 == 0)
-          ? port.widthMm.toInt().toString()
-          : port.widthMm.toStringAsFixed(1);
-      final dimText = 'W: $wValStr mm';
+      final dimText = 'W: ${formatMeasure(port.widthMm, canvasSettings)}';
 
       final titleSpan = TextSpan(
         children: [
@@ -3906,12 +3942,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       )..layout();
 
+      final portStyle = canvasSettings.portBadgeLabel;
       final dimSpan = TextSpan(
         text: dimText,
         style: TextStyle(
           color: Colors.white.withValues(alpha: 0.95),
-          fontSize: 11.5,
-          fontWeight: FontWeight.bold,
+          fontSize: portStyle.fontSize,
+          fontWeight: portStyle.fontWeight,
           letterSpacing: 0.2,
         ),
       );
@@ -4113,14 +4150,17 @@ class _UnfoldedBoardPainter extends CustomPainter {
     bool isSelected,
   ) {
     if (!arc.showLabel) return;
-    final label =
-        'Arc: R=${arc.radius.toStringAsFixed(1)} mm • L=${arc.arcLength.toStringAsFixed(1)} mm';
+    if (!canvasSettings.arcLabel.visible) return;
+    final arcStyle = canvasSettings.arcLabel;
+    final rStr = formatMeasure(arc.radius, canvasSettings);
+    final lStr = formatMeasure(arc.arcLength, canvasSettings);
+    final label = 'Arc: R=$rStr • L=$lStr';
     final textSpan = TextSpan(
       text: label,
       style: TextStyle(
-        color: isSelected ? Colors.white : const Color(0xFF0F172A),
-        fontSize: 10.5,
-        fontWeight: FontWeight.w600,
+        color: isSelected ? Colors.white : arcStyle.color,
+        fontSize: arcStyle.fontSize,
+        fontWeight: arcStyle.fontWeight,
         letterSpacing: 0.2,
       ),
     );
@@ -4464,7 +4504,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
         oldDelegate.hoverCursorCad != hoverCursorCad ||
         oldDelegate.hoveredDimLineId != hoveredDimLineId ||
         oldDelegate.editingDimId != editingDimId ||
-        oldDelegate.isAltPressed != isAltPressed;
+        oldDelegate.isAltPressed != isAltPressed ||
+        oldDelegate.canvasSettings != canvasSettings;
   }
 }
 

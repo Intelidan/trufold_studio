@@ -57,6 +57,7 @@ import '../../engine/port_inference_engine.dart';
 import '../../engine/fitting_port_annotation_engine.dart';
 import 'guided_cms/cms_2d_overlay_painter.dart';
 import '../../models/cms/cms_ux_state.dart';
+import '../../models/canvas_display_settings.dart';
 part 'canvas/canvas_painter.dart';
 part 'canvas/canvas_dimension_editor.dart';
 part 'canvas/canvas_legend.dart';
@@ -974,7 +975,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                                             selectedPatternHoleIndex: viewModel
                                                 .selectedPatternHoleIndex,
                                             showDimensions:
-                                                viewModel.showDimensions,
+                                                viewModel.canvasDisplaySettings.showDimensions,
                                             bendViolations:
                                                 viewModel.bendViolations,
                                             hoveredPunchId:
@@ -1022,7 +1023,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                                             autoCandidateLine:
                                                 autoCandidateLine,
                                             showOpeningTags:
-                                                viewModel.showPortOpeningBadges,
+                                                viewModel.canvasDisplaySettings.showOpeningTags,
                                             fittingMetadata:
                                                 viewModel
                                                     .detectedFittingMetadata ??
@@ -1042,16 +1043,19 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                                             constraintHoverHighlightedEntityIds:
                                                 _constraintHoverHighlightedEntityIds,
                                             showDofDiagnostics:
-                                                viewModel.showDofDiagnostics,
+                                                viewModel.canvasDisplaySettings.showDofDiagnostics,
                                             dofStateProvider: viewModel
                                                 .getEntityConstraintState,
-                                            showConstructionGeometry: viewModel
-                                                .showConstructionGeometry,
+                                            showConstructionGeometry:
+                                                viewModel.canvasDisplaySettings.showConstructionGeometry,
                                             showConstraints:
-                                                viewModel.showConstraints,
-                                            showProfileFill: _showProfileFill,
-                                            showPoints: _showPoints,
-                                            showGrid: _showGrid,
+                                                viewModel.canvasDisplaySettings.showConstraints,
+                                            showProfileFill:
+                                                viewModel.canvasDisplaySettings.showProfileFill,
+                                            showPoints:
+                                                viewModel.canvasDisplaySettings.showSnapPoints,
+                                            showGrid:
+                                                viewModel.canvasDisplaySettings.showGrid,
                                             selectedArcId:
                                                 viewModel.selectedArcId,
                                             hoveredArcId:
@@ -1060,6 +1064,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                                                 .activePortInferenceResult,
                                             hoverCursorCad: _hoverCursorCad,
                                             isAltPressed: _isAltPressed(),
+                                            canvasSettings:
+                                                viewModel.canvasDisplaySettings,
                                           ),
                                         ),
                                         AnimatedBuilder(

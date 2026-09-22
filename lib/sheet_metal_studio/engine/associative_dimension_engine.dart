@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../models/cad_dimension.dart';
 import '../models/cad_primitives.dart';
+import '../models/canvas_display_settings.dart';
 import '../models/dsf_document.dart';
 
 /// Computed geometric layout for rendering a CadDimension
@@ -49,7 +50,7 @@ class ResolvedDimensionLayout {
 
 class AssociativeDimensionEngine {
   /// Format the dimension measurement text including prefixes, tolerances, and units
-  static String formatDimensionText(CadDimension dim) {
+  static String formatDimensionText(CadDimension dim, [CanvasDisplaySettings? settings]) {
     if (dim.overrideText != null && dim.overrideText!.isNotEmpty) {
       return dim.overrideText!;
     }
@@ -71,6 +72,8 @@ class AssociativeDimensionEngine {
     final val = dim.measuredValue;
     if (dim.type == CadDimensionType.angular) {
       buffer.write('${val.toStringAsFixed(1)}°');
+    } else if (settings != null) {
+      buffer.write(formatMeasure(val, settings));
     } else {
       buffer.write(val.toStringAsFixed(1));
     }
@@ -273,13 +276,21 @@ class AssociativeDimensionEngine {
   }
 
   /// Solves complete 2D layout geometry for rendering and hit-testing
-  static ResolvedDimensionLayout resolveLayout(CadDimension dim, DsfDocument doc, {double scale = 1.0}) {
+  static ResolvedDimensionLayout resolveLayout(
+    CadDimension dim,
+    DsfDocument doc, {
+    double scale = 1.0,
+    CanvasDisplaySettings? settings,
+  }) {
     final assoc = resolveAssociation(dim, doc);
     final pA = assoc.pA;
     final pB = assoc.pB;
     final measured = assoc.value;
 
-    final displayText = formatDimensionText(dim.copyWith(measuredValue: measured));
+    final displayText = formatDimensionText(
+      dim.copyWith(measuredValue: measured),
+      settings,
+    );
 
     final offsetDist = dim.dimensionLineOffset;
     final overshoot = dim.extensionLineOvershoot;

@@ -16,6 +16,7 @@ import '../../models/fold_bend_line.dart';
 import '../../models/sheet_metal_definition.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import 'cad_number_spinner.dart';
+import 'fold_direction_animated_toggle.dart';
 
 class BendPropertySheet extends StatelessWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -420,36 +421,18 @@ class BendPropertySheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _directionButton(
-                        label: '↑ (+Z)',
-                        active: isUp,
-                        color: const Color(0xFF0284C7),
-                        onTap: () => viewModel.updateBend(
-                          bend.copyWith(
-                            direction: BendDirection.up,
-                            layer: 'BEND_UP',
-                          ),
-                        ),
+                FoldDirectionAnimatedToggle(
+                  direction: bend.direction,
+                  isFlange: bend.isFlange,
+                  onToggle: (newDir) {
+                    final layer = newDir == BendDirection.up ? 'BEND_UP' : 'BEND_DOWN';
+                    viewModel.updateBend(
+                      bend.copyWith(
+                        direction: newDir,
+                        layer: layer,
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: _directionButton(
-                        label: '↓ (-Z)',
-                        active: !isUp,
-                        color: const Color(0xFFD97706),
-                        onTap: () => viewModel.updateBend(
-                          bend.copyWith(
-                            direction: BendDirection.down,
-                            layer: 'BEND_DOWN',
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 6),
 
@@ -925,37 +908,6 @@ class BendPropertySheet extends StatelessWidget {
       );
   }
 
-  Widget _directionButton({
-    required String label,
-    required bool active,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(
-          color: active
-              ? color.withValues(alpha: 0.12)
-              : const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: active ? color : const Color(0xFFCBD5E1)),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: active ? color : const Color(0xFF475569),
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _angleChip(double angle) {
     final active = (bend.targetAngleDeg - angle).abs() < 0.1;
