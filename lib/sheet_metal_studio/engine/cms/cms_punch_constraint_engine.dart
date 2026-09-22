@@ -22,6 +22,7 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import '../../models/cad_primitives.dart';
 import '../../models/cad_dimension.dart';
 import '../../models/cad_constraint.dart';
@@ -61,12 +62,7 @@ class CmsPunchConstraintEngine {
 
     // First pass: resolve punches that have explicit punch-to-edge constraints
     for (final punch in baseline.punches) {
-      final edgeShift = _findExplicitEdgeConstraintShift(
-        punch: punch,
-        baseline: baseline,
-        scaled: scaled,
-        transformPt: effectiveTransform,
-      );
+      final edgeShift = _findExplicitEdgeConstraintShift(punch: punch, baseline: baseline, scaled: scaled, transformPt: effectiveTransform);
       if (edgeShift != null) {
         punchDisplacements[punch.id] = edgeShift;
         resolvedPunches[punch.id] = CadPoint2D(punch.center.x + edgeShift.x, punch.center.y + edgeShift.y);
@@ -182,17 +178,11 @@ class CmsPunchConstraintEngine {
         resolvedPunches[punch.id] = CadPoint2D(punch.center.x + fallbackShift.x, punch.center.y + fallbackShift.y);
       } else if (preScaledPunch != null) {
         resolvedPunches[punch.id] = preScaledPunch.center;
-        punchDisplacements[punch.id] = CadPoint2D(
-          preScaledPunch.center.x - punch.center.x,
-          preScaledPunch.center.y - punch.center.y,
-        );
+        punchDisplacements[punch.id] = CadPoint2D(preScaledPunch.center.x - punch.center.x, preScaledPunch.center.y - punch.center.y);
       } else {
         final transformedCenter = effectiveTransform(punch.center);
         resolvedPunches[punch.id] = transformedCenter;
-        punchDisplacements[punch.id] = CadPoint2D(
-          transformedCenter.x - punch.center.x,
-          transformedCenter.y - punch.center.y,
-        );
+        punchDisplacements[punch.id] = CadPoint2D(transformedCenter.x - punch.center.x, transformedCenter.y - punch.center.y);
       }
     }
 
@@ -203,17 +193,9 @@ class CmsPunchConstraintEngine {
     }).toList();
 
     // 4. Transform and reconcile all dimensions
-    final newDimensions = _updateDimensions(
-      baseline: baseline,
-      scaled: scaled,
-      newPunches: newPunches,
-      transformPt: effectiveTransform,
-    );
+    final newDimensions = _updateDimensions(baseline: baseline, scaled: scaled, newPunches: newPunches, transformPt: effectiveTransform);
 
-    return scaled.copyWith(
-      punches: newPunches,
-      dimensions: newDimensions,
-    );
+    return scaled.copyWith(punches: newPunches, dimensions: newDimensions);
   }
 
   /// Discovers explicit punch-to-punch constraints in [doc]
@@ -238,9 +220,7 @@ class CmsPunchConstraintEngine {
 
     // 2. Constraints
     for (final c in doc.constraints) {
-      if (c.type == CadConstraintType.distance ||
-          c.type == CadConstraintType.equal ||
-          c.type == CadConstraintType.coincident) {
+      if (c.type == CadConstraintType.distance || c.type == CadConstraintType.equal || c.type == CadConstraintType.coincident) {
         final matches = c.entityIds.where(punchIds.contains).toList();
         if (matches.length >= 2) {
           pairs.add((matches[0], matches[1]));
@@ -250,9 +230,7 @@ class CmsPunchConstraintEngine {
 
     // 3. ConstraintDefinitions
     for (final cd in doc.constraintDefinitions) {
-      if (cd.type == CadConstraintType.distance ||
-          cd.type == CadConstraintType.equal ||
-          cd.type == CadConstraintType.coincident) {
+      if (cd.type == CadConstraintType.distance || cd.type == CadConstraintType.equal || cd.type == CadConstraintType.coincident) {
         final matches = cd.references.map((r) => r.entityId).where(punchIds.contains).toList();
         if (matches.length >= 2) {
           pairs.add((matches[0], matches[1]));
@@ -273,11 +251,9 @@ class CmsPunchConstraintEngine {
   }) {
     // 1. Inspect dimensions
     for (final dim in baseline.dimensions) {
-      if (dim.referenceAId == punch.id ||
-          dim.referenceBId == punch.id ||
-          dim.referenceEntityId == punch.id ||
-          dim.drivenEntityId == punch.id) {
-        final otherId = (dim.referenceAId == punch.id ? dim.referenceBId : dim.referenceAId) ??
+      if (dim.referenceAId == punch.id || dim.referenceBId == punch.id || dim.referenceEntityId == punch.id || dim.drivenEntityId == punch.id) {
+        final otherId =
+            (dim.referenceAId == punch.id ? dim.referenceBId : dim.referenceAId) ??
             (dim.drivenEntityId == punch.id ? dim.referenceEntityId : dim.drivenEntityId);
 
         if (otherId != null && otherId != punch.id) {
@@ -343,21 +319,13 @@ class CmsPunchConstraintEngine {
   }
 
   /// Measures how edge [edgeId] shifted between [baseline] and [scaled].
-  static CadPoint2D? _measureEdgeShift(
-    String edgeId,
-    DsfDocument baseline,
-    DsfDocument scaled,
-    CadPoint2D Function(CadPoint2D) transformPt,
-  ) {
+  static CadPoint2D? _measureEdgeShift(String edgeId, DsfDocument baseline, DsfDocument scaled, CadPoint2D Function(CadPoint2D) transformPt) {
     // Check bends
     final bendBase = baseline.bends.where((b) => b.id == edgeId).firstOrNull;
     if (bendBase != null) {
       final bendScaled = scaled.bends.where((b) => b.id == edgeId).firstOrNull;
       if (bendScaled != null) {
-        return CadPoint2D(
-          bendScaled.midpoint.x - bendBase.midpoint.x,
-          bendScaled.midpoint.y - bendBase.midpoint.y,
-        );
+        return CadPoint2D(bendScaled.midpoint.x - bendBase.midpoint.x, bendScaled.midpoint.y - bendBase.midpoint.y);
       }
       final newMid = transformPt(bendBase.midpoint);
       return CadPoint2D(newMid.x - bendBase.midpoint.x, newMid.y - bendBase.midpoint.y);
@@ -368,10 +336,7 @@ class CmsPunchConstraintEngine {
     if (cutBase != null) {
       final cutScaled = scaled.cutLines.where((c) => c.id == edgeId).firstOrNull;
       if (cutScaled != null) {
-        return CadPoint2D(
-          cutScaled.midpoint.x - cutBase.midpoint.x,
-          cutScaled.midpoint.y - cutBase.midpoint.y,
-        );
+        return CadPoint2D(cutScaled.midpoint.x - cutBase.midpoint.x, cutScaled.midpoint.y - cutBase.midpoint.y);
       }
       final newMid = transformPt(cutBase.midpoint);
       return CadPoint2D(newMid.x - cutBase.midpoint.x, newMid.y - cutBase.midpoint.y);
@@ -477,22 +442,14 @@ class CmsPunchConstraintEngine {
 
   /// Computes the exact displacement of a coordinate point [pt] that lies on or near
   /// a baseline segment (bend line, cut line, or contour edge) under the scaling transformation.
-  static CadPoint2D _projectPointShiftFromGeometry(
-    CadPoint2D pt,
-    DsfDocument baseline,
-    DsfDocument scaled,
-    CadPoint2D Function(CadPoint2D) transformPt,
-  ) {
+  static CadPoint2D _projectPointShiftFromGeometry(CadPoint2D pt, DsfDocument baseline, DsfDocument scaled, CadPoint2D Function(CadPoint2D) transformPt) {
     // 1. Check bends
     for (final b in baseline.bends) {
       if (_pointToSegmentDistance(pt, b.p1, b.p2) <= 3.5) {
         final scaledB = scaled.bends.where((sb) => sb.id == b.id).firstOrNull;
         if (scaledB != null) {
           final t = _projectionFactorOnSegment(pt, b.p1, b.p2);
-          final scaledPt = CadPoint2D(
-            scaledB.p1.x + t * (scaledB.p2.x - scaledB.p1.x),
-            scaledB.p1.y + t * (scaledB.p2.y - scaledB.p1.y),
-          );
+          final scaledPt = CadPoint2D(scaledB.p1.x + t * (scaledB.p2.x - scaledB.p1.x), scaledB.p1.y + t * (scaledB.p2.y - scaledB.p1.y));
           return CadPoint2D(scaledPt.x - pt.x, scaledPt.y - pt.y);
         }
       }
@@ -504,10 +461,7 @@ class CmsPunchConstraintEngine {
         final scaledC = scaled.cutLines.where((sc) => sc.id == c.id).firstOrNull;
         if (scaledC != null) {
           final t = _projectionFactorOnSegment(pt, c.p1, c.p2);
-          final scaledPt = CadPoint2D(
-            scaledC.p1.x + t * (scaledC.p2.x - scaledC.p1.x),
-            scaledC.p1.y + t * (scaledC.p2.y - scaledC.p1.y),
-          );
+          final scaledPt = CadPoint2D(scaledC.p1.x + t * (scaledC.p2.x - scaledC.p1.x), scaledC.p1.y + t * (scaledC.p2.y - scaledC.p1.y));
           return CadPoint2D(scaledPt.x - pt.x, scaledPt.y - pt.y);
         }
       }
@@ -523,18 +477,12 @@ class CmsPunchConstraintEngine {
           if (scaled.outerContour.length == baseline.outerContour.length) {
             final s1 = scaled.outerContour[i];
             final s2 = scaled.outerContour[(i + 1) % scaled.outerContour.length];
-            final scaledPt = CadPoint2D(
-              s1.x + t * (s2.x - s1.x),
-              s1.y + t * (s2.y - s1.y),
-            );
+            final scaledPt = CadPoint2D(s1.x + t * (s2.x - s1.x), s1.y + t * (s2.y - s1.y));
             return CadPoint2D(scaledPt.x - pt.x, scaledPt.y - pt.y);
           } else {
             final s1 = transformPt(b1);
             final s2 = transformPt(b2);
-            final scaledPt = CadPoint2D(
-              s1.x + t * (s2.x - s1.x),
-              s1.y + t * (s2.y - s1.y),
-            );
+            final scaledPt = CadPoint2D(s1.x + t * (s2.x - s1.x), s1.y + t * (s2.y - s1.y));
             return CadPoint2D(scaledPt.x - pt.x, scaledPt.y - pt.y);
           }
         }
@@ -568,7 +516,8 @@ class CmsPunchConstraintEngine {
     final pt = punch.center;
 
     // 1. Outside Riser Dedicated Punch Scaling
-    final isOutsideRiser = baseline.productType.toLowerCase().contains('outside') ||
+    final isOutsideRiser =
+        baseline.productType.toLowerCase().contains('outside') ||
         baseline.itemName.toLowerCase().contains('outside') ||
         (!baseline.bends.any((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0) &&
             baseline.bends.where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange).length >= 2 &&
@@ -578,8 +527,7 @@ class CmsPunchConstraintEngine {
       final vertBends = baseline.bends.where((b) {
         final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
         return is90 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL');
-      }).toList()
-        ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+      }).toList()..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
 
       if (vertBends.length >= 2) {
         final x1 = math.min(vertBends.first.p1.x, vertBends.last.p1.x);
@@ -657,9 +605,11 @@ class CmsPunchConstraintEngine {
     }
 
     // 2. Inside Riser Dedicated Punch Scaling
-    final isInsideRiser = !isOutsideRiser && (baseline.productType.toLowerCase().contains('riser') ||
-        (baseline.bends.where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange).length >= 2 &&
-            baseline.bends.any((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0)));
+    final isInsideRiser =
+        !isOutsideRiser &&
+        (baseline.productType.toLowerCase().contains('riser') ||
+            (baseline.bends.where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange).length >= 2 &&
+                baseline.bends.any((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0)));
 
     if (isInsideRiser && paramId == 'height') {
       final longBends = baseline.bends.where((b) {
@@ -671,10 +621,7 @@ class CmsPunchConstraintEngine {
         final x1 = math.min(longBends[0].p1.x, longBends[1].p1.x);
         final x2 = math.max(longBends[0].p1.x, longBends[1].p1.x);
 
-        final b3 = baseline.bends.firstWhere(
-          (b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0,
-          orElse: () => baseline.bends.first,
-        );
+        final b3 = baseline.bends.firstWhere((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0, orElse: () => baseline.bends.first);
         final yB3 = b3.p1.y;
         final yProngThreshold = yB3 - (yB3 - 30.0) * 0.45;
 
@@ -822,7 +769,8 @@ class CmsPunchConstraintEngine {
     final groupMid = CadPoint2D(sumX / punchIds.length, sumY / punchIds.length);
 
     // 1. Inside or Outside Riser sidewall cheeks
-    final isRiser = baseline.productType.toLowerCase().contains('riser') ||
+    final isRiser =
+        baseline.productType.toLowerCase().contains('riser') ||
         (baseline.bends.where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange).length >= 2 &&
             baseline.bends.any((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0));
 
@@ -836,10 +784,7 @@ class CmsPunchConstraintEngine {
         final x1 = math.min(longBends[0].p1.x, longBends[1].p1.x);
         final x2 = math.max(longBends[0].p1.x, longBends[1].p1.x);
 
-        final b3 = baseline.bends.firstWhere(
-          (b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0,
-          orElse: () => baseline.bends.first,
-        );
+        final b3 = baseline.bends.firstWhere((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0, orElse: () => baseline.bends.first);
         final yB3 = b3.p1.y;
         final yProngThreshold = yB3 - (yB3 - 30.0) * 0.45;
 
@@ -966,8 +911,7 @@ class CmsPunchConstraintEngine {
     for (int i = 0, j = poly.length - 1; i < poly.length; j = i++) {
       final xi = poly[i].x, yi = poly[i].y;
       final xj = poly[j].x, yj = poly[j].y;
-      final intersect = ((yi > pt.y) != (yj > pt.y)) &&
-          (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
+      final intersect = ((yi > pt.y) != (yj > pt.y)) && (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
       if (intersect) inside = !inside;
     }
     return inside;
@@ -1027,13 +971,9 @@ class CmsPunchConstraintEngine {
             break;
           case CadDimensionType.holeToEdge:
             // Hole to edge: distance to edge segment line
-            final edgeId = (dim.referenceAId != null && !newPunches.any((p) => p.id == dim.referenceAId))
-                ? dim.referenceAId
-                : dim.referenceBId;
+            final edgeId = (dim.referenceAId != null && !newPunches.any((p) => p.id == dim.referenceAId)) ? dim.referenceAId : dim.referenceBId;
             final edgeSeg = AssociativeDimensionEngine.resolveEdgeSegment(edgeId, scaled);
-            final punchId = (dim.referenceAId != null && newPunches.any((p) => p.id == dim.referenceAId))
-                ? dim.referenceAId
-                : dim.referenceBId;
+            final punchId = (dim.referenceAId != null && newPunches.any((p) => p.id == dim.referenceAId)) ? dim.referenceAId : dim.referenceBId;
             final punch = newPunches.where((p) => p.id == punchId).firstOrNull;
 
             if (edgeSeg != null && punch != null) {
@@ -1053,11 +993,7 @@ class CmsPunchConstraintEngine {
         }
       }
 
-      return dim.copyWith(
-        pointA: newPA,
-        pointB: newPB,
-        measuredValue: measured,
-      );
+      return dim.copyWith(pointA: newPA, pointB: newPB, measuredValue: measured);
     }).toList();
   }
 

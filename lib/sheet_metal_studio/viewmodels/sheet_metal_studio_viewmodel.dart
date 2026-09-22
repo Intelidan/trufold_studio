@@ -890,8 +890,9 @@ class SheetMetalStudioViewModel extends ChangeNotifier
             ? CmsProductContract.insideRiser45
             : CmsProductContract.bend45);
 
-    if (cmsGuidedController.state.phase == CmsUxPhase.complete ||
-        cmsGuidedController.state.discoveredPorts.isNotEmpty) {
+    if ((cmsGuidedController.state.phase == CmsUxPhase.complete ||
+            cmsGuidedController.state.discoveredPorts.isNotEmpty) &&
+        !_document.metadata.containsKey('cmsTemplate')) {
       finalizeCmsTemplate(openInspector: false);
     }
     setFittingInspectorOpen(false);
@@ -7113,9 +7114,17 @@ class SheetMetalStudioViewModel extends ChangeNotifier
   }) {
     _recordHistory();
 
-    final newId = role == BendLineRole.flange
-        ? 'FL${_document.bends.where((b) => b.isFlange).length + 1}'
-        : 'B${_document.bends.where((b) => !b.isFlange).length + 1}';
+    // Generate a collision-safe ID by scanning existing IDs. A simple
+    // count-based approach (e.g. 'B${length+1}') can collide when the
+    // document already contains bends from a DXF import with non-sequential
+    // or re-used IDs (e.g. two bends both named 'B5').
+    final existingIds = _document.bends.map((b) => b.id).toSet();
+    final prefix = role == BendLineRole.flange ? 'FL' : 'B';
+    int idCounter = 1;
+    while (existingIds.contains('$prefix$idCounter')) {
+      idCounter++;
+    }
+    final newId = '$prefix$idCounter';
 
     final effectiveRadius =
         radiusMm ??
@@ -8815,9 +8824,19 @@ class SheetMetalStudioViewModel extends ChangeNotifier
   void updateBend(FoldBendLine updated) {
     _recordHistory();
 
-    final newBends = _document.bends
-        .map((b) => b.id == updated.id ? updated : b)
-        .toList();
+    // Replace only the FIRST bend that matches both id AND geometry.
+    // This guards against duplicate bend IDs in the document (e.g. two bends
+    // both named "B7") where a naïve id-only match would overwrite all of
+    // them with the same updated value, corrupting the topology of the
+    // unrelated bend that shares the id.
+    bool replaced = false;
+    final newBends = _document.bends.map((b) {
+      if (!replaced && b.id == updated.id && b.p1 == updated.p1 && b.p2 == updated.p2) {
+        replaced = true;
+        return updated;
+      }
+      return b;
+    }).toList();
 
     _document = _document.copyWith(bends: newBends);
 

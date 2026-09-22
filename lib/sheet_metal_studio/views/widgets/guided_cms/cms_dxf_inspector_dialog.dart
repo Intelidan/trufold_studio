@@ -64,8 +64,8 @@ class _CmsDxfInspectorDialogState extends State<CmsDxfInspectorDialog> {
         side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
       ),
       child: Container(
-        width: 500.0,
-        padding: const EdgeInsets.all(24.0),
+        width: 530.0,
+        padding: const EdgeInsets.all(22.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -188,18 +188,24 @@ class _CmsDxfInspectorDialogState extends State<CmsDxfInspectorDialog> {
               children: [
                 TextButton(
                   onPressed: widget.onOpenNormally,
-                  child: const Text('Open Normally (General CAD)', style: TextStyle(color: Color(0xFF64748B))),
+                  child: const Text(
+                    'Open Normally (General CAD)',
+                    style: TextStyle(color: Color(0xFF64748B), fontSize: 13.0),
+                  ),
                 ),
-                const SizedBox(width: 10.0),
+                const SizedBox(width: 8.0),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0284C7),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 11.0),
                   ),
                   icon: const Icon(Icons.play_arrow_rounded, size: 18.0),
-                  label: const Text('Start Automatic 3D Analysis', style: TextStyle(fontWeight: FontWeight.w600)),
+                  label: const Text(
+                    'Start Automatic 3D Analysis',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.0),
+                  ),
                   onPressed: () => widget.onStartAnalysis(_selectedContract),
                 ),
               ],

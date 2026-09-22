@@ -88,6 +88,106 @@ class CmsScalingController extends ChangeNotifier {
   CmsScalingPreviewResult? get currentPreview => _currentPreview;
   bool get isEvaluating => _isEvaluating;
 
+  bool get isMultiPortFitting {
+    final prof = effectiveScalingProfile;
+    return prof == CmsScalingProfile.tee ||
+        prof == CmsScalingProfile.cross ||
+        baselinePorts.length >= 3;
+  }
+
+  bool get isLinkedPorts => _model.isLinkedPorts;
+  int get activePortIndex => _model.activePortIndex;
+
+  void setActivePortIndex(int index) {
+    if (index < 0 || index >= baselinePorts.length) return;
+    _model = _model.copyWith(activePortIndex: index);
+    if (!_model.isLinkedPorts) {
+      final wId = 'port${index + 1}_width';
+      if (_model.parameters.containsKey(wId)) {
+        selectParameter(wId);
+      }
+    } else {
+      notifyListeners();
+    }
+  }
+
+  void setLinkedPorts(bool linked) {
+    togglePortLinking(linked);
+  }
+
+  void togglePortLinking(bool linked) {
+    if (_model.isLinkedPorts == linked) return;
+    _model = _model.copyWith(isLinkedPorts: linked);
+
+    if (linked) {
+      // In linked mode, synchronize to unified width and height
+      final firstPort = baselinePorts.isNotEmpty ? baselinePorts.first : null;
+      final curW = firstPort?.width ?? 100.0;
+      final curH = firstPort?.height ?? 100.0;
+
+      final params = <String, CmsScalingParameter>{
+        'width': CmsScalingParameter(
+          id: 'width',
+          displayName: 'Width (W)',
+          currentValue: curW,
+          baselineValue: curW,
+          minValidMm: math.min(50.0, curW - 50.0),
+          maxValidMm: math.max(750.0, curW + 200.0),
+          unit: 'mm',
+          teachingState: CmsParameterTeachingState.learning,
+        ),
+        'height': CmsScalingParameter(
+          id: 'height',
+          displayName: 'Height (H)',
+          currentValue: curH,
+          baselineValue: curH,
+          minValidMm: math.min(50.0, curH - 50.0),
+          maxValidMm: math.max(300.0, curH + 150.0),
+          unit: 'mm',
+          teachingState: CmsParameterTeachingState.learning,
+        ),
+      };
+      _model = _model.copyWith(parameters: params);
+      _activeParameterId = 'width';
+      _previewMorphValue = curW;
+    } else {
+      // In unlinked mode, create per-port parameters
+      final params = <String, CmsScalingParameter>{};
+      for (int i = 0; i < baselinePorts.length; i++) {
+        final port = baselinePorts[i];
+        final wId = 'port${i + 1}_width';
+        final hId = 'port${i + 1}_height';
+        params[wId] = CmsScalingParameter(
+          id: wId,
+          displayName: 'Port ${i + 1} Width',
+          currentValue: port.width,
+          baselineValue: port.width,
+          minValidMm: math.min(50.0, port.width - 50.0),
+          maxValidMm: math.max(750.0, port.width + 200.0),
+          unit: 'mm',
+          teachingState: CmsParameterTeachingState.learning,
+        );
+        params[hId] = CmsScalingParameter(
+          id: hId,
+          displayName: 'Port ${i + 1} Height',
+          currentValue: port.height,
+          baselineValue: port.height,
+          minValidMm: math.min(50.0, port.height - 50.0),
+          maxValidMm: math.max(300.0, port.height + 150.0),
+          unit: 'mm',
+          teachingState: CmsParameterTeachingState.learning,
+        );
+      }
+      _model = _model.copyWith(parameters: params);
+      final activeWId = 'port${_model.activePortIndex + 1}_width';
+      _activeParameterId = params.containsKey(activeWId) ? activeWId : params.keys.first;
+      _previewMorphValue = params[_activeParameterId]?.currentValue ?? 100.0;
+    }
+
+    evaluateMorph(_previewMorphValue);
+    notifyListeners();
+  }
+
   CmsScalingParameter? get activeParameter => _model.parameters[_activeParameterId];
 
   void selectParameter(String parameterId) {
@@ -116,23 +216,65 @@ class CmsScalingController extends ChangeNotifier {
     _isEvaluating = true;
 
     final param = activeParameter;
-    final baselineVal = param?.baselineValue ?? 100.0;
-    final delta = targetValue - baselineVal;
+    if (param != null) {
+      final updatedParam = param.copyWith(currentValue: targetValue);
+      final newParams = Map<String, CmsScalingParameter>.from(_model.parameters);
+      newParams[_activeParameterId] = updatedParam;
+      _model = _model.copyWith(parameters: newParams);
+    }
 
-    // 1. Generate updated canonical 2D sheet geometry
-    var scaledDoc = _generateScaled2DDocument(
-      baseline: baselineDocument,
-      paramId: _activeParameterId,
-      delta: delta,
-    );
-    final targetW = _activeParameterId == 'width' ? targetValue : (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
-    final targetH = _activeParameterId == 'height' ? targetValue : (baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0);
+    final widthParam = _model.parameters['width'];
+    final heightParam = _model.parameters['height'];
+
+    final deltaW = (widthParam != null)
+        ? (widthParam.currentValue - widthParam.baselineValue)
+        : 0.0;
+    final deltaH = (heightParam != null)
+        ? (heightParam.currentValue - heightParam.baselineValue)
+        : 0.0;
+
+    // 1. Generate updated canonical 2D sheet geometry composing active parameter deltas
+    var scaledDoc = baselineDocument;
+    final prof = effectiveScalingProfile;
+
+    if (prof == CmsScalingProfile.cross || isCrossGeometry(baselineDocument)) {
+      scaledDoc = _scaleCross2D(
+        scaledDoc,
+        isLinked: _model.isLinkedPorts,
+        parameters: _model.parameters,
+      );
+    } else if (prof == CmsScalingProfile.tee || isTeeGeometry(baselineDocument)) {
+      scaledDoc = _scaleTee2D(
+        scaledDoc,
+        isLinked: _model.isLinkedPorts,
+        parameters: _model.parameters,
+      );
+    } else {
+      if (deltaW.abs() > 0.01) {
+        scaledDoc = _generateScaled2DDocument(
+          baseline: scaledDoc,
+          paramId: 'width',
+          delta: deltaW,
+        );
+      }
+      if (deltaH.abs() > 0.01) {
+        scaledDoc = _generateScaled2DDocument(
+          baseline: scaledDoc,
+          paramId: 'height',
+          delta: deltaH,
+        );
+      }
+    }
+
+    final targetW = widthParam?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
+    final targetH = heightParam?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0);
     scaledDoc = scaledDoc.copyWith(
       parameters: {
         ...scaledDoc.parameters,
         'width': targetW,
         'height': targetH,
         _activeParameterId: targetValue,
+        for (final p in _model.parameters.values) p.id: p.currentValue,
       },
     );
 
@@ -153,18 +295,20 @@ class CmsScalingController extends ChangeNotifier {
       ),
     ).toList();
 
-    // Reconcile channel height across ports (ports of the same fitting share channel cross-section)
+    // Reconcile channel height across ports (only for linked mode)
     double? detectedChannelHeight;
-    for (final m in initialMeasured) {
-      if (m.height > 15.0) {
-        if (detectedChannelHeight == null || m.height > detectedChannelHeight) {
-          detectedChannelHeight = m.height;
+    if (_model.isLinkedPorts) {
+      for (final m in initialMeasured) {
+        if (m.height > 15.0) {
+          if (detectedChannelHeight == null || m.height > detectedChannelHeight) {
+            detectedChannelHeight = m.height;
+          }
         }
       }
     }
 
     final measured = initialMeasured.map((m) {
-      if (detectedChannelHeight != null && (m.height - detectedChannelHeight).abs() > 3.0) {
+      if (_model.isLinkedPorts && detectedChannelHeight != null && (m.height - detectedChannelHeight).abs() > 3.0) {
         return CmsOpeningPlaneAnalyzer.analyze(
           raw: rawOpenings.firstWhere((r) => r.openingId == m.openingId),
           document: scaledDoc,
@@ -187,13 +331,33 @@ class CmsScalingController extends ChangeNotifier {
               (bp) => bp.id == mp.id || bp.index == mp.index,
               orElse: () => mp,
             );
+            var updated = mp;
+            double portExpectedW = targetW;
+            double portExpectedH = targetH;
+            if (!_model.isLinkedPorts) {
+              final pW = _model.parameters['port${mp.index}_width'];
+              final pH = _model.parameters['port${mp.index}_height'];
+              if (pW != null) portExpectedW = pW.currentValue;
+              if (pH != null) portExpectedH = pH.currentValue;
+              updated = updated.copyWith(
+                width: portExpectedW,
+                height: portExpectedH,
+              );
+            } else {
+              if ((portExpectedW - mp.width).abs() <= 6.0) {
+                updated = updated.copyWith(width: portExpectedW);
+              }
+              if ((portExpectedH - mp.height).abs() <= 6.0) {
+                updated = updated.copyWith(height: portExpectedH);
+              }
+            }
             if (baseMatch.role != null && baseMatch.role != CmsPortRole.unassigned) {
-              return mp.copyWith(
+              updated = updated.copyWith(
                 role: baseMatch.role,
                 roleSource: baseMatch.roleSource,
               );
             }
-            return mp;
+            return updated;
           }).toList()
         : baselinePorts;
 
@@ -211,16 +375,13 @@ class CmsScalingController extends ChangeNotifier {
 
   /// Commits the active parameter scaling behavior as Learned.
   DsfDocument acceptScalingModel() {
-    final param = activeParameter;
-    if (param != null) {
-      final learnedParam = param.copyWith(
-        currentValue: _previewMorphValue,
+    final newParams = Map<String, CmsScalingParameter>.from(_model.parameters);
+    for (final entry in _model.parameters.entries) {
+      newParams[entry.key] = entry.value.copyWith(
         teachingState: CmsParameterTeachingState.learned,
       );
-      final newParams = Map<String, CmsScalingParameter>.from(_model.parameters);
-      newParams[_activeParameterId] = learnedParam;
-      _model = _model.copyWith(parameters: newParams);
     }
+    _model = _model.copyWith(parameters: newParams);
 
     // Persist scaling model and derived scaled ports into DSF metadata
     final previewDoc = _currentPreview?.scaledDocument ?? baselineDocument;
@@ -235,14 +396,20 @@ class CmsScalingController extends ChangeNotifier {
     if (meta['fittingMetadata'] is Map) {
       final fittingMeta = Map<String, dynamic>.from(meta['fittingMetadata'] as Map);
       final params = Map<String, dynamic>.from(fittingMeta['parameters'] as Map? ?? {});
-      if (param != null) {
-        params[param.id] = _previewMorphValue;
+      for (final p in _model.parameters.values) {
+        params[p.id] = p.currentValue;
       }
       fittingMeta['parameters'] = params;
       meta['fittingMetadata'] = fittingMeta;
     }
 
-    final finalDoc = previewDoc.copyWith(metadata: meta);
+    final finalDoc = previewDoc.copyWith(
+      parameters: {
+        ...previewDoc.parameters,
+        for (final p in _model.parameters.values) p.id: p.currentValue,
+      },
+      metadata: meta,
+    );
     notifyListeners();
     return finalDoc;
   }
@@ -368,7 +535,342 @@ class CmsScalingController extends ChangeNotifier {
       return CmsScalingProfile.insideRiser;
     }
 
+    if (contract.scalingProfile == CmsScalingProfile.cross ||
+        docType.contains('cross') ||
+        isCrossGeometry(baselineDocument)) {
+      return CmsScalingProfile.cross;
+    }
+    if (contract.scalingProfile == CmsScalingProfile.tee ||
+        docType.contains('tee') ||
+        isTeeGeometry(baselineDocument)) {
+      return CmsScalingProfile.tee;
+    }
+
     return contract.scalingProfile;
+  }
+
+  /// Geometrically detects whether [doc] is a Cross fitting (4 physical ports or 4-way corner bends).
+  bool isCrossGeometry(DsfDocument doc) {
+    final docType = '${doc.productType} ${doc.itemName}'.toLowerCase();
+    if (docType.contains('cross')) return true;
+    return doc.bends.length >= 14 || baselinePorts.length == 4;
+  }
+
+  /// Geometrically detects whether [doc] is a Tee fitting (3 physical ports or 3-way layout).
+  bool isTeeGeometry(DsfDocument doc) {
+    final docType = '${doc.productType} ${doc.itemName}'.toLowerCase();
+    if (docType.contains('tee')) return true;
+    return (doc.bends.length >= 9 && doc.bends.length <= 13) || baselinePorts.length == 3;
+  }
+
+  /// Dedicated 2D Sheet Scaling for Cross Fittings:
+  /// - Base floor is an octagonal or rectangular central base with 4-way symmetry.
+  /// - Horizontal and vertical runs scale symmetrically in linked mode, or independently in unlinked mode.
+  /// - Corner sidewalls and return flanges scale diagonally outward with zero distortion.
+  /// Dedicated 2D Sheet Scaling for Cross Fittings:
+  /// - Base floor is an octagonal or rectangular central base with 4-way symmetry.
+  /// - Horizontal and vertical runs scale symmetrically in linked mode, or independently in unlinked mode.
+  /// - Body height is governed by the highest port height, and flap heights for lower ports retract.
+  DsfDocument _scaleCross2D(
+    DsfDocument baseline, {
+    required bool isLinked,
+    required Map<String, CmsScalingParameter> parameters,
+  }) {
+    final baseFloor = baseline.faces.firstWhere(
+      (f) => f.isBaseAnchor || f.role == FaceRole.baseFloor,
+      orElse: () => baseline.faces.first,
+    );
+    final verts = baseFloor.vertices;
+    final minX = verts.map((v) => v.x).reduce(math.min);
+    final maxX = verts.map((v) => v.x).reduce(math.max);
+    final minY = verts.map((v) => v.y).reduce(math.min);
+    final maxY = verts.map((v) => v.y).reduce(math.max);
+    final midX = (minX + maxX) / 2.0;
+    final midY = (minY + maxY) / 2.0;
+
+    double dWHoriz = 0.0;
+    double dWVert = 0.0;
+    double dHBody = 0.0;
+    double dH1 = 0.0;
+    double dH2 = 0.0;
+    double dH3 = 0.0;
+    double dH4 = 0.0;
+
+    if (isLinked) {
+      final w = parameters['width'];
+      final h = parameters['height'];
+      final dW = w != null ? (w.currentValue - w.baselineValue) : 0.0;
+      final dH = h != null ? (h.currentValue - h.baselineValue) : 0.0;
+      dWHoriz = dW;
+      dWVert = dW;
+      dHBody = dH;
+      dH1 = dH;
+      dH2 = dH;
+      dH3 = dH;
+      dH4 = dH;
+    } else {
+      final p1W = parameters['port1_width'];
+      final p2W = parameters['port2_width'];
+      final p3W = parameters['port3_width'];
+      final p4W = parameters['port4_width'];
+      final p1H = parameters['port1_height'];
+      final p2H = parameters['port2_height'];
+      final p3H = parameters['port3_height'];
+      final p4H = parameters['port4_height'];
+
+      final dW1 = p1W != null ? (p1W.currentValue - p1W.baselineValue) : 0.0;
+      final dW2 = p2W != null ? (p2W.currentValue - p2W.baselineValue) : 0.0;
+      final dW3 = p3W != null ? (p3W.currentValue - p3W.baselineValue) : 0.0;
+      final dW4 = p4W != null ? (p4W.currentValue - p4W.baselineValue) : 0.0;
+
+      dWVert = (dW2.abs() > 0.01 ? dW2 : dW4);
+      dWHoriz = (dW1.abs() > 0.01 ? dW1 : dW3);
+      if (dWVert.abs() < 0.01) dWVert = (dW2 + dW4) / 2.0;
+      if (dWHoriz.abs() < 0.01) dWHoriz = (dW1 + dW3) / 2.0;
+
+      final h1cur = p1H?.currentValue ?? p1H?.baselineValue ?? 100.0;
+      final h2cur = p2H?.currentValue ?? p2H?.baselineValue ?? 100.0;
+      final h3cur = p3H?.currentValue ?? p3H?.baselineValue ?? 100.0;
+      final h4cur = p4H?.currentValue ?? p4H?.baselineValue ?? 100.0;
+      final h1base = p1H?.baselineValue ?? h1cur;
+      final h2base = p2H?.baselineValue ?? h2cur;
+      final h3base = p3H?.baselineValue ?? h3cur;
+      final h4base = p4H?.baselineValue ?? h4cur;
+
+      final maxTargetH = math.max(math.max(h1cur, h2cur), math.max(h3cur, h4cur));
+      final maxBaseH = math.max(math.max(h1base, h2base), math.max(h3base, h4base));
+      dHBody = maxTargetH - maxBaseH;
+
+      dH1 = h1cur - h1base;
+      dH2 = h2cur - h2base;
+      dH3 = h3cur - h3base;
+      dH4 = h4cur - h4base;
+    }
+
+    final hasCrossChange = dWHoriz.abs() > 1e-4 ||
+        dWVert.abs() > 1e-4 ||
+        dHBody.abs() > 1e-4 ||
+        dH1.abs() > 1e-4 ||
+        dH2.abs() > 1e-4 ||
+        dH3.abs() > 1e-4 ||
+        dH4.abs() > 1e-4;
+    if (!hasCrossChange) return baseline;
+
+    CadPoint2D transformCrossPt(CadPoint2D pt) {
+      double x = pt.x;
+      double y = pt.y;
+
+      if (x > midX + 5.0) {
+        x += dWHoriz / 2.0;
+      } else if (x < midX - 5.0) {
+        x -= dWHoriz / 2.0;
+      }
+
+      if (y > midY + 5.0) {
+        y += dWVert / 2.0;
+      } else if (y < midY - 5.0) {
+        y -= dWVert / 2.0;
+      }
+
+      if (dHBody.abs() > 1e-4) {
+        final distFromCenter = math.sqrt(math.pow(pt.x - midX, 2) + math.pow(pt.y - midY, 2));
+        if (distFromCenter > 80.0) {
+          final signX = pt.x >= midX ? 1.0 : -1.0;
+          final signY = pt.y >= midY ? 1.0 : -1.0;
+          x += signX * (dHBody / (2.0 * math.sqrt2));
+          y += signY * (dHBody / (2.0 * math.sqrt2));
+        }
+      }
+
+      // Per-port flap adjustments (height delta relative to baseline for that port)
+      if (dH1.abs() > 1e-4 && x > maxX - 5.0) {
+        final signY = y >= midY ? 1.0 : -1.0;
+        y += signY * (dH1 / 2.0);
+      }
+      if (dH2.abs() > 1e-4 && y > maxY - 5.0) {
+        final signX = x >= midX ? 1.0 : -1.0;
+        x += signX * (dH2 / 2.0);
+      }
+      if (dH3.abs() > 1e-4 && x < minX + 5.0) {
+        final signY = y >= midY ? 1.0 : -1.0;
+        y += signY * (dH3 / 2.0);
+      }
+      if (dH4.abs() > 1e-4 && y < minY + 5.0) {
+        final signX = x >= midX ? 1.0 : -1.0;
+        x += signX * (dH4 / 2.0);
+      }
+
+      return CadPoint2D(x, y);
+    }
+
+    return baseline.copyWith(
+      outerContour: baseline.outerContour.map(transformCrossPt).toList(),
+      bends: baseline.bends.map((b) => b.copyWith(
+        p1: transformCrossPt(b.p1),
+        p2: transformCrossPt(b.p2),
+      )).toList(),
+      faces: baseline.faces.map((f) => f.copyWith(
+        vertices: f.vertices.map(transformCrossPt).toList(),
+      )).toList(),
+      punches: baseline.punches.map((p) => p.copyWith(
+        center: transformCrossPt(p.center),
+      )).toList(),
+    );
+  }
+
+  /// Dedicated 2D Sheet Scaling for Tee Fittings:
+  /// - Base floor web with Main Run and Branch mouth.
+  /// - Branch width scales horizontally; Main run width scales bed vertically.
+  /// - Product physical height remains max port height across the fitting.
+  /// - Lower-height ports have their coupler flaps retracted along their outward direction.
+  DsfDocument _scaleTee2D(
+    DsfDocument baseline, {
+    required bool isLinked,
+    required Map<String, CmsScalingParameter> parameters,
+  }) {
+    final baseFloor = baseline.faces.firstWhere(
+      (f) => f.isBaseAnchor || f.role == FaceRole.baseFloor,
+      orElse: () => baseline.faces.first,
+    );
+    final verts = baseFloor.vertices;
+    final minX = verts.map((v) => v.x).reduce(math.min);
+    final maxX = verts.map((v) => v.x).reduce(math.max);
+    final minY = verts.map((v) => v.y).reduce(math.min);
+    final maxY = verts.map((v) => v.y).reduce(math.max);
+    final midX = (minX + maxX) / 2.0;
+
+    double dWMain = 0.0;
+    double dWBranch = 0.0;
+    double dHBody = 0.0;
+    double dH1 = 0.0;
+    double dH2 = 0.0;
+    double dH3 = 0.0;
+
+    if (isLinked) {
+      final w = parameters['width'];
+      final h = parameters['height'];
+      final dW = w != null ? (w.currentValue - w.baselineValue) : 0.0;
+      final dH = h != null ? (h.currentValue - h.baselineValue) : 0.0;
+      dWMain = dW;
+      dWBranch = dW;
+      dHBody = dH;
+      dH1 = dH;
+      dH2 = dH;
+      dH3 = dH;
+    } else {
+      final p1W = parameters['port1_width'];
+      final p2W = parameters['port2_width'];
+      final p3W = parameters['port3_width'];
+      final p1H = parameters['port1_height'];
+      final p2H = parameters['port2_height'];
+      final p3H = parameters['port3_height'];
+
+      final dW1 = p1W != null ? (p1W.currentValue - p1W.baselineValue) : 0.0;
+      final dW2 = p2W != null ? (p2W.currentValue - p2W.baselineValue) : 0.0;
+      final dW3 = p3W != null ? (p3W.currentValue - p3W.baselineValue) : 0.0;
+
+      dWBranch = dW1;
+      dWMain = (dW2.abs() > 0.01 ? dW2 : dW3);
+      if (dWMain.abs() < 0.01) dWMain = (dW2 + dW3) / 2.0;
+
+      final h1cur = p1H?.currentValue ?? p1H?.baselineValue ?? 100.0;
+      final h2cur = p2H?.currentValue ?? p2H?.baselineValue ?? 100.0;
+      final h3cur = p3H?.currentValue ?? p3H?.baselineValue ?? 100.0;
+      final h1base = p1H?.baselineValue ?? h1cur;
+      final h2base = p2H?.baselineValue ?? h2cur;
+      final h3base = p3H?.baselineValue ?? h3cur;
+
+      final maxTargetH = math.max(h1cur, math.max(h2cur, h3cur));
+      final maxBaseH = math.max(h1base, math.max(h2base, h3base));
+      dHBody = maxTargetH - maxBaseH;
+
+      dH1 = h1cur - h1base;
+      dH2 = h2cur - h2base;
+      dH3 = h3cur - h3base;
+    }
+
+    final hasAnyChange = dWMain.abs() > 1e-4 ||
+        dWBranch.abs() > 1e-4 ||
+        dHBody.abs() > 1e-4 ||
+        dH1.abs() > 1e-4 ||
+        dH2.abs() > 1e-4 ||
+        dH3.abs() > 1e-4;
+    if (!hasAnyChange) return baseline;
+
+    CadPoint2D transformTeePt(CadPoint2D pt) {
+      double x = pt.x;
+      double y = pt.y;
+
+      // --- Width (Branch & Main Run) ---
+      if (x > midX + 5.0) {
+        x += dWBranch / 2.0;
+      } else if (x < midX - 5.0) {
+        x -= dWBranch / 2.0;
+      }
+      if (y > maxY - 15.0) {
+        y += dWMain;
+      }
+
+      // --- Physical Body Height Scaling ---
+      // Sidewall F_9 (top run) extends vertically along with its return flange lip
+      if (dHBody.abs() > 1e-4 && y > maxY - 5.0) {
+        y += dHBody;
+      }
+
+      // --- Coupler Flap Retraction / Extension per Port ---
+      // 1. Port 3 Flaps (Left ear of top wall, and upper-left diagonal cheek flap F_5):
+      if (dH3.abs() > 1e-4) {
+        if (x < minX + 5.0 && y > maxY - 15.0) {
+          // Left ear of top sidewall F_9 / F_11
+          y += dH3;
+        } else if (x < midX - 40.0 && y > 40.0 && y < 160.0) {
+          // Flap F_5 on left cheek
+          x -= dH3 / math.sqrt2;
+          y += dH3 / math.sqrt2;
+        }
+      }
+
+      // 2. Port 2 Flaps (Right ear of top wall, and upper-right diagonal cheek flap F_1):
+      if (dH2.abs() > 1e-4) {
+        if (x > maxX - 5.0 && y > maxY - 15.0) {
+          // Right ear of top sidewall F_9 / F_10
+          y += dH2;
+        } else if (x > midX + 40.0 && y > 140.0 && y < 220.0) {
+          // Flap F_1 on right cheek
+          x += dH2 / math.sqrt2;
+          y += dH2 / math.sqrt2;
+        }
+      }
+
+      // 3. Port 1 Flaps (Lower diagonal cheek flaps F_2 and F_6):
+      if (dH1.abs() > 1e-4 && y < minY + 15.0) {
+        if (x > midX) {
+          // Flap F_2 on right lower cheek
+          x += dH1 / math.sqrt2;
+          y -= dH1 / math.sqrt2;
+        } else {
+          // Flap F_6 on left lower cheek
+          x -= dH1 / math.sqrt2;
+          y -= dH1 / math.sqrt2;
+        }
+      }
+
+      return CadPoint2D(x, y);
+    }
+
+    return baseline.copyWith(
+      outerContour: baseline.outerContour.map(transformTeePt).toList(),
+      bends: baseline.bends.map((b) => b.copyWith(
+        p1: transformTeePt(b.p1),
+        p2: transformTeePt(b.p2),
+      )).toList(),
+      faces: baseline.faces.map((f) => f.copyWith(
+        vertices: f.vertices.map(transformTeePt).toList(),
+      )).toList(),
+      punches: baseline.punches.map((p) => p.copyWith(
+        center: transformTeePt(p.center),
+      )).toList(),
+    );
   }
 
   /// Geometrically detects whether [doc] is an Outside Riser.
@@ -1044,10 +1546,10 @@ class CmsScalingController extends ChangeNotifier {
       if (pt.x < x1 - 0.5) {
         if (pt.y > yProngThreshold) {
           // 45° Riser Prong & Miter Cut:
-          // Outer corner & notch (x <= 25.0, or y ~ 116.92) translate horizontally with the outer wall (-deltaH, 0).
+          // Outer corner & notch (x <= minX + 25.0, or y ~ 116.92) translate horizontally with the outer wall (-deltaH, 0).
           // Inner mouth tip (y ~ 170.66) extends upward and inward by (-deltaH + d45, deltaYProngTip).
           // This keeps the mouth cut completely above FL1 without cutting into the return flange.
-          if (pt.x <= 25.0) {
+          if (pt.x <= minX + 25.0) {
             return CadPoint2D(pt.x - deltaH, pt.y);
           }
           final t = ((pt.y - 116.92) / (170.66 - 116.92)).clamp(0.0, 1.0);
@@ -1526,36 +2028,82 @@ class CmsScalingController extends ChangeNotifier {
     final baselineWidth = baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0;
     final baselineHeight = baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0;
 
-    final params = <String, CmsScalingParameter>{
-      'width': CmsScalingParameter(
+    final minW = math.min(50.0, baselineWidth - 50.0);
+    final maxW = math.max(750.0, baselineWidth + 200.0);
+    final minH = math.min(50.0, baselineHeight - 50.0);
+    final maxH = math.max(300.0, baselineHeight + 150.0);
+
+    bool initialLinked = true;
+    if (baselinePorts.length >= 3) {
+      final firstW = baselinePorts.first.width;
+      final firstH = baselinePorts.first.height;
+      for (final p in baselinePorts) {
+        if ((p.width - firstW).abs() > 3.0 || (p.height - firstH).abs() > 3.0) {
+          initialLinked = false;
+          break;
+        }
+      }
+    }
+
+    final params = <String, CmsScalingParameter>{};
+    if (initialLinked || baselinePorts.length < 3) {
+      params['width'] = CmsScalingParameter(
         id: 'width',
         displayName: 'Width (W)',
         currentValue: baselineWidth,
         baselineValue: baselineWidth,
-        minValidMm: 50.0,
-        maxValidMm: 600.0,
+        minValidMm: minW,
+        maxValidMm: maxW,
         unit: 'mm',
         teachingState: CmsParameterTeachingState.untaught,
         stretchZoneIds: ['ZONE_FLOOR_WEB'],
         translationZoneIds: ['ZONE_SIDEWALLS_AND_FLANGES'],
         rigidGroupIds: rigidGroups.map((g) => g.id).toList(),
         derivedPortIds: derivedPorts.map((p) => p.portId).toList(),
-      ),
-      'height': CmsScalingParameter(
+      );
+      params['height'] = CmsScalingParameter(
         id: 'height',
         displayName: 'Height (H)',
         currentValue: baselineHeight,
         baselineValue: baselineHeight,
-        minValidMm: 50.0,
-        maxValidMm: 300.0,
+        minValidMm: minH,
+        maxValidMm: maxH,
         unit: 'mm',
         teachingState: CmsParameterTeachingState.untaught,
         stretchZoneIds: [],
         translationZoneIds: ['ZONE_SIDEWALLS_AND_FLANGES'],
         rigidGroupIds: rigidGroups.map((g) => g.id).toList(),
         derivedPortIds: derivedPorts.map((p) => p.portId).toList(),
-      ),
-    };
+      );
+      _activeParameterId = 'width';
+    } else {
+      for (int i = 0; i < baselinePorts.length; i++) {
+        final p = baselinePorts[i];
+        final wId = 'port${i + 1}_width';
+        final hId = 'port${i + 1}_height';
+        params[wId] = CmsScalingParameter(
+          id: wId,
+          displayName: 'Port ${i + 1} Width',
+          currentValue: p.width,
+          baselineValue: p.width,
+          minValidMm: math.min(50.0, p.width - 50.0),
+          maxValidMm: math.max(750.0, p.width + 200.0),
+          unit: 'mm',
+          teachingState: CmsParameterTeachingState.untaught,
+        );
+        params[hId] = CmsScalingParameter(
+          id: hId,
+          displayName: 'Port ${i + 1} Height',
+          currentValue: p.height,
+          baselineValue: p.height,
+          minValidMm: math.min(50.0, p.height - 50.0),
+          maxValidMm: math.max(300.0, p.height + 150.0),
+          unit: 'mm',
+          teachingState: CmsParameterTeachingState.untaught,
+        );
+      }
+      _activeParameterId = 'port1_width';
+    }
 
     _model = CmsScalingModel(
       templateId: '${contract.productType}_${contract.variationName}',
@@ -1567,6 +2115,8 @@ class CmsScalingController extends ChangeNotifier {
       translationZones: translationZones,
       rigidFeatureGroups: rigidGroups,
       derivedPorts: derivedPorts,
+      isLinkedPorts: initialLinked,
+      activePortIndex: 0,
     );
   }
 }

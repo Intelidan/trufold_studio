@@ -676,7 +676,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
           labelText = '⚠️ ${bend.id} OPEN · $lenStr';
         } else if (isFlange) {
           labelText =
-              '${bend.id} [FLANGE] ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr · $lenStr';
+              '${bend.id} ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr · $lenStr';
         } else {
           labelText =
               '${bend.id} ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr · $lenStr';

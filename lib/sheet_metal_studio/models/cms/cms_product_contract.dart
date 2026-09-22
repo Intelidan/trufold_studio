@@ -126,28 +126,18 @@ class CmsProductContract {
     expectedCouplerSlotsPerPort: 4,
   );
 
-  static const equalTee = CmsProductContract(
+  static const tee = CmsProductContract(
     productType: 'tee',
-    variationName: 'equal_tee',
-    displayName: 'Equal Tee',
+    variationName: 'tee',
+    displayName: 'Tee',
     scalingProfile: CmsScalingProfile.tee,
     expectedPortCount: 3,
     expectedStructuralBends: 3,
     expectedFlanges: 3,
     expectedCouplerSlotsPerPort: 4,
   );
-
-  static const unequalTee = CmsProductContract(
-    productType: 'tee',
-    variationName: 'unequal_tee',
-    displayName: 'Unequal Tee',
-    scalingProfile: CmsScalingProfile.tee,
-    expectedPortCount: 3,
-    expectedStructuralBends: 3,
-    expectedFlanges: 3,
-    expectedCouplerSlotsPerPort: 4,
-    hasRoleSuggestionRule: true,
-  );
+  static const equalTee = tee;
+  static const unequalTee = tee;
 
   static const concentricReducer = CmsProductContract(
     productType: 'reducer',
@@ -161,28 +151,18 @@ class CmsProductContract {
     hasRoleSuggestionRule: true,
   );
 
-  static const equalCross = CmsProductContract(
+  static const cross = CmsProductContract(
     productType: 'cross',
-    variationName: 'equal_cross',
-    displayName: 'Equal Cross',
+    variationName: 'cross',
+    displayName: 'Cross',
     scalingProfile: CmsScalingProfile.cross,
     expectedPortCount: 4,
     expectedStructuralBends: 4,
     expectedFlanges: 4,
     expectedCouplerSlotsPerPort: 4,
   );
-
-  static const unequalCross = CmsProductContract(
-    productType: 'cross',
-    variationName: 'unequal_cross',
-    displayName: 'Unequal Cross',
-    scalingProfile: CmsScalingProfile.cross,
-    expectedPortCount: 4,
-    expectedStructuralBends: 4,
-    expectedFlanges: 4,
-    expectedCouplerSlotsPerPort: 4,
-    hasRoleSuggestionRule: true,
-  );
+  static const equalCross = cross;
+  static const unequalCross = cross;
 
   static const insideRiser45 = CmsProductContract(
     productType: 'inside_riser',
@@ -236,11 +216,9 @@ class CmsProductContract {
     outsideRiser45,
     outsideRiser90,
     straightTray,
-    equalTee,
-    unequalTee,
+    tee,
     concentricReducer,
-    equalCross,
-    unequalCross,
+    cross,
   ];
 
   /// Disambiguated contract lookup prioritizing exact key matches.
@@ -274,16 +252,10 @@ class CmsProductContract {
       return insideRiser45;
     }
 
-    // 4. Disambiguate 'unequal' before 'equal'
-    if (combined.contains('unequal')) {
-      if (combined.contains('tee')) return unequalTee;
-      if (combined.contains('cross')) return unequalCross;
-    }
-
-    // 5. Reducers, Tees, Crosses, Straights
+    // 4. Reducers, Tees, Crosses, Straights
     if (combined.contains('reducer')) return concentricReducer;
-    if (combined.contains('tee')) return equalTee;
-    if (combined.contains('cross')) return equalCross;
+    if (combined.contains('tee')) return tee;
+    if (combined.contains('cross')) return cross;
     if (combined.contains('straight') || combined.contains('tray') || combined.contains('trunking')) return straightTray;
 
     // 6. Generic angle bends (flat bends) - require bend/elbow/tray/trunking keywords or explicit angle+bend pattern

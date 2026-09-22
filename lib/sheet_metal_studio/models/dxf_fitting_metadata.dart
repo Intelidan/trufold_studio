@@ -485,16 +485,16 @@ class DxfFittingMetadata {
       variantName = name.contains('45') ? '45 Deg Outside Riser' : '90 Deg Outside Riser';
     } else if (name.contains('cross') && name.contains('cover')) {
       product = FittingProductType.crossCover;
-      variantName = name.contains('unequal') ? 'Unequal Cross Cover' : 'Equal Cross Cover';
+      variantName = 'Cross Cover';
     } else if (name.contains('cross')) {
       product = FittingProductType.cross;
-      variantName = name.contains('unequal') ? 'Unequal Cross' : 'Equal Cross';
+      variantName = 'Cross';
     } else if (name.contains('tee') && name.contains('cover')) {
       product = FittingProductType.teeCover;
-      variantName = name.contains('unequal') ? 'Unequal Tee Cover' : 'Equal Tee Cover';
+      variantName = 'Tee Cover';
     } else if (name.contains('tee')) {
       product = FittingProductType.tee;
-      variantName = name.contains('unequal') ? 'Unequal Tee' : 'Equal Tee';
+      variantName = 'Tee';
     } else if (name.contains('reducer')) {
       product = FittingProductType.reducer;
       variantName = name.contains('left')
@@ -537,7 +537,13 @@ class DxfFittingMetadata {
     }
 
     if (product == FittingProductType.tee) {
-      if (variantName == 'Unequal Tee') {
+      final isUnequal = name.contains('unequal') ||
+          dimNumbers.length > 2 ||
+          (analyzed['branchWidth'] != null &&
+              analyzed['bedWidth'] != null &&
+              (analyzed['branchWidth']! - analyzed['bedWidth']!).abs() > 5.0);
+      if (isUnequal) {
+        params['isLinkedPorts'] = 0.0;
         params['port1Width'] = dimNumbers.isNotEmpty ? dimNumbers[0] : (analyzed['bedWidth'] ?? 100.0);
         params['port1Height'] = dimNumbers.length > 1 ? dimNumbers[1] : 50.0;
         params['port2Width'] = dimNumbers.length > 2 ? dimNumbers[2] : (analyzed['bedWidth'] ?? 100.0);
@@ -548,6 +554,7 @@ class DxfFittingMetadata {
         params['height'] = params['port1Height']!;
         params['branchWidth'] = params['port3Width']!;
       } else {
+        params['isLinkedPorts'] = 1.0;
         final w = dimNumbers.isNotEmpty ? dimNumbers[0] : (analyzed['bedWidth'] ?? 100.0);
         final h = dimNumbers.length > 1 ? dimNumbers[1] : 50.0;
         params['width'] = w;
@@ -561,7 +568,9 @@ class DxfFittingMetadata {
         params['port3Height'] = h;
       }
     } else if (product == FittingProductType.cross) {
-      if (variantName == 'Unequal Cross') {
+      final isUnequal = name.contains('unequal') || dimNumbers.length > 2;
+      if (isUnequal) {
+        params['isLinkedPorts'] = 0.0;
         params['port1Width'] = dimNumbers.isNotEmpty ? dimNumbers[0] : 100.0;
         params['port1Height'] = dimNumbers.length > 1 ? dimNumbers[1] : 50.0;
         params['port2Width'] = dimNumbers.length > 2 ? dimNumbers[2] : 100.0;
@@ -573,6 +582,7 @@ class DxfFittingMetadata {
         params['width'] = params['port1Width']!;
         params['height'] = params['port1Height']!;
       } else {
+        params['isLinkedPorts'] = 1.0;
         final w = dimNumbers.isNotEmpty ? dimNumbers[0] : 100.0;
         final h = dimNumbers.length > 1 ? dimNumbers[1] : 50.0;
         params['width'] = w;

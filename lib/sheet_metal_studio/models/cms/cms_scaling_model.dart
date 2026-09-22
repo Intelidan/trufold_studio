@@ -336,6 +336,8 @@ class CmsScalingModel {
   final List<CmsTranslationZone> translationZones;
   final List<CmsRigidFeatureGroup> rigidFeatureGroups;
   final List<CmsDerivedPort> derivedPorts;
+  final bool isLinkedPorts;
+  final int activePortIndex;
 
   const CmsScalingModel({
     required this.templateId,
@@ -347,6 +349,8 @@ class CmsScalingModel {
     this.translationZones = const [],
     this.rigidFeatureGroups = const [],
     this.derivedPorts = const [],
+    this.isLinkedPorts = true,
+    this.activePortIndex = 0,
   });
 
   bool get isFullyTaught =>
@@ -365,6 +369,8 @@ class CmsScalingModel {
     List<CmsTranslationZone>? translationZones,
     List<CmsRigidFeatureGroup>? rigidFeatureGroups,
     List<CmsDerivedPort>? derivedPorts,
+    bool? isLinkedPorts,
+    int? activePortIndex,
   }) {
     return CmsScalingModel(
       templateId: templateId ?? this.templateId,
@@ -376,6 +382,8 @@ class CmsScalingModel {
       translationZones: translationZones ?? this.translationZones,
       rigidFeatureGroups: rigidFeatureGroups ?? this.rigidFeatureGroups,
       derivedPorts: derivedPorts ?? this.derivedPorts,
+      isLinkedPorts: isLinkedPorts ?? this.isLinkedPorts,
+      activePortIndex: activePortIndex ?? this.activePortIndex,
     );
   }
 
@@ -389,6 +397,8 @@ class CmsScalingModel {
         'translationZones': translationZones.map((z) => z.toJson()).toList(),
         'rigidFeatureGroups': rigidFeatureGroups.map((g) => g.toJson()).toList(),
         'derivedPorts': derivedPorts.map((p) => p.toJson()).toList(),
+        'isLinkedPorts': isLinkedPorts,
+        'activePortIndex': activePortIndex,
       };
 
   factory CmsScalingModel.fromJson(Map<String, dynamic> json) {
@@ -415,6 +425,8 @@ class CmsScalingModel {
       derivedPorts: (json['derivedPorts'] as List<dynamic>? ?? [])
           .map((p) => CmsDerivedPort.fromJson(p as Map<String, dynamic>))
           .toList(),
+      isLinkedPorts: json['isLinkedPorts'] as bool? ?? true,
+      activePortIndex: json['activePortIndex'] as int? ?? 0,
     );
   }
 }

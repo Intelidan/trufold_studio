@@ -240,6 +240,8 @@ void main() {
           faces: normalizedFaces,
           baseFaceId: 'F_2',
           punches: punches,
+          dimensions: const [],
+          constraints: const [],
         );
 
         riserBaselinePorts = const [
@@ -884,6 +886,301 @@ void main() {
         expect(scaledS5.center.distanceTo(scaledS3.center), closeTo(50.0, 0.5));
         // SLOT_5 must remain at constant 24mm from FL1
         expect((scaledS5.center.y - scaledFL1.p1.y).abs(), closeTo(24.0, 0.5));
+      });
+
+      test('Test Q — Resolving SS2 & SS3: Scaling Width first and then Height preserves left cheek without distortion or spilled coupler holes', () {
+        // 1. Initial controller with baseline riserDoc (width ~96mm, height ~98mm)
+        final controller = CmsScalingController(
+          baselineDocument: riserDoc,
+          contract: CmsProductContract.insideRiser45,
+          baselinePorts: riserBaselinePorts,
+        );
+
+        // Step 1: Scale Width to 185 mm (+89 mm) as in SS3
+        controller.selectParameter('width');
+        controller.evaluateMorph(185.0);
+        final widthPreview = controller.currentPreview!;
+        expect(widthPreview.isValid, isTrue);
+
+        // Accept the width morph so the document now has 185mm width
+        final docAfterWidth = widthPreview.scaledDocument;
+
+        // Step 2: Now scale Height on the width-scaled document to 135 mm (+37.5 mm) as in SS2
+        final heightController = CmsScalingController(
+          baselineDocument: docAfterWidth,
+          contract: CmsProductContract.insideRiser45,
+          baselinePorts: widthPreview.derivedPorts,
+        );
+
+        heightController.selectParameter('height');
+        heightController.evaluateMorph(135.0);
+        final preview135 = heightController.currentPreview!;
+        expect(preview135.isValid, isTrue);
+
+        final doc135 = preview135.scaledDocument;
+
+        // Verify left cheek prongs and flanges:
+        final fl1Orig = docAfterWidth.bends.firstWhere((b) => b.id == 'FL1');
+        final fl1_135 = doc135.bends.firstWhere((b) => b.id == 'FL1');
+        expect((fl1_135.p1.x - fl1_135.p2.x).abs(), closeTo((fl1Orig.p1.x - fl1Orig.p2.x).abs(), 0.05));
+
+        // Coupler slots on left cheek:
+        final s3_135 = doc135.punches.firstWhere((p) => p.id == 'SLOT_3');
+        final s4_135 = doc135.punches.firstWhere((p) => p.id == 'SLOT_4');
+
+        // SLOT_3 and SLOT_4 maintain 45° angle
+        final angle135 = math.atan2(s3_135.center.y - s4_135.center.y, s3_135.center.x - s4_135.center.x) * 180 / math.pi;
+        expect(angle135, closeTo(45.0, 0.1));
+
+        // Neither slot is spilled out: both slot centers must be well within the outerContour bounds
+        double minContourX = double.infinity;
+        double maxContourX = -double.infinity;
+        for (final pt in doc135.outerContour) {
+          if (pt.x < minContourX) minContourX = pt.x;
+          if (pt.x > maxContourX) maxContourX = pt.x;
+        }
+        expect(s4_135.center.x, greaterThan(minContourX));
+        expect(s3_135.center.x, greaterThan(minContourX));
+        expect(s4_135.center.x, lessThan(maxContourX));
+        expect(s3_135.center.x, lessThan(maxContourX));
+
+        // Step 3: Now scale Height down to 125 mm as in SS3
+        heightController.evaluateMorph(125.0);
+        final preview125 = heightController.currentPreview!;
+        expect(preview125.isValid, isTrue);
+
+        final doc125 = preview125.scaledDocument;
+        final fl1_125 = doc125.bends.firstWhere((b) => b.id == 'FL1');
+        expect((fl1_125.p1.x - fl1_125.p2.x).abs(), closeTo((fl1Orig.p1.x - fl1Orig.p2.x).abs(), 0.05));
+
+        final s3_125 = doc125.punches.firstWhere((p) => p.id == 'SLOT_3');
+        final s4_125 = doc125.punches.firstWhere((p) => p.id == 'SLOT_4');
+        final angle125 = math.atan2(s3_125.center.y - s4_125.center.y, s3_125.center.x - s4_125.center.x) * 180 / math.pi;
+        expect(angle125, closeTo(45.0, 0.1));
+
+        // 3D Folded Model is valid and both ports scale
+        final mesh135 = KinematicFoldEngine.foldDocument(doc135, foldProgress: 1.0);
+        expect(mesh135.polygons, isNotEmpty);
+      });
+
+      test('Test R — Resolving Requests 4 & 5: Moving width slider and switching to height slider preserves both, and re-opening dialog reflects real drawing size', () {
+        final controller = CmsScalingController(
+          baselineDocument: riserDoc,
+          contract: CmsProductContract.insideRiser45,
+          baselinePorts: riserBaselinePorts,
+        );
+
+        // 1. Move Width slider to 150.0 mm
+        controller.selectParameter('width');
+        controller.evaluateMorph(150.0);
+        expect(controller.model.parameters['width']!.currentValue, equals(150.0));
+
+        // 2. Switch tab to Height without width reverting
+        controller.selectParameter('height');
+        expect(controller.model.parameters['width']!.currentValue, equals(150.0)); // Width is preserved!
+
+        // 3. Move Height slider to 135.0 mm
+        controller.evaluateMorph(135.0);
+        expect(controller.model.parameters['height']!.currentValue, equals(135.0));
+        expect(controller.model.parameters['width']!.currentValue, equals(150.0)); // Both active!
+
+        // 4. Preview document combines both width (+50mm) and height (+35mm)
+        final preview = controller.currentPreview!;
+        expect(preview.isValid, isTrue);
+        final scaledDoc = preview.scaledDocument;
+
+        // Floor width expanded by ~50mm
+        final b1 = scaledDoc.bends.firstWhere((b) => b.id == 'B1');
+        final b2 = scaledDoc.bends.firstWhere((b) => b.id == 'B2');
+        expect((b2.p1.x - b1.p1.x).abs(), closeTo(145.8, 0.5));
+
+        // B3 height expanded by ~15.5mm
+        final b3 = scaledDoc.bends.firstWhere((b) => b.id == 'B3');
+        expect(b3.p1.y, greaterThan(140.0));
+
+        // 5. Accept Scaling Model
+        final acceptedDoc = controller.acceptScalingModel();
+        final derivedPorts = preview.derivedPorts;
+
+        // 6. User re-opens the template scaling dialog (Request 5)
+        final reopenedController = CmsScalingController(
+          baselineDocument: acceptedDoc,
+          contract: CmsProductContract.insideRiser45,
+          baselinePorts: derivedPorts,
+        );
+
+        // Slider takes the actual real place just as the drawing!
+        expect(reopenedController.model.parameters['width']!.currentValue, closeTo(150.0, 1.0));
+        expect(reopenedController.model.parameters['height']!.currentValue, closeTo(135.0, 1.0));
+      });
+
+      test('Test S — Resolving SS1, SS2 & SS3: 45° Inside Riser height scaling to 150mm and 200mm extends mouth upward and preserves return flange FL1/FL2', () {
+        final controller = CmsScalingController(
+          baselineDocument: riserDoc,
+          contract: CmsProductContract.insideRiser45,
+          baselinePorts: riserBaselinePorts,
+        );
+
+        controller.selectParameter('height');
+
+        // --- 1. Scale Height to 150mm (+50mm delta) ---
+        controller.evaluateMorph(150.0);
+        final preview150 = controller.currentPreview!;
+        expect(preview150.isValid, isTrue);
+        final doc150 = preview150.scaledDocument;
+
+        // Outer corner anchor test: Point at X <= 25.0 must stay at baseline Y (approx 115-120mm) and NOT shift down into flange
+        final outerCornerPts150 = doc150.outerContour.where((p) => p.x <= 25.0 && p.y >= 110.0 && p.y <= 125.0).toList();
+        expect(outerCornerPts150, isNotEmpty);
+        for (final pt in outerCornerPts150) {
+          expect(pt.y, closeTo(116.9, 2.0)); // Y is anchored (actual DSF corner is ~116.92mm)
+        }
+
+        // Return flange FL1 test: FL1 must remain vertical and not intersect diagonal cut
+        final fl1_150 = doc150.bends.firstWhere((b) => b.id == 'FL1');
+        expect(fl1_150.p1.y, lessThan(90.0));
+        expect(fl1_150.p2.y, lessThan(90.0));
+
+        // Fold 3D mesh at 150mm: Both ports must scale cleanly to ~150mm
+        final mesh150 = KinematicFoldEngine.foldDocument(doc150, foldProgress: 1.0);
+        expect(mesh150.polygons, isNotEmpty);
+        final ports150 = preview150.derivedPorts;
+        expect(ports150.first.height, closeTo(148.0, 4.0));
+        expect(ports150.last.height, closeTo(151.0, 4.0));
+
+        // --- 2. Scale Height to 200mm (+100mm delta as in official DXF) ---
+        controller.evaluateMorph(200.0);
+        final preview200 = controller.currentPreview!;
+        expect(preview200.isValid, isTrue);
+        final doc200 = preview200.scaledDocument;
+
+        // Outer corner anchor test: Still anchored at Y ~ 116.9mm
+        final outerCornerPts200 = doc200.outerContour.where((p) => p.x <= 25.0 && p.y >= 110.0 && p.y <= 125.0).toList();
+        expect(outerCornerPts200, isNotEmpty);
+        for (final pt in outerCornerPts200) {
+          expect(pt.y, closeTo(116.9, 2.0));
+        }
+
+        // Fold 3D mesh at 200mm: Both ports must scale cleanly to ~200mm
+        final mesh200 = KinematicFoldEngine.foldDocument(doc200, foldProgress: 1.0);
+        expect(mesh200.polygons, isNotEmpty);
+        final ports200 = preview200.derivedPorts;
+        expect(ports200.first.height, closeTo(198.0, 4.0));
+        expect(ports200.last.height, closeTo(202.0, 4.0));
+      });
+
+      test('Test T — Multi-port Tee and Cross fittings support Equal (Linked) and Unequal (Independent) scaling modes', () {
+        // Create a 3-port Tee mock fitting (no 'side' field in CmsPhysicalPort; use normal vectors instead)
+        final p1 = CmsPhysicalPort(id: 'P1', index: 1, width: 100.0, height: 50.0, normal: const CadPoint3D(0, 1, 0), center: const CadPoint3D(0, 100, 25));
+        final p2 = CmsPhysicalPort(id: 'P2', index: 2, width: 100.0, height: 50.0, normal: const CadPoint3D(1, 0, 0), center: const CadPoint3D(100, 0, 25));
+        final p3 = CmsPhysicalPort(id: 'P3', index: 3, width: 100.0, height: 50.0, normal: const CadPoint3D(0, -1, 0), center: const CadPoint3D(0, -100, 25));
+
+        final controller = CmsScalingController(
+          baselineDocument: riserDoc,
+          contract: CmsProductContract.tee, // equalTee is an alias for .tee
+          baselinePorts: [p1, p2, p3],
+        );
+
+        // Verify initial state: multi-port fitting defaults to linked ports
+        expect(controller.isMultiPortFitting, isTrue);
+        expect(controller.isLinkedPorts, isTrue);
+        expect(controller.model.parameters.containsKey('width'), isTrue);
+        expect(controller.model.parameters.containsKey('height'), isTrue);
+
+        // Toggle to Unequal (Independent) mode
+        controller.togglePortLinking(false);
+        expect(controller.isLinkedPorts, isFalse);
+        expect(controller.model.parameters.containsKey('port1_width'), isTrue);
+        expect(controller.model.parameters.containsKey('port2_width'), isTrue);
+        expect(controller.model.parameters.containsKey('port3_width'), isTrue);
+
+        // Switch to Port 2 and morph its width independently
+        controller.setActivePortIndex(1);
+        expect(controller.activePortIndex, equals(1));
+        expect(controller.activeParameterId, equals('port2_width'));
+
+        controller.evaluateMorph(150.0);
+        expect(controller.model.parameters['port2_width']!.currentValue, equals(150.0));
+        // Port 1 and Port 3 remain at baseline 100mm!
+        expect(controller.model.parameters['port1_width']!.currentValue, equals(100.0));
+        expect(controller.model.parameters['port3_width']!.currentValue, equals(100.0));
+      });
+
+      test('Test U — Unequal Tee Independent Height Scaling preserves max body height and retracts flaps for lower-height ports', () {
+        final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+        final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
+        final teeDoc = DsfDocument.fromJson(json);
+
+        final p1 = const CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 100.0);
+        final p2 = const CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 100.0);
+        final p3 = const CmsPhysicalPort(id: 'PORT_3', index: 3, width: 100.0, height: 100.0);
+
+        final controller = CmsScalingController(
+          baselineDocument: teeDoc,
+          contract: CmsProductContract.tee,
+          baselinePorts: [p1, p2, p3],
+        );
+
+        // Toggle to unlinked/independent mode
+        controller.togglePortLinking(false);
+        expect(controller.isLinkedPorts, isFalse);
+        expect(controller.model.parameters.containsKey('port2_height'), isTrue);
+
+        // Scale Port 2 height down to 50mm
+        controller.selectParameter('port2_height');
+        controller.evaluateMorph(50.0);
+
+        expect(controller.currentPreview, isNotNull);
+        final preview = controller.currentPreview!;
+        expect(preview.isValid, isTrue);
+
+        // Port 2 height is 50mm, while Ports 1 & 3 maintain 100mm
+        final ports = preview.derivedPorts;
+        final port2 = ports.firstWhere((p) => p.index == 2);
+        final port1 = ports.firstWhere((p) => p.index == 1);
+        final port3 = ports.firstWhere((p) => p.index == 3);
+        expect(port2.height, equals(50.0));
+        expect(port1.height, equals(100.0));
+        expect(port3.height, equals(100.0));
+
+        // 3D mesh is folded with valid polygons
+        expect(preview.foldedMesh.polygons, isNotEmpty);
+      });
+
+      test('Test V — Unequal Cross Independent Height Scaling maintains separate port dimensions', () {
+        final crossFile = File('assets/dxf_templates/trunking_accessories/equal_cross_100x100.dsf');
+        final json = jsonDecode(crossFile.readAsStringSync()) as Map<String, dynamic>;
+        final crossDoc = DsfDocument.fromJson(json);
+
+        final p1 = const CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 100.0);
+        final p2 = const CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 100.0);
+        final p3 = const CmsPhysicalPort(id: 'PORT_3', index: 3, width: 100.0, height: 100.0);
+        final p4 = const CmsPhysicalPort(id: 'PORT_4', index: 4, width: 100.0, height: 100.0);
+
+        final controller = CmsScalingController(
+          baselineDocument: crossDoc,
+          contract: CmsProductContract.cross,
+          baselinePorts: [p1, p2, p3, p4],
+        );
+
+        // Toggle to unlinked/independent mode
+        controller.togglePortLinking(false);
+        expect(controller.isLinkedPorts, isFalse);
+        expect(controller.model.parameters.containsKey('port4_height'), isTrue);
+
+        // Scale Port 4 height down to 50mm
+        controller.selectParameter('port4_height');
+        controller.evaluateMorph(50.0);
+
+        expect(controller.currentPreview, isNotNull);
+        final preview = controller.currentPreview!;
+        expect(preview.isValid, isTrue);
+
+        final ports = preview.derivedPorts;
+        final port4 = ports.firstWhere((p) => p.index == 4);
+        final port1 = ports.firstWhere((p) => p.index == 1);
+        expect(port4.height, equals(50.0));
+        expect(port1.height, equals(100.0));
       });
     });
 

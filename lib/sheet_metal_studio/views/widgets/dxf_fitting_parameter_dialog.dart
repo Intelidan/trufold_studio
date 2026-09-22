@@ -64,6 +64,7 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
   late String _selectedProduct;
   late String _selectedVariantName;
   late double _flangeMm;
+  bool _isDeclaredCms = false;
 
   // Controllers for parameters
   final Map<String, TextEditingController> _controllers = {};
@@ -71,6 +72,7 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
   late Map<String, double> _currentParams;
   late Map<String, double> _analyzed;
   late Map<String, String> _portAssignments;
+  bool _isLinkedPorts = true;
 
   @override
   void initState() {
@@ -87,6 +89,23 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     _portAssignments = meta.portAssignments != null
         ? Map<String, String>.from(meta.portAssignments!)
         : _detectInitialPortAssignments(meta);
+
+    _isDeclaredCms = widget.viewModel.isCmsDrawing ||
+        widget.viewModel.hasVerifiedCmsTemplate ||
+        widget.viewModel.document.isCmsDrawing ||
+        (_selectedProduct.isNotEmpty && _selectedProduct != 'None');
+
+    final verifiedPorts = widget.viewModel.verifiedCmsPorts;
+    if (verifiedPorts.length >= 3) {
+      final firstW = verifiedPorts.first.width;
+      final firstH = verifiedPorts.first.height;
+      for (final p in verifiedPorts) {
+        if ((p.width - firstW).abs() > 3.0 || (p.height - firstH).abs() > 3.0) {
+          _isLinkedPorts = false;
+          break;
+        }
+      }
+    }
 
     final currentThk = widget.viewModel.document.material.thicknessMm;
     _thicknessController = TextEditingController(
@@ -148,8 +167,10 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
       _selectedProduct = newProd;
       if (newProd == 'None') {
         _selectedVariantName = 'None';
+        _isDeclaredCms = false;
         _applyAnalyzedDefaults();
       } else {
+        _isDeclaredCms = true;
         _updateVariantOptions();
       }
     });
@@ -228,6 +249,29 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     }
     widget.viewModel.updateFittingMetadata(meta);
 
+    if (_isDeclaredCms) {
+      final contract = CmsProductContract.lookup(_selectedProduct, _selectedVariantName) ??
+          CmsProductContract.lookup(meta.product, meta.variantName) ??
+          CmsProductContract.lookup(null, widget.viewModel.document.itemName) ??
+          CmsProductContract.lookup(null, widget.viewModel.document.productType) ??
+          CmsProductContract.bend45;
+
+      final updatedMetadata = Map<String, dynamic>.from(widget.viewModel.document.metadata);
+      updatedMetadata['isCmsProduct'] = true;
+      updatedMetadata['cmsWorkflow'] = {'stage': 'manufacturing_definition', 'stageIndex': 1};
+      updatedMetadata['cms_product_contract'] = {
+        'productType': contract.productType,
+        'variationName': contract.variationName,
+        'displayName': contract.displayName,
+      };
+      widget.viewModel.updateDocument(
+        widget.viewModel.document.copyWith(
+          productType: contract.productType,
+          metadata: updatedMetadata,
+        ),
+      );
+    }
+
     if (widget.onClose != null) {
       widget.onClose!();
     } else if (Navigator.canPop(context)) {
@@ -237,8 +281,60 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Fitting parameters attached to DSF drawing: ${meta.product} (${meta.variantName}) | THK: ${widget.viewModel.document.material.thicknessMm.toStringAsFixed(1)}mm'),
+        content: Text(_isDeclaredCms
+            ? 'CMS product parameters attached to DSF: ${meta.product} (${meta.variantName}) | THK: ${widget.viewModel.document.material.thicknessMm.toStringAsFixed(1)}mm'
+            : 'Fitting parameters attached to DSF drawing: ${meta.product} (${meta.variantName}) | THK: ${widget.viewModel.document.material.thicknessMm.toStringAsFixed(1)}mm'),
         backgroundColor: const Color(0xFF0F766E),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _handleDeclareAsCmsProduct() {
+    final meta = _buildCurrentMetadata();
+    final thk = double.tryParse(_thicknessController.text);
+    if (thk != null && thk > 0) {
+      widget.viewModel.setSheetThickness(thk);
+    }
+    widget.viewModel.updateFittingMetadata(meta);
+
+    // Resolve matching CMS Product Contract
+    final contract = CmsProductContract.lookup(_selectedProduct, _selectedVariantName) ??
+        CmsProductContract.lookup(meta.product, meta.variantName) ??
+        CmsProductContract.lookup(null, widget.viewModel.document.itemName) ??
+        CmsProductContract.lookup(null, widget.viewModel.document.productType) ??
+        CmsProductContract.bend45;
+
+    // Attach CMS product flags to DSF document
+    final updatedMetadata = Map<String, dynamic>.from(widget.viewModel.document.metadata);
+    updatedMetadata['isCmsProduct'] = true;
+    updatedMetadata['cmsWorkflow'] = {'stage': 'manufacturing_definition', 'stageIndex': 1};
+    updatedMetadata['cms_product_contract'] = {
+      'productType': contract.productType,
+      'variationName': contract.variationName,
+      'displayName': contract.displayName,
+    };
+    widget.viewModel.updateDocument(
+      widget.viewModel.document.copyWith(
+        productType: contract.productType,
+        metadata: updatedMetadata,
+      ),
+    );
+
+    if (widget.onClose != null) {
+      widget.onClose!();
+    } else if (Navigator.canPop(context)) {
+      Navigator.of(context).pop();
+    }
+    widget.viewModel.setFittingInspectorOpen(false);
+
+    // Launch clean autonomous CMS discovery pipeline
+    widget.viewModel.startCleanCmsDiscovery(contract: contract);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Declared as CMS Product: ${contract.displayName} — Starting 3D Channel Discovery...'),
+        backgroundColor: const Color(0xFF0284C7),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -539,6 +635,88 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                     _buildAnalyzedInfoBanner(),
                     const SizedBox(height: 12),
 
+                    // B2. CMS Product Declaration Banner & Toggle
+                    if (!widget.viewModel.hasVerifiedCmsTemplate) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _isDeclaredCms ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: _isDeclaredCms ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1),
+                            width: 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _isDeclaredCms ? Icons.auto_awesome : Icons.layers_outlined,
+                              size: 18,
+                              color: _isDeclaredCms ? const Color(0xFF059669) : const Color(0xFF64748B),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Declare as CMS Product Fitting',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: _isDeclaredCms ? const Color(0xFF166534) : const Color(0xFF334155),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: _isDeclaredCms ? const Color(0xFFDCFCE7) : const Color(0xFFE2E8F0),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          _isDeclaredCms ? 'CMS ACTIVE' : 'NON-CMS (CAD)',
+                                          style: TextStyle(
+                                            fontSize: 9.0,
+                                            fontWeight: FontWeight.bold,
+                                            color: _isDeclaredCms ? const Color(0xFF15803D) : const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _isDeclaredCms
+                                        ? 'Declared as CMS ${_selectedProduct != 'None' ? _selectedProduct : 'Fitting'}. Enables 3D kinematic channel folding, port discovery, and template scaling.'
+                                        : 'Currently opened as general CAD. Toggle ON or click Declare below to enable automatic 3D folding and template scaling.',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: _isDeclaredCms ? const Color(0xFF15803D) : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Switch(
+                              value: _isDeclaredCms,
+                              activeThumbColor: const Color(0xFF059669),
+                              activeTrackColor: const Color(0xFFA7F3D0),
+                              onChanged: (val) {
+                                setState(() {
+                                  _isDeclaredCms = val;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
                     // C. Parameters Entry Section
                     if (widget.viewModel.hasVerifiedCmsTemplate) ...[
                       _buildSectionHeader(
@@ -604,6 +782,22 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                     icon: const Icon(Icons.tune, size: 15),
                     label: const Text(
                       'Teach Scaling (Phase 2) →',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                if (!widget.viewModel.hasVerifiedCmsTemplate)
+                  ElevatedButton.icon(
+                    onPressed: _handleDeclareAsCmsProduct,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      elevation: 1,
+                    ),
+                    icon: const Icon(Icons.auto_awesome, size: 15),
+                    label: const Text(
+                      'Declare as CMS Product & Discover 3D →',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -1103,6 +1297,91 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
             ),
           ],
         ),
+        if (ports.length >= 3) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _isLinkedPorts = true),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _isLinkedPorts ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: _isLinkedPorts
+                            ? [const BoxShadow(color: Color(0x10000000), blurRadius: 2, offset: Offset(0, 1))]
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.link,
+                            size: 13,
+                            color: _isLinkedPorts ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Equal (Linked Ports)',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: _isLinkedPorts ? FontWeight.bold : FontWeight.w500,
+                              color: _isLinkedPorts ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() => _isLinkedPorts = false),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      decoration: BoxDecoration(
+                        color: !_isLinkedPorts ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: !_isLinkedPorts
+                            ? [const BoxShadow(color: Color(0x10000000), blurRadius: 2, offset: Offset(0, 1))]
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.link_off,
+                            size: 13,
+                            color: !_isLinkedPorts ? const Color(0xFF7C3AED) : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Unequal (Independent Ports)',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: !_isLinkedPorts ? FontWeight.bold : FontWeight.w500,
+                              color: !_isLinkedPorts ? const Color(0xFF7C3AED) : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1130,7 +1409,7 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                       children: [
                         Expanded(
                           child: Text(
-                            'Port ${port.index} (${port.index == 1 ? 'Inlet / Opening 1' : 'Outlet / Opening 2'})',
+                            'Port ${port.index} (${port.index == 1 ? 'Inlet / Opening 1' : 'Outlet / Opening ${port.index}'})',
                             style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.bold),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -1159,7 +1438,7 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                     // Width Row
                     _buildVerifiedParamField(
                       label: 'Width (W)',
-                      key: port.index == 1 ? 'port1Width' : 'port2Width',
+                      key: 'port${port.index}Width',
                       val: port.width,
                       accentColor: accentColor,
                     ),
@@ -1168,7 +1447,7 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                     // Height Row
                     _buildVerifiedParamField(
                       label: 'Height (H)',
-                      key: port.index == 1 ? 'port1Height' : 'port2Height',
+                      key: 'port${port.index}Height',
                       val: port.height,
                       accentColor: accentColor,
                     ),
@@ -1245,6 +1524,23 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(vertical: 6),
                     ),
+                    onChanged: (newValStr) {
+                      if (_isLinkedPorts) {
+                        if (key.endsWith('Width')) {
+                          for (final k in _controllers.keys.where((k) => k.endsWith('Width') || k == 'width')) {
+                            if (k != key && _controllers[k]?.text != newValStr) {
+                              _controllers[k]?.text = newValStr;
+                            }
+                          }
+                        } else if (key.endsWith('Height')) {
+                          for (final k in _controllers.keys.where((k) => k.endsWith('Height') || k == 'height')) {
+                            if (k != key && _controllers[k]?.text != newValStr) {
+                              _controllers[k]?.text = newValStr;
+                            }
+                          }
+                        }
+                      }
+                    },
                   ),
                 ),
                 const Text('mm', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),

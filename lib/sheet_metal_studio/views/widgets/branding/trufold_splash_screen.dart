@@ -7,7 +7,9 @@
 // =============================================================================
 
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import 'trufold_3d_icon.dart';
 
 /// Full-featured animated splash screen for truFold Studio.
@@ -21,12 +23,7 @@ class TruFoldSplashScreen extends StatefulWidget {
   /// Whether to allow the user to click to skip the splash animation.
   final bool allowTapToSkip;
 
-  const TruFoldSplashScreen({
-    super.key,
-    this.onInitializationComplete,
-    this.totalDuration = const Duration(milliseconds: 3200),
-    this.allowTapToSkip = true,
-  });
+  const TruFoldSplashScreen({super.key, this.onInitializationComplete, this.totalDuration = const Duration(milliseconds: 3200), this.allowTapToSkip = true});
 
   @override
   State<TruFoldSplashScreen> createState() => _TruFoldSplashScreenState();
@@ -54,10 +51,7 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
   void initState() {
     super.initState();
 
-    _mainController = AnimationController(
-      vsync: this,
-      duration: widget.totalDuration,
-    );
+    _mainController = AnimationController(vsync: this, duration: widget.totalDuration);
 
     // 1. Laser cut outline trace: 0% -> 30%
     _laserTraceAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -137,11 +131,7 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
         body: Stack(
           children: [
             // 1. Animated Blueprint CAD Grid Background
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _BlueprintGridBackgroundPainter(),
-              ),
-            ),
+            Positioned.fill(child: CustomPaint(painter: _BlueprintGridBackgroundPainter())),
 
             // 2. Radial Ambient Glow behind the logo
             Positioned.fill(
@@ -152,11 +142,7 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
-                      colors: [
-                        const Color(0xFF38BDF8).withValues(alpha: 0.12),
-                        const Color(0xFF0284C7).withValues(alpha: 0.04),
-                        Colors.transparent,
-                      ],
+                      colors: [const Color(0xFF38BDF8).withValues(alpha: 0.12), const Color(0xFF0284C7).withValues(alpha: 0.04), Colors.transparent],
                       stops: const [0.0, 0.45, 1.0],
                     ),
                   ),
@@ -232,19 +218,11 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF0284C7).withValues(alpha: 0.25),
                                       borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                        color: const Color(0xFF38BDF8).withValues(alpha: 0.6),
-                                        width: 1.0,
-                                      ),
+                                      border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.6), width: 1.0),
                                     ),
                                     child: const Text(
                                       'STUDIO',
-                                      style: TextStyle(
-                                        color: Color(0xFF38BDF8),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1.4,
-                                      ),
+                                      style: TextStyle(color: Color(0xFF38BDF8), fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.4),
                                     ),
                                   ),
                                 ],
@@ -302,12 +280,7 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
                         child: Text(
                           _statusMessages[_statusIndex],
                           key: ValueKey<int>(_statusIndex),
-                          style: const TextStyle(
-                            color: Color(0xFF64748B),
-                            fontSize: 11.5,
-                            fontFamily: 'monospace',
-                            letterSpacing: 0.3,
-                          ),
+                          style: const TextStyle(color: Color(0xFF64748B), fontSize: 11.5, fontFamily: 'monospace', letterSpacing: 0.3),
                         ),
                       ),
                     ],
@@ -362,11 +335,7 @@ class _LaserCutTracePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (progress <= 0.0) return;
 
-    final rect = Rect.fromCenter(
-      center: Offset(size.width / 2.0, size.height / 2.0),
-      width: size.width * 0.92,
-      height: size.height * 0.92,
-    );
+    final rect = Rect.fromCenter(center: Offset(size.width / 2.0, size.height / 2.0), width: size.width * 0.92, height: size.height * 0.92);
 
     final path = Path()..addRRect(RRect.fromRectAndRadius(rect, const Radius.circular(8)));
     final pathMetric = path.computeMetrics().first;

@@ -308,7 +308,7 @@ class CmsGuidedStageCard extends StatelessWidget {
                                   padding: const EdgeInsets.symmetric(vertical: 10.0),
                                 ),
                                 icon: const Icon(Icons.tune, size: 16.0),
-                                label: const Text('Teach Scaling →', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.0)),
+                                label: const Text('Template Scaling →', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.0)),
                                 onPressed: onStartTeachScaling,
                               ),
                             ),

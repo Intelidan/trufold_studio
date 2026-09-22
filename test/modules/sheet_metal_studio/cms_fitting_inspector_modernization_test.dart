@@ -173,5 +173,49 @@ void main() {
       expect(vm.showCmsPortHighlights, isFalse);
       expect(find.text('Ports (2D/3D): OFF'), findsOneWidget);
     });
+
+    testWidgets('4. Declaring non-CMS drawing as CMS Product in DSF Fitting Inspector enables CMS product contract and launches discovery', (tester) async {
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      // Create a plain non-CMS document
+      final nonCmsDoc = DsfDocument.sampleCableTray().copyWith(
+        itemName: 'custom_fitting.dxf',
+        productType: 'None',
+        metadata: {},
+      );
+
+      final plainVm = SheetMetalStudioViewModel(initialDocument: nonCmsDoc);
+      expect(plainVm.isCmsDrawing, isFalse);
+      expect(plainVm.hasVerifiedCmsTemplate, isFalse);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DxfFittingParameterDialog(
+              viewModel: plainVm,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Dialog shows DSF Fitting Inspector for unverified drawing
+      expect(find.text('DSF Fitting Inspector'), findsOneWidget);
+      expect(find.text('Declare as CMS Product Fitting'), findsOneWidget);
+      expect(find.text('Declare as CMS Product & Discover 3D →'), findsOneWidget);
+      expect(find.text('Save Parameters to DSF'), findsOneWidget);
+
+      // Tap Declare as CMS Product & Discover 3D
+      await tester.tap(find.text('Declare as CMS Product & Discover 3D →'));
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+
+      // Document is now recognized as CMS Product
+      expect(plainVm.isCmsDrawing, isTrue);
+      expect(plainVm.document.metadata['isCmsProduct'], isTrue);
+      expect(plainVm.document.metadata['cmsWorkflow']?['stage'], 'manufacturing_definition');
+    });
   });
 }
