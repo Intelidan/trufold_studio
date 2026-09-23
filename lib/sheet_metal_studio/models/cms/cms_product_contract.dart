@@ -13,6 +13,10 @@ enum CmsScalingProfile {
   flatBend90,
   insideRiser,
   outsideRiser,
+  equalTee,
+  unequalTee,
+  equalCross,
+  unequalCross,
   tee,
   cross,
   straight,
@@ -28,10 +32,16 @@ enum CmsScalingProfile {
         return '45° Inside Riser (Floor Web & Cheeks)';
       case CmsScalingProfile.outsideRiser:
         return '45° Outside Riser (Floor Web & Cheeks)';
+      case CmsScalingProfile.equalTee:
       case CmsScalingProfile.tee:
-        return 'Tee Duct Fitting';
+        return 'Equal Tee Duct Fitting';
+      case CmsScalingProfile.unequalTee:
+        return 'Unequal Tee Duct Fitting';
+      case CmsScalingProfile.equalCross:
       case CmsScalingProfile.cross:
-        return 'Cross Fitting';
+        return 'Equal Cross Fitting';
+      case CmsScalingProfile.unequalCross:
+        return 'Unequal Cross Fitting';
       case CmsScalingProfile.straight:
         return 'Straight Cable Tray';
       case CmsScalingProfile.generic:
@@ -126,18 +136,31 @@ class CmsProductContract {
     expectedCouplerSlotsPerPort: 4,
   );
 
-  static const tee = CmsProductContract(
+  static const equalTee = CmsProductContract(
     productType: 'tee',
-    variationName: 'tee',
-    displayName: 'Tee',
-    scalingProfile: CmsScalingProfile.tee,
+    variationName: 'equal_tee',
+    displayName: 'Equal Tee',
+    scalingProfile: CmsScalingProfile.equalTee,
     expectedPortCount: 3,
     expectedStructuralBends: 3,
     expectedFlanges: 3,
     expectedCouplerSlotsPerPort: 4,
+    hasRoleSuggestionRule: false,
   );
-  static const equalTee = tee;
-  static const unequalTee = tee;
+
+  static const unequalTee = CmsProductContract(
+    productType: 'tee',
+    variationName: 'unequal_tee',
+    displayName: 'Unequal Tee',
+    scalingProfile: CmsScalingProfile.unequalTee,
+    expectedPortCount: 3,
+    expectedStructuralBends: 3,
+    expectedFlanges: 3,
+    expectedCouplerSlotsPerPort: 4,
+    hasRoleSuggestionRule: true,
+  );
+
+  static const tee = equalTee;
 
   static const concentricReducer = CmsProductContract(
     productType: 'reducer',
@@ -151,18 +174,31 @@ class CmsProductContract {
     hasRoleSuggestionRule: true,
   );
 
-  static const cross = CmsProductContract(
+  static const equalCross = CmsProductContract(
     productType: 'cross',
-    variationName: 'cross',
-    displayName: 'Cross',
-    scalingProfile: CmsScalingProfile.cross,
+    variationName: 'equal_cross',
+    displayName: 'Equal Cross',
+    scalingProfile: CmsScalingProfile.equalCross,
     expectedPortCount: 4,
     expectedStructuralBends: 4,
     expectedFlanges: 4,
     expectedCouplerSlotsPerPort: 4,
+    hasRoleSuggestionRule: false,
   );
-  static const equalCross = cross;
-  static const unequalCross = cross;
+
+  static const unequalCross = CmsProductContract(
+    productType: 'cross',
+    variationName: 'unequal_cross',
+    displayName: 'Unequal Cross',
+    scalingProfile: CmsScalingProfile.unequalCross,
+    expectedPortCount: 4,
+    expectedStructuralBends: 4,
+    expectedFlanges: 4,
+    expectedCouplerSlotsPerPort: 4,
+    hasRoleSuggestionRule: true,
+  );
+
+  static const cross = equalCross;
 
   static const insideRiser45 = CmsProductContract(
     productType: 'inside_riser',
@@ -216,9 +252,11 @@ class CmsProductContract {
     outsideRiser45,
     outsideRiser90,
     straightTray,
-    tee,
+    equalTee,
+    unequalTee,
     concentricReducer,
-    cross,
+    equalCross,
+    unequalCross,
   ];
 
   /// Disambiguated contract lookup prioritizing exact key matches.
@@ -254,8 +292,12 @@ class CmsProductContract {
 
     // 4. Reducers, Tees, Crosses, Straights
     if (combined.contains('reducer')) return concentricReducer;
-    if (combined.contains('tee')) return tee;
-    if (combined.contains('cross')) return cross;
+    if (combined.contains('unequal') && combined.contains('tee')) return unequalTee;
+    if (combined.contains('equal') && combined.contains('tee')) return equalTee;
+    if (combined.contains('tee')) return equalTee;
+    if (combined.contains('unequal') && combined.contains('cross')) return unequalCross;
+    if (combined.contains('equal') && combined.contains('cross')) return equalCross;
+    if (combined.contains('cross')) return equalCross;
     if (combined.contains('straight') || combined.contains('tray') || combined.contains('trunking')) return straightTray;
 
     // 6. Generic angle bends (flat bends) - require bend/elbow/tray/trunking keywords or explicit angle+bend pattern

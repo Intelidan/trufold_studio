@@ -28,6 +28,7 @@ import 'cms_3d_opening_detector.dart';
 import 'cms_opening_plane_analyzer.dart';
 import 'cms_port_matcher.dart';
 import 'cms_punch_constraint_engine.dart';
+import 'unequal_tee_scaler.dart';
 
 /// Result of evaluating a parametric dimension on the 2D blank and folding to 3D.
 class CmsScalingPreviewResult {
@@ -90,7 +91,11 @@ class CmsScalingController extends ChangeNotifier {
 
   bool get isMultiPortFitting {
     final prof = effectiveScalingProfile;
-    return prof == CmsScalingProfile.tee ||
+    return prof == CmsScalingProfile.equalTee ||
+        prof == CmsScalingProfile.unequalTee ||
+        prof == CmsScalingProfile.equalCross ||
+        prof == CmsScalingProfile.unequalCross ||
+        prof == CmsScalingProfile.tee ||
         prof == CmsScalingProfile.cross ||
         baselinePorts.length >= 3;
   }
@@ -237,7 +242,29 @@ class CmsScalingController extends ChangeNotifier {
     var scaledDoc = baselineDocument;
     final prof = effectiveScalingProfile;
 
-    if (prof == CmsScalingProfile.cross || isCrossGeometry(baselineDocument)) {
+    if (prof == CmsScalingProfile.equalCross) {
+      scaledDoc = _scaleEqualCross2D(
+        scaledDoc,
+        parameters: _model.parameters,
+      );
+    } else if (prof == CmsScalingProfile.unequalCross) {
+      scaledDoc = _scaleUnequalCross2D(
+        scaledDoc,
+        isLinked: _model.isLinkedPorts,
+        parameters: _model.parameters,
+      );
+    } else if (prof == CmsScalingProfile.equalTee) {
+      scaledDoc = _scaleEqualTee2D(
+        scaledDoc,
+        parameters: _model.parameters,
+      );
+    } else if (prof == CmsScalingProfile.unequalTee) {
+      scaledDoc = _scaleUnequalTee2D(
+        scaledDoc,
+        isLinked: _model.isLinkedPorts,
+        parameters: _model.parameters,
+      );
+    } else if (prof == CmsScalingProfile.cross || isCrossGeometry(baselineDocument)) {
       scaledDoc = _scaleCross2D(
         scaledDoc,
         isLinked: _model.isLinkedPorts,
@@ -535,15 +562,32 @@ class CmsScalingController extends ChangeNotifier {
       return CmsScalingProfile.insideRiser;
     }
 
-    if (contract.scalingProfile == CmsScalingProfile.cross ||
+    final isCross = contract.scalingProfile == CmsScalingProfile.equalCross ||
+        contract.scalingProfile == CmsScalingProfile.unequalCross ||
+        contract.scalingProfile == CmsScalingProfile.cross ||
         docType.contains('cross') ||
-        isCrossGeometry(baselineDocument)) {
-      return CmsScalingProfile.cross;
+        isCrossGeometry(baselineDocument);
+
+    if (isCross) {
+      if (contract.scalingProfile == CmsScalingProfile.unequalCross ||
+          isUnequalCross(baselineDocument)) {
+        return CmsScalingProfile.unequalCross;
+      }
+      return CmsScalingProfile.equalCross;
     }
-    if (contract.scalingProfile == CmsScalingProfile.tee ||
+
+    final isTee = contract.scalingProfile == CmsScalingProfile.equalTee ||
+        contract.scalingProfile == CmsScalingProfile.unequalTee ||
+        contract.scalingProfile == CmsScalingProfile.tee ||
         docType.contains('tee') ||
-        isTeeGeometry(baselineDocument)) {
-      return CmsScalingProfile.tee;
+        isTeeGeometry(baselineDocument);
+
+    if (isTee) {
+      if (contract.scalingProfile == CmsScalingProfile.unequalTee ||
+          isUnequalTee(baselineDocument)) {
+        return CmsScalingProfile.unequalTee;
+      }
+      return CmsScalingProfile.equalTee;
     }
 
     return contract.scalingProfile;
@@ -556,6 +600,26 @@ class CmsScalingController extends ChangeNotifier {
     return doc.bends.length >= 14 || baselinePorts.length == 4;
   }
 
+  /// Checks whether [doc] is an Unequal Cross fitting based on contract, metadata, or port dimensions.
+  bool isUnequalCross(DsfDocument doc) {
+    if (contract == CmsProductContract.unequalCross) return true;
+    if (contract == CmsProductContract.equalCross) return false;
+    final docType = '${doc.productType} ${doc.itemName} ${doc.metadata['appliedTemplate']} ${doc.metadata['cmsTemplate']?['variation']}'.toLowerCase();
+    if (docType.contains('unequal')) return true;
+    if (docType.contains('equal')) return false;
+
+    if (baselinePorts.length >= 2) {
+      final w0 = baselinePorts.first.width;
+      final h0 = baselinePorts.first.height;
+      for (final p in baselinePorts) {
+        if ((p.width - w0).abs() > 1.0 || (p.height - h0).abs() > 1.0) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   /// Geometrically detects whether [doc] is a Tee fitting (3 physical ports or 3-way layout).
   bool isTeeGeometry(DsfDocument doc) {
     final docType = '${doc.productType} ${doc.itemName}'.toLowerCase();
@@ -563,15 +627,103 @@ class CmsScalingController extends ChangeNotifier {
     return (doc.bends.length >= 9 && doc.bends.length <= 13) || baselinePorts.length == 3;
   }
 
-  /// Dedicated 2D Sheet Scaling for Cross Fittings:
+  /// Checks whether [doc] is an Unequal Tee fitting based on contract, metadata, or port dimensions.
+  bool isUnequalTee(DsfDocument doc) {
+    if (contract == CmsProductContract.unequalTee) return true;
+    if (contract == CmsProductContract.equalTee) return false;
+    final docType = '${doc.productType} ${doc.itemName} ${doc.metadata['appliedTemplate']} ${doc.metadata['cmsTemplate']?['variation']}'.toLowerCase();
+    if (docType.contains('unequal')) return true;
+    if (docType.contains('equal')) return false;
+
+    if (baselinePorts.length >= 2) {
+      final w0 = baselinePorts.first.width;
+      final h0 = baselinePorts.first.height;
+      for (final p in baselinePorts) {
+        if ((p.width - w0).abs() > 1.0 || (p.height - h0).abs() > 1.0) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Straightforward, locked 2D Sheet Scaling for Equal Cross Fittings:
   /// - Base floor is an octagonal or rectangular central base with 4-way symmetry.
-  /// - Horizontal and vertical runs scale symmetrically in linked mode, or independently in unlinked mode.
-  /// - Corner sidewalls and return flanges scale diagonally outward with zero distortion.
-  /// Dedicated 2D Sheet Scaling for Cross Fittings:
+  /// - All 4 ports have identical width and height.
+  /// - Horizontal and vertical runs scale symmetrically in all 4 directions.
+  /// - Sidewalls and flaps scale uniformly with height.
+  DsfDocument _scaleEqualCross2D(
+    DsfDocument baseline, {
+    required Map<String, CmsScalingParameter> parameters,
+  }) {
+    final baseFloor = baseline.faces.firstWhere(
+      (f) => f.isBaseAnchor || f.role == FaceRole.baseFloor,
+      orElse: () => baseline.faces.first,
+    );
+    final verts = baseFloor.vertices;
+    final minX = verts.map((v) => v.x).reduce(math.min);
+    final maxX = verts.map((v) => v.x).reduce(math.max);
+    final minY = verts.map((v) => v.y).reduce(math.min);
+    final maxY = verts.map((v) => v.y).reduce(math.max);
+    final midX = (minX + maxX) / 2.0;
+    final midY = (minY + maxY) / 2.0;
+
+    final w = parameters['width'];
+    final h = parameters['height'];
+    final dW = w != null ? (w.currentValue - w.baselineValue) : 0.0;
+    final dH = h != null ? (h.currentValue - h.baselineValue) : 0.0;
+
+    final hasCrossChange = dW.abs() > 1e-4 || dH.abs() > 1e-4;
+    if (!hasCrossChange) return baseline;
+
+    CadPoint2D transformEqualCrossPt(CadPoint2D pt) {
+      double x = pt.x;
+      double y = pt.y;
+
+      // 4-way symmetrical width expansion:
+      if (x > midX + 5.0) {
+        x += dW / 2.0;
+      } else if (x < midX - 5.0) {
+        x -= dW / 2.0;
+      }
+
+      if (y > midY + 5.0) {
+        y += dW / 2.0;
+      } else if (y < midY - 5.0) {
+        y -= dW / 2.0;
+      }
+
+      // Height expansion on outer extremities
+      if (dH.abs() > 1e-4) {
+        if (x > maxX + 5.0) x += dH;
+        if (x < minX - 5.0) x -= dH;
+        if (y > maxY + 5.0) y += dH;
+        if (y < minY - 5.0) y -= dH;
+      }
+
+      return CadPoint2D(x, y);
+    }
+
+    return baseline.copyWith(
+      outerContour: baseline.outerContour.map(transformEqualCrossPt).toList(),
+      bends: baseline.bends.map((b) => b.copyWith(
+        p1: transformEqualCrossPt(b.p1),
+        p2: transformEqualCrossPt(b.p2),
+      )).toList(),
+      faces: baseline.faces.map((f) => f.copyWith(
+        vertices: f.vertices.map(transformEqualCrossPt).toList(),
+      )).toList(),
+      punches: baseline.punches.map((p) => p.copyWith(
+        center: transformEqualCrossPt(p.center),
+      )).toList(),
+    );
+  }
+
+  /// Dedicated 2D Sheet Scaling for Unequal Cross Fittings:
   /// - Base floor is an octagonal or rectangular central base with 4-way symmetry.
-  /// - Horizontal and vertical runs scale symmetrically in linked mode, or independently in unlinked mode.
+  /// - Calculates each side separately when port widths or heights differ.
   /// - Body height is governed by the highest port height, and flap heights for lower ports retract.
-  DsfDocument _scaleCross2D(
+  DsfDocument _scaleUnequalCross2D(
     DsfDocument baseline, {
     required bool isLinked,
     required Map<String, CmsScalingParameter> parameters,
@@ -660,40 +812,40 @@ class CmsScalingController extends ChangeNotifier {
       double x = pt.x;
       double y = pt.y;
 
+      // Symmetrical horizontal run expansion (Ports 1 & 3)
       if (x > midX + 5.0) {
         x += dWHoriz / 2.0;
       } else if (x < midX - 5.0) {
         x -= dWHoriz / 2.0;
       }
 
+      // Symmetrical vertical run expansion (Ports 2 & 4)
       if (y > midY + 5.0) {
         y += dWVert / 2.0;
       } else if (y < midY - 5.0) {
         y -= dWVert / 2.0;
       }
 
+      // Body height expansion on outer extremities
       if (dHBody.abs() > 1e-4) {
-        final distFromCenter = math.sqrt(math.pow(pt.x - midX, 2) + math.pow(pt.y - midY, 2));
-        if (distFromCenter > 80.0) {
-          final signX = pt.x >= midX ? 1.0 : -1.0;
-          final signY = pt.y >= midY ? 1.0 : -1.0;
-          x += signX * (dHBody / (2.0 * math.sqrt2));
-          y += signY * (dHBody / (2.0 * math.sqrt2));
-        }
+        if (x > maxX + 5.0) x += dHBody;
+        if (x < minX - 5.0) x -= dHBody;
+        if (y > maxY + 5.0) y += dHBody;
+        if (y < minY - 5.0) y -= dHBody;
       }
 
-      // Per-port flap adjustments (height delta relative to baseline for that port)
-      if (dH1.abs() > 1e-4 && x > maxX - 5.0) {
+      // Per-port flap retraction / extension
+      if (dH1.abs() > 1e-4 && x < minX - 5.0) {
         final signY = y >= midY ? 1.0 : -1.0;
         y += signY * (dH1 / 2.0);
       }
-      if (dH2.abs() > 1e-4 && y > maxY - 5.0) {
-        final signX = x >= midX ? 1.0 : -1.0;
-        x += signX * (dH2 / 2.0);
-      }
-      if (dH3.abs() > 1e-4 && x < minX + 5.0) {
+      if (dH3.abs() > 1e-4 && x > maxX + 5.0) {
         final signY = y >= midY ? 1.0 : -1.0;
         y += signY * (dH3 / 2.0);
+      }
+      if (dH2.abs() > 1e-4 && y > maxY + 5.0) {
+        final signX = x >= midX ? 1.0 : -1.0;
+        x += signX * (dH2 / 2.0);
       }
       if (dH4.abs() > 1e-4 && y < minY + 5.0) {
         final signX = x >= midX ? 1.0 : -1.0;
@@ -718,14 +870,26 @@ class CmsScalingController extends ChangeNotifier {
     );
   }
 
-  /// Dedicated 2D Sheet Scaling for Tee Fittings:
-  /// - Base floor web with Main Run and Branch mouth.
-  /// - Branch width scales horizontally; Main run width scales bed vertically.
-  /// - Product physical height remains max port height across the fitting.
-  /// - Lower-height ports have their coupler flaps retracted along their outward direction.
-  DsfDocument _scaleTee2D(
+  /// Cross scaling dispatcher: routes to equal or unequal subroutine based on [isLinked].
+  DsfDocument _scaleCross2D(
     DsfDocument baseline, {
     required bool isLinked,
+    required Map<String, CmsScalingParameter> parameters,
+  }) {
+    if (isLinked) {
+      return _scaleEqualCross2D(baseline, parameters: parameters);
+    } else {
+      return _scaleUnequalCross2D(baseline, isLinked: isLinked, parameters: parameters);
+    }
+  }
+
+  /// Straightforward, locked 2D Sheet Scaling for Equal Tee Fittings:
+  /// - Base floor web with Main Run and Branch mouth.
+  /// - All 3 ports are identical in width and height.
+  /// - Branch width scales horizontally; Main run width scales bed vertically.
+  /// - Sidewall F_9 (top run) and all cheek flaps scale uniformly with body height.
+  DsfDocument _scaleEqualTee2D(
+    DsfDocument baseline, {
     required Map<String, CmsScalingParameter> parameters,
   }) {
     final baseFloor = baseline.faces.firstWhere(
@@ -735,123 +899,48 @@ class CmsScalingController extends ChangeNotifier {
     final verts = baseFloor.vertices;
     final minX = verts.map((v) => v.x).reduce(math.min);
     final maxX = verts.map((v) => v.x).reduce(math.max);
-    final minY = verts.map((v) => v.y).reduce(math.min);
     final maxY = verts.map((v) => v.y).reduce(math.max);
     final midX = (minX + maxX) / 2.0;
 
-    double dWMain = 0.0;
-    double dWBranch = 0.0;
-    double dHBody = 0.0;
-    double dH1 = 0.0;
-    double dH2 = 0.0;
-    double dH3 = 0.0;
+    final w = parameters['width'];
+    final h = parameters['height'];
+    final dW = w != null ? (w.currentValue - w.baselineValue) : 0.0;
+    final dH = h != null ? (h.currentValue - h.baselineValue) : 0.0;
 
-    if (isLinked) {
-      final w = parameters['width'];
-      final h = parameters['height'];
-      final dW = w != null ? (w.currentValue - w.baselineValue) : 0.0;
-      final dH = h != null ? (h.currentValue - h.baselineValue) : 0.0;
-      dWMain = dW;
-      dWBranch = dW;
-      dHBody = dH;
-      dH1 = dH;
-      dH2 = dH;
-      dH3 = dH;
-    } else {
-      final p1W = parameters['port1_width'];
-      final p2W = parameters['port2_width'];
-      final p3W = parameters['port3_width'];
-      final p1H = parameters['port1_height'];
-      final p2H = parameters['port2_height'];
-      final p3H = parameters['port3_height'];
-
-      final dW1 = p1W != null ? (p1W.currentValue - p1W.baselineValue) : 0.0;
-      final dW2 = p2W != null ? (p2W.currentValue - p2W.baselineValue) : 0.0;
-      final dW3 = p3W != null ? (p3W.currentValue - p3W.baselineValue) : 0.0;
-
-      dWBranch = dW1;
-      dWMain = (dW2.abs() > 0.01 ? dW2 : dW3);
-      if (dWMain.abs() < 0.01) dWMain = (dW2 + dW3) / 2.0;
-
-      final h1cur = p1H?.currentValue ?? p1H?.baselineValue ?? 100.0;
-      final h2cur = p2H?.currentValue ?? p2H?.baselineValue ?? 100.0;
-      final h3cur = p3H?.currentValue ?? p3H?.baselineValue ?? 100.0;
-      final h1base = p1H?.baselineValue ?? h1cur;
-      final h2base = p2H?.baselineValue ?? h2cur;
-      final h3base = p3H?.baselineValue ?? h3cur;
-
-      final maxTargetH = math.max(h1cur, math.max(h2cur, h3cur));
-      final maxBaseH = math.max(h1base, math.max(h2base, h3base));
-      dHBody = maxTargetH - maxBaseH;
-
-      dH1 = h1cur - h1base;
-      dH2 = h2cur - h2base;
-      dH3 = h3cur - h3base;
-    }
-
-    final hasAnyChange = dWMain.abs() > 1e-4 ||
-        dWBranch.abs() > 1e-4 ||
-        dHBody.abs() > 1e-4 ||
-        dH1.abs() > 1e-4 ||
-        dH2.abs() > 1e-4 ||
-        dH3.abs() > 1e-4;
+    final hasAnyChange = dW.abs() > 1e-4 || dH.abs() > 1e-4;
     if (!hasAnyChange) return baseline;
 
-    CadPoint2D transformTeePt(CadPoint2D pt) {
+    CadPoint2D transformEqualTeePt(CadPoint2D pt) {
       double x = pt.x;
       double y = pt.y;
 
       // --- Width (Branch & Main Run) ---
-      if (x > midX + 5.0) {
-        x += dWBranch / 2.0;
-      } else if (x < midX - 5.0) {
-        x -= dWBranch / 2.0;
+      if (pt.x > midX + 5.0) {
+        x += dW / 2.0;
+      } else if (pt.x < midX - 5.0) {
+        x -= dW / 2.0;
       }
-      if (y > maxY - 15.0) {
-        y += dWMain;
+      if (pt.y > maxY - 15.0) {
+        y += dW;
       }
 
       // --- Physical Body Height Scaling ---
-      // Sidewall F_9 (top run) extends vertically along with its return flange lip
-      if (dHBody.abs() > 1e-4 && y > maxY - 5.0) {
-        y += dHBody;
-      }
-
-      // --- Coupler Flap Retraction / Extension per Port ---
-      // 1. Port 3 Flaps (Left ear of top wall, and upper-left diagonal cheek flap F_5):
-      if (dH3.abs() > 1e-4) {
-        if (x < minX + 5.0 && y > maxY - 15.0) {
-          // Left ear of top sidewall F_9 / F_11
-          y += dH3;
-        } else if (x < midX - 40.0 && y > 40.0 && y < 160.0) {
-          // Flap F_5 on left cheek
-          x -= dH3 / math.sqrt2;
-          y += dH3 / math.sqrt2;
+      if (dH.abs() > 1e-4) {
+        // Top sidewall F_10 upper region and return flange F_9
+        if (pt.y > maxY + 45.0) {
+          y += dH;
         }
-      }
 
-      // 2. Port 2 Flaps (Right ear of top wall, and upper-right diagonal cheek flap F_1):
-      if (dH2.abs() > 1e-4) {
-        if (x > maxX - 5.0 && y > maxY - 15.0) {
-          // Right ear of top sidewall F_9 / F_10
-          y += dH2;
-        } else if (x > midX + 40.0 && y > 140.0 && y < 220.0) {
-          // Flap F_1 on right cheek
-          x += dH2 / math.sqrt2;
-          y += dH2 / math.sqrt2;
+        // Left cheek F_3, F_0, F_1, F_2 outer region
+        if (pt.x < midX && (pt.x + pt.y) < 126.0) {
+          x -= dH / math.sqrt2;
+          y -= dH / math.sqrt2;
         }
-      }
 
-      // 3. Port 1 Flaps (Lower diagonal cheek flaps F_2 and F_6):
-      if (dH1.abs() > 1e-4 && y < minY + 15.0) {
-        if (x > midX) {
-          // Flap F_2 on right lower cheek
-          x += dH1 / math.sqrt2;
-          y -= dH1 / math.sqrt2;
-        } else {
-          // Flap F_6 on left lower cheek
-          x -= dH1 / math.sqrt2;
-          y -= dH1 / math.sqrt2;
+        // Right cheek F_7, F_4, F_5, F_6 outer region
+        if (pt.x > midX && (pt.x - pt.y) > 194.0) {
+          x += dH / math.sqrt2;
+          y -= dH / math.sqrt2;
         }
       }
 
@@ -859,18 +948,59 @@ class CmsScalingController extends ChangeNotifier {
     }
 
     return baseline.copyWith(
-      outerContour: baseline.outerContour.map(transformTeePt).toList(),
+      outerContour: baseline.outerContour.map(transformEqualTeePt).toList(),
       bends: baseline.bends.map((b) => b.copyWith(
-        p1: transformTeePt(b.p1),
-        p2: transformTeePt(b.p2),
+        p1: transformEqualTeePt(b.p1),
+        p2: transformEqualTeePt(b.p2),
       )).toList(),
       faces: baseline.faces.map((f) => f.copyWith(
-        vertices: f.vertices.map(transformTeePt).toList(),
+        vertices: f.vertices.map(transformEqualTeePt).toList(),
       )).toList(),
       punches: baseline.punches.map((p) => p.copyWith(
-        center: transformTeePt(p.center),
+        center: transformEqualTeePt(p.center),
       )).toList(),
     );
+  }
+
+  /// Dedicated 2D Sheet Scaling for Unequal Tee Fittings:
+  /// Dispatches to the standalone analytical [UnequalTeeScaler].
+  DsfDocument _scaleUnequalTee2D(
+    DsfDocument baseline, {
+    required bool isLinked,
+    required Map<String, CmsScalingParameter> parameters,
+  }) {
+    final scaleParams = isLinked
+        ? UnequalTeeScaleParameters(
+            port1Width: parameters['width']?.currentValue ?? 100.0,
+            port1Height: parameters['height']?.currentValue ?? 100.0,
+            port2Width: parameters['width']?.currentValue ?? 50.0,
+            port2Height: parameters['height']?.currentValue ?? 100.0,
+            port3Width: parameters['width']?.currentValue ?? 100.0,
+            port3Height: parameters['height']?.currentValue ?? 100.0,
+            sheetThickness: parameters['thickness']?.currentValue ?? 1.5,
+            flangeWidth: parameters['flange']?.currentValue ?? 10.0,
+          )
+        : UnequalTeeScaleParameters.fromCmsParameters(parameters);
+
+    final res = UnequalTeeScaler.scale(
+      baseline: baseline,
+      parameters: scaleParams,
+    );
+    return res.isValid ? res.document : baseline;
+  }
+
+
+  /// Tee scaling dispatcher: routes to equal or unequal subroutine based on [isLinked].
+  DsfDocument _scaleTee2D(
+    DsfDocument baseline, {
+    required bool isLinked,
+    required Map<String, CmsScalingParameter> parameters,
+  }) {
+    if (isLinked) {
+      return _scaleEqualTee2D(baseline, parameters: parameters);
+    } else {
+      return _scaleUnequalTee2D(baseline, isLinked: isLinked, parameters: parameters);
+    }
   }
 
   /// Geometrically detects whether [doc] is an Outside Riser.
@@ -2034,7 +2164,11 @@ class CmsScalingController extends ChangeNotifier {
     final maxH = math.max(300.0, baselineHeight + 150.0);
 
     bool initialLinked = true;
-    if (baselinePorts.length >= 3) {
+    if (contract == CmsProductContract.unequalTee || contract == CmsProductContract.unequalCross) {
+      initialLinked = false;
+    } else if (contract == CmsProductContract.equalTee || contract == CmsProductContract.equalCross) {
+      initialLinked = true;
+    } else if (baselinePorts.length >= 3) {
       final firstW = baselinePorts.first.width;
       final firstH = baselinePorts.first.height;
       for (final p in baselinePorts) {

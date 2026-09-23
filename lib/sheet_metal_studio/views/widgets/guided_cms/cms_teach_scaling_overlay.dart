@@ -58,7 +58,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
               side: const BorderSide(color: Color(0xFFBAE6FD), width: 1.2),
             ),
             child: Container(
-              width: 360.0,
+              width: 380.0,
               padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -88,19 +88,22 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                             ),
                           ),
                           const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF0FDF4),
-                              borderRadius: BorderRadius.circular(4.0),
-                              border: Border.all(color: const Color(0xFFBBF7D0)),
-                            ),
-                            child: Text(
-                              profileName,
-                              style: const TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF15803D),
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(4.0),
+                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                              ),
+                              child: Text(
+                                profileName,
+                                style: const TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF15803D),
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
@@ -117,124 +120,39 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                   ),
                   const SizedBox(height: 10.0),
 
-                  // Multi-Port Fitting Configuration (Tee & Cross)
-                  if (widget.controller.isMultiPortFitting) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 3.0),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(6.0),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
+                  // Port Selector Row for Unequal Multi-Port Fittings (Unequal Tee & Unequal Cross)
+                  if (!widget.controller.isLinkedPorts && widget.controller.baselinePorts.length >= 3) ...[
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: [
-                          Expanded(
-                            child: InkWell(
-                              onTap: () => widget.controller.togglePortLinking(true),
-                              borderRadius: BorderRadius.circular(4.0),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                decoration: BoxDecoration(
-                                  color: widget.controller.isLinkedPorts ? Colors.white : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(4.0),
-                                  boxShadow: widget.controller.isLinkedPorts
-                                      ? [const BoxShadow(color: Color(0x10000000), blurRadius: 2, offset: Offset(0, 1))]
-                                      : null,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.link,
-                                      size: 13.0,
-                                      color: widget.controller.isLinkedPorts ? const Color(0xFF0284C7) : const Color(0xFF64748B),
-                                    ),
-                                    const SizedBox(width: 4.0),
-                                    Text(
-                                      'Equal (Linked)',
-                                      style: TextStyle(
-                                        fontSize: 10.5,
-                                        fontWeight: widget.controller.isLinkedPorts ? FontWeight.bold : FontWeight.w500,
-                                        color: widget.controller.isLinkedPorts ? const Color(0xFF0284C7) : const Color(0xFF64748B),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                        children: List.generate(widget.controller.baselinePorts.length, (idx) {
+                          final port = widget.controller.baselinePorts[idx];
+                          final isSelected = idx == widget.controller.activePortIndex;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6.0),
+                            child: ChoiceChip(
+                              label: Text('Port ${idx + 1} (${port.width.toInt()}×${port.height.toInt()})'),
+                              selected: isSelected,
+                              selectedColor: const Color(0xFFEDE9FE),
+                              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.0),
+                              labelStyle: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                color: isSelected ? const Color(0xFF6D28D9) : const Color(0xFF475569),
                               ),
+                              onSelected: (_) => widget.controller.setActivePortIndex(idx),
                             ),
-                          ),
-                          Expanded(
-                            child: InkWell(
-                              onTap: () => widget.controller.togglePortLinking(false),
-                              borderRadius: BorderRadius.circular(4.0),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                decoration: BoxDecoration(
-                                  color: !widget.controller.isLinkedPorts ? Colors.white : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(4.0),
-                                  boxShadow: !widget.controller.isLinkedPorts
-                                      ? [const BoxShadow(color: Color(0x10000000), blurRadius: 2, offset: Offset(0, 1))]
-                                      : null,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.link_off,
-                                      size: 13.0,
-                                      color: !widget.controller.isLinkedPorts ? const Color(0xFF7C3AED) : const Color(0xFF64748B),
-                                    ),
-                                    const SizedBox(width: 4.0),
-                                    Text(
-                                      'Unequal (Independent)',
-                                      style: TextStyle(
-                                        fontSize: 10.5,
-                                        fontWeight: !widget.controller.isLinkedPorts ? FontWeight.bold : FontWeight.w500,
-                                        color: !widget.controller.isLinkedPorts ? const Color(0xFF7C3AED) : const Color(0xFF64748B),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                          );
+                        }),
                       ),
                     ),
                     const SizedBox(height: 8.0),
-
-                    // Port Selector Row when in Unequal Mode
-                    if (!widget.controller.isLinkedPorts) ...[
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: List.generate(widget.controller.baselinePorts.length, (idx) {
-                            final port = widget.controller.baselinePorts[idx];
-                            final isSelected = idx == widget.controller.activePortIndex;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 6.0),
-                              child: ChoiceChip(
-                                label: Text('Port ${idx + 1} (${port.width.toInt()}×${port.height.toInt()})'),
-                                selected: isSelected,
-                                selectedColor: const Color(0xFFEDE9FE),
-                                padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.0),
-                                labelStyle: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                  color: isSelected ? const Color(0xFF6D28D9) : const Color(0xFF475569),
-                                ),
-                                onSelected: (_) => widget.controller.setActivePortIndex(idx),
-                              ),
-                            );
-                          }),
-                        ),
-                      ),
-                      const SizedBox(height: 8.0),
-                    ],
                   ],
 
                   // Parameter Tabs (Width vs Height)
-                  Row(
+                  Wrap(
+                    spacing: 6.0,
+                    runSpacing: 4.0,
                     children: (widget.controller.isLinkedPorts
                             ? widget.controller.model.parameters.values.toList()
                             : widget.controller.model.parameters.values.where((p) {
@@ -243,20 +161,17 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                               }).toList())
                         .map((p) {
                       final isSelected = p.id == widget.controller.activeParameterId;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6.0),
-                        child: ChoiceChip(
-                          label: Text('${p.displayName} (${p.currentValue.toStringAsFixed(0)} mm)'),
-                          selected: isSelected,
-                          selectedColor: const Color(0xFFE0F2FE),
-                          padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
-                          labelStyle: TextStyle(
-                            fontSize: 11.0,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                            color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF334155),
-                          ),
-                          onSelected: (_) => widget.controller.selectParameter(p.id),
+                      return ChoiceChip(
+                        label: Text('${p.displayName} (${p.currentValue.toStringAsFixed(0)} mm)'),
+                        selected: isSelected,
+                        selectedColor: const Color(0xFFE0F2FE),
+                        padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                        labelStyle: TextStyle(
+                          fontSize: 11.0,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF334155),
                         ),
+                        onSelected: (_) => widget.controller.selectParameter(p.id),
                       );
                     }).toList(),
                   ),
@@ -276,14 +191,18 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              param.displayName,
-                              style: const TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1E293B),
+                            Expanded(
+                              child: Text(
+                                param.displayName,
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1E293B),
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            const SizedBox(width: 8.0),
                             Text(
                               '${previewVal.toStringAsFixed(1)} mm (${delta >= 0 ? "+" : ""}${delta.toStringAsFixed(1)} mm)',
                               style: const TextStyle(
@@ -352,23 +271,34 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Baseline: ${baselineVal.toStringAsFixed(0)} mm',
-                              style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
-                            ),
-                            TextButton.icon(
-                              style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFF0284C7),
-                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 0.0),
-                                visualDensity: VisualDensity.compact,
+                            Flexible(
+                              child: Text(
+                                'Baseline: ${baselineVal.toStringAsFixed(0)} mm',
+                                style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              icon: const Icon(Icons.restart_alt, size: 12.0),
-                              label: const Text('Reset', style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.w600)),
-                              onPressed: () => widget.controller.resetToBaseline(),
                             ),
-                            Text(
-                              'Max: ${param.maxValidMm.toStringAsFixed(0)} mm',
-                              style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
+                            InkWell(
+                              onTap: () => widget.controller.resetToBaseline(),
+                              borderRadius: BorderRadius.circular(4.0),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.restart_alt, size: 12.0, color: Color(0xFF0284C7)),
+                                    SizedBox(width: 2.0),
+                                    Text('Reset', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF0284C7))),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Flexible(
+                              child: Text(
+                                'Max: ${param.maxValidMm.toStringAsFixed(0)} mm',
+                                style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                         ),

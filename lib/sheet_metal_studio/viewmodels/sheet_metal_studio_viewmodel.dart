@@ -877,8 +877,12 @@ class SheetMetalStudioViewModel extends ChangeNotifier
   /// Launches Phase 2: Teach Scaling. Automatically finalizes Phase 1 baseline if needed.
   void startTeachScaling() {
     final contract =
-        cmsGuidedController.state.contract ??
-        CmsProductContract.lookup(_document.productType, _document.itemName) ??
+        (_document.metadata['cms_product_contract'] != null
+            ? CmsProductContract.lookup(
+                _document.metadata['cms_product_contract']?['productType'] as String?,
+                _document.metadata['cms_product_contract']?['variationName'] as String?,
+              )
+            : null) ??
         CmsProductContract.lookup(
           _detectedFittingMetadata?.product,
           _detectedFittingMetadata?.variantName,
@@ -887,6 +891,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier
           _document.metadata['fittingProduct'] as String?,
           _document.metadata['fittingVariant'] as String?,
         ) ??
+        cmsGuidedController.state.contract ??
+        CmsProductContract.lookup(_document.productType, _document.itemName) ??
         CmsProductContract.lookup(null, _document.itemName) ??
         CmsProductContract.lookup(null, _document.productType) ??
         (CmsScalingController.isInsideRiserGeometry(_document)

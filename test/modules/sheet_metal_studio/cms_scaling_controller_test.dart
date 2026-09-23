@@ -1211,5 +1211,88 @@ void main() {
       expect(vm.activeCmsPorts.first.width, greaterThan(140.0));
       expect(vm.activeCmsPorts.last.width, greaterThan(140.0));
     });
+
+    test('Test W — Equal Tee straightforward width and height scaling scales all 3 ports uniformly', () {
+      final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+      final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
+      final teeDoc = DsfDocument.fromJson(json);
+
+      final p1 = const CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 100.0);
+      final p2 = const CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 100.0);
+      final p3 = const CmsPhysicalPort(id: 'PORT_3', index: 3, width: 100.0, height: 100.0);
+
+      final controller = CmsScalingController(
+        baselineDocument: teeDoc,
+        contract: CmsProductContract.equalTee,
+        baselinePorts: [p1, p2, p3],
+      );
+
+      expect(controller.effectiveScalingProfile, equals(CmsScalingProfile.equalTee));
+      expect(controller.isMultiPortFitting, isTrue);
+      expect(controller.isLinkedPorts, isTrue);
+
+      // Scale unified width from 100 to 150mm
+      controller.selectParameter('width');
+      controller.evaluateMorph(150.0);
+
+      final previewW = controller.currentPreview!;
+      expect(previewW.isValid, isTrue);
+      for (final port in previewW.derivedPorts) {
+        expect(port.width, closeTo(150.0, 5.0));
+      }
+
+      // Scale unified height from 100 to 125mm
+      controller.selectParameter('height');
+      controller.evaluateMorph(125.0);
+
+      final previewH = controller.currentPreview!;
+      expect(previewH.isValid, isTrue);
+      for (final port in previewH.derivedPorts) {
+        expect(port.height, closeTo(125.0, 5.0));
+      }
+    });
+
+    test('Test X — Equal Cross straightforward 4-way width and height scaling scales all 4 ports uniformly', () {
+      final crossFile = File('assets/dxf_templates/trunking_accessories/equal_cross_100x100.dsf');
+      final json = jsonDecode(crossFile.readAsStringSync()) as Map<String, dynamic>;
+      final crossDoc = DsfDocument.fromJson(json);
+
+      final p1 = const CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 100.0);
+      final p2 = const CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 100.0);
+      final p3 = const CmsPhysicalPort(id: 'PORT_3', index: 3, width: 100.0, height: 100.0);
+      final p4 = const CmsPhysicalPort(id: 'PORT_4', index: 4, width: 100.0, height: 100.0);
+
+      final controller = CmsScalingController(
+        baselineDocument: crossDoc,
+        contract: CmsProductContract.equalCross,
+        baselinePorts: [p1, p2, p3, p4],
+      );
+
+      expect(controller.effectiveScalingProfile, equals(CmsScalingProfile.equalCross));
+      expect(controller.isMultiPortFitting, isTrue);
+      expect(controller.isLinkedPorts, isTrue);
+
+      // Scale width from 100 to 140mm
+      controller.selectParameter('width');
+      controller.evaluateMorph(140.0);
+
+      final preview = controller.currentPreview!;
+      expect(preview.isValid, isTrue);
+      for (final port in preview.derivedPorts) {
+        expect(port.width, closeTo(140.0, 5.0));
+      }
+    });
+
+    test('Test Y — Product profile resolution distinguishes equal and unequal contracts', () {
+      expect(CmsProductContract.equalTee.scalingProfile, equals(CmsScalingProfile.equalTee));
+      expect(CmsProductContract.unequalTee.scalingProfile, equals(CmsScalingProfile.unequalTee));
+      expect(CmsProductContract.equalCross.scalingProfile, equals(CmsScalingProfile.equalCross));
+      expect(CmsProductContract.unequalCross.scalingProfile, equals(CmsScalingProfile.unequalCross));
+
+      expect(CmsProductContract.lookup('tee', 'equal_tee'), equals(CmsProductContract.equalTee));
+      expect(CmsProductContract.lookup('tee', 'unequal_tee'), equals(CmsProductContract.unequalTee));
+      expect(CmsProductContract.lookup('cross', 'equal_cross'), equals(CmsProductContract.equalCross));
+      expect(CmsProductContract.lookup('cross', 'unequal_cross'), equals(CmsProductContract.unequalCross));
+    });
   });
 }

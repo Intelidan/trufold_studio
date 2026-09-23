@@ -18,6 +18,10 @@ import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_product_contrac
 import 'package:trufold_studio/sheet_metal_studio/viewmodels/sheet_metal_studio_viewmodel.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/cms_channel_topology_pictograph.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/dxf_fitting_parameter_dialog.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/dxf_fitting_metadata.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/cms/cms_scaling_controller.dart';
+import 'package:trufold_studio/sheet_metal_studio/views/widgets/guided_cms/cms_teach_scaling_overlay.dart';
+import 'package:trufold_studio/sheet_metal_studio/services/product_catalog_service.dart';
 
 void main() {
   group('SS1 & SS2: CMS Fitting Inspector Modernization & Port Annotation Toggle', () {
@@ -216,6 +220,120 @@ void main() {
       expect(plainVm.isCmsDrawing, isTrue);
       expect(plainVm.document.metadata['isCmsProduct'], isTrue);
       expect(plainVm.document.metadata['cmsWorkflow']?['stage'], 'manufacturing_definition');
+    });
+
+    test('5. Catalog Registry provides distinct Equal and Unequal variants for Cross and Tee', () {
+      ProductCatalogService.clearCache();
+
+      // Check Tray Accessories
+      final trayCrossVars = FittingCatalogRegistry.getVariantNamesForProduct('Tray Accessories', 'Cross');
+      expect(trayCrossVars, containsAll(['Equal Cross', 'Unequal Cross']));
+      expect(trayCrossVars.contains('Cross'), isFalse);
+
+      final trayTeeVars = FittingCatalogRegistry.getVariantNamesForProduct('Tray Accessories', 'Tee');
+      expect(trayTeeVars, containsAll(['Equal Tee', 'Unequal Tee']));
+      expect(trayTeeVars.contains('Tee'), isFalse);
+
+      // Check Trunking Accessories
+      final trunkingCrossVars = FittingCatalogRegistry.getVariantNamesForProduct('Trunking Accessories', 'Cross');
+      expect(trunkingCrossVars, containsAll(['Equal Cross', 'Unequal Cross']));
+
+      final trunkingTeeVars = FittingCatalogRegistry.getVariantNamesForProduct('Trunking Accessories', 'Tee');
+      expect(trunkingTeeVars, containsAll(['Equal Tee', 'Unequal Tee']));
+    });
+
+    test('6. DxfFittingMetadata detectFromDocument distinguishes Equal vs Unequal variant names', () {
+      final equalTeeDoc = DsfDocument.sampleCableTray().copyWith(
+        itemName: 'equal_tee_100x100.dsf',
+        productType: 'tee',
+      );
+      final metaEqual = DxfFittingMetadata.detectFromDocument(equalTeeDoc);
+      expect(metaEqual.variantName, equals('Equal Tee'));
+
+      final unequalTeeDoc = DsfDocument.sampleCableTray().copyWith(
+        itemName: 'unequal_tee_100x100x50x100x100x50x50.dsf',
+        productType: 'tee',
+      );
+      final metaUnequal = DxfFittingMetadata.detectFromDocument(unequalTeeDoc);
+      expect(metaUnequal.variantName, equals('Unequal Tee'));
+
+      final equalCrossDoc = DsfDocument.sampleCableTray().copyWith(
+        itemName: 'equal_cross_100x100.dsf',
+        productType: 'cross',
+      );
+      final metaCross = DxfFittingMetadata.detectFromDocument(equalCrossDoc);
+      expect(metaCross.variantName, equals('Equal Cross'));
+    });
+
+    testWidgets('7. CmsTeachScalingOverlay respects selected variant without showing Equal/Unequal toggle bar', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final p1 = const CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 100.0);
+      final p2 = const CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 100.0);
+      final p3 = const CmsPhysicalPort(id: 'PORT_3', index: 3, width: 100.0, height: 100.0);
+      final p4 = const CmsPhysicalPort(id: 'PORT_4', index: 4, width: 100.0, height: 100.0);
+
+      final doc = DsfDocument.sampleCableTray().copyWith(
+        productType: 'cross',
+        itemName: 'equal_cross_100x100.dsf',
+      );
+
+      // --- Equal Cross Fitting ---
+      final equalController = CmsScalingController(
+        baselineDocument: doc,
+        contract: CmsProductContract.equalCross,
+        baselinePorts: [p1, p2, p3, p4],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CmsTeachScalingOverlay(
+              controller: equalController,
+              onAccept: () {},
+              onCancel: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Equal variant: Shows Equal Cross Fitting badge and unified Width/Height
+      expect(find.text('Equal Cross Fitting'), findsOneWidget);
+      expect(find.textContaining('Width (W)'), findsWidgets);
+      expect(find.textContaining('Height (H)'), findsWidgets);
+      // Suppresses toggle button bar between Equal and Unequal!
+      expect(find.text('Equal (Linked)'), findsNothing);
+      expect(find.text('Unequal (Independent)'), findsNothing);
+
+      // --- Unequal Cross Fitting ---
+      final unequalController = CmsScalingController(
+        baselineDocument: doc,
+        contract: CmsProductContract.unequalCross,
+        baselinePorts: [p1, p2, p3, p4],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CmsTeachScalingOverlay(
+              controller: unequalController,
+              onAccept: () {},
+              onCancel: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Unequal variant: Shows Unequal Cross Fitting badge and Port selector
+      expect(find.text('Unequal Cross Fitting'), findsOneWidget);
+      expect(find.textContaining('Port 1'), findsWidgets);
+      // Suppresses toggle button bar between Equal and Unequal!
+      expect(find.text('Equal (Linked)'), findsNothing);
+      expect(find.text('Unequal (Independent)'), findsNothing);
     });
   });
 }

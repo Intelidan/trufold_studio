@@ -40,7 +40,7 @@ class LabelStyle {
 
   const LabelStyle({
     this.visible = true,
-    this.fontSize = 10.0,
+    this.fontSize = 7.0,
     this.color = const Color(0xFF334155),
     this.fontWeight = FontWeight.w600,
   });
@@ -129,37 +129,37 @@ class CanvasDisplaySettings {
     // default colour used when no per-direction colour overrides are needed.
     this.bendLabel = const LabelStyle(
       visible: true,
-      fontSize: 10.0,
+      fontSize: 7.0,
       color: Color(0xFF0369A1),
       fontWeight: FontWeight.bold,
     ),
     this.faceLabel = const LabelStyle(
       visible: true,
-      fontSize: 9.5,
+      fontSize: 7.0,
       color: Color(0xFF334155),
       fontWeight: FontWeight.w600,
     ),
     this.arcLabel = const LabelStyle(
-      visible: true,
-      fontSize: 9.5,
+      visible: false,
+      fontSize: 7.0,
       color: Color(0xFF0891B2),
       fontWeight: FontWeight.w600,
     ),
     this.dimTextLabel = const LabelStyle(
       visible: true,
-      fontSize: 9.0,
+      fontSize: 7.0,
       color: Color(0xFFD97706),
       fontWeight: FontWeight.bold,
     ),
     this.outsideDimLabel = const LabelStyle(
       visible: true,
-      fontSize: 9.0,
+      fontSize: 7.0,
       color: Color(0xFF475569),
       fontWeight: FontWeight.w500,
     ),
     this.portBadgeLabel = const LabelStyle(
       visible: true,
-      fontSize: 9.5,
+      fontSize: 7.0,
       color: Color(0xFF0F766E),
       fontWeight: FontWeight.w600,
     ),

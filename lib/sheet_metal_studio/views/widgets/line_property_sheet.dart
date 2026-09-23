@@ -294,7 +294,7 @@ class LinePropertySheet extends StatelessWidget {
                       ),
                     ),
                     child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
+                      child:  DropdownButton<String>(
                         value: line.layer.isNotEmpty ? line.layer : 'CUT',
                         isExpanded: true,
                         style: const TextStyle(

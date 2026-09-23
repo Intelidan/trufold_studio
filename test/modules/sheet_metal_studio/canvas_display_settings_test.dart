@@ -115,5 +115,25 @@ void main() {
       expect(vm.canvasDisplaySettings.dimTextLabel.fontSize, 12.0);
       expect(vm.canvasDisplaySettings.dimTextLabel.color, const Color(0xFF16A34A));
     });
+
+    test('Default CanvasDisplaySettings starts with smallest font size (7.0) and arc labels off', () {
+      const defaultSettings = CanvasDisplaySettings();
+      expect(defaultSettings.bendLabel.fontSize, 7.0);
+      expect(defaultSettings.faceLabel.fontSize, 7.0);
+      expect(defaultSettings.arcLabel.fontSize, 7.0);
+      expect(defaultSettings.dimTextLabel.fontSize, 7.0);
+      expect(defaultSettings.outsideDimLabel.fontSize, 7.0);
+      expect(defaultSettings.portBadgeLabel.fontSize, 7.0);
+      expect(defaultSettings.arcLabel.visible, isFalse);
+
+      final vm = SheetMetalStudioViewModel();
+      expect(vm.canvasDisplaySettings.bendLabel.fontSize, 7.0);
+      expect(vm.canvasDisplaySettings.faceLabel.fontSize, 7.0);
+      expect(vm.canvasDisplaySettings.arcLabel.fontSize, 7.0);
+      expect(vm.canvasDisplaySettings.dimTextLabel.fontSize, 7.0);
+      expect(vm.canvasDisplaySettings.outsideDimLabel.fontSize, 7.0);
+      expect(vm.canvasDisplaySettings.portBadgeLabel.fontSize, 7.0);
+      expect(vm.canvasDisplaySettings.arcLabel.visible, isFalse);
+    });
   });
 }
