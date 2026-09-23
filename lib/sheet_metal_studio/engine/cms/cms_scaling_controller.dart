@@ -29,6 +29,7 @@ import 'cms_opening_plane_analyzer.dart';
 import 'cms_port_matcher.dart';
 import 'cms_punch_constraint_engine.dart';
 import 'unequal_tee_scaler.dart';
+import 'unequal_cross_scaler.dart';
 
 /// Result of evaluating a parametric dimension on the 2D blank and folding to 3D.
 class CmsScalingPreviewResult {
@@ -107,9 +108,15 @@ class CmsScalingController extends ChangeNotifier {
     if (index < 0 || index >= baselinePorts.length) return;
     _model = _model.copyWith(activePortIndex: index);
     if (!_model.isLinkedPorts) {
-      final wId = 'port${index + 1}_width';
-      if (_model.parameters.containsKey(wId)) {
-        selectParameter(wId);
+      final isHeightActive = _activeParameterId.endsWith('_height');
+      final targetId = isHeightActive ? 'port${index + 1}_height' : 'port${index + 1}_width';
+      if (_model.parameters.containsKey(targetId)) {
+        selectParameter(targetId);
+      } else {
+        final wId = 'port${index + 1}_width';
+        if (_model.parameters.containsKey(wId)) {
+          selectParameter(wId);
+        }
       }
     } else {
       notifyListeners();
@@ -720,154 +727,22 @@ class CmsScalingController extends ChangeNotifier {
   }
 
   /// Dedicated 2D Sheet Scaling for Unequal Cross Fittings:
-  /// - Base floor is an octagonal or rectangular central base with 4-way symmetry.
-  /// - Calculates each side separately when port widths or heights differ.
-  /// - Body height is governed by the highest port height, and flap heights for lower ports retract.
+  /// Routes to the analytical [UnequalCrossScaler] which preserves:
+  /// - All 16 corner fillet arcs (r=10mm)
+  /// - Universal 95mm coupler rule for punches
+  /// - Hbody = max(H1, H2, H3, H4) with orthogonal non-slanted steps
+  /// - Closed-form base floor F_16 without bend line shear
   DsfDocument _scaleUnequalCross2D(
     DsfDocument baseline, {
     required bool isLinked,
     required Map<String, CmsScalingParameter> parameters,
   }) {
-    final baseFloor = baseline.faces.firstWhere(
-      (f) => f.isBaseAnchor || f.role == FaceRole.baseFloor,
-      orElse: () => baseline.faces.first,
+    final scaleParams = UnequalCrossScaleParameters.fromCmsParameters(parameters);
+    final result = UnequalCrossScaler.scale(
+      baseline: baseline,
+      parameters: scaleParams,
     );
-    final verts = baseFloor.vertices;
-    final minX = verts.map((v) => v.x).reduce(math.min);
-    final maxX = verts.map((v) => v.x).reduce(math.max);
-    final minY = verts.map((v) => v.y).reduce(math.min);
-    final maxY = verts.map((v) => v.y).reduce(math.max);
-    final midX = (minX + maxX) / 2.0;
-    final midY = (minY + maxY) / 2.0;
-
-    double dWHoriz = 0.0;
-    double dWVert = 0.0;
-    double dHBody = 0.0;
-    double dH1 = 0.0;
-    double dH2 = 0.0;
-    double dH3 = 0.0;
-    double dH4 = 0.0;
-
-    if (isLinked) {
-      final w = parameters['width'];
-      final h = parameters['height'];
-      final dW = w != null ? (w.currentValue - w.baselineValue) : 0.0;
-      final dH = h != null ? (h.currentValue - h.baselineValue) : 0.0;
-      dWHoriz = dW;
-      dWVert = dW;
-      dHBody = dH;
-      dH1 = dH;
-      dH2 = dH;
-      dH3 = dH;
-      dH4 = dH;
-    } else {
-      final p1W = parameters['port1_width'];
-      final p2W = parameters['port2_width'];
-      final p3W = parameters['port3_width'];
-      final p4W = parameters['port4_width'];
-      final p1H = parameters['port1_height'];
-      final p2H = parameters['port2_height'];
-      final p3H = parameters['port3_height'];
-      final p4H = parameters['port4_height'];
-
-      final dW1 = p1W != null ? (p1W.currentValue - p1W.baselineValue) : 0.0;
-      final dW2 = p2W != null ? (p2W.currentValue - p2W.baselineValue) : 0.0;
-      final dW3 = p3W != null ? (p3W.currentValue - p3W.baselineValue) : 0.0;
-      final dW4 = p4W != null ? (p4W.currentValue - p4W.baselineValue) : 0.0;
-
-      dWVert = (dW2.abs() > 0.01 ? dW2 : dW4);
-      dWHoriz = (dW1.abs() > 0.01 ? dW1 : dW3);
-      if (dWVert.abs() < 0.01) dWVert = (dW2 + dW4) / 2.0;
-      if (dWHoriz.abs() < 0.01) dWHoriz = (dW1 + dW3) / 2.0;
-
-      final h1cur = p1H?.currentValue ?? p1H?.baselineValue ?? 100.0;
-      final h2cur = p2H?.currentValue ?? p2H?.baselineValue ?? 100.0;
-      final h3cur = p3H?.currentValue ?? p3H?.baselineValue ?? 100.0;
-      final h4cur = p4H?.currentValue ?? p4H?.baselineValue ?? 100.0;
-      final h1base = p1H?.baselineValue ?? h1cur;
-      final h2base = p2H?.baselineValue ?? h2cur;
-      final h3base = p3H?.baselineValue ?? h3cur;
-      final h4base = p4H?.baselineValue ?? h4cur;
-
-      final maxTargetH = math.max(math.max(h1cur, h2cur), math.max(h3cur, h4cur));
-      final maxBaseH = math.max(math.max(h1base, h2base), math.max(h3base, h4base));
-      dHBody = maxTargetH - maxBaseH;
-
-      dH1 = h1cur - h1base;
-      dH2 = h2cur - h2base;
-      dH3 = h3cur - h3base;
-      dH4 = h4cur - h4base;
-    }
-
-    final hasCrossChange = dWHoriz.abs() > 1e-4 ||
-        dWVert.abs() > 1e-4 ||
-        dHBody.abs() > 1e-4 ||
-        dH1.abs() > 1e-4 ||
-        dH2.abs() > 1e-4 ||
-        dH3.abs() > 1e-4 ||
-        dH4.abs() > 1e-4;
-    if (!hasCrossChange) return baseline;
-
-    CadPoint2D transformCrossPt(CadPoint2D pt) {
-      double x = pt.x;
-      double y = pt.y;
-
-      // Symmetrical horizontal run expansion (Ports 1 & 3)
-      if (x > midX + 5.0) {
-        x += dWHoriz / 2.0;
-      } else if (x < midX - 5.0) {
-        x -= dWHoriz / 2.0;
-      }
-
-      // Symmetrical vertical run expansion (Ports 2 & 4)
-      if (y > midY + 5.0) {
-        y += dWVert / 2.0;
-      } else if (y < midY - 5.0) {
-        y -= dWVert / 2.0;
-      }
-
-      // Body height expansion on outer extremities
-      if (dHBody.abs() > 1e-4) {
-        if (x > maxX + 5.0) x += dHBody;
-        if (x < minX - 5.0) x -= dHBody;
-        if (y > maxY + 5.0) y += dHBody;
-        if (y < minY - 5.0) y -= dHBody;
-      }
-
-      // Per-port flap retraction / extension
-      if (dH1.abs() > 1e-4 && x < minX - 5.0) {
-        final signY = y >= midY ? 1.0 : -1.0;
-        y += signY * (dH1 / 2.0);
-      }
-      if (dH3.abs() > 1e-4 && x > maxX + 5.0) {
-        final signY = y >= midY ? 1.0 : -1.0;
-        y += signY * (dH3 / 2.0);
-      }
-      if (dH2.abs() > 1e-4 && y > maxY + 5.0) {
-        final signX = x >= midX ? 1.0 : -1.0;
-        x += signX * (dH2 / 2.0);
-      }
-      if (dH4.abs() > 1e-4 && y < minY + 5.0) {
-        final signX = x >= midX ? 1.0 : -1.0;
-        x += signX * (dH4 / 2.0);
-      }
-
-      return CadPoint2D(x, y);
-    }
-
-    return baseline.copyWith(
-      outerContour: baseline.outerContour.map(transformCrossPt).toList(),
-      bends: baseline.bends.map((b) => b.copyWith(
-        p1: transformCrossPt(b.p1),
-        p2: transformCrossPt(b.p2),
-      )).toList(),
-      faces: baseline.faces.map((f) => f.copyWith(
-        vertices: f.vertices.map(transformCrossPt).toList(),
-      )).toList(),
-      punches: baseline.punches.map((p) => p.copyWith(
-        center: transformCrossPt(p.center),
-      )).toList(),
-    );
+    return result.document;
   }
 
   /// Cross scaling dispatcher: routes to equal or unequal subroutine based on [isLinked].
@@ -974,7 +849,7 @@ class CmsScalingController extends ChangeNotifier {
             port1Width: parameters['width']?.currentValue ?? 100.0,
             port1Height: parameters['height']?.currentValue ?? 100.0,
             port2Width: parameters['width']?.currentValue ?? 50.0,
-            port2Height: parameters['height']?.currentValue ?? 100.0,
+            port2Height: parameters['height']?.currentValue ?? 50.0,
             port3Width: parameters['width']?.currentValue ?? 100.0,
             port3Height: parameters['height']?.currentValue ?? 100.0,
             sheetThickness: parameters['thickness']?.currentValue ?? 1.5,
@@ -2215,23 +2090,44 @@ class CmsScalingController extends ChangeNotifier {
         final p = baselinePorts[i];
         final wId = 'port${i + 1}_width';
         final hId = 'port${i + 1}_height';
+        final double baseWidth;
+        if (contract == CmsProductContract.unequalCross) {
+          baseWidth = (i == 1 || i == 3) ? 50.0 : 100.0;
+        } else {
+          baseWidth = p.width;
+        }
         params[wId] = CmsScalingParameter(
           id: wId,
           displayName: 'Port ${i + 1} Width',
-          currentValue: p.width,
-          baselineValue: p.width,
-          minValidMm: math.min(50.0, p.width - 50.0),
-          maxValidMm: math.max(750.0, p.width + 200.0),
+          currentValue: baseWidth,
+          baselineValue: baseWidth,
+          minValidMm: math.min(50.0, baseWidth - 50.0),
+          maxValidMm: math.max(750.0, baseWidth + 200.0),
           unit: 'mm',
           teachingState: CmsParameterTeachingState.untaught,
         );
+        final double baseHeight;
+        if (contract == CmsProductContract.unequalTee && i == 1) {
+          // Port 2 coupler on Unequal Tee has a 50mm baseline coupler height
+          baseHeight = 50.0;
+        } else if (contract == CmsProductContract.unequalTee) {
+          baseHeight = 100.0;
+        } else if (contract == CmsProductContract.unequalCross && (i == 1 || i == 3)) {
+          // Port 2 and Port 4 couplers on Unequal Cross have a 50mm baseline coupler height
+          baseHeight = 50.0;
+        } else if (contract == CmsProductContract.unequalCross) {
+          // Port 1 and Port 3 couplers have 100mm baseline coupler height
+          baseHeight = 100.0;
+        } else {
+          baseHeight = p.height;
+        }
         params[hId] = CmsScalingParameter(
           id: hId,
           displayName: 'Port ${i + 1} Height',
-          currentValue: p.height,
-          baselineValue: p.height,
-          minValidMm: math.min(50.0, p.height - 50.0),
-          maxValidMm: math.max(300.0, p.height + 150.0),
+          currentValue: baseHeight,
+          baselineValue: baseHeight,
+          minValidMm: math.min(50.0, baseHeight - 50.0),
+          maxValidMm: math.max(300.0, baseHeight + 150.0),
           unit: 'mm',
           teachingState: CmsParameterTeachingState.untaught,
         );

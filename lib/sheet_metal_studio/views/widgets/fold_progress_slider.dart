@@ -9,7 +9,9 @@
 // =============================================================================
 
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
 
 class FoldProgressSlider extends StatefulWidget {
@@ -64,13 +66,7 @@ class _FoldProgressSliderState extends State<FoldProgressSlider> {
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Color(0xFFE2E8F0), width: 1.5)),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 4,
-            offset: Offset(0, -2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Color(0x08000000), blurRadius: 4, offset: Offset(0, -2))],
       ),
       child: isStepMode ? _buildStepCamDock(vm, totalBends) : _buildContinuousDock(vm),
     );
@@ -98,11 +94,7 @@ class _FoldProgressSliderState extends State<FoldProgressSlider> {
       children: [
         // Play / Pause Animation Button
         IconButton(
-          icon: Icon(
-            _isAnimating ? Icons.pause_circle_filled : Icons.play_circle_filled,
-            color: const Color(0xFF0284C7),
-            size: 32,
-          ),
+          icon: Icon(_isAnimating ? Icons.pause_circle_filled : Icons.play_circle_filled, color: const Color(0xFF0284C7), size: 32),
           tooltip: _isAnimating ? 'Pause Folding' : 'Play Folding Simulation',
           onPressed: _toggleAutoPlay,
         ),
@@ -115,12 +107,7 @@ class _FoldProgressSliderState extends State<FoldProgressSlider> {
           children: [
             Text(
               statusLabel,
-              style: TextStyle(
-                color: statusColor,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
-              ),
+              style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
             ),
             const SizedBox(height: 2),
             Text(
@@ -219,12 +206,7 @@ class _FoldProgressSliderState extends State<FoldProgressSlider> {
               children: [
                 Text(
                   'STEP $currentStep OF $totalBends: BEND $currentBendId',
-                  style: const TextStyle(
-                    color: Color(0xFF0F172A),
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
+                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                 ),
                 const SizedBox(width: 8),
                 // Collision / Clear Badge
@@ -233,9 +215,7 @@ class _FoldProgressSliderState extends State<FoldProgressSlider> {
                   decoration: BoxDecoration(
                     color: hasCollision ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7),
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: hasCollision ? const Color(0xFFF87171) : const Color(0xFF4ADE80),
-                    ),
+                    border: Border.all(color: hasCollision ? const Color(0xFFF87171) : const Color(0xFF4ADE80)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -248,11 +228,7 @@ class _FoldProgressSliderState extends State<FoldProgressSlider> {
                       const SizedBox(width: 3),
                       Text(
                         hasCollision ? 'TOOL COLLISION' : 'CLEAR',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: hasCollision ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
-                        ),
+                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: hasCollision ? const Color(0xFFDC2626) : const Color(0xFF16A34A)),
                       ),
                     ],
                   ),
@@ -261,13 +237,8 @@ class _FoldProgressSliderState extends State<FoldProgressSlider> {
             ),
             const SizedBox(height: 2),
             Text(
-              hasCollision
-                  ? (stepData?.reason ?? 'Flange interferes with upper punch tooling.')
-                  : 'Punch clearance verified. Ready for press-brake cycle.',
-              style: TextStyle(
-                color: hasCollision ? const Color(0xFFDC2626) : const Color(0xFF64748B),
-                fontSize: 10,
-              ),
+              hasCollision ? (stepData?.reason ?? 'Flange interferes with upper punch tooling.') : 'Punch clearance verified. Ready for press-brake cycle.',
+              style: TextStyle(color: hasCollision ? const Color(0xFFDC2626) : const Color(0xFF64748B), fontSize: 10),
             ),
           ],
         ),
@@ -307,10 +278,7 @@ class _FoldProgressSliderState extends State<FoldProgressSlider> {
                     decoration: BoxDecoration(
                       color: isCurrent ? const Color(0xFFE0F2FE) : const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isCurrent ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0),
-                        width: isCurrent ? 1.5 : 1.0,
-                      ),
+                      border: Border.all(color: isCurrent ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0), width: isCurrent ? 1.5 : 1.0),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -393,18 +361,11 @@ class _FoldProgressSliderState extends State<FoldProgressSlider> {
         decoration: BoxDecoration(
           color: active ? const Color(0xFFE0F2FE) : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: active ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0),
-            width: 1.0,
-          ),
+          border: Border.all(color: active ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0), width: 1.0),
         ),
         child: Text(
           label,
-          style: TextStyle(
-            color: active ? const Color(0xFF0284C7) : const Color(0xFF475569),
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: active ? const Color(0xFF0284C7) : const Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold),
         ),
       ),
     );
@@ -419,27 +380,16 @@ class _FoldProgressSliderState extends State<FoldProgressSlider> {
         decoration: BoxDecoration(
           color: isStep ? const Color(0xFFEFF6FF) : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: isStep ? const Color(0xFF3B82F6) : const Color(0xFFCBD5E1),
-            width: 1.0,
-          ),
+          border: Border.all(color: isStep ? const Color(0xFF3B82F6) : const Color(0xFFCBD5E1), width: 1.0),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isStep ? Icons.alt_route : Icons.format_list_numbered,
-              size: 13,
-              color: isStep ? const Color(0xFF1D4ED8) : const Color(0xFF475569),
-            ),
+            Icon(isStep ? Icons.alt_route : Icons.format_list_numbered, size: 13, color: isStep ? const Color(0xFF1D4ED8) : const Color(0xFF475569)),
             const SizedBox(width: 4),
             Text(
               isStep ? 'Step CAM' : 'Step Mode',
-              style: TextStyle(
-                color: isStep ? const Color(0xFF1D4ED8) : const Color(0xFF475569),
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(color: isStep ? const Color(0xFF1D4ED8) : const Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold),
             ),
           ],
         ),

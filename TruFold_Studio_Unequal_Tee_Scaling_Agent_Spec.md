@@ -663,29 +663,44 @@ The reference PDF explicitly defines a different height rule for unequal ports. 
 
 ---
 
-# 19. Maximum-Height Rule
+# 19. Maximum-Height Rule & Derived Body Architecture
 
-For the three ports:
+### Explicit Specification Rule
+> **Port heights are independent inputs. Common body height is a derived value equal to the maximum port height:**
+> 
+> $$H_{\text{body}} = \max(H_1, H_2, H_3)$$
+> 
+> **A port's coupler area always follows its own port height, while the shared body follows the maximum. The vertical difference between the body and each port defines that port's step/notch:**
+> 
+> $$\text{Notch}_i = H_{\text{body}} - H_i$$
 
-```text
-H1
-H2
-H3
+### Canonical Determination Order
+The body is never independently changed by individual ports. Instead, determine the maximum first:
+```dart
+final bodyHeight = max(
+  port1Height,
+  max(port2Height, port3Height),
+);
 ```
 
-calculate:
+Then map features deterministically:
+- **Body geometry** $\leftarrow$ `bodyHeight` (Left cheek wall $FL1$, right cheek wall $FL2$, back wall main web $FL3$, return flanges $F_2, F_6, F_8$)
+- **P1 coupler geometry** $\leftarrow$ `port1Height` (Flap $F_0$ along $B5$, Flap $F_5$ along $B6$, slots $SLOT_9, SLOT_12$)
+- **P2 coupler geometry** $\leftarrow$ `port2Height` (Flap $F_4$ along $B4$, Right ear of $F_9$, slots $SLOT_6, SLOT_7$)
+- **P3 coupler geometry** $\leftarrow$ `port3Height` (Flap $F_1$ along $B7$, Left ear of $F_9$, slots $SLOT_10, SLOT_11$)
 
-```text
-maxHeight = max(H1, H2, H3)
-```
+This prevents order-dependent behavior and guarantees that scaling back and forth (e.g. $50 \to 75 \to 100 \to 125 \to 75$) returns to the exact baseline-derived state without accumulated error.
 
-The overall physical/product height remains:
+### Calibrated Verification Matrix
 
-```text
-maxHeight
-```
-
-This is a product rule, not an incidental geometric result.
+| P1 | P2 | P3 | Body | P1 notch | P2 notch | P3 notch | Status |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---|
+| 100 | 50 | 100 | 100 | 0 | 50 | 0 | Baseline state |
+| 100 | 75 | 100 | 100 | 0 | 25 | 0 | P2 coupler grows +25mm |
+| 100 | 100 | 100 | 100 | 0 | 0 | 0 | Flush state (notch eliminated) |
+| 100 | 125 | 100 | 125 | 25 | 0 | 25 | P2 becomes max; entire body expands to 125 |
+| 125 | 100 | 100 | 125 | 0 | 25 | 25 | P1 becomes max; entire body expands to 125 |
+| 100 | 100 | 125 | 125 | 25 | 25 | 0 | P3 becomes max; entire body expands to 125 |
 
 ---
 

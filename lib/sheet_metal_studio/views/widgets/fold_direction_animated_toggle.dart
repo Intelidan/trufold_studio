@@ -23,21 +23,13 @@ class FoldDirectionAnimatedToggle extends StatefulWidget {
   final ValueChanged<BendDirection> onToggle;
   final bool isFlange;
 
-  const FoldDirectionAnimatedToggle({
-    super.key,
-    required this.direction,
-    required this.onToggle,
-    this.isFlange = false,
-  });
+  const FoldDirectionAnimatedToggle({super.key, required this.direction, required this.onToggle, this.isFlange = false});
 
   @override
-  State<FoldDirectionAnimatedToggle> createState() =>
-      _FoldDirectionAnimatedToggleState();
+  State<FoldDirectionAnimatedToggle> createState() => _FoldDirectionAnimatedToggleState();
 }
 
-class _FoldDirectionAnimatedToggleState
-    extends State<FoldDirectionAnimatedToggle>
-    with TickerProviderStateMixin {
+class _FoldDirectionAnimatedToggleState extends State<FoldDirectionAnimatedToggle> with TickerProviderStateMixin {
   late final AnimationController _animController;
   late final Animation<double> _curve;
   late final AnimationController _pressController;
@@ -51,23 +43,11 @@ class _FoldDirectionAnimatedToggleState
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-      value: _isUp ? 0.0 : 1.0,
-    );
-    _curve = CurvedAnimation(
-      parent: _animController,
-      curve: Curves.easeInOutBack,
-    );
+    _animController = AnimationController(vsync: this, duration: const Duration(milliseconds: 400), value: _isUp ? 0.0 : 1.0);
+    _curve = CurvedAnimation(parent: _animController, curve: Curves.easeInOutBack);
 
-    _pressController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 90),
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _pressController, curve: Curves.easeOutCubic),
-    );
+    _pressController = AnimationController(vsync: this, duration: const Duration(milliseconds: 90));
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(CurvedAnimation(parent: _pressController, curve: Curves.easeOutCubic));
   }
 
   @override
@@ -91,8 +71,7 @@ class _FoldDirectionAnimatedToggleState
   }
 
   void _handleTap() {
-    final nextDirection =
-        _isUp ? BendDirection.down : BendDirection.up;
+    final nextDirection = _isUp ? BendDirection.down : BendDirection.up;
     widget.onToggle(nextDirection);
   }
 
@@ -110,23 +89,11 @@ class _FoldDirectionAnimatedToggleState
           progress,
         )!;
 
-        final Color bgGradientStart = Color.lerp(
-          const Color(0xFFF0F9FF),
-          const Color(0xFFFFFBEB),
-          progress,
-        )!;
+        final Color bgGradientStart = Color.lerp(const Color(0xFFF0F9FF), const Color(0xFFFFFBEB), progress)!;
 
-        final Color bgGradientEnd = Color.lerp(
-          const Color(0xFFE0F2FE),
-          const Color(0xFFFEF3C7),
-          progress,
-        )!;
+        final Color bgGradientEnd = Color.lerp(const Color(0xFFE0F2FE), const Color(0xFFFEF3C7), progress)!;
 
-        final Color borderColor = Color.lerp(
-          const Color(0xFF38BDF8),
-          const Color(0xFFF59E0B),
-          progress,
-        )!;
+        final Color borderColor = Color.lerp(const Color(0xFF38BDF8), const Color(0xFFF59E0B), progress)!;
 
         // 3D perspective tilt: peaks at mid-transition (progress = 0.5)
         final tiltMagnitude = math.sin(progress * math.pi) * 0.22;
@@ -155,23 +122,12 @@ class _FoldDirectionAnimatedToggleState
                   height: 42.0,
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [bgGradientStart, bgGradientEnd],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    gradient: LinearGradient(colors: [bgGradientStart, bgGradientEnd], begin: Alignment.topLeft, end: Alignment.bottomRight),
                     borderRadius: BorderRadius.circular(8.0),
-                    border: Border.all(
-                      color: _isHovered
-                          ? primaryColor
-                          : borderColor.withValues(alpha: 0.85),
-                      width: _isHovered ? 1.8 : 1.4,
-                    ),
+                    border: Border.all(color: _isHovered ? primaryColor : borderColor.withValues(alpha: 0.85), width: _isHovered ? 1.8 : 1.4),
                     boxShadow: [
                       BoxShadow(
-                        color: primaryColor.withValues(
-                          alpha: _isHovered ? 0.32 : 0.18,
-                        ),
+                        color: primaryColor.withValues(alpha: _isHovered ? 0.32 : 0.18),
                         blurRadius: _isHovered ? 10.0 : 6.0,
                         spreadRadius: _isHovered ? 0.8 : 0.0,
                         offset: const Offset(0, 2.0),
@@ -185,10 +141,7 @@ class _FoldDirectionAnimatedToggleState
                         width: 30.0,
                         height: 28.0,
                         child: CustomPaint(
-                          painter: _FoldHingePainter(
-                            progress: progress,
-                            activeColor: primaryColor,
-                          ),
+                          painter: _FoldHingePainter(progress: progress, activeColor: primaryColor),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -202,25 +155,13 @@ class _FoldDirectionAnimatedToggleState
                           children: [
                             Text(
                               progress < 0.5 ? '↑ (+Z) UP' : '↓ (-Z) DOWN',
-                              style: TextStyle(
-                                color: primaryColor,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.3,
-                              ),
+                              style: TextStyle(color: primaryColor, fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.3),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              progress < 0.5
-                                  ? 'SURFACE ▲ (Toward Viewer)'
-                                  : 'REVERSE ▼ (Into Screen)',
-                              style: TextStyle(
-                                color: primaryColor.withValues(alpha: 0.78),
-                                fontSize: 8.0,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.2,
-                              ),
+                              progress < 0.5 ? 'SURFACE ▲ (Toward Viewer)' : 'REVERSE ▼ (Into Screen)',
+                              style: TextStyle(color: primaryColor.withValues(alpha: 0.78), fontSize: 8.0, fontWeight: FontWeight.bold, letterSpacing: 0.2),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -230,42 +171,24 @@ class _FoldDirectionAnimatedToggleState
 
                       // --- 3. Dramatic Flip Action Badge ---
                       Tooltip(
-                        message: _isUp
-                            ? 'Click to flip fold direction to -Z (DOWN)'
-                            : 'Click to flip fold direction to +Z (UP)',
+                        message: _isUp ? 'Click to flip fold direction to -Z (DOWN)' : 'Click to flip fold direction to +Z (UP)',
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 250),
                           padding: const EdgeInsets.all(5.0),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             shape: BoxShape.circle,
-                            border: Border.all(
-                              color: primaryColor.withValues(alpha: 0.4),
-                              width: 1.0,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: primaryColor.withValues(alpha: 0.2),
-                                blurRadius: 4,
-                                offset: const Offset(0, 1),
-                              ),
-                            ],
+                            border: Border.all(color: primaryColor.withValues(alpha: 0.4), width: 1.0),
+                            boxShadow: [BoxShadow(color: primaryColor.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 1))],
                           ),
                           child: TweenAnimationBuilder<double>(
-                            tween: Tween<double>(
-                              begin: 0.0,
-                              end: _rotationAngle,
-                            ),
+                            tween: Tween<double>(begin: 0.0, end: _rotationAngle),
                             duration: const Duration(milliseconds: 400),
                             curve: Curves.easeOutBack,
                             builder: (context, angle, child) {
                               return Transform.rotate(
                                 angle: angle,
-                                child: Icon(
-                                  Icons.swap_vert_rounded,
-                                  size: 15.0,
-                                  color: primaryColor,
-                                ),
+                                child: Icon(Icons.swap_vert_rounded, size: 15.0, color: primaryColor),
                               );
                             },
                           ),
@@ -348,10 +271,7 @@ class _FoldHingePainter extends CustomPainter {
       ..close();
 
     final flangeGradient = LinearGradient(
-      colors: [
-        activeColor.withValues(alpha: 0.88),
-        activeColor.withValues(alpha: 0.52),
-      ],
+      colors: [activeColor.withValues(alpha: 0.88), activeColor.withValues(alpha: 0.52)],
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
     ).createShader(Rect.fromPoints(flangeP1, flangeP3));
@@ -378,11 +298,7 @@ class _FoldHingePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6
       ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(arrowX, arrowBaseY),
-      Offset(arrowX, arrowTipY),
-      arrowPaint,
-    );
+    canvas.drawLine(Offset(arrowX, arrowBaseY), Offset(arrowX, arrowTipY), arrowPaint);
 
     final headDir = isUp ? -1.0 : 1.0;
     final headPath = Path()
@@ -393,6 +309,5 @@ class _FoldHingePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_FoldHingePainter old) =>
-      old.progress != progress || old.activeColor != activeColor;
+  bool shouldRepaint(_FoldHingePainter old) => old.progress != progress || old.activeColor != activeColor;
 }
