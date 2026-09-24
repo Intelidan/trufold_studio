@@ -58,6 +58,8 @@ import '../../engine/fitting_port_annotation_engine.dart';
 import 'guided_cms/cms_2d_overlay_painter.dart';
 import '../../models/cms/cms_ux_state.dart';
 import '../../models/canvas_display_settings.dart';
+import '../../models/trunking_cover_data.dart';
+import '../../engine/covers/trunking_cover_generator.dart';
 part 'canvas/canvas_painter.dart';
 part 'canvas/canvas_dimension_editor.dart';
 part 'canvas/canvas_legend.dart';
@@ -83,6 +85,7 @@ enum _DragTarget {
   portBadge,
   drawEntity,
   multiEntity,
+  cover,
 }
 
 class UnfoldedCanvasWidget extends StatefulWidget {
@@ -221,17 +224,32 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                 ? viewModel.document.blankLengthMm
                 : 300.0;
 
+            var effectiveW = bw;
+            var effectiveL = bl;
+            if (viewModel.document.cover != null &&
+                viewModel.document.cover!.isVisible2D) {
+              final coverBbox = TrunkingCoverGenerator.calculateDocumentBbox(
+                viewModel.document.cover!.document,
+              );
+              final coverMaxX =
+                  viewModel.document.cover!.offset2D.x + coverBbox.maxX;
+              final coverMaxY =
+                  viewModel.document.cover!.offset2D.y + coverBbox.maxY;
+              if (coverMaxX > effectiveW) effectiveW = coverMaxX + 40.0;
+              if (coverMaxY > effectiveL) effectiveL = coverMaxY + 40.0;
+            }
+
             final fitScale = math.min(
-              (size.width * 0.75) / bw,
-              (size.height * 0.75) / bl,
+              (size.width * 0.75) / effectiveW,
+              (size.height * 0.75) / effectiveL,
             );
             final scale = fitScale * viewModel.zoom2D;
 
             final cx = size.width / 2.0 + viewModel.pan2D.dx;
             final cy = size.height / 2.0 + viewModel.pan2D.dy;
 
-            final originX = cx - (bw / 2.0) * scale;
-            final originY = cy - (bl / 2.0) * scale;
+            final originX = cx - (effectiveW / 2.0) * scale;
+            final originY = cy - (effectiveL / 2.0) * scale;
 
             CadPoint2D screenToCad(Offset screenPos) {
               final x = (screenPos.dx - originX) / scale;
@@ -553,7 +571,8 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                                           _hoveredDimLineId != null ||
                                           _activeDrag ==
                                               _DragTarget.portBadge ||
-                                          _hoveredPortBadgeId != null)
+                                          _hoveredPortBadgeId != null ||
+                                          _activeDrag == _DragTarget.cover)
                                     ? SystemMouseCursors.move
                                     : ((viewModel.toolMode ==
                                                   StudioToolMode.pickPortEdge ||

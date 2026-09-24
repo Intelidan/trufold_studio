@@ -13,6 +13,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../models/dds_package.dart';
 import '../../engine/export_engine_3d.dart';
 import '../../engine/dxf_exporter.dart';
@@ -54,6 +55,7 @@ class _StudioExportDialogState extends State<StudioExportDialog> {
   ExportFormatType _selectedFormat = ExportFormatType.dsf;
   bool _copied = false;
   double _solidThickness = 1.5;
+  DxfExportScope _dxfExportScope = DxfExportScope.bothSideBySide;
 
   @override
   void initState() {
@@ -69,23 +71,18 @@ class _StudioExportDialogState extends State<StudioExportDialog> {
         return doc.toJsonString(pretty: true);
 
       case ExportFormatType.dxf:
+        if (widget.viewModel.hasCover) {
+          return DxfExporter.exportBaseAndCoverDxf(doc, scope: _dxfExportScope);
+        }
         return DxfExporter.exportDxf(doc);
 
       case ExportFormatType.obj:
         final foldedMesh = KinematicFoldEngine.computeFold(doc: doc, foldProgress: 1.0);
-        return ExportEngine3d.exportWavefrontObj(
-          polygons: foldedMesh,
-          thicknessMm: _solidThickness,
-          partName: doc.partNumber.replaceAll(' ', '_'),
-        );
+        return ExportEngine3d.exportWavefrontObj(polygons: foldedMesh, thicknessMm: _solidThickness, partName: doc.partNumber.replaceAll(' ', '_'));
 
       case ExportFormatType.stl:
         final foldedMesh = KinematicFoldEngine.computeFold(doc: doc, foldProgress: 1.0);
-        return ExportEngine3d.exportAsciiStl(
-          polygons: foldedMesh,
-          thicknessMm: _solidThickness,
-          solidName: doc.partNumber.replaceAll(' ', '_'),
-        );
+        return ExportEngine3d.exportAsciiStl(polygons: foldedMesh, thicknessMm: _solidThickness, solidName: doc.partNumber.replaceAll(' ', '_'));
 
       case ExportFormatType.dds:
         final pkg = DdsPackage.create(
@@ -104,6 +101,16 @@ class _StudioExportDialogState extends State<StudioExportDialog> {
 
   String get _fileName {
     final cleanPart = widget.viewModel.document.partNumber.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+    if (_selectedFormat == ExportFormatType.dxf && widget.viewModel.hasCover) {
+      switch (_dxfExportScope) {
+        case DxfExportScope.baseOnly:
+          return '${cleanPart}_base.dxf';
+        case DxfExportScope.coverOnly:
+          return '${cleanPart}_cover.dxf';
+        case DxfExportScope.bothSideBySide:
+          return '${cleanPart}_with_cover.dxf';
+      }
+    }
     return '$cleanPart.${_selectedFormat.extension}';
   }
 
@@ -161,9 +168,7 @@ class _StudioExportDialogState extends State<StudioExportDialog> {
                     fontSize: 11.5,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                   ),
-                  side: BorderSide(
-                    color: isSelected ? const Color(0xFF00E5FF) : const Color(0xFF37474F),
-                  ),
+                  side: BorderSide(color: isSelected ? const Color(0xFF00E5FF) : const Color(0xFF37474F)),
                   onSelected: (selected) {
                     if (selected) {
                       setState(() {
@@ -177,10 +182,7 @@ class _StudioExportDialogState extends State<StudioExportDialog> {
             ),
 
             const SizedBox(height: 8),
-            Text(
-              _selectedFormat.description,
-              style: const TextStyle(color: Color(0xFF90A4AE), fontSize: 11),
-            ),
+            Text(_selectedFormat.description, style: const TextStyle(color: Color(0xFF90A4AE), fontSize: 11)),
 
             // Optional 3D Solid Thickness Slider for OBJ / STL
             if (_selectedFormat == ExportFormatType.obj || _selectedFormat == ExportFormatType.stl) ...[
@@ -203,10 +205,7 @@ class _StudioExportDialogState extends State<StudioExportDialog> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 3,
-                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                        ),
+                        data: SliderTheme.of(context).copyWith(trackHeight: 3, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6)),
                         child: Slider(
                           value: _solidThickness,
                           min: 0.0,
@@ -222,6 +221,58 @@ class _StudioExportDialogState extends State<StudioExportDialog> {
               ),
             ],
 
+            // Optional DXF Cover Export Scope Selector
+            if (_selectedFormat == ExportFormatType.dxf && widget.viewModel.hasCover) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1B222A),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.layers_outlined, size: 16, color: Color(0xFF00E5FF)),
+                    const SizedBox(width: 8),
+                    const Text('DXF Content:', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    const SizedBox(width: 12),
+                    ...DxfExportScope.values.map((scope) {
+                      final isSelected = scope == _dxfExportScope;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _dxfExportScope = scope;
+                              _copied = false;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFF00E5FF).withValues(alpha: 0.2) : const Color(0xFF141920),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: isSelected ? const Color(0xFF00E5FF) : const Color(0xFF37474F)),
+                            ),
+                            child: Text(
+                              scope.label,
+                              style: TextStyle(
+                                color: isSelected ? const Color(0xFF00E5FF) : Colors.white60,
+                                fontSize: 10.5,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ],
+
             const SizedBox(height: 10),
 
             // File stats badge
@@ -232,10 +283,7 @@ class _StudioExportDialogState extends State<StudioExportDialog> {
                   style: const TextStyle(color: Color(0xFFB0BEC5), fontSize: 11, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
-                Text(
-                  'Lines: $lineCount | Size: ${(byteSize / 1024).toStringAsFixed(1)} KB',
-                  style: const TextStyle(color: Colors.white38, fontSize: 11),
-                ),
+                Text('Lines: $lineCount | Size: ${(byteSize / 1024).toStringAsFixed(1)} KB', style: const TextStyle(color: Colors.white38, fontSize: 11)),
               ],
             ),
 
@@ -254,12 +302,7 @@ class _StudioExportDialogState extends State<StudioExportDialog> {
                 child: SingleChildScrollView(
                   child: SelectableText(
                     content,
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 10.5,
-                      color: Color(0xFFCFD8DC),
-                      height: 1.35,
-                    ),
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 10.5, color: Color(0xFFCFD8DC), height: 1.35),
                   ),
                 ),
               ),
@@ -271,18 +314,10 @@ class _StudioExportDialogState extends State<StudioExportDialog> {
             Row(
               children: [
                 OutlinedButton.icon(
-                  icon: Icon(
-                    _copied ? Icons.check_circle : Icons.copy,
-                    color: _copied ? Colors.greenAccent : Colors.white70,
-                    size: 15,
-                  ),
+                  icon: Icon(_copied ? Icons.check_circle : Icons.copy, color: _copied ? Colors.greenAccent : Colors.white70, size: 15),
                   label: Text(
                     _copied ? 'COPIED TO CLIPBOARD' : 'COPY CONTENT',
-                    style: TextStyle(
-                      color: _copied ? Colors.greenAccent : Colors.white70,
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: _copied ? Colors.greenAccent : Colors.white70, fontSize: 11.5, fontWeight: FontWeight.bold),
                   ),
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(color: _copied ? Colors.greenAccent : const Color(0xFF37474F)),
@@ -309,24 +344,15 @@ class _StudioExportDialogState extends State<StudioExportDialog> {
                     'DOWNLOAD $_fileName',
                     style: const TextStyle(color: Colors.black, fontSize: 11.5, fontWeight: FontWeight.bold),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00E5FF),
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E5FF), padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12)),
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: content));
-                    final saved = await StudioFileService.saveFile(
-                      fileName: _fileName,
-                      content: content,
-                      dialogTitle: 'Save / Download $_fileName',
-                    );
+                    final saved = await StudioFileService.saveFile(fileName: _fileName, content: content, dialogTitle: 'Save / Download $_fileName');
                     if (context.mounted) {
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(saved
-                              ? 'Saved $_fileName successfully!'
-                              : 'Export copied to clipboard (Save cancelled or downloaded).'),
+                          content: Text(saved ? 'Saved $_fileName successfully!' : 'Export copied to clipboard (Save cancelled or downloaded).'),
                           backgroundColor: saved ? const Color(0xFF00C853) : const Color(0xFF00E5FF),
                           duration: const Duration(seconds: 3),
                         ),

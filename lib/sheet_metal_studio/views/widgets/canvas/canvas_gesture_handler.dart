@@ -19,6 +19,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
   String? _draggedCutId;
   Offset _dragStartScreen = Offset.zero;
   CadPoint2D _dragPunchOffsetCad = const CadPoint2D(0, 0);
+  CadPoint2D _coverDragStartOffset = const CadPoint2D(0, 0);
 
   DateTime? _lastTapTime;
   Offset? _lastTapPosition;
@@ -705,6 +706,30 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                   }
                                 }
 
+                                if (!found &&
+                                    viewModel.document.cover != null &&
+                                    viewModel.document.cover!.isVisible2D) {
+                                  final cover = viewModel.document.cover!;
+                                  final coverDoc = cover.document;
+                                  final ox = cover.offset2D.x;
+                                  final oy = cover.offset2D.y;
+                                  final relCadPt = CadPoint2D(
+                                    cadPt.x - ox,
+                                    cadPt.y - oy,
+                                  );
+                                  final coverBbox = TrunkingCoverGenerator
+                                      .calculateDocumentBbox(coverDoc);
+                                  if (relCadPt.x >= coverBbox.minX - 10.0 &&
+                                      relCadPt.x <= coverBbox.maxX + 10.0 &&
+                                      relCadPt.y >= coverBbox.minY - 35.0 &&
+                                      relCadPt.y <= coverBbox.maxY + 10.0) {
+                                    _activeDrag = _DragTarget.cover;
+                                    _dragStartScreen = touchScreen;
+                                    _coverDragStartOffset = cover.offset2D;
+                                    found = true;
+                                  }
+                                }
+
                                 if (found) {
                                   if (!isShiftHeld &&
                                       _activeDrag != _DragTarget.none &&
@@ -1015,6 +1040,33 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
 
                                   case _DragTarget.canvasPan:
                                     viewModel.pan2DCanvas(details.delta);
+                                    break;
+
+                                  case _DragTarget.cover:
+                                    if (viewModel.document.cover != null) {
+                                      final screenDelta =
+                                          details.localPosition -
+                                          _dragStartScreen;
+                                      final cadDeltaX = screenDelta.dx / scale;
+                                      final cadDeltaY = screenDelta.dy / scale;
+                                      final newOffset = CadPoint2D(
+                                        _coverDragStartOffset.x + cadDeltaX,
+                                        _coverDragStartOffset.y + cadDeltaY,
+                                      );
+                                      final updatedCover = viewModel
+                                          .document
+                                          .cover!
+                                          .copyWith(
+                                            placementMode2D:
+                                                CoverPlacementMode2D.custom,
+                                            offset2D: newOffset,
+                                          );
+                                      viewModel.setDocumentFromSolver(
+                                        viewModel.document.copyWith(
+                                          cover: updatedCover,
+                                        ),
+                                      );
+                                    }
                                     break;
 
                                   case _DragTarget.portBadge:

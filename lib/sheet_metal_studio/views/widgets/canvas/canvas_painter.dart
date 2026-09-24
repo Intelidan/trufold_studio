@@ -160,14 +160,24 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final bw = doc.blankWidthMm > 0 ? doc.blankWidthMm : 200.0;
     final bl = doc.blankLengthMm > 0 ? doc.blankLengthMm : 300.0;
 
-    final fitScale = math.min((size.width * 0.75) / bw, (size.height * 0.75) / bl);
+    var effectiveW = bw;
+    var effectiveL = bl;
+    if (doc.cover != null && doc.cover!.isVisible2D) {
+      final coverBbox = TrunkingCoverGenerator.calculateDocumentBbox(doc.cover!.document);
+      final coverMaxX = doc.cover!.offset2D.x + coverBbox.maxX;
+      final coverMaxY = doc.cover!.offset2D.y + coverBbox.maxY;
+      if (coverMaxX > effectiveW) effectiveW = coverMaxX + 40.0;
+      if (coverMaxY > effectiveL) effectiveL = coverMaxY + 40.0;
+    }
+
+    final fitScale = math.min((size.width * 0.75) / effectiveW, (size.height * 0.75) / effectiveL);
     final scale = fitScale * zoom;
 
     final cx = size.width / 2.0 + pan.dx;
     final cy = size.height / 2.0 + pan.dy;
 
-    final originX = cx - (bw / 2.0) * scale;
-    final originY = cy - (bl / 2.0) * scale;
+    final originX = cx - (effectiveW / 2.0) * scale;
+    final originY = cy - (effectiveL / 2.0) * scale;
 
     Offset toScreen(double x, double y) => Offset(originX + x * scale, originY + y * scale);
 
@@ -1927,6 +1937,196 @@ class _UnfoldedBoardPainter extends CustomPainter {
     if (activePortInferenceResult != null) {
       _paintSemanticPortPreview(canvas, size, toScreen, scale);
     }
+
+    // 15. Parametric Trunking Accessory Cover 2D Flat Pattern
+    if (doc.cover != null && doc.cover!.isVisible2D) {
+      _paintCover(canvas, size, toScreen, scale);
+    }
+  }
+
+  void _paintCover(
+    Canvas canvas,
+    Size size,
+    Offset Function(double x, double y) toScreen,
+    double scale,
+  ) {
+    final cover = doc.cover;
+    if (cover == null || !cover.isVisible2D) return;
+
+    final coverDoc = cover.document;
+    final ox = cover.offset2D.x;
+    final oy = cover.offset2D.y;
+
+    Offset toCoverScreen(double x, double y) => toScreen(x + ox, y + oy);
+
+    // 1. Draw Cover Faces (Flat 2D Blank)
+    final coverMainFill = Paint()
+      ..color = const Color(0xFFE0F2FE).withValues(alpha: 0.85) // Sky-100
+      ..style = PaintingStyle.fill;
+
+    final coverFlangeFill = Paint()
+      ..color = const Color(0xFFE0E7FF).withValues(alpha: 0.80) // Indigo-100 / Flange
+      ..style = PaintingStyle.fill;
+
+    final coverBorderPaint = Paint()
+      ..color = const Color(0xFF0284C7) // Sky-600 laser cut outline
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3;
+
+    for (final face in coverDoc.faces) {
+      if (face.vertices.length < 3) continue;
+
+      final path = Path();
+      final first = toCoverScreen(face.vertices.first.x, face.vertices.first.y);
+      path.moveTo(first.dx, first.dy);
+      for (int i = 1; i < face.vertices.length; i++) {
+        final pt = toCoverScreen(face.vertices[i].x, face.vertices[i].y);
+        path.lineTo(pt.dx, pt.dy);
+      }
+      path.close();
+
+      final isFlange = face.role == FaceRole.returnFlange ||
+          face.role == FaceRole.sideWall ||
+          face.id.contains('flange') ||
+          face.id.contains('flap');
+      canvas.drawPath(path, isFlange ? coverFlangeFill : coverMainFill);
+      canvas.drawPath(path, coverBorderPaint);
+    }
+
+    // 2. Draw Cover Bend Lines (90° Down Fold Lines)
+    final bendLinePaint = Paint()
+      ..color = const Color(0xFF0369A1) // Sky-700
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+
+    for (final bend in coverDoc.bends) {
+      final sp1 = toCoverScreen(bend.p1.x, bend.p1.y);
+      final sp2 = toCoverScreen(bend.p2.x, bend.p2.y);
+      _drawDashedLine(canvas, sp1, sp2, bendLinePaint, dash: 5.0, gap: 3.5);
+
+      // Label on bend line
+      final mid = Offset((sp1.dx + sp2.dx) / 2.0, (sp1.dy + sp2.dy) / 2.0);
+      final isDropFlap = bend.id.toLowerCase().contains('drop') ||
+          bend.id.toLowerCase().contains('flap');
+      final label = isDropFlap ? '90° PORT FLAP' : '90° FLANGE';
+      _drawCoverBendBadge(canvas, mid, label);
+    }
+
+    // 3. Draw Punches (Center Mounting Hole)
+    final holePaint = Paint()
+      ..color = const Color(0xFF0284C7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    final crosshairPaint = Paint()
+      ..color = const Color(0xFF0284C7).withValues(alpha: 0.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+
+    for (final punch in coverDoc.punches) {
+      final sCenter = toCoverScreen(punch.center.x, punch.center.y);
+      final radius = (punch.diameterMm / 2.0) * scale;
+      canvas.drawCircle(sCenter, radius, holePaint);
+      // Crosshair
+      final chLen = math.max(radius + 4.0, 6.0);
+      canvas.drawLine(
+        Offset(sCenter.dx - chLen, sCenter.dy),
+        Offset(sCenter.dx + chLen, sCenter.dy),
+        crosshairPaint,
+      );
+      canvas.drawLine(
+        Offset(sCenter.dx, sCenter.dy - chLen),
+        Offset(sCenter.dx, sCenter.dy + chLen),
+        crosshairPaint,
+      );
+      _drawDimText(
+        canvas,
+        Offset(sCenter.dx, sCenter.dy + radius + 4.0),
+        'Ø${punch.diameterMm.toStringAsFixed(0)}',
+      );
+    }
+
+    // 4. Header Badge Above Cover
+    final bbox = TrunkingCoverGenerator.calculateDocumentBbox(coverDoc);
+    final headerCadX = (bbox.minX + bbox.maxX) / 2.0;
+    final headerCadY = bbox.minY - 14.0;
+    final sHeader = toCoverScreen(headerCadX, headerCadY);
+    _drawCoverHeaderBadge(canvas, sHeader, cover);
+  }
+
+  void _drawCoverHeaderBadge(
+    Canvas canvas,
+    Offset pos,
+    TrunkingCoverData cover,
+  ) {
+    const title = '🛡️ COVER (Parametric)';
+    const textStyle = TextStyle(
+      color: Color(0xFF0284C7),
+      fontSize: 10,
+      fontWeight: FontWeight.bold,
+      letterSpacing: 0.5,
+    );
+    final tp = TextPainter(
+      text: const TextSpan(text: title, style: textStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final badgeW = tp.width + 16.0;
+    final badgeH = tp.height + 8.0;
+    final rect = Rect.fromCenter(center: pos, width: badgeW, height: badgeH);
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6.0));
+
+    // Shadow
+    canvas.drawRRect(
+      rrect.shift(const Offset(0, 1.5)),
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.12)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
+    );
+
+    // Pill background
+    final bgPaint = Paint()
+      ..color = const Color(0xFFF0F9FF).withValues(alpha: 0.95) // Sky-50
+      ..style = PaintingStyle.fill;
+    canvas.drawRRect(rrect, bgPaint);
+
+    // Border
+    final borderPaint = Paint()
+      ..color = const Color(0xFF0284C7).withValues(alpha: 0.6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawRRect(rrect, borderPaint);
+
+    tp.paint(canvas, Offset(rect.left + 8.0, rect.top + 4.0));
+  }
+
+  void _drawCoverBendBadge(Canvas canvas, Offset pos, String label) {
+    final textStyle = const TextStyle(
+      color: Color(0xFF0369A1),
+      fontSize: 8.5,
+      fontWeight: FontWeight.w600,
+    );
+    final tp = TextPainter(
+      text: TextSpan(text: label, style: textStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final badgeW = tp.width + 8.0;
+    final badgeH = tp.height + 4.0;
+    final rect = Rect.fromCenter(center: pos, width: badgeW, height: badgeH);
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(4.0));
+
+    final bgPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.88)
+      ..style = PaintingStyle.fill;
+    canvas.drawRRect(rrect, bgPaint);
+
+    final borderPaint = Paint()
+      ..color = const Color(0xFF0284C7).withValues(alpha: 0.4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    canvas.drawRRect(rrect, borderPaint);
+
+    tp.paint(canvas, Offset(rect.left + 4.0, rect.top + 2.0));
   }
 
   void _drawHandle(Canvas canvas, Offset pos) {

@@ -87,64 +87,233 @@ mixin CanvasOverlayStackMixin on State<UnfoldedCanvasWidget>, CanvasLegendMixin,
                     // In-Place Dimension Editor (converts number tag directly in-place)
                     _buildInPlaceDimensionEditor(viewModel),
 
-                    // 2. Fitting Metadata / DSF Inspector Badge (Always accessible)
+                    // 2. Fitting Metadata & Trunking Cover Control Bar (Top Left)
                     Positioned(
                       top: 12,
                       left: 12,
-                      child: InkWell(
-                        onTap: () => viewModel.setFittingInspectorOpen(true),
-                        borderRadius: BorderRadius.circular(6),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B)
-                                .withValues(alpha: 0.88),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          InkWell(
+                            onTap: () => viewModel.setFittingInspectorOpen(true),
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: const Color(0xFF8B5CF6)
-                                  .withValues(alpha: 0.65),
-                              width: 1.2,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E293B)
+                                    .withValues(alpha: 0.88),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: const Color(0xFF8B5CF6)
+                                      .withValues(alpha: 0.65),
+                                  width: 1.2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.25),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.tune,
+                                    size: 14,
+                                    color: Color(0xFFA78BFA),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    (viewModel.detectedFittingMetadata != null &&
+                                            viewModel
+                                                .detectedFittingMetadata!
+                                                .isAssigned &&
+                                            viewModel
+                                                .detectedFittingMetadata!
+                                                .product
+                                                .isNotEmpty)
+                                        ? '${viewModel.detectedFittingMetadata!.product} (${viewModel.detectedFittingMetadata!.variantName})'
+                                        : 'DSF Inspector',
+                                    style: const TextStyle(
+                                      color: Color(0xFFF1F5F9),
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.tune,
-                                size: 14,
-                                color: Color(0xFFA78BFA),
+                          const SizedBox(width: 8),
+
+                          // Cover Control Pill
+                          if (viewModel.hasCover)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                (viewModel.detectedFittingMetadata != null &&
-                                        viewModel
-                                            .detectedFittingMetadata!
-                                            .isAssigned &&
-                                        viewModel
-                                            .detectedFittingMetadata!
-                                            .product
-                                            .isNotEmpty)
-                                    ? '${viewModel.detectedFittingMetadata!.product} (${viewModel.detectedFittingMetadata!.variantName})'
-                                    : 'DSF Inspector',
-                                style: const TextStyle(
-                                  color: Color(0xFFF1F5F9),
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.bold,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E293B)
+                                    .withValues(alpha: 0.90),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: const Color(0xFF0284C7)
+                                      .withValues(alpha: 0.70),
+                                  width: 1.2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.25),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.shield_outlined,
+                                    size: 14,
+                                    color: Color(0xFF38BDF8),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'Cover',
+                                    style: TextStyle(
+                                      color: Color(0xFFF1F5F9),
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  // Show/Hide Toggle
+                                  Tooltip(
+                                    message: viewModel.isCoverVisible2D
+                                        ? 'Hide Cover (2D)'
+                                        : 'Show Cover (2D)',
+                                    child: InkWell(
+                                      onTap: viewModel.toggleCoverVisibility2D,
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(3.0),
+                                        child: Icon(
+                                          viewModel.isCoverVisible2D
+                                              ? Icons.visibility
+                                              : Icons.visibility_off,
+                                          size: 14,
+                                          color: viewModel.isCoverVisible2D
+                                              ? const Color(0xFF38BDF8)
+                                              : const Color(0xFF94A3B8),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  // Snap to Base / Move Beside Toggle
+                                  Tooltip(
+                                    message: viewModel.coverPlacementMode2D ==
+                                            CoverPlacementMode2D.snappedToBase
+                                        ? 'Move Cover Beside Base'
+                                        : 'Snap Cover to Base',
+                                    child: InkWell(
+                                      onTap: () {
+                                        if (viewModel.coverPlacementMode2D ==
+                                            CoverPlacementMode2D.snappedToBase) {
+                                          viewModel.resetCoverBesideBase();
+                                        } else {
+                                          viewModel.snapCoverToBase();
+                                        }
+                                      },
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(3.0),
+                                        child: Icon(
+                                          viewModel.coverPlacementMode2D ==
+                                                  CoverPlacementMode2D
+                                                      .snappedToBase
+                                              ? Icons.flip_to_front
+                                              : Icons.flip_to_back,
+                                          size: 14,
+                                          color: const Color(0xFFA78BFA),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  // Reset Position
+                                  Tooltip(
+                                    message: 'Reset Beside Position',
+                                    child: InkWell(
+                                      onTap: viewModel.resetCoverBesideBase,
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(3.0),
+                                        child: Icon(
+                                          Icons.refresh,
+                                          size: 14,
+                                          color: Color(0xFF94A3B8),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            InkWell(
+                              onTap: viewModel.createCoverForCurrentFitting,
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0284C7)
+                                      .withValues(alpha: 0.90),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: const Color(0xFF38BDF8),
+                                    width: 1.2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black
+                                          .withValues(alpha: 0.25),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.add_moderator,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Create Cover',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                        ],
                       ),
                     ),
 

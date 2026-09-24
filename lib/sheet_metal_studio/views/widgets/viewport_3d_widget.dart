@@ -21,20 +21,137 @@ import 'package:flutter/services.dart';
 
 import '../../models/cad_primitives.dart';
 import '../../models/cms/cms_physical_port.dart';
+import '../../models/trunking_cover_data.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../../engine/kinematic_fold_engine.dart';
 import 'studio/studio_view_cube.dart';
 
-class Viewport3dWidget extends StatelessWidget {
+class Viewport3dWidget extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
 
   const Viewport3dWidget({super.key, required this.viewModel});
+
+  @override
+  State<Viewport3dWidget> createState() => _Viewport3dWidgetState();
+}
+
+class _Viewport3dWidgetState extends State<Viewport3dWidget> {
+  SheetMetalStudioViewModel get viewModel => widget.viewModel;
+
+  bool _isDraggingCover = false;
+  bool _isHoveringCover = false;
+  bool _pureVerticalDrag = false;
+
+  bool _isPointOverCover(Offset localPos, Size size) {
+    final coverMesh = viewModel.coverMesh;
+    if (coverMesh == null || !viewModel.isCoverVisible3D) return false;
+    if (size.width <= 0 || size.height <= 0) return false;
+
+    final cx = size.width / 2.0 + viewModel.pan3D.dx;
+    final cy = size.height / 2.0 + viewModel.pan3D.dy;
+
+    final azRad = viewModel.azimuthDeg * math.pi / 180.0;
+    final elRad = viewModel.elevationDeg * math.pi / 180.0;
+
+    final cosAz = math.cos(azRad);
+    final sinAz = math.sin(azRad);
+    final cosEl = math.cos(elRad);
+    final sinEl = math.sin(elRad);
+
+    final mesh = viewModel.currentMesh;
+    final maxDim = math.max(
+      mesh.boundWidth,
+      math.max(mesh.boundLength, mesh.boundHeight),
+    );
+    final fitDim = maxDim > 0 ? maxDim : 200.0;
+    final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
+    final scale = baseScale * viewModel.cameraZoom;
+
+    final pivot = mesh.center;
+
+    for (final poly in coverMesh.polygons) {
+      if (poly.vertices.length < 3) continue;
+      final path = Path();
+      bool first = true;
+      for (final p in poly.vertices) {
+        final rx = p.x - pivot.x;
+        final ry = p.y - pivot.y;
+        final rz = p.z - pivot.z;
+
+        final x1 = rx * cosAz - ry * sinAz;
+        final y1 = rx * sinAz + ry * cosAz;
+        final z1 = rz;
+
+        final x2 = x1;
+        final y2 = y1 * cosEl - z1 * sinEl;
+
+        final sx = cx + x2 * scale;
+        final sy = cy - y2 * scale;
+
+        if (first) {
+          path.moveTo(sx, sy);
+          first = false;
+        } else {
+          path.lineTo(sx, sy);
+        }
+      }
+      path.close();
+      if (path.contains(localPos)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _handleCoverDrag(Offset delta, Size size, bool isVerticalOnly) {
+    final azRad = viewModel.azimuthDeg * math.pi / 180.0;
+    final elRad = viewModel.elevationDeg * math.pi / 180.0;
+
+    final cosAz = math.cos(azRad);
+    final sinAz = math.sin(azRad);
+    final cosEl = math.cos(elRad);
+    final sinEl = math.sin(elRad);
+
+    final mesh = viewModel.currentMesh;
+    final maxDim = math.max(
+      mesh.boundWidth,
+      math.max(mesh.boundLength, mesh.boundHeight),
+    );
+    final fitDim = maxDim > 0 ? maxDim : 200.0;
+    final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
+    final scale = baseScale * viewModel.cameraZoom;
+
+    if (scale <= 1e-6) return;
+
+    if (isVerticalOnly) {
+      final dZ = -delta.dy / scale;
+      viewModel.updateCoverOffset3D(CadPoint3D(0, 0, dZ));
+    } else {
+      final uRightX = cosAz;
+      final uRightY = -sinAz;
+      final uRightZ = 0.0;
+
+      final uUpX = sinAz * cosEl;
+      final uUpY = cosAz * cosEl;
+      final uUpZ = -sinEl;
+
+      final dxCam = delta.dx / scale;
+      final dyCam = -delta.dy / scale;
+
+      final dX = uRightX * dxCam + uUpX * dyCam;
+      final dY = uRightY * dxCam + uUpY * dyCam;
+      final dZ = uRightZ * dxCam + uUpZ * dyCam;
+
+      viewModel.updateCoverOffset3D(CadPoint3D(dX, dY, dZ));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return ClipRect(
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final size = constraints.biggest;
           return Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -45,61 +162,108 @@ class Viewport3dWidget extends StatelessWidget {
             ),
             child: Stack(
               children: [
-            // 1. Interactive Orbit, Middle-Mouse Pan & Wheel Zoom Surface
-            Listener(
-              onPointerSignal: (pointerSignal) {
-                if (pointerSignal is PointerScrollEvent) {
-                  final factor = pointerSignal.scrollDelta.dy < 0 ? 1.12 : 0.89;
-                  viewModel.zoom3D(factor);
-                }
-              },
-              onPointerMove: (event) {
-                final isMiddleMouse = (event.buttons & kTertiaryButton) != 0;
-                bool isShiftHeld = false;
-                try {
-                  isShiftHeld = HardwareKeyboard.instance.isShiftPressed;
-                } catch (_) {}
+                // 1. Interactive Orbit, Middle-Mouse Pan & Wheel Zoom Surface
+                MouseRegion(
+                  cursor: _isDraggingCover
+                      ? SystemMouseCursors.grabbing
+                      : (_isHoveringCover || viewModel.isCover3DMoveActive
+                          ? SystemMouseCursors.grab
+                          : SystemMouseCursors.basic),
+                  onHover: (event) {
+                    if (_isDraggingCover) return;
+                    final over = _isPointOverCover(event.localPosition, size);
+                    if (_isHoveringCover != over) {
+                      setState(() {
+                        _isHoveringCover = over;
+                      });
+                    }
+                  },
+                  child: Listener(
+                    onPointerSignal: (pointerSignal) {
+                      if (pointerSignal is PointerScrollEvent) {
+                        final factor = pointerSignal.scrollDelta.dy < 0 ? 1.12 : 0.89;
+                        viewModel.zoom3D(factor);
+                      }
+                    },
+                    onPointerDown: (event) {
+                      if ((event.buttons & kPrimaryMouseButton) != 0) {
+                        final overCover = _isPointOverCover(event.localPosition, size);
+                        if (overCover || viewModel.isCover3DMoveActive) {
+                          _isDraggingCover = true;
+                          setState(() {});
+                        }
+                      }
+                    },
+                    onPointerUp: (event) {
+                      if (_isDraggingCover) {
+                        _isDraggingCover = false;
+                        viewModel.commitCover3DMove();
+                        setState(() {});
+                      }
+                    },
+                    onPointerCancel: (event) {
+                      if (_isDraggingCover) {
+                        _isDraggingCover = false;
+                        setState(() {});
+                      }
+                    },
+                    onPointerMove: (event) {
+                      if (_isDraggingCover) {
+                        bool isShiftHeld = false;
+                        try {
+                          isShiftHeld = HardwareKeyboard.instance.isShiftPressed;
+                        } catch (_) {}
+                        _handleCoverDrag(event.delta, size, isShiftHeld || _pureVerticalDrag);
+                        return;
+                      }
 
-                if (isMiddleMouse ||
-                    (isShiftHeld &&
-                        (event.buttons & kPrimaryMouseButton) != 0)) {
-                  // Middle mouse or Shift+Left drag -> Pan 3D camera
-                  viewModel.pan3DCanvas(event.delta);
-                } else if ((event.buttons & kPrimaryMouseButton) != 0) {
-                  // Left mouse drag -> Orbit turntable
-                  viewModel.orbit3D(
-                    event.delta.dx * 0.5,
-                    -event.delta.dy * 0.5,
-                  );
-                }
-              },
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => viewModel.clearSelection(),
-                child: ExcludeSemantics(
-                  child: CustomPaint(
-                    size: Size.infinite,
-                    painter: _Viewport3dPainter(
-                      mesh: viewModel.currentMesh,
-                      azimuthDeg: viewModel.azimuthDeg,
-                      elevationDeg: viewModel.elevationDeg,
-                      zoom: viewModel.cameraZoom,
-                      pan: viewModel.pan3D,
-                      showWireframe: viewModel.showWireframe,
-                      isGlassMode: viewModel.isGlassMode,
-                      selectedBendId: viewModel.selectedBendId,
-                      selectedPunchId: viewModel.selectedPunchId,
-                      selectedFaceId: viewModel.selectedFaceId,
-                      hoveredPunchId: viewModel.hoveredPunchId,
-                      hoveredBendId: viewModel.hoveredBendId,
-                      hoveredFaceId: viewModel.hoveredFaceId,
-                      activePorts: viewModel.activeCmsPorts,
-                      focusedPortId: viewModel.cmsGuidedController.state.focus.activePortId,
+                      final isMiddleMouse = (event.buttons & kTertiaryButton) != 0;
+                      bool isShiftHeld = false;
+                      try {
+                        isShiftHeld = HardwareKeyboard.instance.isShiftPressed;
+                      } catch (_) {}
+
+                      if (isMiddleMouse ||
+                          (isShiftHeld &&
+                              (event.buttons & kPrimaryMouseButton) != 0)) {
+                        // Middle mouse or Shift+Left drag -> Pan 3D camera
+                        viewModel.pan3DCanvas(event.delta);
+                      } else if ((event.buttons & kPrimaryMouseButton) != 0) {
+                        // Left mouse drag -> Orbit turntable
+                        viewModel.orbit3D(
+                          event.delta.dx * 0.5,
+                          -event.delta.dy * 0.5,
+                        );
+                      }
+                    },
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => viewModel.clearSelection(),
+                      child: ExcludeSemantics(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: _Viewport3dPainter(
+                            mesh: viewModel.currentMesh,
+                            azimuthDeg: viewModel.azimuthDeg,
+                            elevationDeg: viewModel.elevationDeg,
+                            zoom: viewModel.cameraZoom,
+                            pan: viewModel.pan3D,
+                            showWireframe: viewModel.showWireframe,
+                            isGlassMode: viewModel.isGlassMode,
+                            selectedBendId: viewModel.selectedBendId,
+                            selectedPunchId: viewModel.selectedPunchId,
+                            selectedFaceId: viewModel.selectedFaceId,
+                            hoveredPunchId: viewModel.hoveredPunchId,
+                            hoveredBendId: viewModel.hoveredBendId,
+                            hoveredFaceId: viewModel.hoveredFaceId,
+                            activePorts: viewModel.activeCmsPorts,
+                            focusedPortId: viewModel.cmsGuidedController.state.focus.activePortId,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
 
             // 2. Viewport Header Overlay (Light CAD Card)
             Positioned(
@@ -122,12 +286,12 @@ class Viewport3dWidget extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.view_in_ar, size: 14, color: Color(0xFF0284C7)),
-                    SizedBox(width: 6),
-                    Text(
+                    const Icon(Icons.view_in_ar, size: 14, color: Color(0xFF0284C7)),
+                    const SizedBox(width: 6),
+                    const Text(
                       '3D FOLDED MESH',
                       style: TextStyle(
                         color: Color(0xFF0F172A),
@@ -136,6 +300,154 @@ class Viewport3dWidget extends StatelessWidget {
                         letterSpacing: 0.8,
                       ),
                     ),
+                    if (viewModel.hasCover) ...[
+                      const SizedBox(width: 8),
+                      Container(width: 1, height: 12, color: const Color(0xFFCBD5E1)),
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: viewModel.isCoverVisible3D ? 'Hide Cover (3D)' : 'Show Cover (3D)',
+                        child: InkWell(
+                          onTap: viewModel.toggleCoverVisibility3D,
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  viewModel.isCoverVisible3D ? Icons.shield : Icons.shield_outlined,
+                                  size: 13,
+                                  color: viewModel.isCoverVisible3D ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  viewModel.isCoverVisible3D ? 'Cover On' : 'Cover Off',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: viewModel.isCoverVisible3D ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (viewModel.isCoverVisible3D) ...[
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
+                              ? '3D Mode: Snapped on Base (Click to Move Beside)'
+                              : (viewModel.coverPlacementMode3D == CoverPlacementMode3D.custom
+                                  ? '3D Mode: Custom Offset (Click to Snap on Base)'
+                                  : '3D Mode: Beside Base (Click to Snap on Base)'),
+                          child: InkWell(
+                            onTap: () {
+                              final nextMode = viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
+                                  ? CoverPlacementMode3D.besideBase
+                                  : CoverPlacementMode3D.snappedToBase;
+                              viewModel.setCoverPlacementMode3D(nextMode);
+                            },
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
+                                        ? Icons.flip_to_front
+                                        : (viewModel.coverPlacementMode3D == CoverPlacementMode3D.custom
+                                            ? Icons.open_with
+                                            : Icons.flip_to_back),
+                                    size: 13,
+                                    color: const Color(0xFF8B5CF6),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
+                                        ? 'Snapped'
+                                        : (viewModel.coverPlacementMode3D == CoverPlacementMode3D.custom
+                                            ? 'Moved'
+                                            : 'Beside'),
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF8B5CF6),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: 'Move & Explode 3D Cover (Elevation Lift & Position Controls)',
+                          child: InkWell(
+                            onTap: () {
+                              viewModel.toggleCover3DMoveActive();
+                            },
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: viewModel.isCover3DMoveActive
+                                    ? const Color(0xFF8B5CF6).withValues(alpha: 0.15)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: viewModel.isCover3DMoveActive
+                                      ? const Color(0xFF8B5CF6)
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.open_with,
+                                    size: 13,
+                                    color: viewModel.isCover3DMoveActive
+                                        ? const Color(0xFF7C3AED)
+                                        : const Color(0xFF64748B),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Move / Explode',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: viewModel.isCover3DMoveActive
+                                          ? const Color(0xFF7C3AED)
+                                          : const Color(0xFF475569),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: 'Open Independent 3D Cover Inspector Window',
+                          child: InkWell(
+                            onTap: () {
+                              viewModel.setCover3DViewerOpen(!viewModel.isCover3DViewerOpen);
+                            },
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              child: Icon(
+                                Icons.open_in_new,
+                                size: 13,
+                                color: viewModel.isCover3DViewerOpen ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ],
                 ),
               ),
@@ -320,6 +632,72 @@ class Viewport3dWidget extends StatelessWidget {
             ),
 
             // 5. Port tags are rendered coplanar directly on the aperture face in _Viewport3dPainter PASS 3
+
+            // 6. Secondary Floating / Draggable 3D Cover Viewer Window
+            if (viewModel.isCover3DViewerOpen &&
+                viewModel.hasCover &&
+                viewModel.coverMesh != null)
+              _FloatingCover3DViewer(viewModel: viewModel),
+
+            // 7. Interactive 3D Cover Movement & Explode HUD
+            if (viewModel.isCover3DMoveActive &&
+                viewModel.hasCover &&
+                viewModel.isCoverVisible3D)
+              _Cover3DMoveHud(
+                viewModel: viewModel,
+                isVerticalOnly: _pureVerticalDrag,
+                onToggleVerticalOnly: (v) => setState(() => _pureVerticalDrag = v),
+              ),
+
+            // 8. Real-time drag / hover status banner
+            if (_isDraggingCover)
+              Positioned(
+                top: 54,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1B4B).withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.open_with, size: 13, color: Color(0xFFA78BFA)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Cover 3D:  X: ${viewModel.coverOffset3D.x.toStringAsFixed(0)}mm  Y: ${viewModel.coverOffset3D.y.toStringAsFixed(0)}mm  Z: ${viewModel.coverOffset3D.z >= 0 ? "+" : ""}${viewModel.coverOffset3D.z.toStringAsFixed(0)}mm',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          (HardwareKeyboard.instance.isShiftPressed || _pureVerticalDrag)
+                              ? '(Vertical Z Lift)'
+                              : '(Shift: Lock to Z)',
+                          style: const TextStyle(
+                            color: Color(0xFFC4B5FD),
+                            fontSize: 9.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       );
@@ -1245,5 +1623,615 @@ class _Viewport3dPainter extends CustomPainter {
         oldDelegate.hoveredFaceId != hoveredFaceId ||
         oldDelegate.activePorts != activePorts ||
         oldDelegate.focusedPortId != focusedPortId;
+  }
+}
+
+class _FloatingCover3DViewer extends StatefulWidget {
+  final SheetMetalStudioViewModel viewModel;
+
+  const _FloatingCover3DViewer({required this.viewModel});
+
+  @override
+  State<_FloatingCover3DViewer> createState() => _FloatingCover3DViewerState();
+}
+
+class _FloatingCover3DViewerState extends State<_FloatingCover3DViewer> {
+  Offset _position = const Offset(20, 70);
+  double _azimuth = 45.0;
+  double _elevation = 30.0;
+  double _zoom = 1.0;
+  Offset _pan = Offset.zero;
+
+  @override
+  Widget build(BuildContext context) {
+    final coverMesh = widget.viewModel.coverMesh;
+    if (coverMesh == null) return const SizedBox.shrink();
+
+    return Positioned(
+      left: _position.dx,
+      top: _position.dy,
+      child: Container(
+        width: 300,
+        height: 250,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF0284C7), width: 1.4),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            // Draggable Header
+            GestureDetector(
+              onPanUpdate: (details) {
+                setState(() {
+                  _position += details.delta;
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF0F172A),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(6.6),
+                    topRight: Radius.circular(6.6),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.shield, size: 14, color: Color(0xFF38BDF8)),
+                    const SizedBox(width: 6),
+                    const Expanded(
+                      child: Text(
+                        'COVER 3D VIEWER',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _azimuth = 45.0;
+                          _elevation = 30.0;
+                          _zoom = 1.0;
+                          _pan = Offset.zero;
+                        });
+                      },
+                      child: const Tooltip(
+                        message: 'Reset View',
+                        child: Icon(Icons.refresh, size: 14, color: Color(0xFF94A3B8)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () => widget.viewModel.setCover3DViewerOpen(false),
+                      child: const Tooltip(
+                        message: 'Close Window',
+                        child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // 3D Canvas
+            Expanded(
+              child: ClipRRect(
+                child: Listener(
+                  onPointerSignal: (event) {
+                    if (event is PointerScrollEvent) {
+                      setState(() {
+                        _zoom = (_zoom * (event.scrollDelta.dy < 0 ? 1.15 : 0.87))
+                            .clamp(0.2, 5.0);
+                      });
+                    }
+                  },
+                  child: GestureDetector(
+                    onPanUpdate: (details) {
+                      setState(() {
+                        _azimuth = (_azimuth + details.delta.dx * 0.7) % 360.0;
+                        _elevation = (_elevation - details.delta.dy * 0.7).clamp(-85.0, 85.0);
+                      });
+                    },
+                    child: Container(
+                      color: const Color(0xFFF8FAFC),
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: _Viewport3dPainter(
+                          mesh: coverMesh,
+                          azimuthDeg: _azimuth,
+                          elevationDeg: _elevation,
+                          zoom: _zoom,
+                          pan: _pan,
+                          showWireframe: widget.viewModel.showWireframe,
+                          isGlassMode: widget.viewModel.isGlassMode,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // Footer
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(6.6),
+                  bottomRight: Radius.circular(6.6),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    '${coverMesh.boundWidth.toStringAsFixed(0)} x ${coverMesh.boundLength.toStringAsFixed(0)} x ${coverMesh.boundHeight.toStringAsFixed(0)} mm',
+                    style: const TextStyle(
+                      color: Color(0xFF0284C7),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  const Spacer(),
+                  const Text(
+                    'Drag to orbit • Scroll to zoom',
+                    style: TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Cover3DMoveHud extends StatefulWidget {
+  final SheetMetalStudioViewModel viewModel;
+  final bool isVerticalOnly;
+  final ValueChanged<bool> onToggleVerticalOnly;
+
+  const _Cover3DMoveHud({
+    required this.viewModel,
+    required this.isVerticalOnly,
+    required this.onToggleVerticalOnly,
+  });
+
+  @override
+  State<_Cover3DMoveHud> createState() => _Cover3DMoveHudState();
+}
+
+class _Cover3DMoveHudState extends State<_Cover3DMoveHud> {
+  Offset _position = const Offset(12, 60);
+
+  @override
+  Widget build(BuildContext context) {
+    final vm = widget.viewModel;
+    final cover = vm.document.cover;
+    if (cover == null) return const SizedBox.shrink();
+
+    final offset = cover.offset3D;
+    final liftZ = offset.z;
+
+    return Positioned(
+      left: _position.dx,
+      top: _position.dy,
+      child: Container(
+        width: 300,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF8B5CF6), width: 1.4),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Draggable Header
+            GestureDetector(
+              onPanUpdate: (details) {
+                setState(() {
+                  _position += details.delta;
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1E1B4B),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(6.6),
+                    topRight: Radius.circular(6.6),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.open_with, size: 14, color: Color(0xFFA78BFA)),
+                    const SizedBox(width: 6),
+                    const Expanded(
+                      child: Text(
+                        '3D COVER POSITION & EXPLODE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => vm.setCover3DMoveActive(false),
+                      borderRadius: BorderRadius.circular(4),
+                      child: const Padding(
+                        padding: EdgeInsets.all(2),
+                        child: Icon(Icons.close, size: 14, color: Colors.white70),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Vertical Z Lift / Explode Slider
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Vertical Lift (Z-Axis):',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3E8FF),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFC084FC)),
+                        ),
+                        child: Text(
+                          liftZ >= 0 ? '+${liftZ.toStringAsFixed(0)} mm' : '${liftZ.toStringAsFixed(0)} mm',
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF7E22CE),
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 3,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      activeTrackColor: const Color(0xFF8B5CF6),
+                      inactiveTrackColor: const Color(0xFFE2E8F0),
+                      thumbColor: const Color(0xFF7C3AED),
+                      overlayColor: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                    ),
+                    child: Slider(
+                      min: 0.0,
+                      max: math.max(250.0, liftZ + 50.0),
+                      value: liftZ.clamp(0.0, math.max(250.0, liftZ + 50.0)),
+                      onChanged: (val) {
+                        vm.setCoverLiftZ(val);
+                      },
+                      onChangeEnd: (_) {
+                        vm.commitCover3DMove();
+                      },
+                    ),
+                  ),
+
+                  // Quick Lift presets
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      _presetChip('Snap (0)', liftZ == 0, () {
+                        vm.setCoverLiftZ(0);
+                        vm.commitCover3DMove();
+                      }),
+                      _presetChip('+30mm', (liftZ - 30).abs() < 1, () {
+                        vm.setCoverLiftZ(30);
+                        vm.commitCover3DMove();
+                      }),
+                      _presetChip('+60mm', (liftZ - 60).abs() < 1, () {
+                        vm.setCoverLiftZ(60);
+                        vm.commitCover3DMove();
+                      }),
+                      _presetChip('+100mm', (liftZ - 100).abs() < 1, () {
+                        vm.setCoverLiftZ(100);
+                        vm.commitCover3DMove();
+                      }),
+                      _presetChip('+150mm', (liftZ - 150).abs() < 1, () {
+                        vm.setCoverLiftZ(150);
+                        vm.commitCover3DMove();
+                      }),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 8),
+
+                  // 2. 3D Coordinates (X, Y, Z offsets)
+                  const Text(
+                    'Position Offset (mm):',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _axisStepper(
+                          label: 'X',
+                          val: offset.x,
+                          onDec: () {
+                            vm.updateCoverOffset3D(const CadPoint3D(-10, 0, 0));
+                            vm.commitCover3DMove();
+                          },
+                          onInc: () {
+                            vm.updateCoverOffset3D(const CadPoint3D(10, 0, 0));
+                            vm.commitCover3DMove();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _axisStepper(
+                          label: 'Y',
+                          val: offset.y,
+                          onDec: () {
+                            vm.updateCoverOffset3D(const CadPoint3D(0, -10, 0));
+                            vm.commitCover3DMove();
+                          },
+                          onInc: () {
+                            vm.updateCoverOffset3D(const CadPoint3D(0, 10, 0));
+                            vm.commitCover3DMove();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _axisStepper(
+                          label: 'Z',
+                          val: offset.z,
+                          onDec: () {
+                            vm.updateCoverOffset3D(const CadPoint3D(0, 0, -10));
+                            vm.commitCover3DMove();
+                          },
+                          onInc: () {
+                            vm.updateCoverOffset3D(const CadPoint3D(0, 0, 10));
+                            vm.commitCover3DMove();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 8),
+
+                  // 3. Quick Actions (Snap to Rim, Beside Base, Reset)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.flip_to_front, size: 12),
+                          label: const Text('Snap to Rim', style: TextStyle(fontSize: 9.5)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF4338CA),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                            side: const BorderSide(color: Color(0xFFC7D2FE)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                          ),
+                          onPressed: () {
+                            vm.setCoverPlacementMode3D(CoverPlacementMode3D.snappedToBase);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.flip_to_back, size: 12),
+                          label: const Text('Beside Base', style: TextStyle(fontSize: 9.5)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF0F766E),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                            side: const BorderSide(color: Color(0xFF99F6E4)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                          ),
+                          onPressed: () {
+                            vm.setCoverPlacementMode3D(CoverPlacementMode3D.besideBase);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: const Icon(Icons.replay, size: 14),
+                        tooltip: 'Reset 3D Offset to (0,0,0)',
+                        style: IconButton.styleFrom(
+                          padding: const EdgeInsets.all(6),
+                          backgroundColor: const Color(0xFFF1F5F9),
+                        ),
+                        onPressed: () {
+                          vm.resetCover3DOffset();
+                        },
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 8),
+                  // Drag mode toggle (Lock to Z-lift vs Free 3D)
+                  InkWell(
+                    onTap: () {
+                      widget.onToggleVerticalOnly(!widget.isVerticalOnly);
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: widget.isVerticalOnly ? const Color(0xFFF3E8FF) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: widget.isVerticalOnly ? const Color(0xFFC084FC) : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            widget.isVerticalOnly ? Icons.check_box : Icons.check_box_outline_blank,
+                            size: 13,
+                            color: widget.isVerticalOnly ? const Color(0xFF7C3AED) : const Color(0xFF94A3B8),
+                          ),
+                          const SizedBox(width: 5),
+                          const Expanded(
+                            child: Text(
+                              'Lock Drag to Vertical Z (or hold Shift)',
+                              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w500, color: Color(0xFF475569)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.touch_app, size: 12, color: Color(0xFF64748B)),
+                        SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Click & drag cover in viewport. Hold Shift for pure vertical Z-lift.',
+                            style: TextStyle(fontSize: 9, color: Color(0xFF64748B)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _presetChip(String label, bool isSelected, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF7C3AED) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(color: isSelected ? const Color(0xFF6D28D9) : const Color(0xFFCBD5E1)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.white : const Color(0xFF475569),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _axisStepper({
+    required String label,
+    required double val,
+    required VoidCallback onDec,
+    required VoidCallback onInc,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+              Text(val.toStringAsFixed(0), style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF0F172A), fontFamily: 'monospace')),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: onDec,
+                  borderRadius: BorderRadius.circular(2),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 1),
+                    color: const Color(0xFFE2E8F0),
+                    alignment: Alignment.center,
+                    child: const Text('-', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                child: InkWell(
+                  onTap: onInc,
+                  borderRadius: BorderRadius.circular(2),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 1),
+                    color: const Color(0xFFE2E8F0),
+                    alignment: Alignment.center,
+                    child: const Text('+', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

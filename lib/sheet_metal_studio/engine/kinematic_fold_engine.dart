@@ -47,6 +47,89 @@ class FoldedMeshResult {
     ...filletPolygons,
     ...thicknessPolygons,
   ];
+
+  /// Translates all vertices in this mesh by [dx], [dy], [dz], with optional [colorOverride].
+  FoldedMeshResult translate(double dx, double dy, double dz, {Color? colorOverride}) {
+    CadPoint3D transPt(CadPoint3D p) => CadPoint3D(p.x + dx, p.y + dy, p.z + dz);
+    CadFoldedPolygon3D transPoly(CadFoldedPolygon3D p) => CadFoldedPolygon3D(
+      faceId: p.faceId,
+      vertices: p.vertices.map(transPt).toList(),
+      normal: p.normal,
+      color: colorOverride ?? p.color,
+      drawWireframe: p.drawWireframe,
+      holes: p.holes.map((h) => h.map(transPt).toList()).toList(),
+      holePunchIds: p.holePunchIds,
+      cutSegments: p.cutSegments.map((c) => c.map(transPt).toList()).toList(),
+      boundaryLines: p.boundaryLines.map((b) => b.map(transPt).toList()).toList(),
+    );
+
+    return FoldedMeshResult(
+      polygons: polygons.map(transPoly).toList(),
+      filletPolygons: filletPolygons.map(transPoly).toList(),
+      thicknessPolygons: thicknessPolygons.map(transPoly).toList(),
+      boundWidth: boundWidth,
+      boundLength: boundLength,
+      boundHeight: boundHeight,
+      center: transPt(center),
+    );
+  }
+
+  /// Combines this mesh with [other] into a single aggregated mesh with unified bounding box.
+  /// If [preserveCenter] is true, retains this mesh's center as pivot.
+  FoldedMeshResult combineWith(FoldedMeshResult other, {bool preserveCenter = false}) {
+    final allP = [...polygons, ...other.polygons];
+    final allF = [...filletPolygons, ...other.filletPolygons];
+    final allT = [...thicknessPolygons, ...other.thicknessPolygons];
+
+    double minX = double.infinity, maxX = -double.infinity;
+    double minY = double.infinity, maxY = -double.infinity;
+    double minZ = double.infinity, maxZ = -double.infinity;
+
+    void update(CadPoint3D p) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+      if (p.z < minZ) minZ = p.z;
+      if (p.z > maxZ) maxZ = p.z;
+    }
+
+    for (final p in allP) {
+      for (final v in p.vertices) {
+        update(v);
+      }
+    }
+    for (final p in allF) {
+      for (final v in p.vertices) {
+        update(v);
+      }
+    }
+    for (final p in allT) {
+      for (final v in p.vertices) {
+        update(v);
+      }
+    }
+
+    if (minX == double.infinity) {
+      return this;
+    }
+
+    return FoldedMeshResult(
+      polygons: allP,
+      filletPolygons: allF,
+      thicknessPolygons: allT,
+      boundWidth: maxX - minX,
+      boundLength: maxY - minY,
+      boundHeight: maxZ - minZ,
+      center: preserveCenter
+          ? center
+          : CadPoint3D(
+              (minX + maxX) / 2.0,
+              (minY + maxY) / 2.0,
+              (minZ + maxZ) / 2.0,
+            ),
+    );
+  }
 }
 
 /// Node in the kinematic tree

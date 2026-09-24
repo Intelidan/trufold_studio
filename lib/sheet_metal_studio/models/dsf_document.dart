@@ -22,6 +22,7 @@ import 'constraints/constraint_definition.dart';
 import 'constraints/reference_geometry.dart';
 import 'template_parameter_definition.dart';
 import 'cms/cms_product_contract.dart';
+import 'trunking_cover_data.dart';
 
 class DsfDocument {
   static const String currentFormat = 'DANISH_SHEET_FOLD';
@@ -51,6 +52,7 @@ class DsfDocument {
   final Map<String, double> edgeChamfers;
   final Map<String, double> parameters;
   final Map<String, dynamic> metadata;
+  final TrunkingCoverData? cover;
 
   const DsfDocument({
     this.format = currentFormat,
@@ -77,6 +79,7 @@ class DsfDocument {
     this.edgeChamfers = const {},
     this.parameters = const {},
     this.metadata = const {},
+    this.cover,
   });
 
   /// Returns all active visible punches, combining standalone punches and expanded perforation pattern holes
@@ -314,6 +317,8 @@ class DsfDocument {
     Map<String, double>? edgeChamfers,
     Map<String, double>? parameters,
     Map<String, dynamic>? metadata,
+    TrunkingCoverData? cover,
+    bool clearCover = false,
   }) {
     return DsfDocument(
       format: format,
@@ -340,6 +345,7 @@ class DsfDocument {
       edgeChamfers: edgeChamfers ?? this.edgeChamfers,
       parameters: parameters ?? this.parameters,
       metadata: metadata ?? this.metadata,
+      cover: clearCover ? null : (cover ?? this.cover),
     );
   }
 
@@ -371,6 +377,7 @@ class DsfDocument {
     'edgeChamfers': edgeChamfers,
     'parameters': parameters,
     'metadata': metadata,
+    if (cover != null) 'cover': cover!.toJson(),
   };
 
   String toPrettyJson() => const JsonEncoder.withIndent('  ').convert(toJson());
@@ -417,6 +424,7 @@ class DsfDocument {
     edgeChamfers: (json['edgeChamfers'] as Map<String, dynamic>? ?? {}).map((k, v) => MapEntry(k, (v as num).toDouble())),
     parameters: (json['parameters'] as Map<String, dynamic>? ?? {}).map((k, v) => MapEntry(k, (v as num).toDouble())),
     metadata: json['metadata'] as Map<String, dynamic>? ?? {},
+    cover: json['cover'] != null ? TrunkingCoverData.fromJson(json['cover'] as Map<String, dynamic>) : null,
   );
 
   factory DsfDocument.parseJsonString(String jsonString) => DsfDocument.fromJson(jsonDecode(jsonString) as Map<String, dynamic>);
