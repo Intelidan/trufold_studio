@@ -37,18 +37,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
   final Map<String, Offset> dimensionOffsets;
   final Map<String, double> dimensionLineOffsets;
   final Map<String, Rect>? renderedDimensionBadges;
-  final Map<
-    String,
-    ({
-      Offset pA,
-      Offset pB,
-      double offsetDist,
-      CadPoint2D ptA,
-      CadPoint2D ptB,
-      CadDimensionType type,
-    })
-  >?
-  renderedDimensionLines;
+  final Map<String, ({Offset pA, Offset pB, double offsetDist, CadPoint2D ptA, CadPoint2D ptB, CadDimensionType type})>? renderedDimensionLines;
   final String? editingDimId;
   final String? selectedDimensionId;
   final String? hoveredDimensionId;
@@ -171,10 +160,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final bw = doc.blankWidthMm > 0 ? doc.blankWidthMm : 200.0;
     final bl = doc.blankLengthMm > 0 ? doc.blankLengthMm : 300.0;
 
-    final fitScale = math.min(
-      (size.width * 0.75) / bw,
-      (size.height * 0.75) / bl,
-    );
+    final fitScale = math.min((size.width * 0.75) / bw, (size.height * 0.75) / bl);
     final scale = fitScale * zoom;
 
     final cx = size.width / 2.0 + pan.dx;
@@ -183,8 +169,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final originX = cx - (bw / 2.0) * scale;
     final originY = cy - (bl / 2.0) * scale;
 
-    Offset toScreen(double x, double y) =>
-        Offset(originX + x * scale, originY + y * scale);
+    Offset toScreen(double x, double y) => Offset(originX + x * scale, originY + y * scale);
 
     // 2. Render Unfolded Planar Faces (Strictly Flat 2D Blank)
     final fillPaint = Paint()..style = PaintingStyle.fill;
@@ -253,9 +238,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
         if (matchedArc != null && targetIdx != -1) {
           final samples = matchedArc.toPolygon(maxStepDeg: 3.0);
-          final orderedSamples = isReversed
-              ? samples.reversed.toList()
-              : samples;
+          final orderedSamples = isReversed ? samples.reversed.toList() : samples;
           for (final s in orderedSamples.skip(1)) {
             final pt = toScreen(s.x, s.y);
             path.lineTo(pt.dx, pt.dy);
@@ -281,8 +264,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
       for (final face in facesToDraw) {
         if (face.vertices.length < 3) continue;
 
-        final facePath = buildSmoothPolygonPath(face.vertices)
-          ..fillType = PathFillType.evenOdd;
+        final facePath = buildSmoothPolygonPath(face.vertices)..fillType = PathFillType.evenOdd;
 
         for (final loop in face.holes) {
           if (loop.length >= 3) {
@@ -293,9 +275,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         if (showProfileFill) {
           fillPaint.color = face.id == selectedFaceId
               ? const Color(0xFFFDE68A).withValues(alpha: 0.70)
-              : (face.id == doc.baseFaceId
-                    ? const Color(0xFFD6E8F6).withValues(alpha: 0.75)
-                    : const Color(0xFFE2EFF9).withValues(alpha: 0.70));
+              : (face.id == doc.baseFaceId ? const Color(0xFFD6E8F6).withValues(alpha: 0.75) : const Color(0xFFE2EFF9).withValues(alpha: 0.70));
           canvas.drawPath(facePath, fillPaint);
         }
         canvas.drawPath(facePath, borderPaint);
@@ -317,17 +297,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
             // Suppress label if the face is too small on-screen.
             final screenW = fWidth * zoom;
             final screenH = fHeight * zoom;
-            if (screenW >= canvasSettings.faceLabelMinScreenSize ||
-                screenH >= canvasSettings.faceLabelMinScreenSize) {
+            if (screenW >= canvasSettings.faceLabelMinScreenSize || screenH >= canvasSettings.faceLabelMinScreenSize) {
               final sCenter = toScreen(face.centroid.x, face.centroid.y);
-              _drawFaceSizeBadge(
-                canvas,
-                sCenter,
-                face.label.isNotEmpty ? face.label : face.id,
-                fWidth,
-                fHeight,
-                face.id == selectedFaceId,
-              );
+              _drawFaceSizeBadge(canvas, sCenter, face.label.isNotEmpty ? face.label : face.id, fWidth, fHeight, face.id == selectedFaceId);
             }
           }
         }
@@ -388,9 +360,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         if (drawnPts.contains(sPt)) return;
         drawnPts.add(sPt);
 
-        pointFillPaint.color = isConstrained
-            ? const Color(0xFF0F172A)
-            : const Color(0xFF2563EB);
+        pointFillPaint.color = isConstrained ? const Color(0xFF0F172A) : const Color(0xFF2563EB);
         canvas.drawCircle(sPt, 3.2, pointFillPaint);
         canvas.drawCircle(sPt, 3.2, pointStrokePaint);
       }
@@ -405,8 +375,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       bool isInsideAnyArc(CadPoint2D pt) {
         for (final arc in doc.arcs) {
-          if (pt.distanceTo(arc.startPoint) <= 1.2 ||
-              pt.distanceTo(arc.endPoint) <= 1.2) {
+          if (pt.distanceTo(arc.startPoint) <= 1.2 || pt.distanceTo(arc.endPoint) <= 1.2) {
             return false;
           }
           if (arc.distanceTo(pt) <= 1.0) {
@@ -457,11 +426,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
       ..strokeWidth = 1.6;
 
     for (final cut in doc.cutLines) {
-      final isSelected =
-          cut.id == selectedCutId || selectedEntityIds.contains(cut.id);
-      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(
-        cut.id,
-      );
+      final isSelected = cut.id == selectedCutId || selectedEntityIds.contains(cut.id);
+      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(cut.id);
       final sp1 = toScreen(cut.p1.x, cut.p1.y);
       final sp2 = toScreen(cut.p2.x, cut.p2.y);
 
@@ -486,14 +452,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       final mid = Offset((sp1.dx + sp2.dx) / 2.0, (sp1.dy + sp2.dy) / 2.0);
       if (cut.showLabel) {
-        _drawCutBadge(
-          canvas,
-          mid,
-          cut.id,
-          isSelected,
-          lengthMm: cut.length,
-          showLabel: cut.showLabel,
-        );
+        _drawCutBadge(canvas, mid, cut.id, isSelected, lengthMm: cut.length, showLabel: cut.showLabel);
       }
 
       if (isSelected) {
@@ -504,14 +463,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
     // 3b. Render First-Class Arcs (SS3: Hover, Selection, Dimension Badge)
     for (final arc in doc.arcs) {
-      final isSelected =
-          arc.id == selectedArcId || selectedEntityIds.contains(arc.id);
+      final isSelected = arc.id == selectedArcId || selectedEntityIds.contains(arc.id);
       final isHovered = arc.id == hoveredArcId && !isSelected;
 
       if (isSelected || isHovered || !arc.isBoundary) {
-        final arcColor = isSelected
-            ? const Color(0xFF2563EB)
-            : (isHovered ? const Color(0xFF0EA5E9) : const Color(0xFF0F172A));
+        final arcColor = isSelected ? const Color(0xFF2563EB) : (isHovered ? const Color(0xFF0EA5E9) : const Color(0xFF0F172A));
 
         final arcPaint = Paint()
           ..color = arcColor
@@ -529,11 +485,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
           }
           canvas.drawPath(arcPath, arcPaint);
         }
-
       }
       // Draw arc badge if arcLabel is visible and arc.showLabel, OR if hovered/selected
-      final showArcBadge = arc.showLabel &&
-          (canvasSettings.arcLabel.visible || isHovered || isSelected);
+      final showArcBadge = arc.showLabel && (canvasSettings.arcLabel.visible || isHovered || isSelected);
       if (showArcBadge) {
         final midCad = arc.midpoint;
         final sMid = toScreen(midCad.x, midCad.y);
@@ -544,8 +498,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     // 4. Render Fold Bends & Flanges with Bend Deductions, Role Colors, and Hover Glow
     for (final bend in doc.bends) {
       if (!bend.isVisible) continue;
-      final isSelected =
-          bend.id == selectedBendId || selectedEntityIds.contains(bend.id);
+      final isSelected = bend.id == selectedBendId || selectedEntityIds.contains(bend.id);
       final isHovered = bend.id == hoveredBendId && !isSelected;
       final isUp = bend.direction == FoldDirection.up;
       final isFlange = bend.isFlange;
@@ -555,13 +508,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
       if (showDofDiagnostics && dofStateProvider != null) {
         color = dofStateProvider!(bend.id).color;
       } else if (isSelected) {
-        color = isFlange
-            ? const Color(0xFF7C3AED)
-            : const Color(0xFF2563EB); // Vibrant Purple / Royal Blue
+        color = isFlange ? const Color(0xFF7C3AED) : const Color(0xFF2563EB); // Vibrant Purple / Royal Blue
       } else if (isHovered) {
-        color = isFlange
-            ? const Color(0xFFA78BFA)
-            : const Color(0xFF0EA5E9); // Light Purple / Sky-500 hover
+        color = isFlange ? const Color(0xFFA78BFA) : const Color(0xFF0EA5E9); // Light Purple / Sky-500 hover
       } else if (isIncomplete) {
         color = const Color(0xFFD97706); // Amber warning
       } else {
@@ -570,9 +519,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
             : (isUp ? const Color(0xFF0284C7) : const Color(0xFFD97706));
       }
 
-      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(
-        bend.id,
-      );
+      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(bend.id);
       final sp1 = toScreen(bend.p1.x, bend.p1.y);
       final sp2 = toScreen(bend.p2.x, bend.p2.y);
 
@@ -585,10 +532,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
       }
 
       // Render Outer Bend Zone Margins (Curving Bend Allowance / Fillet Lines)
-      final baMm = bend.calculateBendAllowance(
-        sheetThicknessMm: doc.material.thicknessMm,
-        kFactor: bend.kFactor ?? doc.material.kFactor,
-      );
+      final baMm = bend.calculateBendAllowance(sheetThicknessMm: doc.material.thicknessMm, kFactor: bend.kFactor ?? doc.material.kFactor);
       final halfBaMm = baMm / 2.0;
 
       final bendLen = bend.p1.distanceTo(bend.p2);
@@ -596,22 +540,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
         final nx = -(bend.p2.y - bend.p1.y) / bendLen;
         final ny = (bend.p2.x - bend.p1.x) / bendLen;
 
-        final m1a = toScreen(
-          bend.p1.x + nx * halfBaMm,
-          bend.p1.y + ny * halfBaMm,
-        );
-        final m1b = toScreen(
-          bend.p2.x + nx * halfBaMm,
-          bend.p2.y + ny * halfBaMm,
-        );
-        final m2a = toScreen(
-          bend.p1.x - nx * halfBaMm,
-          bend.p1.y - ny * halfBaMm,
-        );
-        final m2b = toScreen(
-          bend.p2.x - nx * halfBaMm,
-          bend.p2.y - ny * halfBaMm,
-        );
+        final m1a = toScreen(bend.p1.x + nx * halfBaMm, bend.p1.y + ny * halfBaMm);
+        final m1b = toScreen(bend.p2.x + nx * halfBaMm, bend.p2.y + ny * halfBaMm);
+        final m2a = toScreen(bend.p1.x - nx * halfBaMm, bend.p1.y - ny * halfBaMm);
+        final m2b = toScreen(bend.p2.x - nx * halfBaMm, bend.p2.y - ny * halfBaMm);
 
         // 1. Shaded Bend Allowance Zone (Clear visual indicator distinguishing bends from cuts)
         final zonePath = Path()
@@ -621,9 +553,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
           ..lineTo(m2a.dx, m2a.dy)
           ..close();
         final zonePaint = Paint()
-          ..color = color.withValues(
-            alpha: isSelected ? 0.18 : (isHovered ? 0.14 : 0.08),
-          )
+          ..color = color.withValues(alpha: isSelected ? 0.18 : (isHovered ? 0.14 : 0.08))
           ..style = PaintingStyle.fill;
         canvas.drawPath(zonePath, zonePaint);
 
@@ -643,22 +573,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
             ..style = PaintingStyle.stroke
             ..strokeWidth = 0.8;
           const notchRadius = 2.8;
-          canvas.drawRect(
-            Rect.fromCenter(
-              center: sp1,
-              width: notchRadius * 2,
-              height: notchRadius * 2,
-            ),
-            reliefPaint,
-          );
-          canvas.drawRect(
-            Rect.fromCenter(
-              center: sp2,
-              width: notchRadius * 2,
-              height: notchRadius * 2,
-            ),
-            reliefPaint,
-          );
+          canvas.drawRect(Rect.fromCenter(center: sp1, width: notchRadius * 2, height: notchRadius * 2), reliefPaint);
+          canvas.drawRect(Rect.fromCenter(center: sp2, width: notchRadius * 2, height: notchRadius * 2), reliefPaint);
         }
       }
 
@@ -683,130 +599,101 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       if (bend.showLabel) {
         // --- Zoom-adaptive bend label declutter ---
-        final effectivelyVisible = canvasSettings.bendLabel.visible &&
-            zoom >= canvasSettings.bendLabelHideZoomThreshold;
+        final effectivelyVisible = canvasSettings.bendLabel.visible && zoom >= canvasSettings.bendLabelHideZoomThreshold;
         if (!effectivelyVisible) {
           // Skip label entirely when very zoomed out
         } else {
-        final bool compactMode =
-            zoom < canvasSettings.bendLabelCompactZoomThreshold;
+          final bool compactMode = zoom < canvasSettings.bendLabelCompactZoomThreshold;
 
-        final arrowStr = isUp ? '↑' : '↓';
-        final lenStr = compactMode
-            ? ''
-            : ' · ${formatMeasure(bend.length, canvasSettings)}';
-        final String labelText;
-        if (isIncomplete) {
-          labelText = '⚠️ ${bend.id} OPEN$lenStr';
-        } else {
-          labelText =
-              '${bend.id} ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr$lenStr';
-        }
-
-        final bendLabelStyle = canvasSettings.bendLabel;
-        final textColor = isIncomplete
-            ? const Color(0xFFB45309)
-            : (isFlange
-                  ? const Color(0xFF6D28D9)
-                  : (isUp ? const Color(0xFF0369A1) : const Color(0xFFB45309)));
-
-        final textSpan = TextSpan(
-          text: labelText,
-          style: TextStyle(
-            color: textColor,
-            fontSize: bendLabelStyle.fontSize,
-            fontWeight: bendLabelStyle.fontWeight,
-            letterSpacing: 0.2,
-          ),
-        );
-        final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)
-          ..layout();
-
-        const iconSize = 11.0;
-        const badgePaddingH = 7.0;
-        final badgeWidth = iconSize + 4.0 + tp.width + (badgePaddingH * 2.0);
-        const badgeHeight = 20.0;
-
-        final badgeRect = RRect.fromRectAndRadius(
-          Rect.fromCenter(center: mid, width: badgeWidth, height: badgeHeight),
-          const Radius.circular(4.5),
-        );
-
-        // 4a. Drop shadow
-        canvas.drawRRect(
-          badgeRect.shift(const Offset(0, 1.2)),
-          Paint()
-            ..color = Colors.black.withValues(alpha: 0.14)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
-        );
-
-        // 4b. High-contrast pill background (Occludes the dashed line completely)
-        final badgeBg = Paint()
-          ..color = isIncomplete
-              ? const Color(0xFFFEF3C7)
-              : (isSelected
-                    ? const Color(0xFFF0F9FF)
-                    : Colors.white.withValues(alpha: 0.96))
-          ..style = PaintingStyle.fill;
-        canvas.drawRRect(badgeRect, badgeBg);
-
-        // 4c. Crisp colored border
-        final badgeBorder = Paint()
-          ..color = color.withValues(alpha: isSelected ? 0.95 : 0.75)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = isSelected ? 1.6 : 1.0;
-        canvas.drawRRect(badgeRect, badgeBorder);
-
-        // 4d. Micro vector icon (Hook for Flange, Chevron for Bend)
-        final iconLeft = mid.dx - (badgeWidth / 2.0) + badgePaddingH;
-        final iconTop = mid.dy - (iconSize / 2.0);
-        final iconPaint = Paint()
-          ..color = textColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.3
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round;
-
-        if (isFlange) {
-          final hook = Path()
-            ..moveTo(iconLeft + 1.0, iconTop + 9.5)
-            ..lineTo(iconLeft + 1.0, iconTop + 2.0)
-            ..lineTo(iconLeft + 9.0, iconTop + 2.0);
-          canvas.drawPath(hook, iconPaint);
-        } else {
-          final chev = Path();
-          if (isUp) {
-            chev.moveTo(iconLeft + 1.5, iconTop + 8.0);
-            chev.lineTo(iconLeft + 5.5, iconTop + 2.5);
-            chev.lineTo(iconLeft + 9.5, iconTop + 8.0);
+          final arrowStr = isUp ? '↑' : '↓';
+          final lenStr = compactMode ? '' : ' · ${formatMeasure(bend.length, canvasSettings)}';
+          final String labelText;
+          if (isIncomplete) {
+            labelText = '⚠️ ${bend.id} OPEN$lenStr';
           } else {
-            chev.moveTo(iconLeft + 1.5, iconTop + 3.0);
-            chev.lineTo(iconLeft + 5.5, iconTop + 8.5);
-            chev.lineTo(iconLeft + 9.5, iconTop + 3.0);
+            labelText = '${bend.id} ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr$lenStr';
           }
-          canvas.drawPath(chev, iconPaint);
-        }
 
-        // 4e. Paint label text
-        tp.paint(
-          canvas,
-          Offset(iconLeft + iconSize + 4.0, mid.dy - tp.height / 2.0),
-        );
+          final bendLabelStyle = canvasSettings.bendLabel;
+          final textColor = isIncomplete
+              ? const Color(0xFFB45309)
+              : (isFlange ? const Color(0xFF6D28D9) : (isUp ? const Color(0xFF0369A1) : const Color(0xFFB45309)));
 
-        // 4f. Render CAM violation icon if detected
-        final vResult = bendViolations?[bend.id];
-        if (vResult != null && !vResult.isClean) {
-          const camSpan = TextSpan(text: '⚠️', style: TextStyle(fontSize: 9.5));
-          final camTp = TextPainter(
-            text: camSpan,
-            textDirection: TextDirection.ltr,
-          )..layout();
-          camTp.paint(
-            canvas,
-            Offset(mid.dx + badgeWidth / 2.0 + 3, mid.dy - camTp.height / 2.0),
+          final textSpan = TextSpan(
+            text: labelText,
+            style: TextStyle(color: textColor, fontSize: bendLabelStyle.fontSize, fontWeight: bendLabelStyle.fontWeight, letterSpacing: 0.2),
           );
+          final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
+
+          const iconSize = 11.0;
+          const badgePaddingH = 7.0;
+          final badgeWidth = iconSize + 4.0 + tp.width + (badgePaddingH * 2.0);
+          const badgeHeight = 20.0;
+
+          final badgeRect = RRect.fromRectAndRadius(Rect.fromCenter(center: mid, width: badgeWidth, height: badgeHeight), const Radius.circular(4.5));
+
+          // 4a. Drop shadow
+          canvas.drawRRect(
+            badgeRect.shift(const Offset(0, 1.2)),
+            Paint()
+              ..color = Colors.black.withValues(alpha: 0.14)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
+          );
+
+          // 4b. High-contrast pill background (Occludes the dashed line completely)
+          final badgeBg = Paint()
+            ..color = isIncomplete ? const Color(0xFFFEF3C7) : (isSelected ? const Color(0xFFF0F9FF) : Colors.white.withValues(alpha: 0.96))
+            ..style = PaintingStyle.fill;
+          canvas.drawRRect(badgeRect, badgeBg);
+
+          // 4c. Crisp colored border
+          final badgeBorder = Paint()
+            ..color = color.withValues(alpha: isSelected ? 0.95 : 0.75)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = isSelected ? 1.6 : 1.0;
+          canvas.drawRRect(badgeRect, badgeBorder);
+
+          // 4d. Micro vector icon (Hook for Flange, Chevron for Bend)
+          final iconLeft = mid.dx - (badgeWidth / 2.0) + badgePaddingH;
+          final iconTop = mid.dy - (iconSize / 2.0);
+          final iconPaint = Paint()
+            ..color = textColor
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.3
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round;
+
+          if (isFlange) {
+            final hook = Path()
+              ..moveTo(iconLeft + 1.0, iconTop + 9.5)
+              ..lineTo(iconLeft + 1.0, iconTop + 2.0)
+              ..lineTo(iconLeft + 9.0, iconTop + 2.0);
+            canvas.drawPath(hook, iconPaint);
+          } else {
+            final chev = Path();
+            if (isUp) {
+              chev.moveTo(iconLeft + 1.5, iconTop + 8.0);
+              chev.lineTo(iconLeft + 5.5, iconTop + 2.5);
+              chev.lineTo(iconLeft + 9.5, iconTop + 8.0);
+            } else {
+              chev.moveTo(iconLeft + 1.5, iconTop + 3.0);
+              chev.lineTo(iconLeft + 5.5, iconTop + 8.5);
+              chev.lineTo(iconLeft + 9.5, iconTop + 3.0);
+            }
+            canvas.drawPath(chev, iconPaint);
+          }
+
+          // 4e. Paint label text
+          tp.paint(canvas, Offset(iconLeft + iconSize + 4.0, mid.dy - tp.height / 2.0));
+
+          // 4f. Render CAM violation icon if detected
+          final vResult = bendViolations?[bend.id];
+          if (vResult != null && !vResult.isClean) {
+            const camSpan = TextSpan(text: '⚠️', style: TextStyle(fontSize: 9.5));
+            final camTp = TextPainter(text: camSpan, textDirection: TextDirection.ltr)..layout();
+            camTp.paint(canvas, Offset(mid.dx + badgeWidth / 2.0 + 3, mid.dy - camTp.height / 2.0));
+          }
         }
-      }
       }
 
       // Warning rings around open endpoints
@@ -834,33 +721,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.0;
 
-          _drawDashedLine(
-            canvas,
-            midBend,
-            leftEdgeScreen,
-            dimLinePaint,
-            dash: 4,
-            gap: 3,
-          );
-          _drawDimText(
-            canvas,
-            Offset((midBend.dx + leftEdgeScreen.dx) / 2, midBend.dy - 12),
-            'X: ${bend.midpoint.x.toStringAsFixed(1)} mm',
-          );
+          _drawDashedLine(canvas, midBend, leftEdgeScreen, dimLinePaint, dash: 4, gap: 3);
+          _drawDimText(canvas, Offset((midBend.dx + leftEdgeScreen.dx) / 2, midBend.dy - 12), 'X: ${bend.midpoint.x.toStringAsFixed(1)} mm');
 
-          _drawDashedLine(
-            canvas,
-            midBend,
-            bottomEdgeScreen,
-            dimLinePaint,
-            dash: 4,
-            gap: 3,
-          );
-          _drawDimText(
-            canvas,
-            Offset(midBend.dx + 6, (midBend.dy + bottomEdgeScreen.dy) / 2),
-            'Y: ${bend.midpoint.y.toStringAsFixed(1)} mm',
-          );
+          _drawDashedLine(canvas, midBend, bottomEdgeScreen, dimLinePaint, dash: 4, gap: 3);
+          _drawDimText(canvas, Offset(midBend.dx + 6, (midBend.dy + bottomEdgeScreen.dy) / 2), 'Y: ${bend.midpoint.y.toStringAsFixed(1)} mm');
         }
       }
     }
@@ -940,10 +805,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     Path? unselectedCouplerUnion;
 
     for (final punch in allPunchesList) {
-      final isSelected =
-          punch.id == selectedPunchId ||
-          selectedEntityIds.contains(punch.id) ||
-          selectedEntityIds.any((id) => punch.id.startsWith('${id}_'));
+      final isSelected = punch.id == selectedPunchId || selectedEntityIds.contains(punch.id) || selectedEntityIds.any((id) => punch.id.startsWith('${id}_'));
       final isHovered = punch.id == hoveredPunchId && !isSelected;
       if (isSelected || isHovered) {
         activePunches.add(punch);
@@ -965,26 +827,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
               unselectedCouplerPath.addPath(pPath, Offset.zero);
               hasUnselectedCoupler = true;
             } else {
-              unselectedCouplerUnion = (unselectedCouplerUnion == null)
-                  ? pPath
-                  : Path.combine(
-                      PathOperation.union,
-                      unselectedCouplerUnion,
-                      pPath,
-                    );
+              unselectedCouplerUnion = (unselectedCouplerUnion == null) ? pPath : Path.combine(PathOperation.union, unselectedCouplerUnion, pPath);
             }
           } else {
             if (useBatching) {
               unselectedPath.addPath(pPath, Offset.zero);
               hasUnselected = true;
             } else {
-              unselectedPunchesUnion = (unselectedPunchesUnion == null)
-                  ? pPath
-                  : Path.combine(
-                      PathOperation.union,
-                      unselectedPunchesUnion,
-                      pPath,
-                    );
+              unselectedPunchesUnion = (unselectedPunchesUnion == null) ? pPath : Path.combine(PathOperation.union, unselectedPunchesUnion, pPath);
             }
           }
         }
@@ -1016,14 +866,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
       for (final punch in allPunchesList) {
         if (punch.role == CncPunchRole.coupler) {
           final isSelected =
-              punch.id == selectedPunchId ||
-              selectedEntityIds.contains(punch.id) ||
-              selectedEntityIds.any((id) => punch.id.startsWith('${id}_'));
+              punch.id == selectedPunchId || selectedEntityIds.contains(punch.id) || selectedEntityIds.any((id) => punch.id.startsWith('${id}_'));
           final isHovered = punch.id == hoveredPunchId && !isSelected;
           final centerScreen = toScreen(punch.center.x, punch.center.y);
-          final halfSpan =
-              (punch.type == PunchType.obroundSlot ||
-                  punch.type == PunchType.rectangle)
+          final halfSpan = (punch.type == PunchType.obroundSlot || punch.type == PunchType.rectangle)
               ? (punch.widthMm * 0.5 * scale)
               : (punch.diameterMm * 0.5 * scale);
 
@@ -1034,9 +880,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
               canvas,
               centerScreen,
               glyphSize,
-              const Color(
-                0xFF7C3AED,
-              ).withValues(alpha: isSelected ? 0.9 : (isHovered ? 0.85 : 0.75)),
+              const Color(0xFF7C3AED).withValues(alpha: isSelected ? 0.9 : (isHovered ? 0.85 : 0.75)),
               strokeWidth: 1.0,
             );
           }
@@ -1065,14 +909,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
     }
 
     for (final punch in activePunches) {
-      final isSelected =
-          punch.id == selectedPunchId ||
-          selectedEntityIds.contains(punch.id) ||
-          selectedEntityIds.any((id) => punch.id.startsWith('${id}_'));
+      final isSelected = punch.id == selectedPunchId || selectedEntityIds.contains(punch.id) || selectedEntityIds.any((id) => punch.id.startsWith('${id}_'));
       final isHovered = punch.id == hoveredPunchId && !isSelected;
-      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(
-        punch.id,
-      );
+      final isHoverLinked = constraintHoverHighlightedEntityIds.contains(punch.id);
       final poly = punch.toPolygon();
       if (poly.isNotEmpty) {
         final holePath = Path();
@@ -1098,21 +937,12 @@ class _UnfoldedBoardPainter extends CustomPainter {
             ..color = dof.color
             ..style = PaintingStyle.stroke
             ..strokeWidth = isSelected ? 2.4 : 1.6;
-          canvas.drawPath(
-            holePath,
-            isSelected ? selectedFillPaint : hoveredFillPaint,
-          );
+          canvas.drawPath(holePath, isSelected ? selectedFillPaint : hoveredFillPaint);
           canvas.drawPath(holePath, dofBorder);
         } else if (isSelected) {
           final isCoupler = punch.role == CncPunchRole.coupler;
-          canvas.drawPath(
-            holePath,
-            isCoupler ? selectedCouplerFillPaint : selectedFillPaint,
-          );
-          canvas.drawPath(
-            holePath,
-            isCoupler ? selectedCouplerHolePaint : selectedHolePaint,
-          );
+          canvas.drawPath(holePath, isCoupler ? selectedCouplerFillPaint : selectedFillPaint);
+          canvas.drawPath(holePath, isCoupler ? selectedCouplerHolePaint : selectedHolePaint);
 
           // Draw CAD Constraint Leader Lines to Left and Bottom Edges
           if (punch.showLabel) {
@@ -1127,55 +957,19 @@ class _UnfoldedBoardPainter extends CustomPainter {
               ..strokeWidth = 1.0;
 
             // Dimension X to Left Edge
-            _drawDashedLine(
-              canvas,
-              centerScreen,
-              leftEdgeScreen,
-              dimLinePaint,
-              dash: 4,
-              gap: 3,
-            );
-            _drawDimText(
-              canvas,
-              Offset(
-                (centerScreen.dx + leftEdgeScreen.dx) / 2,
-                centerScreen.dy - 12,
-              ),
-              'X: ${punch.center.x.toStringAsFixed(1)} mm',
-            );
+            _drawDashedLine(canvas, centerScreen, leftEdgeScreen, dimLinePaint, dash: 4, gap: 3);
+            _drawDimText(canvas, Offset((centerScreen.dx + leftEdgeScreen.dx) / 2, centerScreen.dy - 12), 'X: ${punch.center.x.toStringAsFixed(1)} mm');
 
             // Dimension Y to Bottom Edge
-            _drawDashedLine(
-              canvas,
-              centerScreen,
-              bottomEdgeScreen,
-              dimLinePaint,
-              dash: 4,
-              gap: 3,
-            );
-            _drawDimText(
-              canvas,
-              Offset(
-                centerScreen.dx + 6,
-                (centerScreen.dy + bottomEdgeScreen.dy) / 2,
-              ),
-              'Y: ${punch.center.y.toStringAsFixed(1)} mm',
-            );
+            _drawDashedLine(canvas, centerScreen, bottomEdgeScreen, dimLinePaint, dash: 4, gap: 3);
+            _drawDimText(canvas, Offset(centerScreen.dx + 6, (centerScreen.dy + bottomEdgeScreen.dy) / 2), 'Y: ${punch.center.y.toStringAsFixed(1)} mm');
           }
         } else {
           final isCoupler = punch.role == CncPunchRole.coupler;
-          canvas.drawPath(
-            holePath,
-            isCoupler ? selectedCouplerFillPaint : hoveredFillPaint,
-          );
-          canvas.drawPath(
-            holePath,
-            isCoupler ? hoveredCouplerHolePaint : hoveredHolePaint,
-          );
+          canvas.drawPath(holePath, isCoupler ? selectedCouplerFillPaint : hoveredFillPaint);
+          canvas.drawPath(holePath, isCoupler ? hoveredCouplerHolePaint : hoveredHolePaint);
           final haloPaint = Paint()
-            ..color =
-                (isCoupler ? const Color(0xFF8B5CF6) : const Color(0xFF0284C7))
-                    .withValues(alpha: 0.20)
+            ..color = (isCoupler ? const Color(0xFF8B5CF6) : const Color(0xFF0284C7)).withValues(alpha: 0.20)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.5;
           canvas.drawPath(holePath, haloPaint);
@@ -1189,38 +983,24 @@ class _UnfoldedBoardPainter extends CustomPainter {
           if (punch.type == PunchType.roundHole) {
             sizeStr = '$prefixØ ${punch.diameterMm.toStringAsFixed(1)} mm';
           } else if (punch.type == PunchType.square) {
-            sizeStr =
-                '$prefix${punch.widthMm.toStringAsFixed(1)} × ${punch.widthMm.toStringAsFixed(1)} mm';
+            sizeStr = '$prefix${punch.widthMm.toStringAsFixed(1)} × ${punch.widthMm.toStringAsFixed(1)} mm';
           } else {
-            sizeStr =
-                '$prefix${punch.widthMm.toStringAsFixed(1)} × ${punch.lengthMm.toStringAsFixed(1)} mm';
+            sizeStr = '$prefix${punch.widthMm.toStringAsFixed(1)} × ${punch.lengthMm.toStringAsFixed(1)} mm';
           }
 
           final pSpan = TextSpan(
             text: sizeStr,
             style: TextStyle(
               color: isSelected
-                  ? (isCoupler
-                        ? const Color(0xFF6D28D9)
-                        : const Color(0xFF1D4ED8))
-                  : (isCoupler
-                        ? const Color(0xFF7C3AED)
-                        : const Color(0xFF047857)),
+                  ? (isCoupler ? const Color(0xFF6D28D9) : const Color(0xFF1D4ED8))
+                  : (isCoupler ? const Color(0xFF7C3AED) : const Color(0xFF047857)),
               fontSize: 9.0,
               fontWeight: FontWeight.bold,
             ),
           );
-          final pTp = TextPainter(text: pSpan, textDirection: TextDirection.ltr)
-            ..layout();
-          final pBadgeRect = Rect.fromCenter(
-            center: Offset(centerScreen.dx, centerScreen.dy - 16.0),
-            width: pTp.width + 8.0,
-            height: pTp.height + 4.0,
-          );
-          final pRRect = RRect.fromRectAndRadius(
-            pBadgeRect,
-            const Radius.circular(3.0),
-          );
+          final pTp = TextPainter(text: pSpan, textDirection: TextDirection.ltr)..layout();
+          final pBadgeRect = Rect.fromCenter(center: Offset(centerScreen.dx, centerScreen.dy - 16.0), width: pTp.width + 8.0, height: pTp.height + 4.0);
+          final pRRect = RRect.fromRectAndRadius(pBadgeRect, const Radius.circular(3.0));
           canvas.drawRRect(
             pRRect,
             Paint()
@@ -1230,26 +1010,18 @@ class _UnfoldedBoardPainter extends CustomPainter {
           canvas.drawRRect(
             pRRect,
             Paint()
-              ..color = isSelected
-                  ? const Color(0xFF2563EB)
-                  : const Color(0xFF10B981)
+              ..color = isSelected ? const Color(0xFF2563EB) : const Color(0xFF10B981)
               ..style = PaintingStyle.stroke
               ..strokeWidth = 0.8,
           );
-          pTp.paint(
-            canvas,
-            Offset(pBadgeRect.left + 4.0, pBadgeRect.top + 2.0),
-          );
+          pTp.paint(canvas, Offset(pBadgeRect.left + 4.0, pBadgeRect.top + 2.0));
         }
       }
     }
 
     // Ghost Phantom Preview for pending tool stamp (Round Hole, Obround, Square, Perforation, Chamfer)
     if (pendingBendStart == null && rubberBandEndpoint != null) {
-      final ghostCenter = toScreen(
-        rubberBandEndpoint!.x,
-        rubberBandEndpoint!.y,
-      );
+      final ghostCenter = toScreen(rubberBandEndpoint!.x, rubberBandEndpoint!.y);
       final cfg = toolConfig ?? ActiveToolConfig();
 
       final ghostFill = Paint()
@@ -1260,27 +1032,15 @@ class _UnfoldedBoardPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
 
-      if (toolMode == StudioToolMode.addPunchRound ||
-          toolMode == StudioToolMode.drawCircle) {
+      if (toolMode == StudioToolMode.addPunchRound || toolMode == StudioToolMode.drawCircle) {
         final r = (cfg.roundHoleDiameterMm / 2.0) * scale;
         canvas.drawCircle(ghostCenter, r, ghostFill);
         canvas.drawCircle(ghostCenter, r, ghostStroke);
-        _drawDimText(
-          canvas,
-          Offset(ghostCenter.dx, ghostCenter.dy - r - 10),
-          'Ø ${cfg.roundHoleDiameterMm.toStringAsFixed(1)} mm',
-        );
+        _drawDimText(canvas, Offset(ghostCenter.dx, ghostCenter.dy - r - 10), 'Ø ${cfg.roundHoleDiameterMm.toStringAsFixed(1)} mm');
       } else if (toolMode == StudioToolMode.addPunchObround) {
         final halfW = (cfg.obroundWidthMm / 2.0) * scale;
         final halfL = (cfg.obroundLengthMm / 2.0) * scale;
-        final rect = RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: ghostCenter,
-            width: halfW * 2.0,
-            height: halfL * 2.0,
-          ),
-          Radius.circular(halfW),
-        );
+        final rect = RRect.fromRectAndRadius(Rect.fromCenter(center: ghostCenter, width: halfW * 2.0, height: halfL * 2.0), Radius.circular(halfW));
         canvas.drawRRect(rect, ghostFill);
         canvas.drawRRect(rect, ghostStroke);
         _drawDimText(
@@ -1288,26 +1048,16 @@ class _UnfoldedBoardPainter extends CustomPainter {
           Offset(ghostCenter.dx, ghostCenter.dy - halfL - 10),
           '${cfg.obroundLengthMm.toStringAsFixed(0)}x${cfg.obroundWidthMm.toStringAsFixed(0)} mm',
         );
-      } else if (toolMode == StudioToolMode.addPunchSquare ||
-          toolMode == StudioToolMode.drawRectangle) {
+      } else if (toolMode == StudioToolMode.addPunchSquare || toolMode == StudioToolMode.drawRectangle) {
         final w = cfg.squareAspectLocked ? cfg.squareSizeMm : cfg.rectWidthMm;
         final h = cfg.squareAspectLocked ? cfg.squareSizeMm : cfg.rectHeightMm;
         final halfW = (w / 2.0) * scale;
         final halfH = (h / 2.0) * scale;
-        final rect = Rect.fromCenter(
-          center: ghostCenter,
-          width: halfW * 2.0,
-          height: halfH * 2.0,
-        );
+        final rect = Rect.fromCenter(center: ghostCenter, width: halfW * 2.0, height: halfH * 2.0);
         canvas.drawRect(rect, ghostFill);
         canvas.drawRect(rect, ghostStroke);
-        _drawDimText(
-          canvas,
-          Offset(ghostCenter.dx, ghostCenter.dy - halfH - 10),
-          '□ ${w.toStringAsFixed(1)} × ${h.toStringAsFixed(1)} mm',
-        );
-      } else if (toolMode == StudioToolMode.perforationPattern &&
-          previewPerforationPattern == null) {
+        _drawDimText(canvas, Offset(ghostCenter.dx, ghostCenter.dy - halfH - 10), '□ ${w.toStringAsFixed(1)} × ${h.toStringAsFixed(1)} mm');
+      } else if (toolMode == StudioToolMode.perforationPattern && previewPerforationPattern == null) {
         final countX = cfg.patternCountX;
         final countY = cfg.patternCountY;
         final pitchX = cfg.patternPitchXMm * scale;
@@ -1320,9 +1070,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         final startY = ghostCenter.dy - totalSpanY / 2.0;
 
         for (int row = 0; row < countY; row++) {
-          final rowOffset = (cfg.patternStaggered && row % 2 == 1)
-              ? pitchX / 2.0
-              : 0.0;
+          final rowOffset = (cfg.patternStaggered && row % 2 == 1) ? pitchX / 2.0 : 0.0;
           for (int col = 0; col < countX; col++) {
             final slotX = startX + col * pitchX + rowOffset;
             final slotY = startY + row * pitchY;
@@ -1339,21 +1087,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
               canvas.drawCircle(Offset.zero, r, ghostStroke);
             } else if (cfg.patternHoleType == PunchType.square) {
               final halfS = (cfg.patternSquareSize / 2.0) * scale;
-              final rect = Rect.fromCenter(
-                center: Offset.zero,
-                width: halfS * 2.0,
-                height: halfS * 2.0,
-              );
+              final rect = Rect.fromCenter(center: Offset.zero, width: halfS * 2.0, height: halfS * 2.0);
               canvas.drawRect(rect, ghostFill);
               canvas.drawRect(rect, ghostStroke);
             } else if (cfg.patternHoleType == PunchType.rectangle) {
               final halfW = (cfg.patternRectWidth / 2.0) * scale;
               final halfH = (cfg.patternRectHeight / 2.0) * scale;
-              final rect = Rect.fromCenter(
-                center: Offset.zero,
-                width: halfW * 2.0,
-                height: halfH * 2.0,
-              );
+              final rect = Rect.fromCenter(center: Offset.zero, width: halfW * 2.0, height: halfH * 2.0);
               canvas.drawRect(rect, ghostFill);
               canvas.drawRect(rect, ghostStroke);
             } else {
@@ -1361,14 +1101,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
               final halfW = (cfg.patternSlotWidth / 2.0) * scale;
               final halfH = (cfg.patternSlotHeight / 2.0) * scale;
               final r = math.min(halfW, halfH);
-              final rect = RRect.fromRectAndRadius(
-                Rect.fromCenter(
-                  center: Offset.zero,
-                  width: halfW * 2.0,
-                  height: halfH * 2.0,
-                ),
-                Radius.circular(r),
-              );
+              final rect = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: halfW * 2.0, height: halfH * 2.0), Radius.circular(r));
               canvas.drawRRect(rect, ghostFill);
               canvas.drawRRect(rect, ghostStroke);
             }
@@ -1383,17 +1116,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
         );
       } else if (toolMode == StudioToolMode.cornerChamfer) {
         canvas.drawCircle(ghostCenter, 4.0, ghostStroke);
-        _drawDimText(
-          canvas,
-          Offset(ghostCenter.dx, ghostCenter.dy - 12),
-          'Chamfer ${cfg.chamferDistanceMm.toStringAsFixed(1)} mm',
-        );
-      } else if (toolMode == StudioToolMode.addBend ||
-          toolMode == StudioToolMode.addFlange) {
+        _drawDimText(canvas, Offset(ghostCenter.dx, ghostCenter.dy - 12), 'Chamfer ${cfg.chamferDistanceMm.toStringAsFixed(1)} mm');
+      } else if (toolMode == StudioToolMode.addBend || toolMode == StudioToolMode.addFlange) {
         final isFlange = toolMode == StudioToolMode.addFlange;
-        final guideColor = isFlange
-            ? const Color(0xFF8B5CF6)
-            : const Color(0xFF0284C7);
+        final guideColor = isFlange ? const Color(0xFF8B5CF6) : const Color(0xFF0284C7);
 
         // 1. If an auto candidate line has been calculated, draw it cutting across the sheet
         if (autoCandidateLine != null) {
@@ -1417,34 +1143,18 @@ class _UnfoldedBoardPainter extends CustomPainter {
           final lineMid = Offset((g1.dx + g2.dx) / 2.0, (g1.dy + g2.dy) / 2.0);
 
           // Calculate actual candidate feature dimension
-          final candLen = autoCandidateLine!.p1.distanceTo(
-            autoCandidateLine!.p2,
-          );
+          final candLen = autoCandidateLine!.p1.distanceTo(autoCandidateLine!.p2);
           double effDist = isFlange ? 10.0 : candLen;
           if (doc.outerContour.isNotEmpty) {
             double? minD;
-            final cMid = CadPoint2D(
-              (autoCandidateLine!.p1.x + autoCandidateLine!.p2.x) / 2.0,
-              (autoCandidateLine!.p1.y + autoCandidateLine!.p2.y) / 2.0,
-            );
+            final cMid = CadPoint2D((autoCandidateLine!.p1.x + autoCandidateLine!.p2.x) / 2.0, (autoCandidateLine!.p1.y + autoCandidateLine!.p2.y) / 2.0);
             for (int i = 0; i < doc.outerContour.length; i++) {
               final a = doc.outerContour[i];
               final b = doc.outerContour[(i + 1) % doc.outerContour.length];
               final l2 = (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y);
               if (l2 < 1e-4) continue;
-              final t = math.max(
-                0.0,
-                math.min(
-                  1.0,
-                  ((cMid.x - a.x) * (b.x - a.x) +
-                          (cMid.y - a.y) * (b.y - a.y)) /
-                      l2,
-                ),
-              );
-              final proj = CadPoint2D(
-                a.x + t * (b.x - a.x),
-                a.y + t * (b.y - a.y),
-              );
+              final t = math.max(0.0, math.min(1.0, ((cMid.x - a.x) * (b.x - a.x) + (cMid.y - a.y) * (b.y - a.y)) / l2));
+              final proj = CadPoint2D(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y));
               final d = cMid.distanceTo(proj);
               if (minD == null || d < minD) minD = d;
             }
@@ -1453,11 +1163,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
             }
           }
 
-          _drawDimText(
-            canvas,
-            Offset(lineMid.dx, lineMid.dy - 12),
-            '⚡ AUTO $prefix ${effDist.toStringAsFixed(0)}mm (Click to place)',
-          );
+          _drawDimText(canvas, Offset(lineMid.dx, lineMid.dy - 12), '⚡ AUTO $prefix ${effDist.toStringAsFixed(0)}mm (Click to place)');
         } else {
           final contour = doc.outerContour;
           if (contour.length >= 3 && rubberBandEndpoint != null) {
@@ -1488,9 +1194,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
             }
 
             if (minDist != null && edgeP1 != null && edgeP2 != null) {
-              final snapOffsets = isFlange
-                  ? [10.0, 12.0, 13.0, 14.0, 15.0, 20.0, 25.0]
-                  : [25.0, 50.0, 75.0, 100.0, 125.0, 150.0, 200.0];
+              final snapOffsets = isFlange ? [10.0, 12.0, 13.0, 14.0, 15.0, 20.0, 25.0] : [25.0, 50.0, 75.0, 100.0, 125.0, 150.0, 200.0];
               double effectiveDist = minDist;
               for (final snapVal in snapOffsets) {
                 if ((minDist - snapVal).abs() <= 3.5) {
@@ -1511,11 +1215,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
               _drawDashedLine(canvas, g1, g2, guidePaint, dash: 5.0, gap: 3.5);
 
               final prefix = isFlange ? 'FLANGE' : 'BEND';
-              _drawDimText(
-                canvas,
-                Offset(ghostCenter.dx, ghostCenter.dy - 14),
-                '$prefix GUIDE: ${effectiveDist.toStringAsFixed(1)} mm from Edge',
-              );
+              _drawDimText(canvas, Offset(ghostCenter.dx, ghostCenter.dy - 14), '$prefix GUIDE: ${effectiveDist.toStringAsFixed(1)} mm from Edge');
             }
           }
         }
@@ -1606,16 +1306,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
         final mmH = (rubberBandEndpoint!.y - pendingBendStart!.y).abs();
         final rectSpan = TextSpan(
           text: ' ${mmW.toStringAsFixed(1)} × ${mmH.toStringAsFixed(1)} mm ',
-          style: const TextStyle(
-            color: Color(0xFF0F172A),
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 10, fontWeight: FontWeight.bold),
         );
-        final tpRect = TextPainter(
-          text: rectSpan,
-          textDirection: TextDirection.ltr,
-        )..layout();
+        final tpRect = TextPainter(text: rectSpan, textDirection: TextDirection.ltr)..layout();
         tpRect.paint(canvas, Offset(p2.dx + 10, p2.dy - 16));
       } else if (toolMode == StudioToolMode.drawCircle) {
         final radiusPx = (p2 - p1).distance;
@@ -1626,18 +1319,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
         canvas.drawCircle(p1, radiusPx, circlePaint);
         final rMm = pendingBendStart!.distanceTo(rubberBandEndpoint!);
         final circleSpan = TextSpan(
-          text:
-              ' Ø ${(rMm * 2.0).toStringAsFixed(1)} mm (R ${rMm.toStringAsFixed(1)}) ',
-          style: const TextStyle(
-            color: Color(0xFF0284C7),
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
+          text: ' Ø ${(rMm * 2.0).toStringAsFixed(1)} mm (R ${rMm.toStringAsFixed(1)}) ',
+          style: const TextStyle(color: Color(0xFF0284C7), fontSize: 10, fontWeight: FontWeight.bold),
         );
-        final tpCircle = TextPainter(
-          text: circleSpan,
-          textDirection: TextDirection.ltr,
-        )..layout();
+        final tpCircle = TextPainter(text: circleSpan, textDirection: TextDirection.ltr)..layout();
         tpCircle.paint(canvas, Offset(p2.dx + 10, p2.dy - 16));
       } else if (toolMode == StudioToolMode.modifyMove) {
         final movePaint = Paint()
@@ -1648,18 +1333,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
         final dx = rubberBandEndpoint!.x - pendingBendStart!.x;
         final dy = rubberBandEndpoint!.y - pendingBendStart!.y;
         final moveSpan = TextSpan(
-          text:
-              ' MOVE: ΔX=${dx.toStringAsFixed(1)} ΔY=${dy.toStringAsFixed(1)} mm ',
-          style: const TextStyle(
-            color: Color(0xFFE11D48),
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
+          text: ' MOVE: ΔX=${dx.toStringAsFixed(1)} ΔY=${dy.toStringAsFixed(1)} mm ',
+          style: const TextStyle(color: Color(0xFFE11D48), fontSize: 10, fontWeight: FontWeight.bold),
         );
-        final tpMove = TextPainter(
-          text: moveSpan,
-          textDirection: TextDirection.ltr,
-        )..layout();
+        final tpMove = TextPainter(text: moveSpan, textDirection: TextDirection.ltr)..layout();
         tpMove.paint(canvas, Offset(p2.dx + 10, p2.dy - 16));
       } else if (toolMode == StudioToolMode.modifyMirror) {
         final mirrorPaint = Paint()
@@ -1669,19 +1346,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
         _drawDashedLine(canvas, p1, p2, mirrorPaint, dash: 6.0, gap: 4.0);
         final mirrorSpan = const TextSpan(
           text: ' MIRROR AXIS ',
-          style: TextStyle(
-            color: Color(0xFF8B5CF6),
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Color(0xFF8B5CF6), fontSize: 10, fontWeight: FontWeight.bold),
         );
-        final tpMirror = TextPainter(
-          text: mirrorSpan,
-          textDirection: TextDirection.ltr,
-        )..layout();
+        final tpMirror = TextPainter(text: mirrorSpan, textDirection: TextDirection.ltr)..layout();
         tpMirror.paint(canvas, Offset(p2.dx + 10, p2.dy - 16));
-      } else if (toolMode == StudioToolMode.addDimension ||
-          toolMode == StudioToolMode.dragDimension) {
+      } else if (toolMode == StudioToolMode.addDimension || toolMode == StudioToolMode.dragDimension) {
         final dimPaint = Paint()
           ..color = const Color(0xFF0284C7)
           ..style = PaintingStyle.stroke
@@ -1698,16 +1367,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
           final tickPaint = Paint()
             ..color = const Color(0xFF0284C7)
             ..strokeWidth = 1.5;
-          canvas.drawLine(
-            Offset(p1.dx - nx, p1.dy - ny),
-            Offset(p1.dx + nx, p1.dy + ny),
-            tickPaint,
-          );
-          canvas.drawLine(
-            Offset(p2.dx - nx, p2.dy - ny),
-            Offset(p2.dx + nx, p2.dy + ny),
-            tickPaint,
-          );
+          canvas.drawLine(Offset(p1.dx - nx, p1.dy - ny), Offset(p1.dx + nx, p1.dy + ny), tickPaint);
+          canvas.drawLine(Offset(p2.dx - nx, p2.dy - ny), Offset(p2.dx + nx, p2.dy + ny), tickPaint);
         }
 
         // Precision end dots on dimension line endpoints
@@ -1734,33 +1395,18 @@ class _UnfoldedBoardPainter extends CustomPainter {
           isAlt = HardwareKeyboard.instance.isAltPressed;
         } catch (_) {}
         final dimSpan = TextSpan(
-          text:
-              ' DIM: ${distMm.toStringAsFixed(1)} mm ${isAlt ? "(Alt Free)" : ""}',
-          style: const TextStyle(
-            color: Color(0xFF0284C7),
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
+          text: ' DIM: ${distMm.toStringAsFixed(1)} mm ${isAlt ? "(Alt Free)" : ""}',
+          style: const TextStyle(color: Color(0xFF0284C7), fontSize: 10, fontWeight: FontWeight.bold),
         );
-        final tpDim = TextPainter(
-          text: dimSpan,
-          textDirection: TextDirection.ltr,
-        )..layout();
+        final tpDim = TextPainter(text: dimSpan, textDirection: TextDirection.ltr)..layout();
 
         // Place dimension text closer to the invisible drawn line, centered at midpoint
         final mid = Offset((p1.dx + p2.dx) / 2.0, (p1.dy + p2.dy) / 2.0);
         final textBgRect = RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(mid.dx, mid.dy - tpDim.height / 2.0 - 4.0),
-            width: tpDim.width + 8.0,
-            height: tpDim.height + 3.0,
-          ),
+          Rect.fromCenter(center: Offset(mid.dx, mid.dy - tpDim.height / 2.0 - 4.0), width: tpDim.width + 8.0, height: tpDim.height + 3.0),
           const Radius.circular(3.0),
         );
-        canvas.drawRRect(
-          textBgRect,
-          Paint()..color = Colors.white.withValues(alpha: 0.9),
-        );
+        canvas.drawRRect(textBgRect, Paint()..color = Colors.white.withValues(alpha: 0.9));
         canvas.drawRRect(
           textBgRect,
           Paint()
@@ -1768,16 +1414,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.0,
         );
-        tpDim.paint(
-          canvas,
-          Offset(mid.dx - tpDim.width / 2.0, mid.dy - tpDim.height - 4.0),
-        );
+        tpDim.paint(canvas, Offset(mid.dx - tpDim.width / 2.0, mid.dy - tpDim.height - 4.0));
       } else {
         final isCut = toolMode == StudioToolMode.addCut;
         final isFlange = toolMode == StudioToolMode.addFlange;
-        final rubberColor = isCut
-            ? const Color(0xFF0F172A)
-            : (isFlange ? const Color(0xFF8B5CF6) : const Color(0xFF0284C7));
+        final rubberColor = isCut ? const Color(0xFF0F172A) : (isFlange ? const Color(0xFF8B5CF6) : const Color(0xFF0284C7));
         final rubberPaint = Paint()
           ..color = rubberColor
           ..style = PaintingStyle.stroke
@@ -1794,21 +1435,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
         } catch (_) {}
         final angleDeg = (math.atan2(dy, dx) * 180.0 / math.pi).round();
         final prefix = isCut ? "CUT" : (isFlange ? "FLANGE" : "BEND");
-        final angleText =
-            '$prefix ${angleDeg.abs()}° ${isAlt ? "(Alt Free)" : ""}';
+        final angleText = '$prefix ${angleDeg.abs()}° ${isAlt ? "(Alt Free)" : ""}';
 
         final angleSpan = TextSpan(
           text: ' $angleText ',
-          style: TextStyle(
-            color: rubberColor,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: rubberColor, fontSize: 10, fontWeight: FontWeight.bold),
         );
-        final tpAngle = TextPainter(
-          text: angleSpan,
-          textDirection: TextDirection.ltr,
-        )..layout();
+        final tpAngle = TextPainter(text: angleSpan, textDirection: TextDirection.ltr)..layout();
         tpAngle.paint(canvas, Offset(p2.dx + 10, p2.dy - 16));
       }
     }
@@ -1831,19 +1464,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
         // 1. Draw already-placed segments
         for (int i = 0; i < pendingMultiPoints.length - 1; i++) {
           final sA = toScreen(pendingMultiPoints[i].x, pendingMultiPoints[i].y);
-          final sB = toScreen(
-            pendingMultiPoints[i + 1].x,
-            pendingMultiPoints[i + 1].y,
-          );
+          final sB = toScreen(pendingMultiPoints[i + 1].x, pendingMultiPoints[i + 1].y);
           canvas.drawLine(sA, sB, polyStrokePaint);
         }
 
         // 2. Draw placed vertex nodes
         for (int i = 0; i < pendingMultiPoints.length; i++) {
-          final sPt = toScreen(
-            pendingMultiPoints[i].x,
-            pendingMultiPoints[i].y,
-          );
+          final sPt = toScreen(pendingMultiPoints[i].x, pendingMultiPoints[i].y);
           canvas.drawCircle(sPt, 4.5, polyFillNodePaint);
           canvas.drawCircle(sPt, 4.5, polyBorderNodePaint);
           canvas.drawCircle(sPt, 2.0, polyStrokePaint);
@@ -1853,22 +1480,12 @@ class _UnfoldedBoardPainter extends CustomPainter {
         if (rubberBandEndpoint != null) {
           final lastPt = pendingMultiPoints.last;
           final sLast = toScreen(lastPt.x, lastPt.y);
-          final sCursor = toScreen(
-            rubberBandEndpoint!.x,
-            rubberBandEndpoint!.y,
-          );
+          final sCursor = toScreen(rubberBandEndpoint!.x, rubberBandEndpoint!.y);
           final rubberDashPaint = Paint()
             ..color = const Color(0xFF0284C7)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 2.0;
-          _drawDashedLine(
-            canvas,
-            sLast,
-            sCursor,
-            rubberDashPaint,
-            dash: 5.0,
-            gap: 4.0,
-          );
+          _drawDashedLine(canvas, sLast, sCursor, rubberDashPaint, dash: 5.0, gap: 4.0);
 
           final segLen = lastPt.distanceTo(rubberBandEndpoint!);
           final dx = rubberBandEndpoint!.x - lastPt.x;
@@ -1877,18 +1494,12 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
           final isCloseSnap =
               pendingMultiPoints.length >= 2 &&
-              (rubberBandEndpoint!.distanceTo(pendingMultiPoints.first) <
-                      10.0 ||
-                  (activeSnap != null &&
-                      activeSnap!.point.distanceTo(pendingMultiPoints.first) <
-                          1.0));
+              (rubberBandEndpoint!.distanceTo(pendingMultiPoints.first) < 10.0 ||
+                  (activeSnap != null && activeSnap!.point.distanceTo(pendingMultiPoints.first) < 1.0));
 
           if (isCloseSnap) {
             // Draw close loop preview ring and badge
-            final sFirst = toScreen(
-              pendingMultiPoints.first.x,
-              pendingMultiPoints.first.y,
-            );
+            final sFirst = toScreen(pendingMultiPoints.first.x, pendingMultiPoints.first.y);
             final closeRingPaint = Paint()
               ..color = const Color(0xFF10B981)
               ..style = PaintingStyle.stroke
@@ -1897,32 +1508,16 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
             const closeSpan = TextSpan(
               text: ' ⮌ Close Polyline ➔ Cutout Void ',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                backgroundColor: Color(0xFF059669),
-              ),
+              style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, backgroundColor: Color(0xFF059669)),
             );
-            final tpClose = TextPainter(
-              text: closeSpan,
-              textDirection: TextDirection.ltr,
-            )..layout();
+            final tpClose = TextPainter(text: closeSpan, textDirection: TextDirection.ltr)..layout();
             tpClose.paint(canvas, Offset(sCursor.dx + 12, sCursor.dy - 18));
           } else {
             final polySpan = TextSpan(
-              text:
-                  ' Polyline Pt ${pendingMultiPoints.length + 1}: ${segLen.toStringAsFixed(1)} mm | ∠ ${angleDeg.abs()}° ',
-              style: const TextStyle(
-                color: Color(0xFF0284C7),
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
+              text: ' Polyline Pt ${pendingMultiPoints.length + 1}: ${segLen.toStringAsFixed(1)} mm | ∠ ${angleDeg.abs()}° ',
+              style: const TextStyle(color: Color(0xFF0284C7), fontSize: 10, fontWeight: FontWeight.bold),
             );
-            final tpPoly = TextPainter(
-              text: polySpan,
-              textDirection: TextDirection.ltr,
-            )..layout();
+            final tpPoly = TextPainter(text: polySpan, textDirection: TextDirection.ltr)..layout();
             tpPoly.paint(canvas, Offset(sCursor.dx + 12, sCursor.dy - 18));
           }
         }
@@ -1937,10 +1532,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
           ..strokeWidth = 1.0;
 
         for (int i = 0; i < pendingMultiPoints.length; i++) {
-          final sPt = toScreen(
-            pendingMultiPoints[i].x,
-            pendingMultiPoints[i].y,
-          );
+          final sPt = toScreen(pendingMultiPoints[i].x, pendingMultiPoints[i].y);
           canvas.drawCircle(
             sPt,
             4.5,
@@ -1959,21 +1551,12 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
           final chord = p1.distanceTo(rubberBandEndpoint!);
           final arcSpan = TextSpan(
-            text:
-                ' ARC Pt 2 (Through Point) | Chord: ${chord.toStringAsFixed(1)} mm ',
-            style: const TextStyle(
-              color: Color(0xFF0284C7),
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-            ),
+            text: ' ARC Pt 2 (Through Point) | Chord: ${chord.toStringAsFixed(1)} mm ',
+            style: const TextStyle(color: Color(0xFF0284C7), fontSize: 10, fontWeight: FontWeight.bold),
           );
-          final tpArc = TextPainter(
-            text: arcSpan,
-            textDirection: TextDirection.ltr,
-          )..layout();
+          final tpArc = TextPainter(text: arcSpan, textDirection: TextDirection.ltr)..layout();
           tpArc.paint(canvas, Offset(s2.dx + 12, s2.dy - 18));
-        } else if (pendingMultiPoints.length == 2 &&
-            rubberBandEndpoint != null) {
+        } else if (pendingMultiPoints.length == 2 && rubberBandEndpoint != null) {
           final p1 = pendingMultiPoints[0];
           final p2 = pendingMultiPoints[1];
           final p3 = rubberBandEndpoint!;
@@ -1985,12 +1568,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
           _drawDashedLine(canvas, s2, s3, guidePaint, dash: 4.0, gap: 4.0);
 
           try {
-            final previewArc = CadArc2D.from3Points(
-              id: 'preview_arc',
-              p1: p1,
-              p2: p2,
-              p3: p3,
-            );
+            final previewArc = CadArc2D.from3Points(id: 'preview_arc', p1: p1, p2: p2, p3: p3);
             final samples = previewArc.samplePoints(24);
             if (samples.length >= 2) {
               final arcPath = Path();
@@ -2006,16 +1584,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
             final arcSpan = TextSpan(
               text:
                   ' ARC Pt 3 (End) | R: ${previewArc.radius.toStringAsFixed(1)} mm | Sweep: ${(previewArc.sweepAngleRad * 180.0 / math.pi).abs().toStringAsFixed(1)}° ',
-              style: const TextStyle(
-                color: Color(0xFF0284C7),
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(color: Color(0xFF0284C7), fontSize: 10, fontWeight: FontWeight.bold),
             );
-            final tpArc = TextPainter(
-              text: arcSpan,
-              textDirection: TextDirection.ltr,
-            )..layout();
+            final tpArc = TextPainter(text: arcSpan, textDirection: TextDirection.ltr)..layout();
             tpArc.paint(canvas, Offset(s3.dx + 12, s3.dy - 18));
           } catch (_) {
             _drawDashedLine(canvas, s1, s3, guidePaint, dash: 4.0, gap: 4.0);
@@ -2046,14 +1617,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
     if (activeSnap != null) {
       // If snapping to an edge/cut line, highlight the snapped edge
       if (activeSnap!.segmentStart != null && activeSnap!.segmentEnd != null) {
-        final e1 = toScreen(
-          activeSnap!.segmentStart!.x,
-          activeSnap!.segmentStart!.y,
-        );
-        final e2 = toScreen(
-          activeSnap!.segmentEnd!.x,
-          activeSnap!.segmentEnd!.y,
-        );
+        final e1 = toScreen(activeSnap!.segmentStart!.x, activeSnap!.segmentStart!.y);
+        final e2 = toScreen(activeSnap!.segmentEnd!.x, activeSnap!.segmentEnd!.y);
         final edgeGlow = Paint()
           ..color = const Color(0xFF0EA5E9).withValues(alpha: 0.16)
           ..style = PaintingStyle.stroke
@@ -2073,29 +1638,15 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       // Polar / Ortho tracking line from anchor through cursor
       if (activeSnap!.trackingAnchor != null) {
-        final anchorPt = toScreen(
-          activeSnap!.trackingAnchor!.x,
-          activeSnap!.trackingAnchor!.y,
-        );
+        final anchorPt = toScreen(activeSnap!.trackingAnchor!.x, activeSnap!.trackingAnchor!.y);
         final trackingPaint = Paint()
           ..color = const Color(0xFF0284C7).withValues(alpha: 0.55)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 0.85;
-        _drawDashedLine(
-          canvas,
-          anchorPt,
-          snapPt,
-          trackingPaint,
-          dash: 4.0,
-          gap: 3.0,
-        );
+        _drawDashedLine(canvas, anchorPt, snapPt, trackingPaint, dash: 4.0, gap: 3.0);
 
         // Tracking anchor small dot
-        canvas.drawCircle(
-          anchorPt,
-          1.8,
-          Paint()..color = const Color(0xFF0284C7),
-        );
+        canvas.drawCircle(anchorPt, 1.8, Paint()..color = const Color(0xFF0284C7));
       }
 
       // Draw specialized CAD snap glyph
@@ -2120,9 +1671,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     if (isDrawingTool && hoverCursorCad != null) {
       final rawScreen = toScreen(hoverCursorCad!.x, hoverCursorCad!.y);
       final bool hasSnap = !isAltPressed && activeSnap != null;
-      final effectiveScreen = hasSnap
-          ? toScreen(activeSnap!.point.x, activeSnap!.point.y)
-          : rawScreen;
+      final effectiveScreen = hasSnap ? toScreen(activeSnap!.point.x, activeSnap!.point.y) : rawScreen;
 
       if (hasSnap) {
         // Snapped state: draw a dynamic magnetic tether line if cursor is offset
@@ -2131,14 +1680,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
             ..color = const Color(0xFF0EA5E9).withValues(alpha: 0.45)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.0;
-          _drawDashedLine(
-            canvas,
-            rawScreen,
-            effectiveScreen,
-            tetherPaint,
-            dash: 3.0,
-            gap: 2.0,
-          );
+          _drawDashedLine(canvas, rawScreen, effectiveScreen, tetherPaint, dash: 3.0, gap: 2.0);
         }
 
         // Concentric target halo ring
@@ -2171,16 +1713,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
           // "Alt Free" mini tag
           final tagSpan = TextSpan(
             text: ' Alt Free ',
-            style: const TextStyle(
-              color: Color(0xFFF97316),
-              fontSize: 9.0,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(color: Color(0xFFF97316), fontSize: 9.0, fontWeight: FontWeight.bold),
           );
-          final tpTag = TextPainter(
-            text: tagSpan,
-            textDirection: TextDirection.ltr,
-          )..layout();
+          final tpTag = TextPainter(text: tagSpan, textDirection: TextDirection.ltr)..layout();
           tpTag.paint(canvas, Offset(rawScreen.dx + 8, rawScreen.dy - 14));
         } else {
           // Normal hovering dot on mouse pointer
@@ -2214,12 +1749,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         canvas.drawRect(rect, fillPaint);
         canvas.drawRect(rect, borderPaint);
 
-        _drawSelectionTag(
-          canvas,
-          rect.topLeft,
-          'WINDOW (INSIDE)',
-          const Color(0xFF2563EB),
-        );
+        _drawSelectionTag(canvas, rect.topLeft, 'WINDOW (INSIDE)', const Color(0xFF2563EB));
       } else {
         // Crossing Selection (Right-to-Left): Translucent Green with Dashed Border
         final fillPaint = Paint()
@@ -2232,12 +1762,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         canvas.drawRect(rect, fillPaint);
         _drawDashedRect(canvas, rect, borderPaint);
 
-        _drawSelectionTag(
-          canvas,
-          rect.topRight,
-          'CROSSING (TOUCHES)',
-          const Color(0xFF10B981),
-        );
+        _drawSelectionTag(canvas, rect.topRight, 'CROSSING (TOUCHES)', const Color(0xFF10B981));
       }
     }
 
@@ -2264,18 +1789,12 @@ class _UnfoldedBoardPainter extends CustomPainter {
           final pId = entry.key;
           final pData = entry.value;
           final pNum = pId.replaceAll('port', '');
-          final pName = pId == 'port1'
-              ? 'Port 1'
-              : (pId == 'port2' ? 'Port 2' : 'Port $pNum');
+          final pName = pId == 'port1' ? 'Port 1' : (pId == 'port2' ? 'Port 2' : 'Port $pNum');
 
           final wEdge = pData['widthEdge'] as Map?;
           if (wEdge != null && wEdge['p1'] is List && wEdge['p2'] is List) {
-            final p1List = (wEdge['p1'] as List)
-                .map((n) => (n as num).toDouble())
-                .toList();
-            final p2List = (wEdge['p2'] as List)
-                .map((n) => (n as num).toDouble())
-                .toList();
+            final p1List = (wEdge['p1'] as List).map((n) => (n as num).toDouble()).toList();
+            final p2List = (wEdge['p2'] as List).map((n) => (n as num).toDouble()).toList();
             if (p1List.length >= 2 && p2List.length >= 2) {
               if (SheetMetalStudioViewModel.isSameCadEdge(
                 hoveredContourEdgeP1!,
@@ -2293,12 +1812,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
           if (hEdges != null) {
             for (final hEdge in hEdges) {
               if (hEdge is Map && hEdge['p1'] is List && hEdge['p2'] is List) {
-                final p1List = (hEdge['p1'] as List)
-                    .map((n) => (n as num).toDouble())
-                    .toList();
-                final p2List = (hEdge['p2'] as List)
-                    .map((n) => (n as num).toDouble())
-                    .toList();
+                final p1List = (hEdge['p1'] as List).map((n) => (n as num).toDouble()).toList();
+                final p2List = (hEdge['p2'] as List).map((n) => (n as num).toDouble()).toList();
                 if (p1List.length >= 2 && p2List.length >= 2) {
                   if (SheetMetalStudioViewModel.isSameCadEdge(
                     hoveredContourEdgeP1!,
@@ -2322,13 +1837,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       final Color accentColor;
       if (isPickMode) {
-        accentColor = isAssigned
-            ? const Color(0xFFEF4444)
-            : const Color(0xFF0284C7);
+        accentColor = isAssigned ? const Color(0xFFEF4444) : const Color(0xFF0284C7);
       } else {
-        accentColor = isAssigned
-            ? const Color(0xFF0D9488)
-            : const Color(0xFF0284C7);
+        accentColor = isAssigned ? const Color(0xFF0D9488) : const Color(0xFF0284C7);
       }
 
       // 1. Radiant Outer Glow
@@ -2355,36 +1866,22 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       // 4. Floating Callout Dimension Badge
       final hCenter = Offset((hp1.dx + hp2.dx) / 2.0, (hp1.dy + hp2.dy) / 2.0);
-      final lenText =
-          '${hoveredContourEdgeLengthMm?.toStringAsFixed(1) ?? '--'} mm';
+      final lenText = '${hoveredContourEdgeLengthMm?.toStringAsFixed(1) ?? '--'} mm';
 
       final String badgeText;
       if (isPickMode) {
-        badgeText = isAssigned
-            ? ' ⚠️ Already Assigned ($assignedLabel) '
-            : ' 🎯 Click to Assign: $lenText ';
+        badgeText = isAssigned ? ' ⚠️ Already Assigned ($assignedLabel) ' : ' 🎯 Click to Assign: $lenText ';
       } else {
-        badgeText = isAssigned
-            ? ' ✓ $assignedLabel: $lenText '
-            : ' Edge: $lenText ';
+        badgeText = isAssigned ? ' ✓ $assignedLabel: $lenText ' : ' Edge: $lenText ';
       }
 
       final span = TextSpan(
         text: badgeText,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10.0,
-          fontWeight: FontWeight.bold,
-        ),
+        style: const TextStyle(color: Colors.white, fontSize: 10.0, fontWeight: FontWeight.bold),
       );
-      final tp = TextPainter(text: span, textDirection: TextDirection.ltr)
-        ..layout();
+      final tp = TextPainter(text: span, textDirection: TextDirection.ltr)..layout();
       final badgeRect = RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(hCenter.dx, hCenter.dy - 16.0),
-          width: tp.width + 12,
-          height: tp.height + 6,
-        ),
+        Rect.fromCenter(center: Offset(hCenter.dx, hCenter.dy - 16.0), width: tp.width + 12, height: tp.height + 6),
         const Radius.circular(4),
       );
       final shadowPaint = Paint()
@@ -2393,13 +1890,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
       canvas.drawRRect(badgeRect.shift(const Offset(0, 1)), shadowPaint);
       final badgeBgPaint = Paint()..color = accentColor;
       canvas.drawRRect(badgeRect, badgeBgPaint);
-      tp.paint(
-        canvas,
-        Offset(
-          hCenter.dx - tp.width / 2.0,
-          hCenter.dy - 16.0 - tp.height / 2.0,
-        ),
-      );
+      tp.paint(canvas, Offset(hCenter.dx - tp.width / 2.0, hCenter.dy - 16.0 - tp.height / 2.0));
     }
 
     // 11. Live Angle HUD when dragging line endpoints
@@ -2407,27 +1898,15 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final p = toScreen(dragAngleInfo!.point.x, dragAngleInfo!.point.y);
       final angleSpan = TextSpan(
         text: ' ${dragAngleInfo!.label} ',
-        style: const TextStyle(
-          color: Color(0xFF0284C7),
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
+        style: const TextStyle(color: Color(0xFF0284C7), fontSize: 10, fontWeight: FontWeight.bold),
       );
-      final tpAngle = TextPainter(
-        text: angleSpan,
-        textDirection: TextDirection.ltr,
-      )..layout();
+      final tpAngle = TextPainter(text: angleSpan, textDirection: TextDirection.ltr)..layout();
       tpAngle.paint(canvas, Offset(p.dx + 12, p.dy - 18));
     }
 
     // 12. Parametric Reference / Construction Geometry (Centerlines, Offsets, Symmetries)
     if (showConstructionGeometry && referenceGeometries.isNotEmpty) {
-      CanvasReferencePainter.paint(
-        canvas: canvas,
-        size: size,
-        references: referenceGeometries,
-        cadToScreen: (pt) => toScreen(pt.x, pt.y),
-      );
+      CanvasReferencePainter.paint(canvas: canvas, size: size, references: referenceGeometries, cadToScreen: (pt) => toScreen(pt.x, pt.y));
     }
 
     if (showConstraints && constraintDefinitions.isNotEmpty) {
@@ -2463,44 +1942,21 @@ class _UnfoldedBoardPainter extends CustomPainter {
     canvas.drawCircle(pos, 1.2, inner);
   }
 
-  void _drawCutBadge(
-    Canvas canvas,
-    Offset pos,
-    String id,
-    bool isSelected, {
-    double? lengthMm,
-    bool showLabel = true,
-  }) {
+  void _drawCutBadge(Canvas canvas, Offset pos, String id, bool isSelected, {double? lengthMm, bool showLabel = true}) {
     if (!showLabel) return;
-    final label = lengthMm != null
-        ? ' CUT $id ${lengthMm.toStringAsFixed(1)}mm '
-        : ' CUT $id ';
+    final label = lengthMm != null ? ' CUT $id ${lengthMm.toStringAsFixed(1)}mm ' : ' CUT $id ';
     final textSpan = TextSpan(
       text: label,
-      style: TextStyle(
-        color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF0F172A),
-        fontSize: 9,
-        fontWeight: FontWeight.bold,
-      ),
+      style: TextStyle(color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF0F172A), fontSize: 9, fontWeight: FontWeight.bold),
     );
-    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)
-      ..layout();
+    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
     final badgeWidth = tp.width + 6.0;
     final badgeHeight = tp.height + 4.0;
-    final badgeRect = Rect.fromCenter(
-      center: pos,
-      width: badgeWidth,
-      height: badgeHeight,
-    );
-    final rrect = RRect.fromRectAndRadius(
-      badgeRect,
-      const Radius.circular(3.0),
-    );
+    final badgeRect = Rect.fromCenter(center: pos, width: badgeWidth, height: badgeHeight);
+    final rrect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(3.0));
 
     final bgPaint = Paint()
-      ..color = isSelected
-          ? const Color(0xFFEFF6FF)
-          : Colors.white.withValues(alpha: 0.92)
+      ..color = isSelected ? const Color(0xFFEFF6FF) : Colors.white.withValues(alpha: 0.92)
       ..style = PaintingStyle.fill;
     canvas.drawRRect(rrect, bgPaint);
 
@@ -2513,39 +1969,19 @@ class _UnfoldedBoardPainter extends CustomPainter {
     tp.paint(canvas, Offset(pos.dx - tp.width / 2.0, pos.dy - tp.height / 2.0));
   }
 
-  void _drawFaceSizeBadge(
-    Canvas canvas,
-    Offset center,
-    String label,
-    double widthMm,
-    double heightMm,
-    bool isSelected,
-  ) {
+  void _drawFaceSizeBadge(Canvas canvas, Offset center, String label, double widthMm, double heightMm, bool isSelected) {
     final style = canvasSettings.faceLabel;
     final dimStr = formatDimPair(widthMm, heightMm, canvasSettings);
     final text = '$label: $dimStr';
     final span = TextSpan(
       text: text,
-      style: TextStyle(
-        color: isSelected ? const Color(0xFF1E3A8A) : style.color,
-        fontSize: style.fontSize,
-        fontWeight: style.fontWeight,
-        letterSpacing: 0.2,
-      ),
+      style: TextStyle(color: isSelected ? const Color(0xFF1E3A8A) : style.color, fontSize: style.fontSize, fontWeight: style.fontWeight, letterSpacing: 0.2),
     );
-    final tp = TextPainter(text: span, textDirection: TextDirection.ltr)
-      ..layout();
+    final tp = TextPainter(text: span, textDirection: TextDirection.ltr)..layout();
     final badgeWidth = tp.width + 12.0;
     final badgeHeight = tp.height + 6.0;
-    final badgeRect = Rect.fromCenter(
-      center: center,
-      width: badgeWidth,
-      height: badgeHeight,
-    );
-    final rrect = RRect.fromRectAndRadius(
-      badgeRect,
-      const Radius.circular(4.0),
-    );
+    final badgeRect = Rect.fromCenter(center: center, width: badgeWidth, height: badgeHeight);
+    final rrect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(4.0));
 
     // Drop shadow
     canvas.drawRRect(
@@ -2557,17 +1993,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
     // Background
     final bgPaint = Paint()
-      ..color = isSelected
-          ? const Color(0xFFFEF3C7).withValues(alpha: 0.95)
-          : Colors.white.withValues(alpha: 0.90)
+      ..color = isSelected ? const Color(0xFFFEF3C7).withValues(alpha: 0.95) : Colors.white.withValues(alpha: 0.90)
       ..style = PaintingStyle.fill;
     canvas.drawRRect(rrect, bgPaint);
 
     // Border
     final borderPaint = Paint()
-      ..color = isSelected
-          ? const Color(0xFFF59E0B)
-          : const Color(0xFF94A3B8).withValues(alpha: 0.7)
+      ..color = isSelected ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8).withValues(alpha: 0.7)
       ..style = PaintingStyle.stroke
       ..strokeWidth = isSelected ? 1.4 : 0.8;
     canvas.drawRRect(rrect, borderPaint);
@@ -2594,10 +2026,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         final dy = c1.y - c2.y;
         final distC = math.sqrt(dx * dx + dy * dy);
         final diffR = (c1.radius - c2.radius).abs();
-        if (distC < 0.8 &&
-            diffR < 0.8 &&
-            c1.radius >= 1.0 &&
-            c1.radius <= 5000.0) {
+        if (distC < 0.8 && diffR < 0.8 && c1.radius >= 1.0 && c1.radius <= 5000.0) {
           intermediate.add((i + 1) % n);
           intermediate.add((i + 2) % n);
         }
@@ -2606,24 +2035,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
     return intermediate;
   }
 
-  static ({double x, double y, double radius})? _circumcircle(
-    CadPoint2D p1,
-    CadPoint2D p2,
-    CadPoint2D p3,
-  ) {
-    final d =
-        2 *
-        (p1.x * (p2.y - p3.y) + p2.x * (p3.y - p1.y) + p3.x * (p1.y - p2.y));
+  static ({double x, double y, double radius})? _circumcircle(CadPoint2D p1, CadPoint2D p2, CadPoint2D p3) {
+    final d = 2 * (p1.x * (p2.y - p3.y) + p2.x * (p3.y - p1.y) + p3.x * (p1.y - p2.y));
     if (d.abs() < 1e-4) return null;
     final p1Sq = p1.x * p1.x + p1.y * p1.y;
     final p2Sq = p2.x * p2.x + p2.y * p2.y;
     final p3Sq = p3.x * p3.x + p3.y * p3.y;
-    final ux =
-        (p1Sq * (p2.y - p3.y) + p2Sq * (p3.y - p1.y) + p3Sq * (p1.y - p2.y)) /
-        d;
-    final uy =
-        (p1Sq * (p3.x - p2.x) + p2Sq * (p1.x - p3.x) + p3Sq * (p2.x - p1.x)) /
-        d;
+    final ux = (p1Sq * (p2.y - p3.y) + p2Sq * (p3.y - p1.y) + p3Sq * (p1.y - p2.y)) / d;
+    final uy = (p1Sq * (p3.x - p2.x) + p2Sq * (p1.x - p3.x) + p3Sq * (p2.x - p1.x)) / d;
     final rx = ux - p1.x;
     final ry = uy - p1.y;
     final r = math.sqrt(rx * rx + ry * ry);
@@ -2648,29 +2067,16 @@ class _UnfoldedBoardPainter extends CustomPainter {
     for (double x = offsetX - step; x <= size.width + step; x += step) {
       final globalX = x - pan.dx;
       final isMajor = (globalX.round() % majorStep.round()).abs() < 1.0;
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x, size.height),
-        isMajor ? majorGridPaint : gridPaint,
-      );
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), isMajor ? majorGridPaint : gridPaint);
     }
     for (double y = offsetY - step; y <= size.height + step; y += step) {
       final globalY = y - pan.dy;
       final isMajor = (globalY.round() % majorStep.round()).abs() < 1.0;
-      canvas.drawLine(
-        Offset(0, y),
-        Offset(size.width, y),
-        isMajor ? majorGridPaint : gridPaint,
-      );
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), isMajor ? majorGridPaint : gridPaint);
     }
   }
 
-  void _drawSnapGlyph(
-    Canvas canvas,
-    Offset snapPt,
-    SnapType type,
-    String label,
-  ) {
+  void _drawSnapGlyph(Canvas canvas, Offset snapPt, SnapType type, String label) {
     final strokePaint = Paint()
       ..color = const Color(0xFF0284C7)
       ..style = PaintingStyle.stroke
@@ -2700,16 +2106,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
       canvas.drawCircle(snapPt, 1.0, Paint()..color = const Color(0xFF0284C7));
     } else if (type.isIntersection) {
       // 'X' Cross ✖ (Intersection snap - minor 6x6)
-      canvas.drawLine(
-        Offset(snapPt.dx - 3.0, snapPt.dy - 3.0),
-        Offset(snapPt.dx + 3.0, snapPt.dy + 3.0),
-        strokePaint,
-      );
-      canvas.drawLine(
-        Offset(snapPt.dx - 3.0, snapPt.dy + 3.0),
-        Offset(snapPt.dx + 3.0, snapPt.dy - 3.0),
-        strokePaint,
-      );
+      canvas.drawLine(Offset(snapPt.dx - 3.0, snapPt.dy - 3.0), Offset(snapPt.dx + 3.0, snapPt.dy + 3.0), strokePaint);
+      canvas.drawLine(Offset(snapPt.dx - 3.0, snapPt.dy + 3.0), Offset(snapPt.dx + 3.0, snapPt.dy - 3.0), strokePaint);
     } else if (type == SnapType.perpendicular) {
       // Right angle ⟂ (minor)
       final path = Path()
@@ -2724,11 +2122,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     } else if (type == SnapType.tangent) {
       // Circle with tangent bar (minor)
       canvas.drawCircle(Offset(snapPt.dx, snapPt.dy + 1.0), 3.0, strokePaint);
-      canvas.drawLine(
-        Offset(snapPt.dx - 3.5, snapPt.dy - 2.5),
-        Offset(snapPt.dx + 3.5, snapPt.dy - 2.5),
-        strokePaint,
-      );
+      canvas.drawLine(Offset(snapPt.dx - 3.5, snapPt.dy - 2.5), Offset(snapPt.dx + 3.5, snapPt.dy - 2.5), strokePaint);
     } else if (type == SnapType.quadrant) {
       // Diamond 🔷 (minor)
       final path = Path()
@@ -2741,16 +2135,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
       canvas.drawPath(path, strokePaint);
     } else if (type == SnapType.grid) {
       // Grid plus '+' (minor)
-      canvas.drawLine(
-        Offset(snapPt.dx - 3.0, snapPt.dy),
-        Offset(snapPt.dx + 3.0, snapPt.dy),
-        strokePaint,
-      );
-      canvas.drawLine(
-        Offset(snapPt.dx, snapPt.dy - 3.0),
-        Offset(snapPt.dx, snapPt.dy + 3.0),
-        strokePaint,
-      );
+      canvas.drawLine(Offset(snapPt.dx - 3.0, snapPt.dy), Offset(snapPt.dx + 3.0, snapPt.dy), strokePaint);
+      canvas.drawLine(Offset(snapPt.dx, snapPt.dy - 3.0), Offset(snapPt.dx, snapPt.dy + 3.0), strokePaint);
     } else {
       // Nearest / Bowtie ⧗ (minor)
       final path = Path()
@@ -2776,21 +2162,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
     } else if (type == SnapType.perpendicular) {
       symbolPrefix = '⊥ ';
     }
-    final displayLabel =
-        symbolPrefix.isNotEmpty && !label.startsWith(symbolPrefix)
-        ? '$symbolPrefix$label'
-        : label;
+    final displayLabel = symbolPrefix.isNotEmpty && !label.startsWith(symbolPrefix) ? '$symbolPrefix$label' : label;
 
     final textSpan = TextSpan(
       text: displayLabel,
-      style: TextStyle(
-        color: const Color(0xFF0284C7),
-        fontSize: 7.5,
-        fontWeight: FontWeight.w600,
-      ),
+      style: TextStyle(color: const Color(0xFF0284C7), fontSize: 7.5, fontWeight: FontWeight.w600),
     );
-    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)
-      ..layout();
+    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
     tp.paint(canvas, Offset(snapPt.dx + 6, snapPt.dy - 11));
   }
 
@@ -2799,60 +2177,18 @@ class _UnfoldedBoardPainter extends CustomPainter {
       text: ' $label ',
       style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold),
     );
-    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)
-      ..layout();
+    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
     tp.paint(canvas, Offset(pos.dx + 4, pos.dy - 14));
   }
 
-  void _drawDashedRect(
-    Canvas canvas,
-    Rect rect,
-    Paint paint, {
-    double dash = 6.0,
-    double gap = 4.0,
-  }) {
-    _drawDashedLine(
-      canvas,
-      rect.topLeft,
-      rect.topRight,
-      paint,
-      dash: dash,
-      gap: gap,
-    );
-    _drawDashedLine(
-      canvas,
-      rect.topRight,
-      rect.bottomRight,
-      paint,
-      dash: dash,
-      gap: gap,
-    );
-    _drawDashedLine(
-      canvas,
-      rect.bottomRight,
-      rect.bottomLeft,
-      paint,
-      dash: dash,
-      gap: gap,
-    );
-    _drawDashedLine(
-      canvas,
-      rect.bottomLeft,
-      rect.topLeft,
-      paint,
-      dash: dash,
-      gap: gap,
-    );
+  void _drawDashedRect(Canvas canvas, Rect rect, Paint paint, {double dash = 6.0, double gap = 4.0}) {
+    _drawDashedLine(canvas, rect.topLeft, rect.topRight, paint, dash: dash, gap: gap);
+    _drawDashedLine(canvas, rect.topRight, rect.bottomRight, paint, dash: dash, gap: gap);
+    _drawDashedLine(canvas, rect.bottomRight, rect.bottomLeft, paint, dash: dash, gap: gap);
+    _drawDashedLine(canvas, rect.bottomLeft, rect.topLeft, paint, dash: dash, gap: gap);
   }
 
-  void _drawDashedLine(
-    Canvas canvas,
-    Offset p1,
-    Offset p2,
-    Paint paint, {
-    double dash = 6.0,
-    double gap = 4.0,
-  }) {
+  void _drawDashedLine(Canvas canvas, Offset p1, Offset p2, Paint paint, {double dash = 6.0, double gap = 4.0}) {
     final dx = p2.dx - p1.dx;
     final dy = p2.dy - p1.dy;
     final totalLen = math.sqrt(dx * dx + dy * dy);
@@ -2876,25 +2212,15 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final style = canvasSettings.dimTextLabel;
     final textSpan = TextSpan(
       text: text,
-      style: TextStyle(
-        color: style.color,
-        fontSize: style.fontSize,
-        fontWeight: style.fontWeight,
-      ),
+      style: TextStyle(color: style.color, fontSize: style.fontSize, fontWeight: style.fontWeight),
     );
-    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)
-      ..layout();
+    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
     tp.paint(canvas, Offset(pos.dx - tp.width / 2.0, pos.dy - tp.height / 2.0));
   }
 
   // --- Engineering CAD Outside Dimensions & Hole Leaders (Matching SS1) ---
 
-  void _drawOutsideDimensions(
-    Canvas canvas,
-    DsfDocument doc,
-    Offset Function(double x, double y) toScreen,
-    double scale,
-  ) {
+  void _drawOutsideDimensions(Canvas canvas, DsfDocument doc, Offset Function(double x, double y) toScreen, double scale) {
     final allPoints = <CadPoint2D>[];
     final visibleFaces = doc.faces.where((f) => f.isVisible).toList();
     if (doc.outerContour.isNotEmpty) {
@@ -3068,8 +2394,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       // --- RIGHT DIMENSION CHAIN (Hole centers & feature spacing) ---
       // Parametric patterns: dimensions shown for ONLY 1 SET (first pitch interval) + margins
-      final punchesWithUniqueY =
-          doc.allPunches.map((p) => p.center.y).toSet().toList()..sort();
+      final punchesWithUniqueY = doc.allPunches.map((p) => p.center.y).toSet().toList()..sort();
       if (punchesWithUniqueY.isNotEmpty) {
         final rScreenX = toScreen(maxX, 0).dx + dimChain1;
 
@@ -3152,24 +2477,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
     _drawGeometricConstraints(canvas, doc, toScreen, scale);
   }
 
-  void _drawAssociativeDimensions(
-    Canvas canvas,
-    DsfDocument doc,
-    Offset Function(double x, double y) toScreen,
-    double scale,
-  ) {
+  void _drawAssociativeDimensions(Canvas canvas, DsfDocument doc, Offset Function(double x, double y) toScreen, double scale) {
     if (doc.dimensions.isEmpty) return;
     if (!canvasSettings.dimTextLabel.visible) return;
 
     for (final dim in doc.dimensions) {
       if (!dim.isVisible) continue;
 
-      final layout = AssociativeDimensionEngine.resolveLayout(
-        dim,
-        doc,
-        scale: scale,
-        settings: canvasSettings,
-      );
+      final layout = AssociativeDimensionEngine.resolveLayout(dim, doc, scale: scale, settings: canvasSettings);
       final pA = toScreen(layout.dimLineStart.dx, layout.dimLineStart.dy);
       final pB = toScreen(layout.dimLineEnd.dx, layout.dimLineEnd.dy);
       final wA1 = toScreen(layout.witnessAStart.dx, layout.witnessAStart.dy);
@@ -3180,21 +2495,12 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
       final assoc = AssociativeDimensionEngine.resolveAssociation(dim, doc);
       if (renderedDimensionLines != null) {
-        renderedDimensionLines![dim.id] = (
-          pA: pA,
-          pB: pB,
-          offsetDist: dim.dimensionLineOffset,
-          ptA: assoc.pA,
-          ptB: assoc.pB,
-          type: dim.type,
-        );
+        renderedDimensionLines![dim.id] = (pA: pA, pB: pB, offsetDist: dim.dimensionLineOffset, ptA: assoc.pA, ptB: assoc.pB, type: dim.type);
       }
 
       final isLineHovered = hoveredDimLineId == dim.id;
 
-      final dimColor = dim.isDriven
-          ? const Color(0xFF0284C7)
-          : const Color(0xFF2563EB);
+      final dimColor = dim.isDriven ? const Color(0xFF0284C7) : const Color(0xFF2563EB);
 
       final witnessPaint = Paint()
         ..color = const Color(0xFF64748B)
@@ -3243,9 +2549,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
       canvas.drawCircle(pB, 1.2, endDotCore);
 
       // User offset if moved
-      final userOffset = (dimensionOffsets.containsKey(dim.id))
-          ? dimensionOffsets[dim.id]!
-          : Offset.zero;
+      final userOffset = (dimensionOffsets.containsKey(dim.id)) ? dimensionOffsets[dim.id]! : Offset.zero;
       final effectiveCenter = textPos + userOffset;
 
       if (userOffset.distance > 4.0) {
@@ -3278,12 +2582,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     }
   }
 
-  void _drawGeometricConstraints(
-    Canvas canvas,
-    DsfDocument doc,
-    Offset Function(double x, double y) toScreen,
-    double scale,
-  ) {
+  void _drawGeometricConstraints(Canvas canvas, DsfDocument doc, Offset Function(double x, double y) toScreen, double scale) {
     if (doc.constraints.isEmpty) return;
 
     for (final c in doc.constraints) {
@@ -3320,10 +2619,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         ..style = PaintingStyle.stroke;
 
       final badgeCenter = anchorPos + const Offset(12, -12);
-      final rrect = RRect.fromRectAndRadius(
-        Rect.fromCenter(center: badgeCenter, width: 18, height: 16),
-        const Radius.circular(3),
-      );
+      final rrect = RRect.fromRectAndRadius(Rect.fromCenter(center: badgeCenter, width: 18, height: 16), const Radius.circular(3));
 
       canvas.drawRRect(rrect, badgePaint);
       canvas.drawRRect(rrect, borderPaint);
@@ -3331,19 +2627,12 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final textPainter = TextPainter(
         text: TextSpan(
           text: c.symbol,
-          style: TextStyle(
-            color: isSelected ? Colors.white : const Color(0xFF0F172A),
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: isSelected ? Colors.white : const Color(0xFF0F172A), fontSize: 10, fontWeight: FontWeight.bold),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
 
-      textPainter.paint(
-        canvas,
-        badgeCenter - Offset(textPainter.width / 2, textPainter.height / 2),
-      );
+      textPainter.paint(canvas, badgeCenter - Offset(textPainter.width / 2, textPainter.height / 2));
     }
   }
 
@@ -3359,20 +2648,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
     CadPoint2D? ptB,
     double? scale,
   }) {
-    final sign = isVertical
-        ? ((dimScreenCoord >= p1Screen.dx) ? 1.0 : -1.0)
-        : ((dimScreenCoord >= p1Screen.dy) ? 1.0 : -1.0);
+    final sign = isVertical ? ((dimScreenCoord >= p1Screen.dx) ? 1.0 : -1.0) : ((dimScreenCoord >= p1Screen.dy) ? 1.0 : -1.0);
 
     final geomCoord = isVertical ? p1Screen.dx : p1Screen.dy;
     final initialOffsetMm = (dimScreenCoord - geomCoord).abs() / (scale ?? 1.0);
-    final userLineOffsetMm =
-        (dimId != null && dimensionLineOffsets.containsKey(dimId))
-        ? dimensionLineOffsets[dimId]!
-        : initialOffsetMm;
+    final userLineOffsetMm = (dimId != null && dimensionLineOffsets.containsKey(dimId)) ? dimensionLineOffsets[dimId]! : initialOffsetMm;
 
-    final effectiveDimCoord = (scale != null)
-        ? geomCoord + sign * (userLineOffsetMm * scale)
-        : dimScreenCoord;
+    final effectiveDimCoord = (scale != null) ? geomCoord + sign * (userLineOffsetMm * scale) : dimScreenCoord;
 
     final Offset pA;
     final Offset pB;
@@ -3389,19 +2671,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
         pA: pA,
         pB: pB,
         offsetDist: userLineOffsetMm,
-        ptA:
-            ptA ??
-            (isVertical
-                ? CadPoint2D(p1Screen.dx, p1Screen.dy)
-                : CadPoint2D(p1Screen.dx, p1Screen.dy)),
-        ptB:
-            ptB ??
-            (isVertical
-                ? CadPoint2D(p2Screen.dx, p2Screen.dy)
-                : CadPoint2D(p2Screen.dx, p2Screen.dy)),
-        type: isVertical
-            ? CadDimensionType.vertical
-            : CadDimensionType.horizontal,
+        ptA: ptA ?? (isVertical ? CadPoint2D(p1Screen.dx, p1Screen.dy) : CadPoint2D(p1Screen.dx, p1Screen.dy)),
+        ptB: ptB ?? (isVertical ? CadPoint2D(p2Screen.dx, p2Screen.dy) : CadPoint2D(p2Screen.dx, p2Screen.dy)),
+        type: isVertical ? CadDimensionType.vertical : CadDimensionType.horizontal,
       );
     }
 
@@ -3434,23 +2706,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final style = canvasSettings.outsideDimLabel;
     final textSpanVal = TextSpan(
       text: valueText,
-      style: TextStyle(
-        color: style.color,
-        fontSize: style.fontSize,
-        fontWeight: style.fontWeight,
-        fontFamily: 'monospace',
-      ),
+      style: TextStyle(color: style.color, fontSize: style.fontSize, fontWeight: style.fontWeight, fontFamily: 'monospace'),
     );
-    final tpVal = TextPainter(
-      text: textSpanVal,
-      textDirection: TextDirection.ltr,
-    )..layout();
+    final tpVal = TextPainter(text: textSpanVal, textDirection: TextDirection.ltr)..layout();
     final halfTextW = tpVal.width / 2.0 + 3.0;
     final halfTextH = tpVal.height / 2.0 + 2.0;
 
-    final userOffset = (dimId != null && dimensionOffsets.containsKey(dimId))
-        ? dimensionOffsets[dimId]!
-        : Offset.zero;
+    final userOffset = (dimId != null && dimensionOffsets.containsKey(dimId)) ? dimensionOffsets[dimId]! : Offset.zero;
 
     if (!isVertical) {
       // Horizontal dimension line at Y = effectiveDimCoord
@@ -3458,16 +2720,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final endY = effectiveDimCoord + sign * extPast;
 
       // Witness lines
-      canvas.drawLine(
-        Offset(p1Screen.dx, startY),
-        Offset(p1Screen.dx, endY),
-        witnessPaint,
-      );
-      canvas.drawLine(
-        Offset(p2Screen.dx, startY),
-        Offset(p2Screen.dx, endY),
-        witnessPaint,
-      );
+      canvas.drawLine(Offset(p1Screen.dx, startY), Offset(p1Screen.dx, endY), witnessPaint);
+      canvas.drawLine(Offset(p2Screen.dx, startY), Offset(p2Screen.dx, endY), witnessPaint);
 
       // Witness origin dots
       final originDotPaint = Paint()
@@ -3480,20 +2734,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
       defaultMid = Offset(midX, effectiveDimCoord);
 
       // Break dimension line with gap for centered text if not manually offset
-      if (userOffset.distance <= 4.0 &&
-          (p2Screen.dx - p1Screen.dx).abs() > halfTextW * 2.5) {
+      if (userOffset.distance <= 4.0 && (p2Screen.dx - p1Screen.dx).abs() > halfTextW * 2.5) {
         final leftX = math.min(p1Screen.dx, p2Screen.dx);
         final rightX = math.max(p1Screen.dx, p2Screen.dx);
-        canvas.drawLine(
-          Offset(leftX, effectiveDimCoord),
-          Offset(midX - halfTextW, effectiveDimCoord),
-          dimLinePaint,
-        );
-        canvas.drawLine(
-          Offset(midX + halfTextW, effectiveDimCoord),
-          Offset(rightX, effectiveDimCoord),
-          dimLinePaint,
-        );
+        canvas.drawLine(Offset(leftX, effectiveDimCoord), Offset(midX - halfTextW, effectiveDimCoord), dimLinePaint);
+        canvas.drawLine(Offset(midX + halfTextW, effectiveDimCoord), Offset(rightX, effectiveDimCoord), dimLinePaint);
       } else {
         canvas.drawLine(pA, pB, dimLinePaint);
       }
@@ -3507,16 +2752,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final endX = effectiveDimCoord + sign * extPast;
 
       // Witness lines
-      canvas.drawLine(
-        Offset(startX, p1Screen.dy),
-        Offset(endX, p1Screen.dy),
-        witnessPaint,
-      );
-      canvas.drawLine(
-        Offset(startX, p2Screen.dy),
-        Offset(endX, p2Screen.dy),
-        witnessPaint,
-      );
+      canvas.drawLine(Offset(startX, p1Screen.dy), Offset(endX, p1Screen.dy), witnessPaint);
+      canvas.drawLine(Offset(startX, p2Screen.dy), Offset(endX, p2Screen.dy), witnessPaint);
 
       // Witness origin dots
       final originDotPaint = Paint()
@@ -3529,38 +2766,23 @@ class _UnfoldedBoardPainter extends CustomPainter {
       defaultMid = Offset(effectiveDimCoord, midY);
 
       // Break dimension line with gap for centered text if not manually offset
-      if (userOffset.distance <= 4.0 &&
-          (p2Screen.dy - p1Screen.dy).abs() > halfTextH * 2.5) {
+      if (userOffset.distance <= 4.0 && (p2Screen.dy - p1Screen.dy).abs() > halfTextH * 2.5) {
         final topY = math.min(p1Screen.dy, p2Screen.dy);
         final botY = math.max(p1Screen.dy, p2Screen.dy);
-        canvas.drawLine(
-          Offset(effectiveDimCoord, topY),
-          Offset(effectiveDimCoord, midY - halfTextH),
-          dimLinePaint,
-        );
-        canvas.drawLine(
-          Offset(effectiveDimCoord, midY + halfTextH),
-          Offset(effectiveDimCoord, botY),
-          dimLinePaint,
-        );
+        canvas.drawLine(Offset(effectiveDimCoord, topY), Offset(effectiveDimCoord, midY - halfTextH), dimLinePaint);
+        canvas.drawLine(Offset(effectiveDimCoord, midY + halfTextH), Offset(effectiveDimCoord, botY), dimLinePaint);
       } else {
         canvas.drawLine(pA, pB, dimLinePaint);
       }
 
       // Arrowheads pointing towards witness lines
       _drawArrow(canvas, Offset(effectiveDimCoord, p1Screen.dy), math.pi / 2.0);
-      _drawArrow(
-        canvas,
-        Offset(effectiveDimCoord, p2Screen.dy),
-        -math.pi / 2.0,
-      );
+      _drawArrow(canvas, Offset(effectiveDimCoord, p2Screen.dy), -math.pi / 2.0);
     }
 
     // End dots on the dimension line endpoints pA and pB
     final endDotPaint = Paint()
-      ..color = isLineHovered
-          ? const Color(0xFF0284C7)
-          : const Color(0xFF475569)
+      ..color = isLineHovered ? const Color(0xFF0284C7) : const Color(0xFF475569)
       ..style = PaintingStyle.fill;
     final endDotCore = Paint()..color = Colors.white;
     canvas.drawCircle(pA, 2.6, endDotPaint);
@@ -3585,9 +2807,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     }
 
     if (dimId != null) {
-      final parsedVal = double.tryParse(
-        valueText.replaceAll(RegExp(r'[^0-9.]'), ''),
-      );
+      final parsedVal = double.tryParse(valueText.replaceAll(RegExp(r'[^0-9.]'), ''));
       if (parsedVal != null) {
         renderedDimensionValues?[dimId] = parsedVal;
       }
@@ -3620,34 +2840,18 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final path = Path();
     path.moveTo(tip.dx, tip.dy);
     path.lineTo(
-      tip.dx -
-          arrowLength * math.cos(angleRad) -
-          arrowHalfWidth * math.sin(angleRad),
-      tip.dy -
-          arrowLength * math.sin(angleRad) +
-          arrowHalfWidth * math.cos(angleRad),
+      tip.dx - arrowLength * math.cos(angleRad) - arrowHalfWidth * math.sin(angleRad),
+      tip.dy - arrowLength * math.sin(angleRad) + arrowHalfWidth * math.cos(angleRad),
     );
     path.lineTo(
-      tip.dx -
-          arrowLength * math.cos(angleRad) +
-          arrowHalfWidth * math.sin(angleRad),
-      tip.dy -
-          arrowLength * math.sin(angleRad) -
-          arrowHalfWidth * math.cos(angleRad),
+      tip.dx - arrowLength * math.cos(angleRad) + arrowHalfWidth * math.sin(angleRad),
+      tip.dy - arrowLength * math.sin(angleRad) - arrowHalfWidth * math.cos(angleRad),
     );
     path.close();
     canvas.drawPath(path, arrowPaint);
   }
 
-  Rect _drawDimBadge(
-    Canvas canvas,
-    Offset center,
-    String text, {
-    bool isEditing = false,
-    bool isSelected = false,
-    bool isHovered = false,
-    LabelStyle? style,
-  }) {
+  Rect _drawDimBadge(Canvas canvas, Offset center, String text, {bool isEditing = false, bool isSelected = false, bool isHovered = false, LabelStyle? style}) {
     final effectiveStyle = style ?? canvasSettings.dimTextLabel;
     final hasDeleteIcon = isSelected || isHovered;
     final fullText = hasDeleteIcon ? '$text  ✕' : text;
@@ -3655,24 +2859,15 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final span = TextSpan(
       text: fullText,
       style: TextStyle(
-        color: (isSelected || isHovered)
-            ? const Color(0xFF0284C7)
-            : effectiveStyle.color,
+        color: (isSelected || isHovered) ? const Color(0xFF0284C7) : effectiveStyle.color,
         fontSize: effectiveStyle.fontSize,
-        fontWeight: (isSelected || isHovered)
-            ? FontWeight.bold
-            : effectiveStyle.fontWeight,
+        fontWeight: (isSelected || isHovered) ? FontWeight.bold : effectiveStyle.fontWeight,
         fontFamily: 'monospace',
       ),
     );
-    final tp = TextPainter(text: span, textDirection: TextDirection.ltr)
-      ..layout();
+    final tp = TextPainter(text: span, textDirection: TextDirection.ltr)..layout();
 
-    final bgRect = Rect.fromCenter(
-      center: center,
-      width: tp.width + (hasDeleteIcon ? 8.0 : 4.0),
-      height: tp.height + 3.0,
-    );
+    final bgRect = Rect.fromCenter(center: center, width: tp.width + (hasDeleteIcon ? 8.0 : 4.0), height: tp.height + 3.0);
 
     final rrect = RRect.fromRectAndRadius(bgRect, const Radius.circular(3.5));
 
@@ -3692,35 +2887,22 @@ class _UnfoldedBoardPainter extends CustomPainter {
       canvas.drawRRect(
         rrect,
         Paint()
-          ..color = isSelected
-              ? const Color(0xFF0284C7)
-              : const Color(0xFF06B6D4)
+          ..color = isSelected ? const Color(0xFF0284C7) : const Color(0xFF06B6D4)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.0,
       );
     } else {
       // Subtle backing to avoid geometry line collision
-      canvas.drawRRect(
-        rrect,
-        Paint()..color = const Color(0xFFF8FAFC).withValues(alpha: 0.85),
-      );
+      canvas.drawRRect(rrect, Paint()..color = const Color(0xFFF8FAFC).withValues(alpha: 0.85));
     }
 
     if (!isEditing) {
-      tp.paint(
-        canvas,
-        Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0),
-      );
+      tp.paint(canvas, Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0));
     }
     return bgRect;
   }
 
-  void _drawHoleCrosshairs(
-    Canvas canvas,
-    DsfDocument doc,
-    Offset Function(double x, double y) toScreen,
-    double scale,
-  ) {
+  void _drawHoleCrosshairs(Canvas canvas, DsfDocument doc, Offset Function(double x, double y) toScreen, double scale) {
     final crossPaint = Paint()
       ..color = const Color(0xFF94A3B8)
       ..style = PaintingStyle.stroke
@@ -3733,46 +2915,23 @@ class _UnfoldedBoardPainter extends CustomPainter {
         final armLen = rScreen + 4.0;
 
         // Horizontal crosshair arm
-        canvas.drawLine(
-          Offset(sc.dx - armLen, sc.dy),
-          Offset(sc.dx + armLen, sc.dy),
-          crossPaint,
-        );
+        canvas.drawLine(Offset(sc.dx - armLen, sc.dy), Offset(sc.dx + armLen, sc.dy), crossPaint);
         // Vertical crosshair arm
-        canvas.drawLine(
-          Offset(sc.dx, sc.dy - armLen),
-          Offset(sc.dx, sc.dy + armLen),
-          crossPaint,
-        );
+        canvas.drawLine(Offset(sc.dx, sc.dy - armLen), Offset(sc.dx, sc.dy + armLen), crossPaint);
       } else if (punch.type == PunchType.ellipse) {
         final sc = toScreen(punch.center.x, punch.center.y);
         final maxR = math.max(punch.lengthMm, punch.widthMm) / 2.0;
         final armLen = maxR * scale + 4.0;
 
-        canvas.drawLine(
-          Offset(sc.dx - armLen, sc.dy),
-          Offset(sc.dx + armLen, sc.dy),
-          crossPaint,
-        );
-        canvas.drawLine(
-          Offset(sc.dx, sc.dy - armLen),
-          Offset(sc.dx, sc.dy + armLen),
-          crossPaint,
-        );
+        canvas.drawLine(Offset(sc.dx - armLen, sc.dy), Offset(sc.dx + armLen, sc.dy), crossPaint);
+        canvas.drawLine(Offset(sc.dx, sc.dy - armLen), Offset(sc.dx, sc.dy + armLen), crossPaint);
       }
     }
   }
 
-  void _drawHoleLeaderCallouts(
-    Canvas canvas,
-    DsfDocument doc,
-    Offset Function(double x, double y) toScreen,
-    double scale,
-  ) {
+  void _drawHoleLeaderCallouts(Canvas canvas, DsfDocument doc, Offset Function(double x, double y) toScreen, double scale) {
     if (!canvasSettings.dimTextLabel.visible) return;
-    final roundPunches = doc.allPunches
-        .where((p) => p.type == PunchType.roundHole && p.diameterMm > 0)
-        .toList();
+    final roundPunches = doc.allPunches.where((p) => p.type == PunchType.roundHole && p.diameterMm > 0).toList();
     if (roundPunches.isEmpty) return;
 
     // Group by rounded diameter
@@ -3793,14 +2952,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final diam = list.first.diameterMm;
       final count = list.length;
       final dStr = formatMeasure(diam, canvasSettings);
-      final label = (count > 1)
-          ? '$count × Ø$dStr'
-          : 'Ø$dStr';
+      final label = (count > 1) ? '$count × Ø$dStr' : 'Ø$dStr';
 
       // Pick top-right-most punch in this group
-      list.sort(
-        (a, b) => (b.center.x + b.center.y).compareTo(a.center.x + a.center.y),
-      );
+      list.sort((a, b) => (b.center.x + b.center.y).compareTo(a.center.x + a.center.y));
       final repPunch = list.first;
       final sc = toScreen(repPunch.center.x, repPunch.center.y);
       final rScreen = (diam / 2.0) * scale;
@@ -3817,11 +2972,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
       // Draw angled leader line
       canvas.drawLine(Offset(rimX, rimY), Offset(elbowX, elbowY), leaderPaint);
       // Draw horizontal shoulder
-      canvas.drawLine(
-        Offset(elbowX, elbowY),
-        Offset(shoulderEndX, elbowY),
-        leaderPaint,
-      );
+      canvas.drawLine(Offset(elbowX, elbowY), Offset(shoulderEndX, elbowY), leaderPaint);
 
       // Arrow pointing at hole rim
       _drawArrow(canvas, Offset(rimX, rimY), leaderAngle + math.pi);
@@ -3830,26 +2981,16 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final style = canvasSettings.dimTextLabel;
       final span = TextSpan(
         text: ' $label ',
-        style: TextStyle(
-          color: style.color,
-          fontSize: style.fontSize,
-          fontWeight: style.fontWeight,
-        ),
+        style: TextStyle(color: style.color, fontSize: style.fontSize, fontWeight: style.fontWeight),
       );
-      final tp = TextPainter(text: span, textDirection: TextDirection.ltr)
-        ..layout();
+      final tp = TextPainter(text: span, textDirection: TextDirection.ltr)..layout();
       tp.paint(canvas, Offset(shoulderEndX + 2, elbowY - tp.height / 2.0));
 
       calloutIdx++;
     }
   }
 
-  void _drawPortOpeningBadges(
-    Canvas canvas,
-    DsfDocument doc,
-    Offset Function(double x, double y) toScreen,
-    double scale,
-  ) {
+  void _drawPortOpeningBadges(Canvas canvas, DsfDocument doc, Offset Function(double x, double y) toScreen, double scale) {
     final meta = fittingMetadata;
     if (meta == null) return;
 
@@ -3894,15 +3035,10 @@ class _UnfoldedBoardPainter extends CustomPainter {
       canvas.drawLine(sp1, sp2, glowPaint);
 
       // 2. Outward normal vector in screen coordinates
-      final sNormPt = toScreen(
-        port.center.x + port.normal.x,
-        port.center.y + port.normal.y,
-      );
+      final sNormPt = toScreen(port.center.x + port.normal.x, port.center.y + port.normal.y);
       final rawDir = sNormPt - sCenter;
       final dirLen = rawDir.distance;
-      final Offset normalDir = dirLen > 1e-4
-          ? Offset(rawDir.dx / dirLen, rawDir.dy / dirLen)
-          : const Offset(0, -1);
+      final Offset normalDir = dirLen > 1e-4 ? Offset(rawDir.dx / dirLen, rawDir.dy / dirLen) : const Offset(0, -1);
 
       // Leader offset length: 30 pixels out from opening edge
       const leaderLen = 30.0;
@@ -3920,40 +3056,22 @@ class _UnfoldedBoardPainter extends CustomPainter {
         children: [
           TextSpan(
             text: '$labelText  ',
-            style: TextStyle(
-              color: portColor.withValues(alpha: 0.95),
-              fontSize: 9.0,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.3,
-            ),
+            style: TextStyle(color: portColor.withValues(alpha: 0.95), fontSize: 9.0, fontWeight: FontWeight.w600, letterSpacing: 0.3),
           ),
           const TextSpan(
             text: '[Edit ✎]',
-            style: TextStyle(
-              color: Color(0xFF38BDF8),
-              fontSize: 8.5,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: Color(0xFF38BDF8), fontSize: 8.5, fontWeight: FontWeight.bold),
           ),
         ],
       );
-      final tpTitle = TextPainter(
-        text: titleSpan,
-        textDirection: TextDirection.ltr,
-      )..layout();
+      final tpTitle = TextPainter(text: titleSpan, textDirection: TextDirection.ltr)..layout();
 
       final portStyle = canvasSettings.portBadgeLabel;
       final dimSpan = TextSpan(
         text: dimText,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.95),
-          fontSize: portStyle.fontSize,
-          fontWeight: portStyle.fontWeight,
-          letterSpacing: 0.2,
-        ),
+        style: TextStyle(color: Colors.white.withValues(alpha: 0.95), fontSize: portStyle.fontSize, fontWeight: portStyle.fontWeight, letterSpacing: 0.2),
       );
-      final tpDim = TextPainter(text: dimSpan, textDirection: TextDirection.ltr)
-        ..layout();
+      final tpDim = TextPainter(text: dimSpan, textDirection: TextDirection.ltr)..layout();
 
       final badgeW = math.max(tpTitle.width, tpDim.width) + 20.0;
       const badgeH = 38.0;
@@ -3962,11 +3080,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final customOffset = portBadgeOffsets?[port.id] ?? Offset.zero;
       final defaultCenter = badgeAnchor + normalDir * (badgeH / 2.0 + 2.0);
       final badgeCenter = defaultCenter + customOffset;
-      final badgeRect = Rect.fromCenter(
-        center: badgeCenter,
-        width: badgeW,
-        height: badgeH,
-      );
+      final badgeRect = Rect.fromCenter(center: badgeCenter, width: badgeW, height: badgeH);
 
       // Register rendered badge rect for draggable interactions
       renderedPortBadges?[port.id] = badgeRect;
@@ -3979,10 +3093,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         canvas.drawLine(sCenter, badgeAnchor, leaderPaint);
       }
 
-      final rrect = RRect.fromRectAndRadius(
-        badgeRect,
-        const Radius.circular(6),
-      );
+      final rrect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(6));
 
       // Badge drop shadow
       canvas.drawRRect(
@@ -3993,10 +3104,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
       );
 
       // Translucent dark slate background (frosted pill, not loud)
-      canvas.drawRRect(
-        rrect,
-        Paint()..color = const Color(0xFF0F172A).withValues(alpha: 0.62),
-      );
+      canvas.drawRRect(rrect, Paint()..color = const Color(0xFF0F172A).withValues(alpha: 0.62));
 
       // Softer colored accent border
       canvas.drawRRect(
@@ -4015,27 +3123,18 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final manual = meta.manualPortEdges?[port.id];
       final heightEdges = manual?['heightEdges'] as List?;
       if (heightEdges != null && heightEdges.isNotEmpty) {
-        final hValStr = (port.heightMm % 1 == 0)
-            ? port.heightMm.toInt().toString()
-            : port.heightMm.toStringAsFixed(1);
+        final hValStr = (port.heightMm % 1 == 0) ? port.heightMm.toInt().toString() : port.heightMm.toStringAsFixed(1);
         final hDimText = 'H: $hValStr mm';
 
         for (int hIdx = 0; hIdx < heightEdges.length; hIdx++) {
           final hMap = heightEdges[hIdx];
           if (hMap is Map && hMap['p1'] is List && hMap['p2'] is List) {
-            final hp1List = (hMap['p1'] as List)
-                .map((n) => (n as num).toDouble())
-                .toList();
-            final hp2List = (hMap['p2'] as List)
-                .map((n) => (n as num).toDouble())
-                .toList();
+            final hp1List = (hMap['p1'] as List).map((n) => (n as num).toDouble()).toList();
+            final hp2List = (hMap['p2'] as List).map((n) => (n as num).toDouble()).toList();
             if (hp1List.length >= 2 && hp2List.length >= 2) {
               final shp1 = toScreen(hp1List[0], hp1List[1]);
               final shp2 = toScreen(hp2List[0], hp2List[1]);
-              final shCenter = Offset(
-                (shp1.dx + shp2.dx) / 2.0,
-                (shp1.dy + shp2.dy) / 2.0,
-              );
+              final shCenter = Offset((shp1.dx + shp2.dx) / 2.0, (shp1.dy + shp2.dy) / 2.0);
 
               // Unique ID for dragging this specific H badge
               final hBadgeId = '${port.id}_h_$hIdx';
@@ -4052,53 +3151,28 @@ class _UnfoldedBoardPainter extends CustomPainter {
                 children: [
                   TextSpan(
                     text: '${port.label} [Flange]  ',
-                    style: TextStyle(
-                      color: portColor.withValues(alpha: 0.95),
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(color: portColor.withValues(alpha: 0.95), fontSize: 8.5, fontWeight: FontWeight.w600),
                   ),
                   const TextSpan(
                     text: '[Edit ✎]',
-                    style: TextStyle(
-                      color: Color(0xFF38BDF8),
-                      fontSize: 8.0,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: Color(0xFF38BDF8), fontSize: 8.0, fontWeight: FontWeight.bold),
                   ),
                 ],
               );
-              final tpHTitle = TextPainter(
-                text: hTitleSpan,
-                textDirection: TextDirection.ltr,
-              )..layout();
+              final tpHTitle = TextPainter(text: hTitleSpan, textDirection: TextDirection.ltr)..layout();
 
               final hDimSpan = TextSpan(
                 text: hDimText,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.95),
-                  fontSize: 11.0,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.95), fontSize: 11.0, fontWeight: FontWeight.bold),
               );
-              final tpHdim = TextPainter(
-                text: hDimSpan,
-                textDirection: TextDirection.ltr,
-              )..layout();
+              final tpHdim = TextPainter(text: hDimSpan, textDirection: TextDirection.ltr)..layout();
 
               final hBadgeW = math.max(tpHTitle.width, tpHdim.width) + 16.0;
               const hBadgeH = 32.0;
               final defaultHCenter = shCenter + const Offset(0, -26.0);
               final hBadgeCenter = defaultHCenter + hCustomOffset;
-              final hBadgeRect = Rect.fromCenter(
-                center: hBadgeCenter,
-                width: hBadgeW,
-                height: hBadgeH,
-              );
-              final hRRect = RRect.fromRectAndRadius(
-                hBadgeRect,
-                const Radius.circular(5),
-              );
+              final hBadgeRect = Rect.fromCenter(center: hBadgeCenter, width: hBadgeW, height: hBadgeH);
+              final hRRect = RRect.fromRectAndRadius(hBadgeRect, const Radius.circular(5));
 
               // Register badge rect for hit-testing and dragging
               renderedPortBadges?[hBadgeId] = hBadgeRect;
@@ -4115,11 +3189,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
                   ..color = Colors.black.withValues(alpha: 0.15)
                   ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
               );
-              canvas.drawRRect(
-                hRRect,
-                Paint()
-                  ..color = const Color(0xFF0F172A).withValues(alpha: 0.62),
-              );
+              canvas.drawRRect(hRRect, Paint()..color = const Color(0xFF0F172A).withValues(alpha: 0.62));
               canvas.drawRRect(
                 hRRect,
                 Paint()
@@ -4128,14 +3198,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
                   ..strokeWidth = 1.0,
               );
 
-              tpHTitle.paint(
-                canvas,
-                Offset(hBadgeRect.left + 8.0, hBadgeRect.top + 3.0),
-              );
-              tpHdim.paint(
-                canvas,
-                Offset(hBadgeRect.left + 8.0, hBadgeRect.top + 15.0),
-              );
+              tpHTitle.paint(canvas, Offset(hBadgeRect.left + 8.0, hBadgeRect.top + 3.0));
+              tpHdim.paint(canvas, Offset(hBadgeRect.left + 8.0, hBadgeRect.top + 15.0));
             }
           }
         }
@@ -4143,12 +3207,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     }
   }
 
-  void _drawArcBadge(
-    Canvas canvas,
-    Offset screenPos,
-    CadArc2D arc,
-    bool isSelected,
-  ) {
+  void _drawArcBadge(Canvas canvas, Offset screenPos, CadArc2D arc, bool isSelected) {
     if (!arc.showLabel) return;
     if (!canvasSettings.arcLabel.visible) return;
     final arcStyle = canvasSettings.arcLabel;
@@ -4157,52 +3216,27 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final label = 'Arc: R=$rStr • L=$lStr';
     final textSpan = TextSpan(
       text: label,
-      style: TextStyle(
-        color: isSelected ? Colors.white : arcStyle.color,
-        fontSize: arcStyle.fontSize,
-        fontWeight: arcStyle.fontWeight,
-        letterSpacing: 0.2,
-      ),
+      style: TextStyle(color: isSelected ? Colors.white : arcStyle.color, fontSize: arcStyle.fontSize, fontWeight: arcStyle.fontWeight, letterSpacing: 0.2),
     );
-    final textPainter = TextPainter(
-      text: textSpan,
-      textDirection: TextDirection.ltr,
-    )..layout();
+    final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
 
-    final badgeRect = Rect.fromCenter(
-      center: screenPos + const Offset(0, -18),
-      width: textPainter.width + 12.0,
-      height: textPainter.height + 6.0,
-    );
+    final badgeRect = Rect.fromCenter(center: screenPos + const Offset(0, -18), width: textPainter.width + 12.0, height: textPainter.height + 6.0);
 
     final bgPaint = Paint()
-      ..color = isSelected
-          ? const Color(0xFF2563EB)
-          : Colors.white.withValues(alpha: 0.94)
+      ..color = isSelected ? const Color(0xFF2563EB) : Colors.white.withValues(alpha: 0.94)
       ..style = PaintingStyle.fill;
     final borderPaint = Paint()
       ..color = isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF94A3B8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
-    final rrect = RRect.fromRectAndRadius(
-      badgeRect,
-      const Radius.circular(4.0),
-    );
+    final rrect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(4.0));
     canvas.drawRRect(rrect, bgPaint);
     canvas.drawRRect(rrect, borderPaint);
-    textPainter.paint(
-      canvas,
-      Offset(badgeRect.left + 6.0, badgeRect.top + 3.0),
-    );
+    textPainter.paint(canvas, Offset(badgeRect.left + 6.0, badgeRect.top + 3.0));
   }
 
-  void _paintSemanticPortPreview(
-    Canvas canvas,
-    Size size,
-    Offset Function(double x, double y) toScreen,
-    double scale,
-  ) {
+  void _paintSemanticPortPreview(Canvas canvas, Size size, Offset Function(double x, double y) toScreen, double scale) {
     final res = activePortInferenceResult;
     if (res == null) return;
 
@@ -4237,13 +3271,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     canvas.drawCircle(p2, 4.0, endpointBorder);
 
     // Dimension badge for W
-    _paintDimensionBadge(
-      canvas,
-      edgeMid,
-      'W: ${res.inferredWidth.toStringAsFixed(1)} mm',
-      const Color(0xFF0891B2),
-      const Offset(0, -20),
-    );
+    _paintDimensionBadge(canvas, edgeMid, 'W: ${res.inferredWidth.toStringAsFixed(1)} mm', const Color(0xFF0891B2), const Offset(0, -20));
 
     // 2. Sidewall A (Height HA) - Amber Wings
     if (res.sidewallAEdges.isNotEmpty) {
@@ -4264,17 +3292,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
       }
 
       final firstSeg = res.sidewallAEdges.first;
-      final aMid = toScreen(
-        (firstSeg.p1.x + firstSeg.p2.x) / 2.0,
-        (firstSeg.p1.y + firstSeg.p2.y) / 2.0,
-      );
-      _paintDimensionBadge(
-        canvas,
-        aMid,
-        'HA: ${res.inferredHeightA.toStringAsFixed(1)} mm',
-        const Color(0xFFD97706),
-        const Offset(0, -18),
-      );
+      final aMid = toScreen((firstSeg.p1.x + firstSeg.p2.x) / 2.0, (firstSeg.p1.y + firstSeg.p2.y) / 2.0);
+      _paintDimensionBadge(canvas, aMid, 'HA: ${res.inferredHeightA.toStringAsFixed(1)} mm', const Color(0xFFD97706), const Offset(0, -18));
     }
 
     // 3. Sidewall B (Height HB) - Purple Wings
@@ -4296,17 +3315,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
       }
 
       final firstSeg = res.sidewallBEdges.first;
-      final bMid = toScreen(
-        (firstSeg.p1.x + firstSeg.p2.x) / 2.0,
-        (firstSeg.p1.y + firstSeg.p2.y) / 2.0,
-      );
-      _paintDimensionBadge(
-        canvas,
-        bMid,
-        'HB: ${res.inferredHeightB.toStringAsFixed(1)} mm',
-        const Color(0xFF7C3AED),
-        const Offset(0, -18),
-      );
+      final bMid = toScreen((firstSeg.p1.x + firstSeg.p2.x) / 2.0, (firstSeg.p1.y + firstSeg.p2.y) / 2.0);
+      _paintDimensionBadge(canvas, bMid, 'HB: ${res.inferredHeightB.toStringAsFixed(1)} mm', const Color(0xFF7C3AED), const Offset(0, -18));
     }
 
     // 4. Outward Connection Normal Arrow (Green)
@@ -4325,18 +3335,8 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final headAngle1 = normalAngle + math.pi * 0.85;
     final headAngle2 = normalAngle - math.pi * 0.85;
     const headLength = 10.0;
-    final headP1 =
-        arrowEnd +
-        Offset(
-          math.cos(headAngle1) * headLength,
-          math.sin(headAngle1) * headLength,
-        );
-    final headP2 =
-        arrowEnd +
-        Offset(
-          math.cos(headAngle2) * headLength,
-          math.sin(headAngle2) * headLength,
-        );
+    final headP1 = arrowEnd + Offset(math.cos(headAngle1) * headLength, math.sin(headAngle1) * headLength);
+    final headP2 = arrowEnd + Offset(math.cos(headAngle2) * headLength, math.sin(headAngle2) * headLength);
 
     final headPath = Path()
       ..moveTo(arrowEnd.dx, arrowEnd.dy)
@@ -4386,52 +3386,24 @@ class _UnfoldedBoardPainter extends CustomPainter {
     }
   }
 
-  void _paintDimensionBadge(
-    Canvas canvas,
-    Offset pos,
-    String text,
-    Color color,
-    Offset offset,
-  ) {
+  void _paintDimensionBadge(Canvas canvas, Offset pos, String text, Color color, Offset offset) {
     final textSpan = TextSpan(
       text: ' $text ',
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 10.0,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 0.2,
-      ),
+      style: const TextStyle(color: Colors.white, fontSize: 10.0, fontWeight: FontWeight.bold, letterSpacing: 0.2),
     );
-    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)
-      ..layout();
+    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
     final center = pos + offset;
-    final rrect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: center,
-        width: tp.width + 8.0,
-        height: tp.height + 4.0,
-      ),
-      const Radius.circular(4.0),
-    );
+    final rrect = RRect.fromRectAndRadius(Rect.fromCenter(center: center, width: tp.width + 8.0, height: tp.height + 4.0), const Radius.circular(4.0));
     final shadowPaint = Paint()
       ..color = Colors.black.withValues(alpha: 0.25)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
     canvas.drawRRect(rrect.shift(const Offset(0, 1)), shadowPaint);
     canvas.drawRRect(rrect, Paint()..color = color);
-    tp.paint(
-      canvas,
-      Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0),
-    );
+    tp.paint(canvas, Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0));
   }
 
   /// Draws a clean, high-precision vector coupler logo (dual interlocking chain links)
-  void _drawCouplerGlyph(
-    Canvas canvas,
-    Offset center,
-    double size,
-    Color color, {
-    double strokeWidth = 1.2,
-  }) {
+  void _drawCouplerGlyph(Canvas canvas, Offset center, double size, Color color, {double strokeWidth = 1.2}) {
     final linkPaint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -4443,26 +3415,12 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final spacing = size * 0.16;
 
     // Left link capsule
-    final leftRect = Rect.fromCenter(
-      center: Offset(center.dx - spacing, center.dy),
-      width: rw,
-      height: rh,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(leftRect, Radius.circular(rh * 0.5)),
-      linkPaint,
-    );
+    final leftRect = Rect.fromCenter(center: Offset(center.dx - spacing, center.dy), width: rw, height: rh);
+    canvas.drawRRect(RRect.fromRectAndRadius(leftRect, Radius.circular(rh * 0.5)), linkPaint);
 
     // Right link capsule (overlapping)
-    final rightRect = Rect.fromCenter(
-      center: Offset(center.dx + spacing, center.dy),
-      width: rw,
-      height: rh,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rightRect, Radius.circular(rh * 0.5)),
-      linkPaint,
-    );
+    final rightRect = Rect.fromCenter(center: Offset(center.dx + spacing, center.dy), width: rw, height: rh);
+    canvas.drawRRect(RRect.fromRectAndRadius(rightRect, Radius.circular(rh * 0.5)), linkPaint);
 
     // Central connection interlock pin dot
     canvas.drawCircle(
@@ -4508,4 +3466,3 @@ class _UnfoldedBoardPainter extends CustomPainter {
         oldDelegate.canvasSettings != canvasSettings;
   }
 }
-

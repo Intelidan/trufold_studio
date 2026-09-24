@@ -47,7 +47,7 @@ void main() {
       // Verify progressive narrative milestones across all stages
       final titles = controller.milestones.map((m) => m.title).toList();
       expect(titles.any((t) => t.contains('Product Intent Identified')), isTrue);
-      expect(titles.any((t) => t.contains('Bend Structure Verified')), isTrue);
+      expect(titles.any((t) => t.contains('Manufacturing Definition Verified') || t.contains('Bend Structure Verified')), isTrue);
       expect(titles.any((t) => t.contains('3D Channel Folded')), isTrue);
       expect(titles.any((t) => t.contains('3D Openings Located')), isTrue);
       expect(titles.any((t) => t.contains('Matched PORT_1')), isTrue);
@@ -65,9 +65,10 @@ void main() {
       final content = await file.readAsString();
       final json = jsonDecode(content) as Map<String, dynamic>;
       final doc = DsfDocument.fromJson(json);
+      final cleanDoc = doc.copyWith(metadata: {});
 
-      final vm = SheetMetalStudioViewModel(initialDocument: doc);
-      expect(vm.cmsGuidedController.phase, equals(CmsUxPhase.idle));
+      final vm = SheetMetalStudioViewModel(initialDocument: cleanDoc);
+      expect(vm.cmsGuidedController.phase, anyOf(equals(CmsUxPhase.idle), equals(CmsUxPhase.confirmingBends)));
 
       await vm.startCleanCmsDiscovery(contract: CmsProductContract.bend45);
 

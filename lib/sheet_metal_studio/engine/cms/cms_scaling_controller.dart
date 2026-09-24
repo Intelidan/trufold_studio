@@ -11,7 +11,9 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
+
 import '../../models/cad_primitives.dart';
 import '../../models/dsf_document.dart';
 import '../../models/fold_bend_line.dart';
@@ -27,6 +29,7 @@ import '../topological_zone_morpher.dart';
 import 'cms_3d_opening_detector.dart';
 import 'cms_opening_plane_analyzer.dart';
 import 'cms_port_matcher.dart';
+import 'cms_port_reconciler.dart';
 import 'cms_punch_constraint_engine.dart';
 import 'unequal_tee_scaler.dart';
 import 'unequal_cross_scaler.dart';
@@ -62,23 +65,17 @@ class CmsScalingController extends ChangeNotifier {
 
   static DsfDocument _ensureFaces(DsfDocument doc) {
     if (doc.faces.isNotEmpty) return doc;
-    final decomp = PlanarFaceDecomposer.decompose(
-      outerContour: doc.outerContour,
-      bends: doc.bends,
-      cutLines: doc.cutLines,
-    );
-    return doc.copyWith(
-      faces: decomp.faces,
-      baseFaceId: decomp.baseFaceId,
-    );
+    final decomp = PlanarFaceDecomposer.decompose(outerContour: doc.outerContour, bends: doc.bends, cutLines: doc.cutLines);
+    return doc.copyWith(faces: decomp.faces, baseFaceId: decomp.baseFaceId);
   }
 
   CmsScalingController({
     required DsfDocument baselineDocument,
     required this.contract,
     required this.baselinePorts,
+    Map<String, double>? currentParameterValues,
   }) : baselineDocument = _ensureFaces(baselineDocument) {
-    _initModelFromPhase1();
+    _initModelFromPhase1(currentParameterValues: currentParameterValues);
     _previewMorphValue = _model.parameters[_activeParameterId]?.currentValue ?? 100.0;
     evaluateMorph(_previewMorphValue);
   }
@@ -238,65 +235,31 @@ class CmsScalingController extends ChangeNotifier {
     final widthParam = _model.parameters['width'];
     final heightParam = _model.parameters['height'];
 
-    final deltaW = (widthParam != null)
-        ? (widthParam.currentValue - widthParam.baselineValue)
-        : 0.0;
-    final deltaH = (heightParam != null)
-        ? (heightParam.currentValue - heightParam.baselineValue)
-        : 0.0;
+    final deltaW = (widthParam != null) ? (widthParam.currentValue - widthParam.baselineValue) : 0.0;
+    final deltaH = (heightParam != null) ? (heightParam.currentValue - heightParam.baselineValue) : 0.0;
 
     // 1. Generate updated canonical 2D sheet geometry composing active parameter deltas
     var scaledDoc = baselineDocument;
     final prof = effectiveScalingProfile;
 
     if (prof == CmsScalingProfile.equalCross) {
-      scaledDoc = _scaleEqualCross2D(
-        scaledDoc,
-        parameters: _model.parameters,
-      );
+      scaledDoc = _scaleEqualCross2D(scaledDoc, parameters: _model.parameters);
     } else if (prof == CmsScalingProfile.unequalCross) {
-      scaledDoc = _scaleUnequalCross2D(
-        scaledDoc,
-        isLinked: _model.isLinkedPorts,
-        parameters: _model.parameters,
-      );
+      scaledDoc = _scaleUnequalCross2D(scaledDoc, isLinked: _model.isLinkedPorts, parameters: _model.parameters);
     } else if (prof == CmsScalingProfile.equalTee) {
-      scaledDoc = _scaleEqualTee2D(
-        scaledDoc,
-        parameters: _model.parameters,
-      );
+      scaledDoc = _scaleEqualTee2D(scaledDoc, parameters: _model.parameters);
     } else if (prof == CmsScalingProfile.unequalTee) {
-      scaledDoc = _scaleUnequalTee2D(
-        scaledDoc,
-        isLinked: _model.isLinkedPorts,
-        parameters: _model.parameters,
-      );
+      scaledDoc = _scaleUnequalTee2D(scaledDoc, isLinked: _model.isLinkedPorts, parameters: _model.parameters);
     } else if (prof == CmsScalingProfile.cross || isCrossGeometry(baselineDocument)) {
-      scaledDoc = _scaleCross2D(
-        scaledDoc,
-        isLinked: _model.isLinkedPorts,
-        parameters: _model.parameters,
-      );
+      scaledDoc = _scaleCross2D(scaledDoc, isLinked: _model.isLinkedPorts, parameters: _model.parameters);
     } else if (prof == CmsScalingProfile.tee || isTeeGeometry(baselineDocument)) {
-      scaledDoc = _scaleTee2D(
-        scaledDoc,
-        isLinked: _model.isLinkedPorts,
-        parameters: _model.parameters,
-      );
+      scaledDoc = _scaleTee2D(scaledDoc, isLinked: _model.isLinkedPorts, parameters: _model.parameters);
     } else {
       if (deltaW.abs() > 0.01) {
-        scaledDoc = _generateScaled2DDocument(
-          baseline: scaledDoc,
-          paramId: 'width',
-          delta: deltaW,
-        );
+        scaledDoc = _generateScaled2DDocument(baseline: scaledDoc, paramId: 'width', delta: deltaW);
       }
       if (deltaH.abs() > 0.01) {
-        scaledDoc = _generateScaled2DDocument(
-          baseline: scaledDoc,
-          paramId: 'height',
-          delta: deltaH,
-        );
+        scaledDoc = _generateScaled2DDocument(baseline: scaledDoc, paramId: 'height', delta: deltaH);
       }
     }
 
@@ -316,18 +279,10 @@ class CmsScalingController extends ChangeNotifier {
     final mesh = KinematicFoldEngine.foldDocument(scaledDoc, foldProgress: 1.0);
 
     // 3. Derive 3D physical port mouths from the newly folded 3D mesh
-    final rawOpenings = Cms3DOpeningDetector.detectOpenings(
-      document: scaledDoc,
-      foldResult: mesh,
-    );
-    final initialMeasured = rawOpenings.map(
-      (r) => CmsOpeningPlaneAnalyzer.analyze(
-        raw: r,
-        document: scaledDoc,
-        foldResult: mesh,
-        defaultHeight: targetH,
-      ),
-    ).toList();
+    final rawOpenings = Cms3DOpeningDetector.detectOpenings(document: scaledDoc, foldResult: mesh);
+    final initialMeasured = rawOpenings
+        .map((r) => CmsOpeningPlaneAnalyzer.analyze(raw: r, document: scaledDoc, foldResult: mesh, defaultHeight: targetH))
+        .toList();
 
     // Reconcile channel height across ports (only for linked mode)
     double? detectedChannelHeight;
@@ -354,17 +309,17 @@ class CmsScalingController extends ChangeNotifier {
       return m;
     }).toList();
 
-    final matchResult = CmsPortMatcher.match(
-      measuredOpenings: measured,
-      contract: contract,
-    );
+    final List<CmsPhysicalPort> matchedPorts;
+    if (baselinePorts.isNotEmpty) {
+      matchedPorts = CmsPortReconciler.reconcile(previousPorts: baselinePorts, newlyMeasured: measured);
+    } else {
+      final matchResult = CmsPortMatcher.match(measuredOpenings: measured, contract: contract);
+      matchedPorts = matchResult.matchedPorts;
+    }
 
-    final effectivePorts = matchResult.matchedPorts.isNotEmpty
-        ? matchResult.matchedPorts.map((mp) {
-            final baseMatch = baselinePorts.firstWhere(
-              (bp) => bp.id == mp.id || bp.index == mp.index,
-              orElse: () => mp,
-            );
+    final effectivePorts = matchedPorts.isNotEmpty
+        ? matchedPorts.map((mp) {
+            final baseMatch = baselinePorts.firstWhere((bp) => bp.id == mp.id || bp.index == mp.index, orElse: () => mp);
             var updated = mp;
             double portExpectedW = targetW;
             double portExpectedH = targetH;
@@ -373,10 +328,7 @@ class CmsScalingController extends ChangeNotifier {
               final pH = _model.parameters['port${mp.index}_height'];
               if (pW != null) portExpectedW = pW.currentValue;
               if (pH != null) portExpectedH = pH.currentValue;
-              updated = updated.copyWith(
-                width: portExpectedW,
-                height: portExpectedH,
-              );
+              updated = updated.copyWith(width: portExpectedW, height: portExpectedH);
             } else {
               if ((portExpectedW - mp.width).abs() <= 6.0) {
                 updated = updated.copyWith(width: portExpectedW);
@@ -386,10 +338,25 @@ class CmsScalingController extends ChangeNotifier {
               }
             }
             if (baseMatch.role != null && baseMatch.role != CmsPortRole.unassigned) {
-              updated = updated.copyWith(
-                role: baseMatch.role,
-                roleSource: baseMatch.roleSource,
+              updated = updated.copyWith(role: baseMatch.role, roleSource: baseMatch.roleSource);
+            }
+            if (updated.derivedMouthCorners.length == 4 && updated.height > 1.0) {
+              final p1 = updated.derivedMouthCorners[0];
+              final p2 = updated.derivedMouthCorners[3];
+              final hDir = updated.heightDirection;
+              final p3 = CadPoint3D(p1.x + updated.height * hDir.x, p1.y + updated.height * hDir.y, p1.z + updated.height * hDir.z);
+              final p4 = CadPoint3D(p2.x + updated.height * hDir.x, p2.y + updated.height * hDir.y, p2.z + updated.height * hDir.z);
+              final newCenter = CadPoint3D(
+                (p1.x + p2.x) / 2.0 + (updated.height / 2.0) * hDir.x,
+                (p1.y + p2.y) / 2.0 + (updated.height / 2.0) * hDir.y,
+                (p1.z + p2.z) / 2.0 + (updated.height / 2.0) * hDir.z,
               );
+              final newCalloutAnchor = CadPoint3D(
+                (p1.x + p2.x) / 2.0 + updated.height * hDir.x,
+                (p1.y + p2.y) / 2.0 + updated.height * hDir.y,
+                (p1.z + p2.z) / 2.0 + updated.height * hDir.z,
+              );
+              updated = updated.copyWith(derivedMouthCorners: [p1, p3, p4, p2], center: newCenter, calloutAnchor: newCalloutAnchor);
             }
             return updated;
           }).toList()
@@ -411,21 +378,28 @@ class CmsScalingController extends ChangeNotifier {
   DsfDocument acceptScalingModel() {
     final newParams = Map<String, CmsScalingParameter>.from(_model.parameters);
     for (final entry in _model.parameters.entries) {
-      newParams[entry.key] = entry.value.copyWith(
-        teachingState: CmsParameterTeachingState.learned,
-      );
+      newParams[entry.key] = entry.value.copyWith(teachingState: CmsParameterTeachingState.learned);
     }
     _model = _model.copyWith(parameters: newParams);
 
-    // Persist scaling model and derived scaled ports into DSF metadata
+    // Persist scaling model, canonical baseline, and derived scaled ports into DSF metadata
     final previewDoc = _currentPreview?.scaledDocument ?? baselineDocument;
     final meta = Map<String, dynamic>.from(previewDoc.metadata);
     final cmsTemplate = Map<String, dynamic>.from(meta['cmsTemplate'] as Map<String, dynamic>? ?? {});
+    final existingCanonical = (baselineDocument.metadata['cmsTemplate'] as Map?)?['canonicalDocument'];
+    cmsTemplate['canonicalDocument'] = existingCanonical ?? baselineDocument.toJson();
+    final existingBasePorts = (baselineDocument.metadata['cmsTemplate'] as Map?)?['baselinePorts'];
+    cmsTemplate['baselinePorts'] = existingBasePorts ?? baselinePorts.map((p) => p.toJson()).toList();
+    cmsTemplate['productType'] = contract.productType;
+    cmsTemplate['variation'] = contract.variationName;
+    cmsTemplate['templateId'] = '${contract.productType}_${contract.variationName}';
     cmsTemplate['scalingModel'] = _model.toJson();
     if (_currentPreview != null && _currentPreview!.derivedPorts.isNotEmpty) {
       cmsTemplate['ports'] = _currentPreview!.derivedPorts.map((p) => p.toJson()).toList();
     }
     meta['cmsTemplate'] = cmsTemplate;
+    meta['cms_product_contract'] = {'productType': contract.productType, 'variationName': contract.variationName};
+    meta['appliedTemplate'] = contract.productType;
 
     if (meta['fittingMetadata'] is Map) {
       final fittingMeta = Map<String, dynamic>.from(meta['fittingMetadata'] as Map);
@@ -438,10 +412,7 @@ class CmsScalingController extends ChangeNotifier {
     }
 
     final finalDoc = previewDoc.copyWith(
-      parameters: {
-        ...previewDoc.parameters,
-        for (final p in _model.parameters.values) p.id: p.currentValue,
-      },
+      parameters: {...previewDoc.parameters, for (final p in _model.parameters.values) p.id: p.currentValue},
       metadata: meta,
     );
     notifyListeners();
@@ -452,9 +423,7 @@ class CmsScalingController extends ChangeNotifier {
   void resetToBaseline() {
     final newParams = <String, CmsScalingParameter>{};
     for (final entry in _model.parameters.entries) {
-      newParams[entry.key] = entry.value.copyWith(
-        currentValue: entry.value.baselineValue,
-      );
+      newParams[entry.key] = entry.value.copyWith(currentValue: entry.value.baselineValue);
     }
     _model = _model.copyWith(parameters: newParams);
 
@@ -467,15 +436,11 @@ class CmsScalingController extends ChangeNotifier {
   /// Reverts any preview changes back to the unscaled baseline.
   void cancelScaling() {
     _currentPreview = null;
-    final baseVal = baselineDocument.parameters[_activeParameterId] ??
-        (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
+    final baseVal = baselineDocument.parameters[_activeParameterId] ?? (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
     _previewMorphValue = baseVal;
     final param = activeParameter;
     if (param != null && param.teachingState == CmsParameterTeachingState.learning) {
-      final reverted = param.copyWith(
-        currentValue: param.baselineValue,
-        teachingState: CmsParameterTeachingState.untaught,
-      );
+      final reverted = param.copyWith(currentValue: param.baselineValue, teachingState: CmsParameterTeachingState.untaught);
       final newParams = Map<String, CmsScalingParameter>.from(_model.parameters);
       newParams[param.id] = reverted;
       _model = _model.copyWith(parameters: newParams);
@@ -489,6 +454,10 @@ class CmsScalingController extends ChangeNotifier {
   /// Geometrically detects if a document has the topology of an inside riser:
   /// Two parallel ~90° bends with a transverse bend connecting between them.
   static bool isInsideRiserGeometry(DsfDocument doc) {
+    // A cross (4 ports, 14 bends, 17 faces) or tee (3 ports, >=9 bends, >=10 faces) is never an inside riser
+    if (doc.bends.length >= 8 || doc.faces.length >= 10) return false;
+    final docType = '${doc.productType} ${doc.itemName}'.toLowerCase();
+    if (docType.contains('cross') || docType.contains('tee')) return false;
     if (doc.bends.length < 2) return false;
 
     final bends90 = doc.bends.where((b) {
@@ -531,15 +500,38 @@ class CmsScalingController extends ChangeNotifier {
     return false;
   }
 
-  /// Resolves the true scaling profile, ensuring risers are never misclassified as flat bends.
+  /// Resolves the true scaling profile, ensuring multi-port fittings and risers are never misclassified.
   CmsScalingProfile get effectiveScalingProfile {
-    if (contract.scalingProfile == CmsScalingProfile.insideRiser ||
-        contract.scalingProfile == CmsScalingProfile.outsideRiser) {
+    if (contract.scalingProfile == CmsScalingProfile.unequalCross ||
+        contract.scalingProfile == CmsScalingProfile.equalCross ||
+        contract.scalingProfile == CmsScalingProfile.unequalTee ||
+        contract.scalingProfile == CmsScalingProfile.equalTee ||
+        contract.scalingProfile == CmsScalingProfile.insideRiser ||
+        contract.scalingProfile == CmsScalingProfile.outsideRiser ||
+        contract.scalingProfile == CmsScalingProfile.straight) {
       return contract.scalingProfile;
     }
 
     // Inspect baseline document itself to prevent fallback misrouting
     final docType = '${baselineDocument.productType} ${baselineDocument.itemName}'.toLowerCase();
+    final isCross = contract.scalingProfile == CmsScalingProfile.cross || docType.contains('cross') || isCrossGeometry(baselineDocument);
+
+    if (isCross) {
+      if (contract.scalingProfile == CmsScalingProfile.unequalCross || isUnequalCross(baselineDocument)) {
+        return CmsScalingProfile.unequalCross;
+      }
+      return CmsScalingProfile.equalCross;
+    }
+
+    final isTee = contract.scalingProfile == CmsScalingProfile.tee || docType.contains('tee') || isTeeGeometry(baselineDocument);
+
+    if (isTee) {
+      if (contract.scalingProfile == CmsScalingProfile.unequalTee || isUnequalTee(baselineDocument)) {
+        return CmsScalingProfile.unequalTee;
+      }
+      return CmsScalingProfile.equalTee;
+    }
+
     if (docType.contains('inside') && (docType.contains('riser') || docType.contains('rise'))) {
       return CmsScalingProfile.insideRiser;
     }
@@ -569,43 +561,25 @@ class CmsScalingController extends ChangeNotifier {
       return CmsScalingProfile.insideRiser;
     }
 
-    final isCross = contract.scalingProfile == CmsScalingProfile.equalCross ||
-        contract.scalingProfile == CmsScalingProfile.unequalCross ||
-        contract.scalingProfile == CmsScalingProfile.cross ||
-        docType.contains('cross') ||
-        isCrossGeometry(baselineDocument);
-
-    if (isCross) {
-      if (contract.scalingProfile == CmsScalingProfile.unequalCross ||
-          isUnequalCross(baselineDocument)) {
-        return CmsScalingProfile.unequalCross;
-      }
-      return CmsScalingProfile.equalCross;
-    }
-
-    final isTee = contract.scalingProfile == CmsScalingProfile.equalTee ||
-        contract.scalingProfile == CmsScalingProfile.unequalTee ||
-        contract.scalingProfile == CmsScalingProfile.tee ||
-        docType.contains('tee') ||
-        isTeeGeometry(baselineDocument);
-
-    if (isTee) {
-      if (contract.scalingProfile == CmsScalingProfile.unequalTee ||
-          isUnequalTee(baselineDocument)) {
-        return CmsScalingProfile.unequalTee;
-      }
-      return CmsScalingProfile.equalTee;
-    }
-
     return contract.scalingProfile;
   }
 
   /// Geometrically detects whether [doc] is a Cross fitting (4 physical ports or 4-way corner bends).
-  bool isCrossGeometry(DsfDocument doc) {
+  static bool isCrossFitting(DsfDocument doc, {int portCount = 0}) {
     final docType = '${doc.productType} ${doc.itemName}'.toLowerCase();
     if (docType.contains('cross')) return true;
-    return doc.bends.length >= 14 || baselinePorts.length == 4;
+    return doc.bends.length >= 14 || portCount == 4;
   }
+
+  /// Geometrically detects whether [doc] is a Tee fitting (3 physical ports or 3-way layout).
+  static bool isTeeFitting(DsfDocument doc, {int portCount = 0}) {
+    final docType = '${doc.productType} ${doc.itemName}'.toLowerCase();
+    if (docType.contains('tee')) return true;
+    return (doc.bends.length >= 9 && doc.bends.length <= 13) || portCount == 3;
+  }
+
+  /// Geometrically detects whether [doc] is a Cross fitting (4 physical ports or 4-way corner bends).
+  bool isCrossGeometry(DsfDocument doc) => isCrossFitting(doc, portCount: baselinePorts.length);
 
   /// Checks whether [doc] is an Unequal Cross fitting based on contract, metadata, or port dimensions.
   bool isUnequalCross(DsfDocument doc) {
@@ -654,15 +628,32 @@ class CmsScalingController extends ChangeNotifier {
     return false;
   }
 
-  /// Straightforward, locked 2D Sheet Scaling for Equal Cross Fittings:
-  /// - Base floor is an octagonal or rectangular central base with 4-way symmetry.
+  /// Helper struct defining the 8 symmetric coupler flaps of Equal Cross fittings.
+  static const List<_EqualCrossFlapConfig> _equalCrossFlapConfigs = [
+    // SE quadrant: wx = dW/2, wy = dW/2, vx = 1/sqrt2, vy = 1/sqrt2
+    _EqualCrossFlapConfig(innerId: 'SLOT_1', outerId: 'SLOT_2', wxSign: 1, wySign: 1, vx: 0.7071067811865475, vy: 0.7071067811865475, rotDeg: 45.0, portId: 'PORT_3'),
+    _EqualCrossFlapConfig(innerId: 'SLOT_3', outerId: 'SLOT_4', wxSign: 1, wySign: 1, vx: 0.7071067811865475, vy: 0.7071067811865475, rotDeg: 45.0, portId: 'PORT_4'),
+    // SW quadrant: wx = -dW/2, wy = dW/2, vx = -1/sqrt2, vy = 1/sqrt2
+    _EqualCrossFlapConfig(innerId: 'SLOT_5', outerId: 'SLOT_6', wxSign: -1, wySign: 1, vx: -0.7071067811865475, vy: 0.7071067811865475, rotDeg: 135.0, portId: 'PORT_4'),
+    _EqualCrossFlapConfig(innerId: 'SLOT_7', outerId: 'SLOT_8', wxSign: -1, wySign: 1, vx: -0.7071067811865475, vy: 0.7071067811865475, rotDeg: 135.0, portId: 'PORT_1'),
+    // NE quadrant: wx = dW/2, wy = -dW/2, vx = 1/sqrt2, vy = -1/sqrt2
+    _EqualCrossFlapConfig(innerId: 'SLOT_9', outerId: 'SLOT_10', wxSign: 1, wySign: -1, vx: 0.7071067811865475, vy: -0.7071067811865475, rotDeg: 135.0, portId: 'PORT_2'),
+    _EqualCrossFlapConfig(innerId: 'SLOT_11', outerId: 'SLOT_12', wxSign: 1, wySign: -1, vx: 0.7071067811865475, vy: -0.7071067811865475, rotDeg: 135.0, portId: 'PORT_3'),
+    // NW quadrant: wx = -dW/2, wy = -dW/2, vx = -1/sqrt2, vy = -1/sqrt2
+    _EqualCrossFlapConfig(innerId: 'SLOT_13', outerId: 'SLOT_14', wxSign: -1, wySign: -1, vx: -0.7071067811865475, vy: -0.7071067811865475, rotDeg: 45.0, portId: 'PORT_1'),
+    _EqualCrossFlapConfig(innerId: 'SLOT_15', outerId: 'SLOT_16', wxSign: -1, wySign: -1, vx: -0.7071067811865475, vy: -0.7071067811865475, rotDeg: 45.0, portId: 'PORT_2'),
+  ];
+
+  /// Analytical 4-Quadrant Parametric 2D Sheet Scaling for Equal Cross Fittings:
+  /// - Base floor is an octagonal central base with 4-way 90° symmetry.
   /// - All 4 ports have identical width and height.
-  /// - Horizontal and vertical runs scale symmetrically in all 4 directions.
-  /// - Sidewalls and flaps scale uniformly with height.
-  DsfDocument _scaleEqualCross2D(
-    DsfDocument baseline, {
-    required Map<String, CmsScalingParameter> parameters,
-  }) {
+  /// - Width expands symmetrically in all 4 directions (+/- dW / 2).
+  /// - Cheeks and flaps expand along their respective 45° normal vector (+/- dH / sqrt(2)).
+  /// - All 16 corner fillet arcs (r=10mm) are 100% preserved without disconnection or deletion.
+  /// - Coupler punches follow the Universal 95mm Rule:
+  ///     * Height < 95mm: exactly 1 slot centered on each flap with respect to height.
+  ///     * Height >= 95mm: exactly 2 slots per flap at 50mm pitch, centered with respect to height.
+  DsfDocument _scaleEqualCross2D(DsfDocument baseline, {required Map<String, CmsScalingParameter> parameters}) {
     final baseFloor = baseline.faces.firstWhere(
       (f) => f.isBaseAnchor || f.role == FaceRole.baseFloor,
       orElse: () => baseline.faces.first,
@@ -677,52 +668,213 @@ class CmsScalingController extends ChangeNotifier {
 
     final w = parameters['width'];
     final h = parameters['height'];
-    final dW = w != null ? (w.currentValue - w.baselineValue) : 0.0;
-    final dH = h != null ? (h.currentValue - h.baselineValue) : 0.0;
+    final targetW = w?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
+    final targetH = h?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0);
+    final baselineW = w?.baselineValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
+    final baselineH = h?.baselineValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0);
+
+    final dW = targetW - baselineW;
+    final dH = targetH - baselineH;
 
     final hasCrossChange = dW.abs() > 1e-4 || dH.abs() > 1e-4;
     if (!hasCrossChange) return baseline;
 
-    CadPoint2D transformEqualCrossPt(CadPoint2D pt) {
-      double x = pt.x;
-      double y = pt.y;
+    // Dynamically calculate threshold distinguishing base bends from outer flange regions
+    final b1 = baseline.bends.where((b) => b.id == 'B1').firstOrNull;
+    final fl2 = baseline.bends.where((b) => b.id == 'FL2').firstOrNull;
+    final double sThresh;
+    if (b1 != null && fl2 != null) {
+      final sInner = ((b1.p1.x - midX) + (b1.p1.y - midY)).abs();
+      final sOuter = ((fl2.p1.x - midX) + (fl2.p1.y - midY)).abs();
+      sThresh = (sInner + sOuter) / 2.0;
+    } else {
+      sThresh = 195.58;
+    }
 
-      // 4-way symmetrical width expansion:
-      if (x > midX + 5.0) {
-        x += dW / 2.0;
-      } else if (x < midX - 5.0) {
-        x -= dW / 2.0;
+    CadPoint2D transformPt(CadPoint2D pt) {
+      final X = pt.x - midX;
+      final Y = pt.y - midY;
+
+      final double wx;
+      final double wy;
+      final double vx;
+      final double vy;
+      final bool isOuter;
+
+      if (X <= 0.0 && Y <= 0.0) {
+        // NW Quadrant
+        wx = -dW / 2.0;
+        wy = -dW / 2.0;
+        vx = -1.0 / math.sqrt2;
+        vy = -1.0 / math.sqrt2;
+        isOuter = (X + Y) < -sThresh;
+      } else if (X > 0.0 && Y <= 0.0) {
+        // NE Quadrant
+        wx = dW / 2.0;
+        wy = -dW / 2.0;
+        vx = 1.0 / math.sqrt2;
+        vy = -1.0 / math.sqrt2;
+        isOuter = (X - Y) > sThresh;
+      } else if (X > 0.0 && Y > 0.0) {
+        // SE Quadrant
+        wx = dW / 2.0;
+        wy = dW / 2.0;
+        vx = 1.0 / math.sqrt2;
+        vy = 1.0 / math.sqrt2;
+        isOuter = (X + Y) > sThresh;
+      } else {
+        // SW Quadrant (X <= 0.0 && Y > 0.0)
+        wx = -dW / 2.0;
+        wy = dW / 2.0;
+        vx = -1.0 / math.sqrt2;
+        vy = 1.0 / math.sqrt2;
+        isOuter = (X - Y) < -sThresh;
       }
 
-      if (y > midY + 5.0) {
-        y += dW / 2.0;
-      } else if (y < midY - 5.0) {
-        y -= dW / 2.0;
+      double x = pt.x + wx;
+      double y = pt.y + wy;
+      if (isOuter && dH.abs() > 1e-4) {
+        x += dH * vx;
+        y += dH * vy;
       }
-
-      // Height expansion on outer extremities
-      if (dH.abs() > 1e-4) {
-        if (x > maxX + 5.0) x += dH;
-        if (x < minX - 5.0) x -= dH;
-        if (y > maxY + 5.0) y += dH;
-        if (y < minY - 5.0) y -= dH;
-      }
-
       return CadPoint2D(x, y);
     }
 
+    final newContour = baseline.outerContour.map(transformPt).toList();
+
+    final newBends = baseline.bends.map((b) => b.copyWith(
+      p1: transformPt(b.p1),
+      p2: transformPt(b.p2),
+    )).toList();
+
+    final newFaces = baseline.faces.map((f) => f.copyWith(
+      vertices: f.vertices.map(transformPt).toList(),
+    )).toList();
+
+    final newArcs = baseline.arcs.map((a) {
+      return a.copyWith(center: transformPt(a.center));
+    }).toList();
+
+    // Universal 95mm Coupler Rule:
+    // Centered with respect to height on all 8 flaps across the 4 quadrants.
+    final handledPunchIds = <String>{};
+    final newPunches = <CncPunchPrimitive>[];
+
+    for (final flap in _equalCrossFlapConfigs) {
+      final wx = flap.wxSign * (dW / 2.0);
+      final wy = flap.wySign * (dW / 2.0);
+
+      CncPunchPrimitive? pInner = baseline.punches.where((p) => p.id == flap.innerId).firstOrNull;
+      CncPunchPrimitive? pOuter = baseline.punches.where((p) => p.id == flap.outerId).firstOrNull;
+
+      // Geometric fallback if punch IDs differ
+      if (pInner == null) {
+        final candidates = baseline.punches.where((p) {
+          final px = p.center.x - midX;
+          final py = p.center.y - midY;
+          final inQuad = (flap.vx < 0 ? px <= 0 : px > 0) && (flap.vy < 0 ? py <= 0 : py > 0);
+          if (!inQuad) return false;
+          final isVert = flap.innerId == 'SLOT_1' || flap.innerId == 'SLOT_5' || flap.innerId == 'SLOT_9' || flap.innerId == 'SLOT_13';
+          return isVert ? (px.abs() < py.abs()) : (px.abs() > py.abs());
+        }).toList();
+
+        candidates.sort((a, b) {
+          final da = (a.center.x - midX) * (a.center.x - midX) + (a.center.y - midY) * (a.center.y - midY);
+          final db = (b.center.x - midX) * (b.center.x - midX) + (b.center.y - midY) * (b.center.y - midY);
+          return da.compareTo(db);
+        });
+
+        if (candidates.isNotEmpty) pInner = candidates[0];
+        if (candidates.length > 1) pOuter = candidates[1];
+      }
+
+      if (pInner != null) handledPunchIds.add(pInner.id);
+      if (pOuter != null) handledPunchIds.add(pOuter.id);
+
+      if (pInner == null) continue;
+
+      final CadPoint2D mBase;
+      if (pOuter != null) {
+        mBase = CadPoint2D(
+          (pInner.center.x + pOuter.center.x) / 2.0,
+          (pInner.center.y + pOuter.center.y) / 2.0,
+        );
+      } else {
+        mBase = pInner.center;
+      }
+
+      // Scaled flap center
+      final mTarget = CadPoint2D(
+        mBase.x + wx + (dH / 2.0) * flap.vx,
+        mBase.y + wy + (dH / 2.0) * flap.vy,
+      );
+
+      if (targetH < 95.0) {
+        // Single slot centered on flap with respect to height
+        newPunches.add(pInner.copyWith(
+          center: mTarget,
+          rotationDeg: flap.rotDeg,
+        ));
+      } else {
+        // Two slots at 50mm pitch, centered on flap with respect to height
+        final innerCenter = CadPoint2D(
+          mTarget.x - 25.0 * flap.vx,
+          mTarget.y - 25.0 * flap.vy,
+        );
+        final outerCenter = CadPoint2D(
+          mTarget.x + 25.0 * flap.vx,
+          mTarget.y + 25.0 * flap.vy,
+        );
+
+        newPunches.add(pInner.copyWith(
+          center: innerCenter,
+          rotationDeg: flap.rotDeg,
+        ));
+
+        final outerPunch = pOuter?.copyWith(
+          center: outerCenter,
+          rotationDeg: flap.rotDeg,
+        ) ?? CncPunchPrimitive(
+          id: flap.outerId,
+          type: PunchType.obroundSlot,
+          center: outerCenter,
+          widthMm: pInner.widthMm,
+          lengthMm: pInner.lengthMm,
+          diameterMm: pInner.diameterMm,
+          rotationDeg: flap.rotDeg,
+          role: CncPunchRole.coupler,
+          parentFaceId: pInner.parentFaceId,
+          associatedPortId: flap.portId,
+          layer: pInner.layer,
+          showLabel: true,
+          isVisible: true,
+        );
+        newPunches.add(outerPunch);
+      }
+    }
+
+    // Preserve and transform any other non-coupler punches (e.g. floor stampings)
+    for (final p in baseline.punches) {
+      if (!handledPunchIds.contains(p.id)) {
+        newPunches.add(p.copyWith(center: transformPt(p.center)));
+      }
+    }
+
+    final updatedParams = Map<String, double>.from(baseline.parameters);
+    updatedParams['width'] = targetW;
+    updatedParams['height'] = targetH;
+    for (int i = 1; i <= 4; i++) {
+      updatedParams['port${i}_width'] = targetW;
+      updatedParams['port${i}_height'] = targetH;
+    }
+
     return baseline.copyWith(
-      outerContour: baseline.outerContour.map(transformEqualCrossPt).toList(),
-      bends: baseline.bends.map((b) => b.copyWith(
-        p1: transformEqualCrossPt(b.p1),
-        p2: transformEqualCrossPt(b.p2),
-      )).toList(),
-      faces: baseline.faces.map((f) => f.copyWith(
-        vertices: f.vertices.map(transformEqualCrossPt).toList(),
-      )).toList(),
-      punches: baseline.punches.map((p) => p.copyWith(
-        center: transformEqualCrossPt(p.center),
-      )).toList(),
+      outerContour: newContour,
+      bends: newBends,
+      faces: newFaces,
+      arcs: newArcs,
+      punches: newPunches,
+      parameters: updatedParams,
     );
   }
 
@@ -732,25 +884,14 @@ class CmsScalingController extends ChangeNotifier {
   /// - Universal 95mm coupler rule for punches
   /// - Hbody = max(H1, H2, H3, H4) with orthogonal non-slanted steps
   /// - Closed-form base floor F_16 without bend line shear
-  DsfDocument _scaleUnequalCross2D(
-    DsfDocument baseline, {
-    required bool isLinked,
-    required Map<String, CmsScalingParameter> parameters,
-  }) {
+  DsfDocument _scaleUnequalCross2D(DsfDocument baseline, {required bool isLinked, required Map<String, CmsScalingParameter> parameters}) {
     final scaleParams = UnequalCrossScaleParameters.fromCmsParameters(parameters);
-    final result = UnequalCrossScaler.scale(
-      baseline: baseline,
-      parameters: scaleParams,
-    );
+    final result = UnequalCrossScaler.scale(baseline: baseline, parameters: scaleParams);
     return result.document;
   }
 
   /// Cross scaling dispatcher: routes to equal or unequal subroutine based on [isLinked].
-  DsfDocument _scaleCross2D(
-    DsfDocument baseline, {
-    required bool isLinked,
-    required Map<String, CmsScalingParameter> parameters,
-  }) {
+  DsfDocument _scaleCross2D(DsfDocument baseline, {required bool isLinked, required Map<String, CmsScalingParameter> parameters}) {
     if (isLinked) {
       return _scaleEqualCross2D(baseline, parameters: parameters);
     } else {
@@ -758,15 +899,87 @@ class CmsScalingController extends ChangeNotifier {
     }
   }
 
-  /// Straightforward, locked 2D Sheet Scaling for Equal Tee Fittings:
+  /// Helper struct defining the 6 coupler flap & sidewall regions of Equal Tee fittings.
+  static const List<_EqualTeeFlapConfig> _equalTeeFlapConfigs = [
+    // Left Cheek: Port 1 left flange
+    _EqualTeeFlapConfig(
+      innerId: 'SLOT_9',
+      outerId: 'SLOT_10',
+      wxSign: -1,
+      hasWyShift: false,
+      vx: -0.7071067811865475,
+      vy: -0.7071067811865475,
+      rotDeg: 45.0,
+      portId: 'port1',
+    ),
+    // Left Cheek: Port 3 top flange
+    _EqualTeeFlapConfig(
+      innerId: 'SLOT_11',
+      outerId: 'SLOT_12',
+      wxSign: -1,
+      hasWyShift: false,
+      vx: -0.7071067811865475,
+      vy: -0.7071067811865475,
+      rotDeg: 45.0,
+      portId: 'port3',
+    ),
+    // Right Cheek: Port 1 right flange
+    _EqualTeeFlapConfig(
+      innerId: 'SLOT_1',
+      outerId: 'SLOT_2',
+      wxSign: 1,
+      hasWyShift: false,
+      vx: 0.7071067811865475,
+      vy: -0.7071067811865475,
+      rotDeg: 135.0,
+      portId: 'port1',
+    ),
+    // Right Cheek: Port 2 top flange
+    _EqualTeeFlapConfig(
+      innerId: 'SLOT_3',
+      outerId: 'SLOT_4',
+      wxSign: 1,
+      hasWyShift: false,
+      vx: 0.7071067811865475,
+      vy: -0.7071067811865475,
+      rotDeg: 135.0,
+      portId: 'port2',
+    ),
+    // Bottom Sidewall: Left side (Port 3 run)
+    _EqualTeeFlapConfig(
+      innerId: 'SLOT_8',
+      outerId: 'SLOT_7',
+      wxSign: -1,
+      hasWyShift: true,
+      vx: 0.0,
+      vy: 1.0,
+      rotDeg: 90.0,
+      portId: 'port3',
+    ),
+    // Bottom Sidewall: Right side (Port 2 run)
+    _EqualTeeFlapConfig(
+      innerId: 'SLOT_6',
+      outerId: 'SLOT_5',
+      wxSign: 1,
+      hasWyShift: true,
+      vx: 0.0,
+      vy: 1.0,
+      rotDeg: 90.0,
+      portId: 'port2',
+    ),
+  ];
+
+  /// Analytical Parametric 2D Sheet Scaling for Equal Tee Fittings:
   /// - Base floor web with Main Run and Branch mouth.
   /// - All 3 ports are identical in width and height.
-  /// - Branch width scales horizontally; Main run width scales bed vertically.
-  /// - Sidewall F_9 (top run) and all cheek flaps scale uniformly with body height.
-  DsfDocument _scaleEqualTee2D(
-    DsfDocument baseline, {
-    required Map<String, CmsScalingParameter> parameters,
-  }) {
+  /// - Branch width scales horizontally (+/- dW / 2); Main run channel depth scales vertically (+dW).
+  /// - Cheeks expand outward along their 45° normal vector (+/- dH / sqrt(2)).
+  /// - Bottom sidewall F_10 and return flange F_9 expand vertically (+dH).
+  /// - All 12 corner fillet arcs (r=10mm) are 100% preserved and synchronized without disconnection or orphan anchoring dots.
+  /// - Coupler punches follow the Universal 95mm Rule:
+  ///     * Height < 95mm: exactly 1 slot centered on each flap/sidewall region with respect to height.
+  ///     * Height >= 95mm: exactly 2 slots per region at 50mm pitch, centered with respect to height.
+  DsfDocument _scaleEqualTee2D(DsfDocument baseline, {required Map<String, CmsScalingParameter> parameters}) {
     final baseFloor = baseline.faces.firstWhere(
       (f) => f.isBaseAnchor || f.role == FaceRole.baseFloor,
       orElse: () => baseline.faces.first,
@@ -779,11 +992,62 @@ class CmsScalingController extends ChangeNotifier {
 
     final w = parameters['width'];
     final h = parameters['height'];
-    final dW = w != null ? (w.currentValue - w.baselineValue) : 0.0;
-    final dH = h != null ? (h.currentValue - h.baselineValue) : 0.0;
+    final metaPort1 = (baseline.metadata['ports'] is List && (baseline.metadata['ports'] as List).isNotEmpty)
+        ? (baseline.metadata['ports'] as List).first as Map<String, dynamic>
+        : null;
+    final fallbackW = metaPort1?['width'] is num
+        ? (metaPort1!['width'] as num).toDouble()
+        : (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
+    final fallbackH = metaPort1?['height'] is num
+        ? (metaPort1!['height'] as num).toDouble()
+        : (baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0);
 
-    final hasAnyChange = dW.abs() > 1e-4 || dH.abs() > 1e-4;
-    if (!hasAnyChange) return baseline;
+    final targetW = w?.currentValue ?? fallbackW;
+    final targetH = h?.currentValue ?? fallbackH;
+    final baselineW = w?.baselineValue ?? fallbackW;
+    final baselineH = h?.baselineValue ?? fallbackH;
+
+    final dW = targetW - baselineW;
+    final dH = targetH - baselineH;
+
+    final hasTeeChange = dW.abs() > 1e-4 || dH.abs() > 1e-4;
+    if (!hasTeeChange) return baseline;
+
+    // Left cheek threshold: between B1 (inner) and FL2 (outer)
+    final b1 = baseline.bends.where((b) => b.id == 'B1').firstOrNull;
+    final fl2 = baseline.bends.where((b) => b.id == 'FL2').firstOrNull;
+    final double sLeft;
+    if (b1 != null && fl2 != null) {
+      final sInner = (b1.p1.x + b1.p2.x + b1.p1.y + b1.p2.y) / 2.0;
+      final sOuter = (fl2.p1.x + fl2.p2.x + fl2.p1.y + fl2.p2.y) / 2.0;
+      sLeft = (sInner + sOuter) / 2.0;
+    } else {
+      sLeft = 125.16;
+    }
+
+    // Right cheek threshold: between B2 (inner) and FL3 (outer)
+    final b2 = baseline.bends.where((b) => b.id == 'B2').firstOrNull;
+    final fl3 = baseline.bends.where((b) => b.id == 'FL3').firstOrNull;
+    final double sRight;
+    if (b2 != null && fl3 != null) {
+      final sInner = ((b2.p1.x + b2.p2.x) - (b2.p1.y + b2.p2.y)) / 2.0;
+      final sOuter = ((fl3.p1.x + fl3.p2.x) - (fl3.p1.y + fl3.p2.y)) / 2.0;
+      sRight = (sInner + sOuter) / 2.0;
+    } else {
+      sRight = 194.88;
+    }
+
+    // Bottom sidewall threshold: between B3 (inner) and FL1 (outer)
+    final b3 = baseline.bends.where((b) => b.id == 'B3').firstOrNull;
+    final fl1 = baseline.bends.where((b) => b.id == 'FL1').firstOrNull;
+    final double sBottom;
+    if (b3 != null && fl1 != null) {
+      final sInner = (b3.p1.y + b3.p2.y) / 2.0;
+      final sOuter = (fl1.p1.y + fl1.p2.y) / 2.0;
+      sBottom = (sInner + sOuter) / 2.0;
+    } else {
+      sBottom = 257.52;
+    }
 
     CadPoint2D transformEqualTeePt(CadPoint2D pt) {
       double x = pt.x;
@@ -801,19 +1065,19 @@ class CmsScalingController extends ChangeNotifier {
 
       // --- Physical Body Height Scaling ---
       if (dH.abs() > 1e-4) {
-        // Top sidewall F_10 upper region and return flange F_9
-        if (pt.y > maxY + 45.0) {
+        // Bottom sidewall outer region (FL1 and F_9)
+        if (pt.y > sBottom) {
           y += dH;
         }
 
-        // Left cheek F_3, F_0, F_1, F_2 outer region
-        if (pt.x < midX && (pt.x + pt.y) < 126.0) {
+        // Left cheek outer region
+        if (pt.x < midX && (pt.x + pt.y) < sLeft) {
           x -= dH / math.sqrt2;
           y -= dH / math.sqrt2;
         }
 
-        // Right cheek F_7, F_4, F_5, F_6 outer region
-        if (pt.x > midX && (pt.x - pt.y) > 194.0) {
+        // Right cheek outer region
+        if (pt.x > midX && (pt.x - pt.y) > sRight) {
           x += dH / math.sqrt2;
           y -= dH / math.sqrt2;
         }
@@ -822,28 +1086,166 @@ class CmsScalingController extends ChangeNotifier {
       return CadPoint2D(x, y);
     }
 
+    final newContour = baseline.outerContour.map(transformEqualTeePt).toList();
+
+    final newBends = baseline.bends.map((b) => b.copyWith(
+      p1: transformEqualTeePt(b.p1),
+      p2: transformEqualTeePt(b.p2),
+    )).toList();
+
+    final newFaces = baseline.faces.map((f) => f.copyWith(
+      vertices: f.vertices.map(transformEqualTeePt).toList(),
+    )).toList();
+
+    final newArcs = baseline.arcs.map((a) {
+      return a.copyWith(center: transformEqualTeePt(a.center));
+    }).toList();
+
+    // Universal 95mm Coupler Rule:
+    // Centered with respect to height on all 6 flaps/sidewall regions.
+    final handledPunchIds = <String>{};
+    final newPunches = <CncPunchPrimitive>[];
+
+    for (final flap in _equalTeeFlapConfigs) {
+      final wx = flap.wxSign * (dW / 2.0);
+      final wy = flap.hasWyShift ? dW : 0.0;
+
+      CncPunchPrimitive? pInner = baseline.punches.where((p) => p.id == flap.innerId).firstOrNull;
+      CncPunchPrimitive? pOuter = baseline.punches.where((p) => p.id == flap.outerId).firstOrNull;
+
+      // Geometric fallback if punch IDs differ
+      if (pInner == null) {
+        final candidates = baseline.punches.where((p) {
+          if (flap.hasWyShift) {
+            final isBottom = p.center.y > maxY - 15.0;
+            if (!isBottom) return false;
+            return flap.wxSign < 0 ? (p.center.x < midX) : (p.center.x > midX);
+          } else {
+            final isCheek = p.center.y <= maxY - 15.0;
+            if (!isCheek) return false;
+            final isLeft = p.center.x < midX;
+            if (flap.wxSign < 0 != isLeft) return false;
+            if (isLeft) {
+              final isBranch = flap.portId == 'port1';
+              return isBranch ? (p.center.x > p.center.y) : (p.center.x <= p.center.y);
+            } else {
+              final isBranch = flap.portId == 'port1';
+              return isBranch ? (p.center.y < 60.0) : (p.center.y >= 60.0);
+            }
+          }
+        }).toList();
+
+        candidates.sort((a, b) {
+          if (flap.hasWyShift) {
+            return a.center.y.compareTo(b.center.y);
+          } else if (flap.wxSign < 0) {
+            final da = a.center.x + a.center.y;
+            final db = b.center.x + b.center.y;
+            return db.compareTo(da);
+          } else {
+            final da = a.center.x - a.center.y;
+            final db = b.center.x - b.center.y;
+            return da.compareTo(db);
+          }
+        });
+
+        if (candidates.isNotEmpty) pInner = candidates[0];
+        if (candidates.length > 1) pOuter = candidates[1];
+      }
+
+      if (pInner != null) handledPunchIds.add(pInner.id);
+      if (pOuter != null) handledPunchIds.add(pOuter.id);
+
+      if (pInner == null) continue;
+
+      final CadPoint2D mBase;
+      if (pOuter != null) {
+        mBase = CadPoint2D(
+          (pInner.center.x + pOuter.center.x) / 2.0,
+          (pInner.center.y + pOuter.center.y) / 2.0,
+        );
+      } else {
+        mBase = pInner.center;
+      }
+
+      // Scaled flap center
+      final mTarget = CadPoint2D(
+        mBase.x + wx + (dH / 2.0) * flap.vx,
+        mBase.y + wy + (dH / 2.0) * flap.vy,
+      );
+
+      if (targetH < 95.0) {
+        // Single slot centered on flap with respect to height
+        newPunches.add(pInner.copyWith(
+          center: mTarget,
+          rotationDeg: flap.rotDeg,
+        ));
+      } else {
+        // Two slots at 50mm pitch, centered on flap with respect to height
+        final innerCenter = CadPoint2D(
+          mTarget.x - 25.0 * flap.vx,
+          mTarget.y - 25.0 * flap.vy,
+        );
+        final outerCenter = CadPoint2D(
+          mTarget.x + 25.0 * flap.vx,
+          mTarget.y + 25.0 * flap.vy,
+        );
+
+        newPunches.add(pInner.copyWith(
+          center: innerCenter,
+          rotationDeg: flap.rotDeg,
+        ));
+
+        final outerPunch = pOuter?.copyWith(
+          center: outerCenter,
+          rotationDeg: flap.rotDeg,
+        ) ?? CncPunchPrimitive(
+          id: flap.outerId,
+          type: PunchType.obroundSlot,
+          center: outerCenter,
+          widthMm: pInner.widthMm,
+          lengthMm: pInner.lengthMm,
+          diameterMm: pInner.diameterMm,
+          rotationDeg: flap.rotDeg,
+          role: CncPunchRole.coupler,
+          parentFaceId: pInner.parentFaceId,
+          associatedPortId: flap.portId,
+          layer: pInner.layer,
+          showLabel: true,
+          isVisible: true,
+        );
+        newPunches.add(outerPunch);
+      }
+    }
+
+    // Preserve and transform any other non-coupler punches (e.g. floor stampings)
+    for (final p in baseline.punches) {
+      if (!handledPunchIds.contains(p.id)) {
+        newPunches.add(p.copyWith(center: transformEqualTeePt(p.center)));
+      }
+    }
+
+    final updatedParams = Map<String, double>.from(baseline.parameters);
+    updatedParams['width'] = targetW;
+    updatedParams['height'] = targetH;
+    for (int i = 1; i <= 3; i++) {
+      updatedParams['port${i}_width'] = targetW;
+      updatedParams['port${i}_height'] = targetH;
+    }
+
     return baseline.copyWith(
-      outerContour: baseline.outerContour.map(transformEqualTeePt).toList(),
-      bends: baseline.bends.map((b) => b.copyWith(
-        p1: transformEqualTeePt(b.p1),
-        p2: transformEqualTeePt(b.p2),
-      )).toList(),
-      faces: baseline.faces.map((f) => f.copyWith(
-        vertices: f.vertices.map(transformEqualTeePt).toList(),
-      )).toList(),
-      punches: baseline.punches.map((p) => p.copyWith(
-        center: transformEqualTeePt(p.center),
-      )).toList(),
+      outerContour: newContour,
+      bends: newBends,
+      faces: newFaces,
+      arcs: newArcs,
+      punches: newPunches,
+      parameters: updatedParams,
     );
   }
 
   /// Dedicated 2D Sheet Scaling for Unequal Tee Fittings:
   /// Dispatches to the standalone analytical [UnequalTeeScaler].
-  DsfDocument _scaleUnequalTee2D(
-    DsfDocument baseline, {
-    required bool isLinked,
-    required Map<String, CmsScalingParameter> parameters,
-  }) {
+  DsfDocument _scaleUnequalTee2D(DsfDocument baseline, {required bool isLinked, required Map<String, CmsScalingParameter> parameters}) {
     final scaleParams = isLinked
         ? UnequalTeeScaleParameters(
             port1Width: parameters['width']?.currentValue ?? 100.0,
@@ -857,20 +1259,12 @@ class CmsScalingController extends ChangeNotifier {
           )
         : UnequalTeeScaleParameters.fromCmsParameters(parameters);
 
-    final res = UnequalTeeScaler.scale(
-      baseline: baseline,
-      parameters: scaleParams,
-    );
+    final res = UnequalTeeScaler.scale(baseline: baseline, parameters: scaleParams);
     return res.isValid ? res.document : baseline;
   }
 
-
   /// Tee scaling dispatcher: routes to equal or unequal subroutine based on [isLinked].
-  DsfDocument _scaleTee2D(
-    DsfDocument baseline, {
-    required bool isLinked,
-    required Map<String, CmsScalingParameter> parameters,
-  }) {
+  DsfDocument _scaleTee2D(DsfDocument baseline, {required bool isLinked, required Map<String, CmsScalingParameter> parameters}) {
     if (isLinked) {
       return _scaleEqualTee2D(baseline, parameters: parameters);
     } else {
@@ -906,25 +1300,12 @@ class CmsScalingController extends ChangeNotifier {
   // Canonical 2D Sheet Scaling Math (Section 13)
   // ---------------------------------------------------------------------------
 
-  DsfDocument _generateScaled2DDocument({
-    required DsfDocument baseline,
-    required String paramId,
-    required double delta,
-  }) {
+  DsfDocument _generateScaled2DDocument({required DsfDocument baseline, required String paramId, required double delta}) {
     final morphed = _morph2DBlank(baseline: baseline, paramId: paramId, delta: delta);
-    return CmsPunchConstraintEngine.reconcile(
-      baseline: baseline,
-      scaled: morphed,
-      paramId: paramId,
-      delta: delta,
-    );
+    return CmsPunchConstraintEngine.reconcile(baseline: baseline, scaled: morphed, paramId: paramId, delta: delta);
   }
 
-  DsfDocument _morph2DBlank({
-    required DsfDocument baseline,
-    required String paramId,
-    required double delta,
-  }) {
+  DsfDocument _morph2DBlank({required DsfDocument baseline, required String paramId, required double delta}) {
     if (delta.abs() < 1e-4) return baseline;
 
     final baseW = baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0;
@@ -960,11 +1341,7 @@ class CmsScalingController extends ChangeNotifier {
         profile == CmsScalingProfile.tee ||
         profile == CmsScalingProfile.straight) {
       final templateDef = TemplateParameterDefinition(
-        templateId: profile == CmsScalingProfile.flatBend45
-            ? '45_deg_bend'
-            : (profile == CmsScalingProfile.flatBend90
-                ? '90_deg_bend'
-                : 'equal_tee'),
+        templateId: profile == CmsScalingProfile.flatBend45 ? '45_deg_bend' : (profile == CmsScalingProfile.flatBend90 ? '90_deg_bend' : 'equal_tee'),
         name: contract.variationName,
         category: contract.productType,
         productType: contract.productType,
@@ -999,10 +1376,7 @@ class CmsScalingController extends ChangeNotifier {
   DsfDocument _scaleRiserWidth2D(DsfDocument baseline, double delta) {
     if (baseline.bends.isEmpty) return baseline;
 
-    final b45 = baseline.bends.firstWhere(
-      (b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0,
-      orElse: () => baseline.bends.first,
-    );
+    final b45 = baseline.bends.firstWhere((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0, orElse: () => baseline.bends.first);
     final has45 = (b45.targetAngleDeg.abs() - 45.0).abs() < 15.0;
 
     double x1;
@@ -1011,9 +1385,7 @@ class CmsScalingController extends ChangeNotifier {
       x1 = math.min(b45.p1.x, b45.p2.x);
       x2 = math.max(b45.p1.x, b45.p2.x);
     } else {
-      final vertBends = baseline.bends
-          .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0)
-          .toList()
+      final vertBends = baseline.bends.where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0).toList()
         ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
       if (vertBends.length >= 4) {
         x1 = math.min((vertBends[1].p1.x + vertBends[1].p2.x) / 2.0, (vertBends[vertBends.length - 2].p1.x + vertBends[vertBends.length - 2].p2.x) / 2.0);
@@ -1046,10 +1418,7 @@ class CmsScalingController extends ChangeNotifier {
     final newContour = baseline.outerContour.map(transformPt).toList();
 
     final newBends = baseline.bends.map((b) {
-      return b.copyWith(
-        p1: transformPt(b.p1),
-        p2: transformPt(b.p2),
-      );
+      return b.copyWith(p1: transformPt(b.p1), p2: transformPt(b.p2));
     }).toList();
 
     final newFaces = baseline.faces.map((f) {
@@ -1058,16 +1427,11 @@ class CmsScalingController extends ChangeNotifier {
     }).toList();
 
     final newPunches = baseline.punches.map((p) {
-      return p.copyWith(
-        center: transformPt(p.center),
-      );
+      return p.copyWith(center: transformPt(p.center));
     }).toList();
 
     final newCutLines = baseline.cutLines.map((cl) {
-      return cl.copyWith(
-        p1: transformPt(cl.p1),
-        p2: transformPt(cl.p2),
-      );
+      return cl.copyWith(p1: transformPt(cl.p1), p2: transformPt(cl.p2));
     }).toList();
 
     final newArcs = baseline.arcs.map((a) {
@@ -1077,11 +1441,7 @@ class CmsScalingController extends ChangeNotifier {
       return a.translate(dx, dy);
     }).toList();
 
-    final decomp = PlanarFaceDecomposer.decompose(
-      outerContour: newContour,
-      bends: newBends,
-      cutLines: newCutLines,
-    );
+    final decomp = PlanarFaceDecomposer.decompose(outerContour: newContour, bends: newBends, cutLines: newCutLines);
 
     final doc = baseline.copyWith(
       outerContour: newContour,
@@ -1094,9 +1454,7 @@ class CmsScalingController extends ChangeNotifier {
     );
 
     // If baseline topology is already established and complete, preserve it directly!
-    final hasCompleteTopology = baseline.faces.isNotEmpty &&
-        baseline.bends.isNotEmpty &&
-        baseline.bends.every((b) => b.parentFaceId.isNotEmpty);
+    final hasCompleteTopology = baseline.faces.isNotEmpty && baseline.bends.isNotEmpty && baseline.bends.every((b) => b.parentFaceId.isNotEmpty);
 
     if (hasCompleteTopology) {
       return doc;
@@ -1117,10 +1475,11 @@ class CmsScalingController extends ChangeNotifier {
   DsfDocument _scaleOutsideRiserWidth2D(DsfDocument baseline, double delta) {
     if (baseline.bends.isEmpty) return baseline;
 
-    final vertBends = baseline.bends
-        .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
-        .toList()
-      ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+    final vertBends =
+        baseline.bends
+            .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
+            .toList()
+          ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
 
     if (vertBends.length < 2) return _scaleWidth2D(baseline, delta);
 
@@ -1140,9 +1499,7 @@ class CmsScalingController extends ChangeNotifier {
       // The cheek throat notch reaches inward into x1 < x < x2.
       // Partition strictly by midX so that each cheek translates 100% rigidly.
       if (pt.y > yFloorTop + 0.5) {
-        return pt.x < xMid
-            ? CadPoint2D(pt.x - halfDelta, pt.y)
-            : CadPoint2D(pt.x + halfDelta, pt.y);
+        return pt.x < xMid ? CadPoint2D(pt.x - halfDelta, pt.y) : CadPoint2D(pt.x + halfDelta, pt.y);
       }
 
       // 2. Straight sidewall cheeks and flanges
@@ -1161,10 +1518,7 @@ class CmsScalingController extends ChangeNotifier {
     final newContour = baseline.outerContour.map(transformPt).toList();
 
     final newBends = baseline.bends.map((b) {
-      return b.copyWith(
-        p1: transformPt(b.p1),
-        p2: transformPt(b.p2),
-      );
+      return b.copyWith(p1: transformPt(b.p1), p2: transformPt(b.p2));
     }).toList();
 
     final newFaces = baseline.faces.map((f) {
@@ -1173,16 +1527,11 @@ class CmsScalingController extends ChangeNotifier {
     }).toList();
 
     final newPunches = baseline.punches.map((p) {
-      return p.copyWith(
-        center: transformPt(p.center),
-      );
+      return p.copyWith(center: transformPt(p.center));
     }).toList();
 
     final newCutLines = baseline.cutLines.map((cl) {
-      return cl.copyWith(
-        p1: transformPt(cl.p1),
-        p2: transformPt(cl.p2),
-      );
+      return cl.copyWith(p1: transformPt(cl.p1), p2: transformPt(cl.p2));
     }).toList();
 
     final newArcs = baseline.arcs.map((a) {
@@ -1192,11 +1541,7 @@ class CmsScalingController extends ChangeNotifier {
       return a.translate(dx, dy);
     }).toList();
 
-    final decomp = PlanarFaceDecomposer.decompose(
-      outerContour: newContour,
-      bends: newBends,
-      cutLines: newCutLines,
-    );
+    final decomp = PlanarFaceDecomposer.decompose(outerContour: newContour, bends: newBends, cutLines: newCutLines);
 
     final doc = baseline.copyWith(
       outerContour: newContour,
@@ -1209,9 +1554,7 @@ class CmsScalingController extends ChangeNotifier {
     );
 
     // If baseline topology is already established and complete, preserve it directly!
-    final hasCompleteTopology = baseline.faces.isNotEmpty &&
-        baseline.bends.isNotEmpty &&
-        baseline.bends.every((b) => b.parentFaceId.isNotEmpty);
+    final hasCompleteTopology = baseline.faces.isNotEmpty && baseline.bends.isNotEmpty && baseline.bends.every((b) => b.parentFaceId.isNotEmpty);
 
     if (hasCompleteTopology) {
       return doc;
@@ -1232,9 +1575,7 @@ class CmsScalingController extends ChangeNotifier {
     if (baseline.bends.isEmpty) return baseline;
 
     // Identify vertical bends
-    final vertBends = baseline.bends
-        .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0)
-        .toList()
+    final vertBends = baseline.bends.where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0).toList()
       ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
 
     double x1;
@@ -1258,10 +1599,7 @@ class CmsScalingController extends ChangeNotifier {
       return _scaleHeight2D(baseline, delta);
     }
 
-    final b1Bend = vertBends.firstWhere(
-      (b) => ((b.p1.x + b.p2.x) / 2.0 - x1).abs() < 10.0,
-      orElse: () => vertBends.first,
-    );
+    final b1Bend = vertBends.firstWhere((b) => ((b.p1.x + b.p2.x) / 2.0 - x1).abs() < 10.0, orElse: () => vertBends.first);
     final yFloorBottom = math.min(b1Bend.p1.y, b1Bend.p2.y);
     final yFloorTop = math.max(b1Bend.p1.y, b1Bend.p2.y);
     final xMid = (x1 + x2) / 2.0;
@@ -1393,12 +1731,8 @@ class CmsScalingController extends ChangeNotifier {
       if (b.role == BendLineRole.flange || b.id.toUpperCase().startsWith('FL')) {
         final isLeft = ((b.p1.x + b.p2.x) / 2.0) < xMid;
         final shiftX = isLeft ? -delta : delta;
-        final p1 = b.p1.y <= yFloorBottom + 1.0
-            ? CadPoint2D(b.p1.x + shiftX, b.p1.y)
-            : CadPoint2D(b.p1.x + shiftX, b.p1.y + dYStep);
-        final p2 = b.p2.y <= yFloorBottom + 1.0
-            ? CadPoint2D(b.p2.x + shiftX, b.p2.y)
-            : CadPoint2D(b.p2.x + shiftX, b.p2.y + dYStep);
+        final p1 = b.p1.y <= yFloorBottom + 1.0 ? CadPoint2D(b.p1.x + shiftX, b.p1.y) : CadPoint2D(b.p1.x + shiftX, b.p1.y + dYStep);
+        final p2 = b.p2.y <= yFloorBottom + 1.0 ? CadPoint2D(b.p2.x + shiftX, b.p2.y) : CadPoint2D(b.p2.x + shiftX, b.p2.y + dYStep);
         return b.copyWith(p1: p1, p2: p2);
       }
       return b;
@@ -1410,16 +1744,11 @@ class CmsScalingController extends ChangeNotifier {
     }).toList();
 
     final newPunches = baseline.punches.map((p) {
-      return p.copyWith(
-        center: transformPunchCenter(p),
-      );
+      return p.copyWith(center: transformPunchCenter(p));
     }).toList();
 
     final newCutLines = baseline.cutLines.map((cl) {
-      return cl.copyWith(
-        p1: transformPt(cl.p1),
-        p2: transformPt(cl.p2),
-      );
+      return cl.copyWith(p1: transformPt(cl.p1), p2: transformPt(cl.p2));
     }).toList();
 
     final newArcs = baseline.arcs.map((a) {
@@ -1429,11 +1758,7 @@ class CmsScalingController extends ChangeNotifier {
       return a.translate(dx, dy);
     }).toList();
 
-    final decomp = PlanarFaceDecomposer.decompose(
-      outerContour: newContour,
-      bends: newBends,
-      cutLines: newCutLines,
-    );
+    final decomp = PlanarFaceDecomposer.decompose(outerContour: newContour, bends: newBends, cutLines: newCutLines);
 
     return baseline.copyWith(
       outerContour: newContour,
@@ -1457,10 +1782,7 @@ class CmsScalingController extends ChangeNotifier {
   DsfDocument _scaleRiserHeight2D(DsfDocument baseline, double delta) {
     if (baseline.bends.isEmpty) return baseline;
 
-    final b45 = baseline.bends.firstWhere(
-      (b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0,
-      orElse: () => baseline.bends.first,
-    );
+    final b45 = baseline.bends.firstWhere((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0, orElse: () => baseline.bends.first);
     final has45 = (b45.targetAngleDeg.abs() - 45.0).abs() < 15.0;
 
     double x1;
@@ -1469,9 +1791,7 @@ class CmsScalingController extends ChangeNotifier {
       x1 = math.min(b45.p1.x, b45.p2.x);
       x2 = math.max(b45.p1.x, b45.p2.x);
     } else {
-      final vertBends = baseline.bends
-          .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0)
-          .toList()
+      final vertBends = baseline.bends.where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0).toList()
         ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
       if (vertBends.length >= 4) {
         x1 = math.min((vertBends[1].p1.x + vertBends[1].p2.x) / 2.0, (vertBends[vertBends.length - 2].p1.x + vertBends[vertBends.length - 2].p2.x) / 2.0);
@@ -1496,10 +1816,7 @@ class CmsScalingController extends ChangeNotifier {
     if (leftHeight < 10.0 || rightHeight < 10.0) return _scaleHeight2D(baseline, delta);
 
     // Find B3 transverse bend to establish the base junction Y (y ≈ 128.65)
-    final b3 = baseline.bends.firstWhere(
-      (b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0,
-      orElse: () => baseline.bends.first,
-    );
+    final b3 = baseline.bends.firstWhere((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0, orElse: () => baseline.bends.first);
     final yB3 = b3.p1.y;
 
     // Threshold Y separating the straight run (including vertical flange lines FL1/FL2 ending at y = 85.64)
@@ -1658,10 +1975,7 @@ class CmsScalingController extends ChangeNotifier {
     final newContour = baseline.outerContour.map(transformPt).toList();
 
     final newBends = baseline.bends.map((b) {
-      return b.copyWith(
-        p1: transformPt(b.p1),
-        p2: transformPt(b.p2),
-      );
+      return b.copyWith(p1: transformPt(b.p1), p2: transformPt(b.p2));
     }).toList();
 
     final newFaces = baseline.faces.map((f) {
@@ -1670,16 +1984,11 @@ class CmsScalingController extends ChangeNotifier {
     }).toList();
 
     final newPunches = baseline.punches.map((p) {
-      return p.copyWith(
-        center: transformPunchCenter(p.center),
-      );
+      return p.copyWith(center: transformPunchCenter(p.center));
     }).toList();
 
     final newCutLines = baseline.cutLines.map((cl) {
-      return cl.copyWith(
-        p1: transformPt(cl.p1),
-        p2: transformPt(cl.p2),
-      );
+      return cl.copyWith(p1: transformPt(cl.p1), p2: transformPt(cl.p2));
     }).toList();
 
     final newArcs = baseline.arcs.map((a) {
@@ -1689,11 +1998,7 @@ class CmsScalingController extends ChangeNotifier {
       return a.translate(dx, dy);
     }).toList();
 
-    final decomp = PlanarFaceDecomposer.decompose(
-      outerContour: newContour,
-      bends: newBends,
-      cutLines: newCutLines,
-    );
+    final decomp = PlanarFaceDecomposer.decompose(outerContour: newContour, bends: newBends, cutLines: newCutLines);
 
     final doc = baseline.copyWith(
       outerContour: newContour,
@@ -1706,9 +2011,7 @@ class CmsScalingController extends ChangeNotifier {
     );
 
     // If baseline topology is already established and complete, preserve it directly!
-    final hasCompleteTopology = baseline.faces.isNotEmpty &&
-        baseline.bends.isNotEmpty &&
-        baseline.bends.every((b) => b.parentFaceId.isNotEmpty);
+    final hasCompleteTopology = baseline.faces.isNotEmpty && baseline.bends.isNotEmpty && baseline.bends.every((b) => b.parentFaceId.isNotEmpty);
 
     if (hasCompleteTopology) {
       return doc;
@@ -1725,13 +2028,10 @@ class CmsScalingController extends ChangeNotifier {
   /// - Left/Right Flanges (if present) are children of Left/Right Cheeks via outer 90° bends UP.
   /// - Ensures exact 3D touching along the 45° miter line with zero separation.
   DsfDocument _normalizeRiserTopology(DsfDocument doc, double x1, double x2, double yB3) {
-    final floorFace = doc.faces.firstWhere(
-      (f) {
-        final cx = f.centroid.x;
-        return cx >= x1 - 5.0 && cx <= x2 + 5.0 && f.centroid.y < yB3;
-      },
-      orElse: () => doc.faces.firstWhere((f) => f.id == 'F_4' || f.id == 'F_2', orElse: () => doc.faces.first),
-    );
+    final floorFace = doc.faces.firstWhere((f) {
+      final cx = f.centroid.x;
+      return cx >= x1 - 5.0 && cx <= x2 + 5.0 && f.centroid.y < yB3;
+    }, orElse: () => doc.faces.firstWhere((f) => f.id == 'F_4' || f.id == 'F_2', orElse: () => doc.faces.first));
 
     final flapFace = doc.faces.firstWhere(
       (f) => f.id != floorFace.id && f.centroid.x >= x1 - 5.0 && f.centroid.x <= x2 + 5.0,
@@ -1739,14 +2039,12 @@ class CmsScalingController extends ChangeNotifier {
     );
 
     // Left faces: x < x1 - 5.0, sorted descending by centroid.x (cheek is closest to x1, flange is outer)
-    final leftFaces = doc.faces.where((f) => f.centroid.x < x1 - 5.0).toList()
-      ..sort((a, b) => b.centroid.x.compareTo(a.centroid.x));
+    final leftFaces = doc.faces.where((f) => f.centroid.x < x1 - 5.0).toList()..sort((a, b) => b.centroid.x.compareTo(a.centroid.x));
     final leftCheek = leftFaces.isNotEmpty ? leftFaces.first : null;
     final leftFlange = leftFaces.length > 1 ? leftFaces.last : null;
 
     // Right faces: x > x2 + 5.0, sorted ascending by centroid.x (cheek is closest to x2, flange is outer)
-    final rightFaces = doc.faces.where((f) => f.centroid.x > x2 + 5.0).toList()
-      ..sort((a, b) => a.centroid.x.compareTo(b.centroid.x));
+    final rightFaces = doc.faces.where((f) => f.centroid.x > x2 + 5.0).toList()..sort((a, b) => a.centroid.x.compareTo(b.centroid.x));
     final rightCheek = rightFaces.isNotEmpty ? rightFaces.first : null;
     final rightFlange = rightFaces.length > 1 ? rightFaces.last : null;
 
@@ -1773,15 +2071,13 @@ class CmsScalingController extends ChangeNotifier {
       final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
       final midX = (b.p1.x + b.p2.x) / 2.0;
       return is90 && midX <= midWebX;
-    }).toList()
-      ..sort((a, b) => ((b.p1.x + b.p2.x) / 2.0).compareTo((a.p1.x + a.p2.x) / 2.0)); // Inner bend first
+    }).toList()..sort((a, b) => ((b.p1.x + b.p2.x) / 2.0).compareTo((a.p1.x + a.p2.x) / 2.0)); // Inner bend first
 
     final right90Bends = doc.bends.where((b) {
       final is90 = (b.targetAngleDeg.abs() - 90.0).abs() < 15.0;
       final midX = (b.p1.x + b.p2.x) / 2.0;
       return is90 && midX > midWebX;
-    }).toList()
-      ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0)); // Inner bend first
+    }).toList()..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0)); // Inner bend first
 
     final leftInnerBendId = left90Bends.isNotEmpty ? left90Bends.first.id : null;
     final leftOuterBendId = left90Bends.length > 1 ? left90Bends.last.id : null;
@@ -1791,44 +2087,20 @@ class CmsScalingController extends ChangeNotifier {
 
     final normalizedBends = doc.bends.map((b) {
       if ((b.targetAngleDeg.abs() - 45.0).abs() < 15.0) {
-        return b.copyWith(
-          parentFaceId: floorFace.id,
-          childFaceId: flapFace.id,
-          direction: BendDirection.up,
-        );
+        return b.copyWith(parentFaceId: floorFace.id, childFaceId: flapFace.id, direction: BendDirection.up);
       } else if (b.id == leftInnerBendId && leftCheek != null) {
-        return b.copyWith(
-          parentFaceId: floorFace.id,
-          childFaceId: leftCheek.id,
-          direction: BendDirection.up,
-        );
+        return b.copyWith(parentFaceId: floorFace.id, childFaceId: leftCheek.id, direction: BendDirection.up);
       } else if (b.id == leftOuterBendId && leftCheek != null && leftFlange != null) {
-        return b.copyWith(
-          parentFaceId: leftCheek.id,
-          childFaceId: leftFlange.id,
-          direction: BendDirection.up,
-        );
+        return b.copyWith(parentFaceId: leftCheek.id, childFaceId: leftFlange.id, direction: BendDirection.up);
       } else if (b.id == rightInnerBendId && rightCheek != null) {
-        return b.copyWith(
-          parentFaceId: floorFace.id,
-          childFaceId: rightCheek.id,
-          direction: BendDirection.up,
-        );
+        return b.copyWith(parentFaceId: floorFace.id, childFaceId: rightCheek.id, direction: BendDirection.up);
       } else if (b.id == rightOuterBendId && rightCheek != null && rightFlange != null) {
-        return b.copyWith(
-          parentFaceId: rightCheek.id,
-          childFaceId: rightFlange.id,
-          direction: BendDirection.up,
-        );
+        return b.copyWith(parentFaceId: rightCheek.id, childFaceId: rightFlange.id, direction: BendDirection.up);
       }
       return b;
     }).toList();
 
-    return doc.copyWith(
-      baseFaceId: floorFace.id,
-      faces: normalizedFaces,
-      bends: normalizedBends,
-    );
+    return doc.copyWith(baseFaceId: floorFace.id, faces: normalizedFaces, bends: normalizedBends);
   }
 
   /// Scales the canonical 2D flat blank for Width:
@@ -1839,15 +2111,8 @@ class CmsScalingController extends ChangeNotifier {
     final doc = baseline.faces.isNotEmpty
         ? baseline
         : () {
-            final decomp = PlanarFaceDecomposer.decompose(
-              outerContour: baseline.outerContour,
-              bends: baseline.bends,
-              cutLines: baseline.cutLines,
-            );
-            return baseline.copyWith(
-              faces: decomp.faces,
-              baseFaceId: decomp.baseFaceId,
-            );
+            final decomp = PlanarFaceDecomposer.decompose(outerContour: baseline.outerContour, bends: baseline.bends, cutLines: baseline.cutLines);
+            return baseline.copyWith(faces: decomp.faces, baseFaceId: decomp.baseFaceId);
           }();
 
     if (doc.faces.isEmpty && doc.outerContour.isEmpty) return baseline;
@@ -1889,10 +2154,7 @@ class CmsScalingController extends ChangeNotifier {
 
     // 2. Transform bends
     final newBends = doc.bends.map((b) {
-      return b.copyWith(
-        p1: transformPt(b.p1),
-        p2: transformPt(b.p2),
-      );
+      return b.copyWith(p1: transformPt(b.p1), p2: transformPt(b.p2));
     }).toList();
 
     // 3. Transform faces
@@ -1903,24 +2165,15 @@ class CmsScalingController extends ChangeNotifier {
 
     // 4. Transform punches (RIGID: maintain exact shape, shift center with host region)
     final newPunches = doc.punches.map((p) {
-      return p.copyWith(
-        center: transformPt(p.center),
-      );
+      return p.copyWith(center: transformPt(p.center));
     }).toList();
 
     // 5. Transform cut lines
     final newCutLines = doc.cutLines.map((cl) {
-      return cl.copyWith(
-        p1: transformPt(cl.p1),
-        p2: transformPt(cl.p2),
-      );
+      return cl.copyWith(p1: transformPt(cl.p1), p2: transformPt(cl.p2));
     }).toList();
 
-    final decomp = PlanarFaceDecomposer.decompose(
-      outerContour: newContour,
-      bends: newBends,
-      cutLines: newCutLines,
-    );
+    final decomp = PlanarFaceDecomposer.decompose(outerContour: newContour, bends: newBends, cutLines: newCutLines);
 
     return doc.copyWith(
       outerContour: newContour,
@@ -1976,7 +2229,7 @@ class CmsScalingController extends ChangeNotifier {
   // Setup from Phase 1 Verified Template
   // ---------------------------------------------------------------------------
 
-  void _initModelFromPhase1() {
+  void _initModelFromPhase1({Map<String, double>? currentParameterValues}) {
     final floorFace = baselineDocument.faces.firstWhere(
       (f) => f.id == baselineDocument.baseFaceId || f.role == FaceRole.baseFloor,
       orElse: () => baselineDocument.faces.isNotEmpty ? baselineDocument.faces.first : const PlanarSheetFace(id: 'F_FLOOR', vertices: []),
@@ -2056,15 +2309,17 @@ class CmsScalingController extends ChangeNotifier {
 
     final params = <String, CmsScalingParameter>{};
     if (initialLinked || baselinePorts.length < 3) {
+      final curW = currentParameterValues?['width'] ?? (baselineDocument.parameters['width'] as num?)?.toDouble() ?? baselineWidth;
+      final curH = currentParameterValues?['height'] ?? (baselineDocument.parameters['height'] as num?)?.toDouble() ?? baselineHeight;
       params['width'] = CmsScalingParameter(
         id: 'width',
         displayName: 'Width (W)',
-        currentValue: baselineWidth,
+        currentValue: curW,
         baselineValue: baselineWidth,
         minValidMm: minW,
         maxValidMm: maxW,
         unit: 'mm',
-        teachingState: CmsParameterTeachingState.untaught,
+        teachingState: (curW - baselineWidth).abs() > 0.01 ? CmsParameterTeachingState.learned : CmsParameterTeachingState.untaught,
         stretchZoneIds: ['ZONE_FLOOR_WEB'],
         translationZoneIds: ['ZONE_SIDEWALLS_AND_FLANGES'],
         rigidGroupIds: rigidGroups.map((g) => g.id).toList(),
@@ -2073,12 +2328,12 @@ class CmsScalingController extends ChangeNotifier {
       params['height'] = CmsScalingParameter(
         id: 'height',
         displayName: 'Height (H)',
-        currentValue: baselineHeight,
+        currentValue: curH,
         baselineValue: baselineHeight,
         minValidMm: minH,
         maxValidMm: maxH,
         unit: 'mm',
-        teachingState: CmsParameterTeachingState.untaught,
+        teachingState: (curH - baselineHeight).abs() > 0.01 ? CmsParameterTeachingState.learned : CmsParameterTeachingState.untaught,
         stretchZoneIds: [],
         translationZoneIds: ['ZONE_SIDEWALLS_AND_FLANGES'],
         rigidGroupIds: rigidGroups.map((g) => g.id).toList(),
@@ -2092,19 +2347,20 @@ class CmsScalingController extends ChangeNotifier {
         final hId = 'port${i + 1}_height';
         final double baseWidth;
         if (contract == CmsProductContract.unequalCross) {
-          baseWidth = (i == 1 || i == 3) ? 50.0 : 100.0;
+          baseWidth = (i == 0 || i == 2) ? 50.0 : 100.0;
         } else {
           baseWidth = p.width;
         }
+        final curW = currentParameterValues?[wId] ?? (baselineDocument.parameters[wId] as num?)?.toDouble() ?? baseWidth;
         params[wId] = CmsScalingParameter(
           id: wId,
           displayName: 'Port ${i + 1} Width',
-          currentValue: baseWidth,
+          currentValue: curW,
           baselineValue: baseWidth,
           minValidMm: math.min(50.0, baseWidth - 50.0),
           maxValidMm: math.max(750.0, baseWidth + 200.0),
           unit: 'mm',
-          teachingState: CmsParameterTeachingState.untaught,
+          teachingState: (curW - baseWidth).abs() > 0.01 ? CmsParameterTeachingState.learned : CmsParameterTeachingState.untaught,
         );
         final double baseHeight;
         if (contract == CmsProductContract.unequalTee && i == 1) {
@@ -2112,24 +2368,25 @@ class CmsScalingController extends ChangeNotifier {
           baseHeight = 50.0;
         } else if (contract == CmsProductContract.unequalTee) {
           baseHeight = 100.0;
-        } else if (contract == CmsProductContract.unequalCross && (i == 1 || i == 3)) {
-          // Port 2 and Port 4 couplers on Unequal Cross have a 50mm baseline coupler height
+        } else if (contract == CmsProductContract.unequalCross && (i == 0 || i == 2)) {
+          // Port 1 and Port 3 couplers on Unequal Cross have a 50mm baseline coupler height
           baseHeight = 50.0;
         } else if (contract == CmsProductContract.unequalCross) {
-          // Port 1 and Port 3 couplers have 100mm baseline coupler height
+          // Port 2 and Port 4 couplers have 100mm baseline coupler height
           baseHeight = 100.0;
         } else {
           baseHeight = p.height;
         }
+        final curH = currentParameterValues?[hId] ?? (baselineDocument.parameters[hId] as num?)?.toDouble() ?? baseHeight;
         params[hId] = CmsScalingParameter(
           id: hId,
           displayName: 'Port ${i + 1} Height',
-          currentValue: baseHeight,
+          currentValue: curH,
           baselineValue: baseHeight,
           minValidMm: math.min(50.0, baseHeight - 50.0),
           maxValidMm: math.max(300.0, baseHeight + 150.0),
           unit: 'mm',
-          teachingState: CmsParameterTeachingState.untaught,
+          teachingState: (curH - baseHeight).abs() > 0.01 ? CmsParameterTeachingState.learned : CmsParameterTeachingState.untaught,
         );
       }
       _activeParameterId = 'port1_width';
@@ -2150,3 +2407,48 @@ class CmsScalingController extends ChangeNotifier {
     );
   }
 }
+
+class _EqualCrossFlapConfig {
+  final String innerId;
+  final String outerId;
+  final int wxSign;
+  final int wySign;
+  final double vx;
+  final double vy;
+  final double rotDeg;
+  final String portId;
+
+  const _EqualCrossFlapConfig({
+    required this.innerId,
+    required this.outerId,
+    required this.wxSign,
+    required this.wySign,
+    required this.vx,
+    required this.vy,
+    required this.rotDeg,
+    required this.portId,
+  });
+}
+
+class _EqualTeeFlapConfig {
+  final String innerId;
+  final String outerId;
+  final int wxSign;
+  final bool hasWyShift;
+  final double vx;
+  final double vy;
+  final double rotDeg;
+  final String portId;
+
+  const _EqualTeeFlapConfig({
+    required this.innerId,
+    required this.outerId,
+    required this.wxSign,
+    required this.hasWyShift,
+    required this.vx,
+    required this.vy,
+    required this.rotDeg,
+    required this.portId,
+  });
+}
+

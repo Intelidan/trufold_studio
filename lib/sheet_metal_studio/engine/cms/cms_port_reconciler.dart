@@ -34,6 +34,10 @@ class CmsPortReconciler {
           heightDirection: m.heightDirection,
           hostFaceIds: [m.floorFaceId, ...m.sidewallFaceIds],
           boundaryLoopId: m.openingId,
+          floorP1: m.floorP1,
+          floorP2: m.floorP2,
+          derivedMouthCorners: m.derivedMouthCorners,
+          calloutAnchor: m.calloutAnchor,
           confidence: 1.0,
           detectionSource: PortDetectionSource.foldedTopology,
         );
@@ -83,10 +87,33 @@ class CmsPortReconciler {
           heightDirection: matched.heightDirection,
           hostFaceIds: [matched.floorFaceId, ...matched.sidewallFaceIds],
           boundaryLoopId: matched.openingId,
+          floorP1: matched.floorP1,
+          floorP2: matched.floorP2,
+          derivedMouthCorners: matched.derivedMouthCorners,
+          calloutAnchor: matched.calloutAnchor,
           confidence: 1.0,
         ));
+      } else if (remainingOpenings.isNotEmpty) {
+        // Fallback to sequential opening when normal/face data is missing
+        final matched = remainingOpenings.removeAt(0);
+        reconciled.add(oldPort.copyWith(
+          width: matched.width,
+          height: matched.height,
+          flange: matched.flange,
+          center: matched.center,
+          normal: matched.normal,
+          widthDirection: matched.widthDirection,
+          heightDirection: matched.heightDirection,
+          hostFaceIds: [matched.floorFaceId, ...matched.sidewallFaceIds],
+          boundaryLoopId: matched.openingId,
+          floorP1: matched.floorP1,
+          floorP2: matched.floorP2,
+          derivedMouthCorners: matched.derivedMouthCorners,
+          calloutAnchor: matched.calloutAnchor,
+          confidence: 0.8,
+        ));
       } else {
-        // Retain previous port if no clear match was found
+        // Retain previous port if no openings available
         reconciled.add(oldPort);
       }
     }
@@ -106,6 +133,10 @@ class CmsPortReconciler {
         heightDirection: leftover.heightDirection,
         hostFaceIds: [leftover.floorFaceId, ...leftover.sidewallFaceIds],
         boundaryLoopId: leftover.openingId,
+        floorP1: leftover.floorP1,
+        floorP2: leftover.floorP2,
+        derivedMouthCorners: leftover.derivedMouthCorners,
+        calloutAnchor: leftover.calloutAnchor,
         confidence: 0.8,
         detectionSource: PortDetectionSource.foldedTopology,
       ));

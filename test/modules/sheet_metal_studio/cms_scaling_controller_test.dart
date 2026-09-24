@@ -1294,5 +1294,282 @@ void main() {
       expect(CmsProductContract.lookup('cross', 'equal_cross'), equals(CmsProductContract.equalCross));
       expect(CmsProductContract.lookup('cross', 'unequal_cross'), equals(CmsProductContract.unequalCross));
     });
+
+    test('Test Z1 — Equal Cross Width Scaling preserves all 16 corner fillet arcs and moves vertices synchronously (Resolving SS2 & SS3)', () {
+      final crossFile = File('assets/dxf_templates/trunking_accessories/equal_cross_100x100.dsf');
+      final json = jsonDecode(crossFile.readAsStringSync()) as Map<String, dynamic>;
+      final crossDoc = DsfDocument.fromJson(json);
+
+      final p1 = const CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 100.0);
+      final p2 = const CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 100.0);
+      final p3 = const CmsPhysicalPort(id: 'PORT_3', index: 3, width: 100.0, height: 100.0);
+      final p4 = const CmsPhysicalPort(id: 'PORT_4', index: 4, width: 100.0, height: 100.0);
+
+      final controller = CmsScalingController(
+        baselineDocument: crossDoc,
+        contract: CmsProductContract.equalCross,
+        baselinePorts: [p1, p2, p3, p4],
+      );
+
+      // Scale width from 100mm to 200mm (SS3 scenario)
+      controller.selectParameter('width');
+      controller.evaluateMorph(200.0);
+
+      final preview = controller.currentPreview!;
+      expect(preview.isValid, isTrue);
+      final scaledDoc = preview.scaledDocument;
+
+      // 1. All 16 corner fillet arcs MUST be preserved
+      expect(scaledDoc.arcs.length, equals(16));
+      for (final arc in scaledDoc.arcs) {
+        expect(arc.radius, closeTo(10.0, 1e-4));
+        // Every arc start and end point must coincide with an outer contour vertex
+        final hasMatchingStart = scaledDoc.outerContour.any((v) => v.distanceTo(arc.startPoint) < 0.1);
+        final hasMatchingEnd = scaledDoc.outerContour.any((v) => v.distanceTo(arc.endPoint) < 0.1);
+        expect(hasMatchingStart, isTrue, reason: 'Arc ${arc.id} startPoint must coincide with outer contour');
+        expect(hasMatchingEnd, isTrue, reason: 'Arc ${arc.id} endPoint must coincide with outer contour');
+      }
+
+      // 2. Arc centers MUST move with the scale (no stale coordinates at baseline)
+      for (int i = 0; i < 16; i++) {
+        final baselineArc = crossDoc.arcs[i];
+        final scaledArc = scaledDoc.arcs[i];
+        expect(scaledArc.center.distanceTo(baselineArc.center), greaterThan(10.0),
+            reason: 'Arc ${scaledArc.id} must move with width scale, not stay at baseline');
+      }
+    });
+
+    test('Test Z2 — Equal Cross Height Scaling expands cheeks at 45 degrees without shear distortion (Resolving SS4)', () {
+      final crossFile = File('assets/dxf_templates/trunking_accessories/equal_cross_100x100.dsf');
+      final json = jsonDecode(crossFile.readAsStringSync()) as Map<String, dynamic>;
+      final crossDoc = DsfDocument.fromJson(json);
+
+      final p1 = const CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 100.0);
+      final p2 = const CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 100.0);
+      final p3 = const CmsPhysicalPort(id: 'PORT_3', index: 3, width: 100.0, height: 100.0);
+      final p4 = const CmsPhysicalPort(id: 'PORT_4', index: 4, width: 100.0, height: 100.0);
+
+      final controller = CmsScalingController(
+        baselineDocument: crossDoc,
+        contract: CmsProductContract.equalCross,
+        baselinePorts: [p1, p2, p3, p4],
+      );
+
+      // Scale height from 100mm to 150mm (SS4 scenario)
+      controller.selectParameter('height');
+      controller.evaluateMorph(150.0);
+
+      final preview = controller.currentPreview!;
+      expect(preview.isValid, isTrue);
+      final scaledDoc = preview.scaledDocument;
+
+      // 1. All 16 bends preserved with exact fold angles
+      expect(scaledDoc.bends.length, equals(16));
+      final b1 = scaledDoc.bends.firstWhere((b) => b.id == 'B1');
+      expect(b1.p1.distanceTo(b1.p2), closeTo(40.0, 0.1)); // Corner bend stays 40mm
+
+      final fl2 = scaledDoc.bends.firstWhere((b) => b.id == 'FL2');
+      expect(fl2.p1.distanceTo(fl2.p2), closeTo(40.0, 0.1)); // Flange bend stays 40mm
+
+      // Cheek length along 45° angle grew by 50mm
+      final b5 = scaledDoc.bends.firstWhere((b) => b.id == 'B5');
+      final baselineB5 = crossDoc.bends.firstWhere((b) => b.id == 'B5');
+      expect(b5.p1.distanceTo(b5.p2) - baselineB5.p1.distanceTo(baselineB5.p2), closeTo(50.0, 0.1));
+
+      // 2. 3D folded mesh is valid with standing side walls and clean ports
+      expect(preview.foldedMesh.polygons.isNotEmpty, isTrue);
+      for (final port in preview.derivedPorts) {
+        expect(port.height, closeTo(150.0, 5.0));
+      }
+    });
+
+    test('Test Z3 — Equal Cross Coupler Holes Universal 95mm Rule (1 slot < 95mm, 2 slots >= 95mm centered)', () {
+      final crossFile = File('assets/dxf_templates/trunking_accessories/equal_cross_100x100.dsf');
+      final json = jsonDecode(crossFile.readAsStringSync()) as Map<String, dynamic>;
+      final crossDoc = DsfDocument.fromJson(json);
+
+      final p1 = const CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 100.0);
+      final p2 = const CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 100.0);
+      final p3 = const CmsPhysicalPort(id: 'PORT_3', index: 3, width: 100.0, height: 100.0);
+      final p4 = const CmsPhysicalPort(id: 'PORT_4', index: 4, width: 100.0, height: 100.0);
+
+      final controller = CmsScalingController(
+        baselineDocument: crossDoc,
+        contract: CmsProductContract.equalCross,
+        baselinePorts: [p1, p2, p3, p4],
+      );
+
+      // Case A: Height < 95mm (75mm) -> Exactly 1 slot per flap = 8 slots total
+      controller.selectParameter('height');
+      controller.evaluateMorph(75.0);
+
+      var preview = controller.currentPreview!;
+      expect(preview.isValid, isTrue);
+      var scaledDoc = preview.scaledDocument;
+      expect(scaledDoc.punches.length, equals(8));
+
+      // Case B: Height >= 95mm (150mm) -> Exactly 2 slots per flap = 16 slots total at 50mm pitch
+      controller.evaluateMorph(150.0);
+      preview = controller.currentPreview!;
+      expect(preview.isValid, isTrue);
+      scaledDoc = preview.scaledDocument;
+      expect(scaledDoc.punches.length, equals(16));
+
+      // Verify pitch between pair on flap 1 (SLOT_1 and SLOT_2)
+      final slot1 = scaledDoc.punches.firstWhere((p) => p.id == 'SLOT_1');
+      final slot2 = scaledDoc.punches.firstWhere((p) => p.id == 'SLOT_2');
+      expect(slot1.center.distanceTo(slot2.center), closeTo(50.0, 0.1));
+
+      // Verify pitch between pair on flap 3 (SLOT_5 and SLOT_6)
+      final slot5 = scaledDoc.punches.firstWhere((p) => p.id == 'SLOT_5');
+      final slot6 = scaledDoc.punches.firstWhere((p) => p.id == 'SLOT_6');
+      expect(slot5.center.distanceTo(slot6.center), closeTo(50.0, 0.1));
+
+      // Case C: Scale back down to 50mm (< 95mm) -> Returns to 1 slot per flap = 8 slots total
+      controller.evaluateMorph(50.0);
+      preview = controller.currentPreview!;
+      expect(preview.isValid, isTrue);
+      scaledDoc = preview.scaledDocument;
+      expect(scaledDoc.punches.length, equals(8));
+    });
+
+    test('Test Z4 — Equal Tee preserves all 12 fillet arcs (r=10mm) and vertices without orphan anchoring dots (Resolving SS1, SS2, SS3)', () {
+      final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+      final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
+      final teeDoc = DsfDocument.fromJson(json);
+
+      final p1 = const CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 100.0);
+      final p2 = const CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 100.0);
+      final p3 = const CmsPhysicalPort(id: 'PORT_3', index: 3, width: 100.0, height: 100.0);
+
+      final controller = CmsScalingController(
+        baselineDocument: teeDoc,
+        contract: CmsProductContract.equalTee,
+        baselinePorts: [p1, p2, p3],
+      );
+
+      controller.selectParameter('width');
+      controller.evaluateMorph(200.0);
+
+      final preview = controller.currentPreview!;
+      expect(preview.isValid, isTrue);
+      final scaledDoc = preview.scaledDocument;
+
+      // 1. All 12 corner fillet arcs MUST be preserved
+      expect(scaledDoc.arcs.length, equals(12));
+      for (final arc in scaledDoc.arcs) {
+        expect(arc.radius, closeTo(10.0, 1e-4));
+        // Every arc start and end point must coincide with an outer contour vertex
+        final hasMatchingStart = scaledDoc.outerContour.any((v) => v.distanceTo(arc.startPoint) < 0.1);
+        final hasMatchingEnd = scaledDoc.outerContour.any((v) => v.distanceTo(arc.endPoint) < 0.1);
+        expect(hasMatchingStart, isTrue, reason: 'Arc ${arc.id} startPoint must coincide with outer contour');
+        expect(hasMatchingEnd, isTrue, reason: 'Arc ${arc.id} endPoint must coincide with outer contour');
+      }
+
+      // 2. Arc centers MUST move with the scale (no stale coordinates at baseline)
+      for (int i = 0; i < 12; i++) {
+        final baselineArc = teeDoc.arcs[i];
+        final scaledArc = scaledDoc.arcs[i];
+        expect(scaledArc.center.distanceTo(baselineArc.center), greaterThan(10.0),
+            reason: 'Arc ${scaledArc.id} must move with width scale, not stay at baseline');
+      }
+    });
+
+    test('Test Z5 — Equal Tee Height Scaling expands cheeks at 45 degrees and bottom sidewall vertically without distortion (Resolving SS4)', () {
+      final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+      final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
+      final teeDoc = DsfDocument.fromJson(json);
+
+      final p1 = const CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 100.0);
+      final p2 = const CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 100.0);
+      final p3 = const CmsPhysicalPort(id: 'PORT_3', index: 3, width: 100.0, height: 100.0);
+
+      final controller = CmsScalingController(
+        baselineDocument: teeDoc,
+        contract: CmsProductContract.equalTee,
+        baselinePorts: [p1, p2, p3],
+      );
+
+      // Scale height from 100mm to 150mm
+      controller.selectParameter('height');
+      controller.evaluateMorph(150.0);
+
+      final preview = controller.currentPreview!;
+      expect(preview.isValid, isTrue);
+      final scaledDoc = preview.scaledDocument;
+
+      // 1. All 10 bends preserved with exact fold geometry
+      expect(scaledDoc.bends.length, equals(10));
+      final b1 = scaledDoc.bends.firstWhere((b) => b.id == 'B1');
+      expect(b1.p1.distanceTo(b1.p2), closeTo(40.0, 0.1)); // Corner base bend stays 40mm
+
+      final fl2 = scaledDoc.bends.firstWhere((b) => b.id == 'FL2');
+      expect(fl2.p1.distanceTo(fl2.p2), closeTo(40.0, 0.1)); // Flange bend stays 40mm
+
+      // Cheek length along 45° angle grew by 50mm
+      final b5 = scaledDoc.bends.firstWhere((b) => b.id == 'B5');
+      final baselineB5 = teeDoc.bends.firstWhere((b) => b.id == 'B5');
+      expect(b5.p1.distanceTo(b5.p2) - baselineB5.p1.distanceTo(baselineB5.p2), closeTo(50.0, 0.1));
+
+      // Sidewall distance between B3 and FL1 grew by 50mm
+      final b3 = scaledDoc.bends.firstWhere((b) => b.id == 'B3');
+      final fl1 = scaledDoc.bends.firstWhere((b) => b.id == 'FL1');
+      expect((fl1.p1.y - b3.p1.y) - 97.0, closeTo(50.0, 0.1));
+
+      // 2. 3D folded mesh is valid with standing side walls and clean ports
+      expect(preview.foldedMesh.polygons.isNotEmpty, isTrue);
+      for (final port in preview.derivedPorts) {
+        expect(port.height, closeTo(150.0, 5.0));
+      }
+    });
+
+    test('Test Z6 — Equal Tee Coupler Holes Universal 95mm Rule (1 slot < 95mm, 2 slots >= 95mm centered)', () {
+      final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+      final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
+      final teeDoc = DsfDocument.fromJson(json);
+
+      final p1 = const CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 100.0);
+      final p2 = const CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 100.0);
+      final p3 = const CmsPhysicalPort(id: 'PORT_3', index: 3, width: 100.0, height: 100.0);
+
+      final controller = CmsScalingController(
+        baselineDocument: teeDoc,
+        contract: CmsProductContract.equalTee,
+        baselinePorts: [p1, p2, p3],
+      );
+
+      // Case A: Height < 95mm (75mm) -> Exactly 1 slot per region = 6 slots total
+      controller.selectParameter('height');
+      controller.evaluateMorph(75.0);
+
+      var preview = controller.currentPreview!;
+      expect(preview.isValid, isTrue);
+      var scaledDoc = preview.scaledDocument;
+      expect(scaledDoc.punches.length, equals(6));
+
+      // Case B: Height >= 95mm (150mm) -> Exactly 2 slots per region = 12 slots total at 50mm pitch
+      controller.evaluateMorph(150.0);
+      preview = controller.currentPreview!;
+      expect(preview.isValid, isTrue);
+      scaledDoc = preview.scaledDocument;
+      expect(scaledDoc.punches.length, equals(12));
+
+      // Verify pitch on Left Cheek Port 1 flap (SLOT_9 and SLOT_10)
+      final slot9 = scaledDoc.punches.firstWhere((p) => p.id == 'SLOT_9');
+      final slot10 = scaledDoc.punches.firstWhere((p) => p.id == 'SLOT_10');
+      expect(slot9.center.distanceTo(slot10.center), closeTo(50.0, 0.1));
+
+      // Verify pitch on Bottom Sidewall Port 3 side (SLOT_8 and SLOT_7)
+      final slot8 = scaledDoc.punches.firstWhere((p) => p.id == 'SLOT_8');
+      final slot7 = scaledDoc.punches.firstWhere((p) => p.id == 'SLOT_7');
+      expect(slot8.center.distanceTo(slot7.center), closeTo(50.0, 0.1));
+
+      // Case C: Scale back down to 50mm (< 95mm) -> Returns to 1 slot per region = 6 slots total
+      controller.evaluateMorph(50.0);
+      preview = controller.currentPreview!;
+      expect(preview.isValid, isTrue);
+      scaledDoc = preview.scaledDocument;
+      expect(scaledDoc.punches.length, equals(6));
+    });
   });
 }

@@ -1016,11 +1016,41 @@ class _Viewport3dPainter extends CustomPainter {
 
     // PASS 3: Render 3D Channel Mouth Aperture Perimeter Highlight Loops
     for (final port in activePorts) {
-      if (port.derivedMouthCorners.length >= 4) {
-        final p0 = project(port.derivedMouthCorners[0]).pt;
-        final p1 = project(port.derivedMouthCorners[1]).pt;
-        final p2 = project(port.derivedMouthCorners[2]).pt;
-        final p3 = project(port.derivedMouthCorners[3]).pt;
+      List<CadPoint3D> corners = port.derivedMouthCorners;
+      if (corners.length < 4 && port.width > 1.0 && port.height > 1.0) {
+        final floorCenter = CadPoint3D(
+          port.center.x - (port.height / 2.0) * port.heightDirection.x,
+          port.center.y - (port.height / 2.0) * port.heightDirection.y,
+          port.center.z - (port.height / 2.0) * port.heightDirection.z,
+        );
+        final p0 = CadPoint3D(
+          floorCenter.x - (port.width / 2.0) * port.widthDirection.x,
+          floorCenter.y - (port.width / 2.0) * port.widthDirection.y,
+          floorCenter.z - (port.width / 2.0) * port.widthDirection.z,
+        );
+        final p3 = CadPoint3D(
+          floorCenter.x + (port.width / 2.0) * port.widthDirection.x,
+          floorCenter.y + (port.width / 2.0) * port.widthDirection.y,
+          floorCenter.z + (port.width / 2.0) * port.widthDirection.z,
+        );
+        final p1 = CadPoint3D(
+          p0.x + port.height * port.heightDirection.x,
+          p0.y + port.height * port.heightDirection.y,
+          p0.z + port.height * port.heightDirection.z,
+        );
+        final p2 = CadPoint3D(
+          p3.x + port.height * port.heightDirection.x,
+          p3.y + port.height * port.heightDirection.y,
+          p3.z + port.height * port.heightDirection.z,
+        );
+        corners = [p0, p1, p2, p3];
+      }
+
+      if (corners.length >= 4) {
+        final p0 = project(corners[0]).pt;
+        final p1 = project(corners[1]).pt;
+        final p2 = project(corners[2]).pt;
+        final p3 = project(corners[3]).pt;
 
         final mouthPath = Path()
           ..moveTo(p0.dx, p0.dy)

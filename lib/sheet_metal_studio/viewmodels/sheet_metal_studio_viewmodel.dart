@@ -59,7 +59,7 @@ import '../engine/cms/cms_scaling_controller.dart';
 import '../models/cms/cms_ux_state.dart';
 import '../engine/cms/cms_3d_opening_detector.dart';
 import '../engine/cms/cms_opening_plane_analyzer.dart';
-import '../engine/cms/cms_port_matcher.dart';
+import '../engine/cms/cms_port_reconciler.dart';
 import '../engine/cms/cms_coupler_classifier.dart';
 
 import '../engine/planar_face_decomposer.dart';
@@ -853,6 +853,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier
       'variation': contract.variationName,
       'templateId': '${contract.productType}_${contract.variationName}',
       'version': 1,
+      'canonicalDocument': _document.toJson(),
+      'baselinePorts': _persistentCmsPorts.map((p) => p.toJson()).toList(),
       'ports': _persistentCmsPorts.map((p) => p.toJson()).toList(),
       'verifiedBendIds': state.verifiedBendIds,
       'verifiedFlangeIds': state.verifiedFlangeIds,
@@ -863,6 +865,11 @@ class SheetMetalStudioViewModel extends ChangeNotifier
 
     final newMetadata = Map<String, dynamic>.from(_document.metadata);
     newMetadata['cmsTemplate'] = cmsTemplateData;
+    newMetadata['cms_product_contract'] = {
+      'productType': contract.productType,
+      'variationName': contract.variationName,
+    };
+    newMetadata['appliedTemplate'] = contract.productType;
     _document = _document.copyWith(metadata: newMetadata);
     _recordHistory(
       '✓ Finalized CMS Baseline Template (${contract.displayName})',
@@ -876,13 +883,39 @@ class SheetMetalStudioViewModel extends ChangeNotifier
 
   /// Launches Phase 2: Teach Scaling. Automatically finalizes Phase 1 baseline if needed.
   void startTeachScaling() {
+    final cmsTemplate = _document.metadata['cmsTemplate'] as Map<String, dynamic>?;
+    final int portCount = _persistentCmsPorts.isNotEmpty
+        ? _persistentCmsPorts.length
+        : cmsGuidedController.state.discoveredPorts.length;
+
+    final docTypeLower = '${_document.productType} ${_document.itemName} ${_document.metadata['appliedTemplate']} ${cmsTemplate?['variation']}'.toLowerCase();
+    final hasUnequalFlag = docTypeLower.contains('unequal');
+    bool portsAreUnequal = false;
+    if (_persistentCmsPorts.length >= 2) {
+      final w0 = _persistentCmsPorts.first.width;
+      final h0 = _persistentCmsPorts.first.height;
+      for (final p in _persistentCmsPorts) {
+        if ((p.width - w0).abs() > 1.0 || (p.height - h0).abs() > 1.0) {
+          portsAreUnequal = true;
+          break;
+        }
+      }
+    }
+
     final contract =
+        (cmsTemplate != null
+            ? CmsProductContract.lookup(
+                cmsTemplate['productType'] as String?,
+                cmsTemplate['variation'] as String? ?? cmsTemplate['variationName'] as String?,
+              )
+            : null) ??
         (_document.metadata['cms_product_contract'] != null
             ? CmsProductContract.lookup(
                 _document.metadata['cms_product_contract']?['productType'] as String?,
                 _document.metadata['cms_product_contract']?['variationName'] as String?,
               )
             : null) ??
+        cmsGuidedController.state.contract ??
         CmsProductContract.lookup(
           _detectedFittingMetadata?.product,
           _detectedFittingMetadata?.variantName,
@@ -891,13 +924,20 @@ class SheetMetalStudioViewModel extends ChangeNotifier
           _document.metadata['fittingProduct'] as String?,
           _document.metadata['fittingVariant'] as String?,
         ) ??
-        cmsGuidedController.state.contract ??
         CmsProductContract.lookup(_document.productType, _document.itemName) ??
         CmsProductContract.lookup(null, _document.itemName) ??
         CmsProductContract.lookup(null, _document.productType) ??
-        (CmsScalingController.isInsideRiserGeometry(_document)
-            ? CmsProductContract.insideRiser45
-            : CmsProductContract.bend45);
+        (CmsScalingController.isCrossFitting(_document, portCount: portCount)
+            ? (hasUnequalFlag || portsAreUnequal
+                ? CmsProductContract.unequalCross
+                : CmsProductContract.equalCross)
+            : CmsScalingController.isTeeFitting(_document, portCount: portCount)
+                ? (hasUnequalFlag || portsAreUnequal
+                    ? CmsProductContract.unequalTee
+                    : CmsProductContract.equalTee)
+                : (CmsScalingController.isInsideRiserGeometry(_document)
+                    ? CmsProductContract.insideRiser45
+                    : CmsProductContract.bend45));
 
     if ((cmsGuidedController.state.phase == CmsUxPhase.complete ||
             cmsGuidedController.state.discoveredPorts.isNotEmpty) &&
@@ -906,13 +946,57 @@ class SheetMetalStudioViewModel extends ChangeNotifier
     }
     setFittingInspectorOpen(false);
 
+    // Baseline Document resolution: If document was already scaled and holds a canonical baseline,
+    // use that pristine unscaled baseline so morph operations never compound on top of transformed coordinates.
+    DsfDocument baselineDoc = _document;
+    if (cmsTemplate != null && cmsTemplate['canonicalDocument'] is Map) {
+      try {
+        baselineDoc = DsfDocument.fromJson(Map<String, dynamic>.from(cmsTemplate['canonicalDocument'] as Map));
+      } catch (_) {
+        baselineDoc = _document;
+      }
+    }
+
+    // Baseline Ports resolution:
+    List<CmsPhysicalPort> baselinePorts = _persistentCmsPorts.isNotEmpty
+        ? _persistentCmsPorts
+        : cmsGuidedController.state.discoveredPorts;
+    if (cmsTemplate != null && cmsTemplate['baselinePorts'] is List) {
+      try {
+        final list = cmsTemplate['baselinePorts'] as List;
+        baselinePorts = list.map((p) => CmsPhysicalPort.fromJson(Map<String, dynamic>.from(p as Map))).toList();
+      } catch (_) {}
+    }
+
+    // Current Parameter Values extraction:
+    final currentParamValues = <String, double>{};
+    currentParamValues.addAll(_document.parameters);
+    if (cmsTemplate != null && cmsTemplate['scalingModel'] is Map) {
+      final modelParams = cmsTemplate['scalingModel']['parameters'] as Map<String, dynamic>?;
+      if (modelParams != null) {
+        for (final entry in modelParams.entries) {
+          if (entry.value is Map && entry.value['currentValue'] is num) {
+            currentParamValues[entry.key] = (entry.value['currentValue'] as num).toDouble();
+          }
+        }
+      }
+    }
+    for (int i = 0; i < _persistentCmsPorts.length; i++) {
+      final port = _persistentCmsPorts[i];
+      currentParamValues['port${i + 1}_width'] ??= port.width;
+      currentParamValues['port${i + 1}_height'] ??= port.height;
+    }
+    if (_persistentCmsPorts.isNotEmpty) {
+      currentParamValues['width'] ??= _persistentCmsPorts.first.width;
+      currentParamValues['height'] ??= _persistentCmsPorts.first.height;
+    }
+
     _scalingController?.removeListener(_onScalingControllerChanged);
     _scalingController = CmsScalingController(
-      baselineDocument: _document,
+      baselineDocument: baselineDoc,
       contract: contract,
-      baselinePorts: _persistentCmsPorts.isNotEmpty
-          ? _persistentCmsPorts
-          : cmsGuidedController.state.discoveredPorts,
+      baselinePorts: baselinePorts,
+      currentParameterValues: currentParamValues,
     );
     _scalingController!.addListener(_onScalingControllerChanged);
     _isTeachScalingActive = true;
@@ -9600,14 +9684,6 @@ class SheetMetalStudioViewModel extends ChangeNotifier
     if (_cachedMesh == null || _cachedMesh!.polygons.isEmpty) return;
 
     try {
-      final contract =
-          CmsProductContract.lookup(
-            cmsRaw['productType'] as String?,
-            cmsRaw['variation'] as String?,
-          ) ??
-          cmsGuidedController.state.contract ??
-          CmsProductContract.bend45;
-
       final rawOpenings = Cms3DOpeningDetector.detectOpenings(
         document: _document,
         foldResult: _cachedMesh!,
@@ -9622,45 +9698,35 @@ class SheetMetalStudioViewModel extends ChangeNotifier
               ),
             )
             .toList();
-        final match = CmsPortMatcher.match(
-          measuredOpenings: measured,
-          contract: contract,
+        final reconciled = CmsPortReconciler.reconcile(
+          previousPorts: _persistentCmsPorts,
+          newlyMeasured: measured,
         );
-        if (match.matchedPorts.length == _persistentCmsPorts.length) {
+        if (reconciled.length == _persistentCmsPorts.length) {
           bool needsUpdate = false;
-          for (int i = 0; i < match.matchedPorts.length; i++) {
+          for (int i = 0; i < reconciled.length; i++) {
             final current = _persistentCmsPorts[i];
-            final fresh = match.matchedPorts[i];
+            final fresh = reconciled[i];
             if ((current.width - fresh.width).abs() > 0.5 ||
                 (current.height - fresh.height).abs() > 0.5 ||
                 (current.center.x - fresh.center.x).abs() > 0.5 ||
                 (current.center.y - fresh.center.y).abs() > 0.5 ||
-                (current.center.z - fresh.center.z).abs() > 0.5) {
+                (current.center.z - fresh.center.z).abs() > 0.5 ||
+                (current.derivedMouthCorners.isEmpty && fresh.derivedMouthCorners.isNotEmpty) ||
+                (current.derivedMouthCorners.length == 4 && fresh.derivedMouthCorners.length == 4 &&
+                    ((current.derivedMouthCorners[0].x - fresh.derivedMouthCorners[0].x).abs() > 0.5 ||
+                     (current.derivedMouthCorners[0].y - fresh.derivedMouthCorners[0].y).abs() > 0.5 ||
+                     (current.derivedMouthCorners[0].z - fresh.derivedMouthCorners[0].z).abs() > 0.5))) {
               needsUpdate = true;
               break;
             }
           }
           if (needsUpdate) {
-            final updated = <CmsPhysicalPort>[];
-            for (int i = 0; i < match.matchedPorts.length; i++) {
-              final fresh = match.matchedPorts[i];
-              final old = _persistentCmsPorts[i];
-              updated.add(
-                fresh.copyWith(
-                  id: old.id,
-                  index: old.index,
-                  role: old.role,
-                  suggestedRole: old.suggestedRole,
-                  roleSource: old.roleSource,
-                  suggestionReason: old.suggestionReason,
-                ),
-              );
-            }
-            _persistentCmsPorts = updated;
-            cmsGuidedController.updateDiscoveredPorts(updated);
+            _persistentCmsPorts = reconciled;
+            cmsGuidedController.updateDiscoveredPorts(reconciled);
             final meta = Map<String, dynamic>.from(_document.metadata);
             final cms = Map<String, dynamic>.from(meta['cmsTemplate'] as Map);
-            cms['ports'] = updated.map((p) => p.toJson()).toList();
+            cms['ports'] = reconciled.map((p) => p.toJson()).toList();
             meta['cmsTemplate'] = cms;
             _document = _document.copyWith(metadata: meta);
           }

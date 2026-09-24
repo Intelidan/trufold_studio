@@ -19,6 +19,7 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import '../../models/cad_primitives.dart';
 import '../../models/cnc_punch_primitive.dart';
 import '../../models/dsf_document.dart';
@@ -72,14 +73,14 @@ class UnequalCrossScaleParameters {
   /// Factory resolving parameters and deltas from CMS active scaling parameter map.
   factory UnequalCrossScaleParameters.fromCmsParameters(
     Map<String, CmsScalingParameter> params, {
-    double defaultW1 = 100.0,
-    double defaultH1 = 100.0,
-    double defaultW2 = 50.0,
-    double defaultH2 = 50.0,
-    double defaultW3 = 100.0,
-    double defaultH3 = 100.0,
-    double defaultW4 = 50.0,
-    double defaultH4 = 50.0,
+    double defaultW1 = 50.0,
+    double defaultH1 = 50.0,
+    double defaultW2 = 100.0,
+    double defaultH2 = 100.0,
+    double defaultW3 = 50.0,
+    double defaultH3 = 50.0,
+    double defaultW4 = 100.0,
+    double defaultH4 = 100.0,
     double defaultThickness = 1.5,
   }) {
     double getVal(String key, double fallback) {
@@ -144,20 +145,17 @@ class UnequalCrossScaleParameters {
       dH3.abs() > 1e-4 ||
       dW4.abs() > 1e-4 ||
       dH4.abs() > 1e-4 ||
-      (port1Width - 100.0).abs() > 1e-4 ||
-      (port1Height - 100.0).abs() > 1e-4 ||
-      (port2Width - 50.0).abs() > 1e-4 ||
-      (port2Height - 50.0).abs() > 1e-4 ||
-      (port3Width - 100.0).abs() > 1e-4 ||
-      (port3Height - 100.0).abs() > 1e-4 ||
-      (port4Width - 50.0).abs() > 1e-4 ||
-      (port4Height - 50.0).abs() > 1e-4;
+      (port1Width - 50.0).abs() > 1e-4 ||
+      (port1Height - 50.0).abs() > 1e-4 ||
+      (port2Width - 100.0).abs() > 1e-4 ||
+      (port2Height - 100.0).abs() > 1e-4 ||
+      (port3Width - 50.0).abs() > 1e-4 ||
+      (port3Height - 50.0).abs() > 1e-4 ||
+      (port4Width - 100.0).abs() > 1e-4 ||
+      (port4Height - 100.0).abs() > 1e-4;
 
   /// Product-wide maximum height governing core body height.
-  double get maxHeight => math.max(
-        math.max(port1Height, port2Height),
-        math.max(port3Height, port4Height),
-      );
+  double get maxHeight => math.max(math.max(port1Height, port2Height), math.max(port3Height, port4Height));
 }
 
 /// Result of an Unequal Cross scale operation.
@@ -167,12 +165,7 @@ class UnequalCrossScaleResult {
   final String? errorMessage;
   final Map<String, dynamic> diagnostics;
 
-  const UnequalCrossScaleResult({
-    required this.document,
-    required this.isValid,
-    this.errorMessage,
-    this.diagnostics = const {},
-  });
+  const UnequalCrossScaleResult({required this.document, required this.isValid, this.errorMessage, this.diagnostics = const {}});
 }
 
 /// Helper internal descriptor for each quadrant.
@@ -193,15 +186,22 @@ class _QuadrantSpec {
   final List<String> punchesHoriz;
   final List<String> punchesVert;
   final CadPoint2D p0Base;
-  final CadPoint2D dp0;
+  final CadPoint2D u0;
+  final CadPoint2D v0;
+  final CadPoint2D p0;
+  final CadPoint2D p1;
+  final double lB;
   final CadPoint2D uAxis;
   final CadPoint2D vAxis;
+  final double deltaTheta;
   final double heightHoriz;
   final double dHeightHoriz;
   final double heightVert;
   final double dHeightVert;
   final double punchRotation;
   final String newPunchVertId;
+  final double angleHorizDeg;
+  final double angleVertDeg;
 
   const _QuadrantSpec({
     required this.name,
@@ -220,15 +220,22 @@ class _QuadrantSpec {
     required this.punchesHoriz,
     required this.punchesVert,
     required this.p0Base,
-    required this.dp0,
+    required this.u0,
+    required this.v0,
+    required this.p0,
+    required this.p1,
+    required this.lB,
     required this.uAxis,
     required this.vAxis,
+    required this.deltaTheta,
     required this.heightHoriz,
     required this.dHeightHoriz,
     required this.heightVert,
     required this.dHeightVert,
     required this.punchRotation,
     required this.newPunchVertId,
+    required this.angleHorizDeg,
+    required this.angleVertDeg,
   });
 }
 
@@ -242,51 +249,146 @@ class UnequalCrossScaler {
   /// Pure deterministic solver: scales the canonical Unequal Cross template
   /// to the target parameters while preserving all topological relationships,
   /// 16 corner fillet arcs, rigid coupler punches, and fold kinematics.
-  static UnequalCrossScaleResult scale({
-    required DsfDocument baseline,
-    required UnequalCrossScaleParameters parameters,
-  }) {
+  static UnequalCrossScaleResult scale({required DsfDocument baseline, required UnequalCrossScaleParameters parameters}) {
     // 1. Invariance on zero delta:
     if (!parameters.hasAnyChange) {
       return UnequalCrossScaleResult(
         document: baseline,
         isValid: true,
-        diagnostics: {
-          'status': 'unchanged_baseline',
-          'bodyHeight': 100.0,
-          'dHBody': 0.0,
-          'dH1': 0.0,
-          'dH2': 0.0,
-          'dH3': 0.0,
-          'dH4': 0.0,
-        },
+        diagnostics: {'status': 'unchanged_baseline', 'bodyHeight': 100.0, 'dHBody': 0.0, 'dH1': 0.0, 'dH2': 0.0, 'dH3': 0.0, 'dH4': 0.0},
       );
     }
 
-    final dW1 = parameters.dW1.abs() > 1e-4 ? parameters.dW1 : (parameters.port1Width - 100.0);
-    final dW2 = parameters.dW2.abs() > 1e-4 ? parameters.dW2 : (parameters.port2Width - 50.0);
-    final dW3 = parameters.dW3.abs() > 1e-4 ? parameters.dW3 : (parameters.port3Width - 100.0);
-    final dW4 = parameters.dW4.abs() > 1e-4 ? parameters.dW4 : (parameters.port4Width - 50.0);
+    final dW1 = parameters.dW1.abs() > 1e-4 ? parameters.dW1 : (parameters.port1Width - 50.0);
+    final dW2 = parameters.dW2.abs() > 1e-4 ? parameters.dW2 : (parameters.port2Width - 100.0);
+    final dW3 = parameters.dW3.abs() > 1e-4 ? parameters.dW3 : (parameters.port3Width - 50.0);
+    final dW4 = parameters.dW4.abs() > 1e-4 ? parameters.dW4 : (parameters.port4Width - 100.0);
 
-    final dH1 = parameters.dH1.abs() > 1e-4 ? parameters.dH1 : (parameters.port1Height - 100.0);
-    final dH2 = parameters.dH2.abs() > 1e-4 ? parameters.dH2 : (parameters.port2Height - 50.0);
-    final dH3 = parameters.dH3.abs() > 1e-4 ? parameters.dH3 : (parameters.port3Height - 100.0);
-    final dH4 = parameters.dH4.abs() > 1e-4 ? parameters.dH4 : (parameters.port4Height - 50.0);
+    final unbentW1 = 48.0 + dW1;
+    final unbentW2 = 98.0 + dW2;
+    final unbentW3 = 48.0 + dW3;
+    final unbentW4 = 98.0 + dW4;
 
-    final effectiveP1H = 100.0 + dH1;
-    final effectiveP2H = 50.0 + dH2;
-    final effectiveP3H = 100.0 + dH3;
-    final effectiveP4H = 50.0 + dH4;
+    final dH1 = parameters.dH1.abs() > 1e-4 ? parameters.dH1 : (parameters.port1Height - 50.0);
+    final dH2 = parameters.dH2.abs() > 1e-4 ? parameters.dH2 : (parameters.port2Height - 100.0);
+    final dH3 = parameters.dH3.abs() > 1e-4 ? parameters.dH3 : (parameters.port3Height - 50.0);
+    final dH4 = parameters.dH4.abs() > 1e-4 ? parameters.dH4 : (parameters.port4Height - 100.0);
 
-    final bodyHeight = math.max(
-      math.max(effectiveP1H, effectiveP2H),
-      math.max(effectiveP3H, effectiveP4H),
-    );
+    final effectiveP1H = 50.0 + dH1;
+    final effectiveP2H = 100.0 + dH2;
+    final effectiveP3H = 50.0 + dH3;
+    final effectiveP4H = 100.0 + dH4;
+
+    final bodyHeight = math.max(math.max(effectiveP1H, effectiveP2H), math.max(effectiveP3H, effectiveP4H));
     final dHBody = bodyHeight - 100.0;
 
-    // 2. Setup Quadrant Specifications
+    // 2. Base Floor F_16: strict 90-deg orthogonal rectangular port mouths per independent port
+    // Port 1 (West): vertical mouth of width unbentW1 at xWest (dx = 0)
+    // Port 2 (North): horizontal mouth of width unbentW2 at yNorth (dy = 0)
+    // Port 3 (East): vertical mouth of width unbentW3 at xEast (dx = 0)
+    // Port 4 (South): horizontal mouth of width unbentW4 at ySouth (dy = 0)
+    final maxWNs = math.max(unbentW2, unbentW4);
+    final maxWWe = math.max(unbentW1, unbentW3);
+
+    final xWest = _x0 - maxWNs / 2.0 - _c;
+    final xEast = _x0 + maxWNs / 2.0 + _c;
+    final yNorth = _y0 - maxWWe / 2.0 - _c;
+    final ySouth = _y0 + maxWWe / 2.0 + _c;
+
+    final newF16Verts = [
+      CadPoint2D(xWest, _y0 + unbentW1 / 2.0), // v0: Port 1 (West) bottom
+      CadPoint2D(xWest, _y0 - unbentW1 / 2.0), // v1: Port 1 (West) top
+      CadPoint2D(_x0 - unbentW2 / 2.0, yNorth), // v2: Port 2 (North) left
+      CadPoint2D(_x0 + unbentW2 / 2.0, yNorth), // v3: Port 2 (North) right
+      CadPoint2D(xEast, _y0 - unbentW3 / 2.0), // v4: Port 3 (East) top
+      CadPoint2D(xEast, _y0 + unbentW3 / 2.0), // v5: Port 3 (East) bottom
+      CadPoint2D(_x0 + unbentW4 / 2.0, ySouth), // v6: Port 4 (South) right
+      CadPoint2D(_x0 - unbentW4 / 2.0, ySouth), // v7: Port 4 (South) left
+    ];
+
+    // Helper to construct quadrant spec with dynamic bend vector and elongation
+    _QuadrantSpec makeQuad({
+      required String name,
+      required String cheekId,
+      required String flapHorizId,
+      required String flapVertId,
+      required String flangeId,
+      required String bendBaseId,
+      required String bendHorizId,
+      required String bendVertId,
+      required String bendFlangeId,
+      required String baseArcHorizId,
+      required String topArcHorizId,
+      required String baseArcVertId,
+      required String topArcVertId,
+      required List<String> punchesHoriz,
+      required List<String> punchesVert,
+      required CadPoint2D p0Base,
+      required CadPoint2D u0,
+      required CadPoint2D v0,
+      required CadPoint2D Function(CadPoint2D u) vFunc,
+      required CadPoint2D p0,
+      required CadPoint2D p1,
+      required double heightHoriz,
+      required double dHeightHoriz,
+      required double heightVert,
+      required double dHeightVert,
+      required double punchRotation,
+      required String newPunchVertId,
+    }) {
+      final bx = p1.x - p0.x;
+      final by = p1.y - p0.y;
+      final lB = math.sqrt(bx * bx + by * by);
+      final uAxis = CadPoint2D(bx / lB, by / lB);
+      final vAxis = vFunc(uAxis);
+      final theta0 = math.atan2(u0.y, u0.x);
+      final theta = math.atan2(uAxis.y, uAxis.x);
+      final deltaTheta = theta - theta0;
+
+      final absBx = bx.abs();
+      final absBy = by.abs();
+      final alphaDeg = math.atan2(absBy, absBx) * 180.0 / math.pi;
+      final angleHorizDeg = 90.0 - alphaDeg;
+      final angleVertDeg = alphaDeg;
+
+      return _QuadrantSpec(
+        name: name,
+        cheekId: cheekId,
+        flapHorizId: flapHorizId,
+        flapVertId: flapVertId,
+        flangeId: flangeId,
+        bendBaseId: bendBaseId,
+        bendHorizId: bendHorizId,
+        bendVertId: bendVertId,
+        bendFlangeId: bendFlangeId,
+        baseArcHorizId: baseArcHorizId,
+        topArcHorizId: topArcHorizId,
+        baseArcVertId: baseArcVertId,
+        topArcVertId: topArcVertId,
+        punchesHoriz: punchesHoriz,
+        punchesVert: punchesVert,
+        p0Base: p0Base,
+        u0: u0,
+        v0: v0,
+        p0: p0,
+        p1: p1,
+        lB: lB,
+        uAxis: uAxis,
+        vAxis: vAxis,
+        deltaTheta: deltaTheta,
+        heightHoriz: heightHoriz,
+        dHeightHoriz: dHeightHoriz,
+        heightVert: heightVert,
+        dHeightVert: dHeightVert,
+        punchRotation: punchRotation,
+        newPunchVertId: newPunchVertId,
+        angleHorizDeg: angleHorizDeg,
+        angleVertDeg: angleVertDeg,
+      );
+    }
+
     final quadrants = [
-      _QuadrantSpec(
+      makeQuad(
         name: 'Q1_NE',
         cheekId: 'F_3',
         flapHorizId: 'F_1',
@@ -303,17 +405,19 @@ class UnequalCrossScaler {
         punchesHoriz: const ['SLOT_7', 'SLOT_8'],
         punchesVert: const ['SLOT_9'],
         p0Base: const CadPoint2D(202.65180361560638, 83.43860018001283),
-        dp0: CadPoint2D(dW1 / 2.0, -dW2 / 2.0),
-        uAxis: const CadPoint2D(_invSqrt2, _invSqrt2),
-        vAxis: const CadPoint2D(_invSqrt2, -_invSqrt2),
-        heightHoriz: effectiveP1H,
-        dHeightHoriz: dH1,
-        heightVert: effectiveP2H,
-        dHeightVert: dH2,
+        u0: const CadPoint2D(_invSqrt2, _invSqrt2),
+        v0: const CadPoint2D(_invSqrt2, -_invSqrt2),
+        vFunc: (u) => CadPoint2D(u.y, -u.x),
+        p0: newF16Verts[3],
+        p1: newF16Verts[4],
+        heightHoriz: effectiveP2H,
+        dHeightHoriz: dH2,
+        heightVert: effectiveP3H,
+        dHeightVert: dH3,
         punchRotation: 135.0,
         newPunchVertId: 'SLOT_9_B',
       ),
-      _QuadrantSpec(
+      makeQuad(
         name: 'Q2_NW',
         cheekId: 'F_7',
         flapHorizId: 'F_5',
@@ -330,17 +434,19 @@ class UnequalCrossScaler {
         punchesHoriz: const ['SLOT_1', 'PUNCH_CPY_8064'],
         punchesVert: const ['SLOT_3'],
         p0Base: const CadPoint2D(104.65180361560647, 83.43860018001283),
-        dp0: CadPoint2D(-dW1 / 2.0, -dW4 / 2.0),
-        uAxis: const CadPoint2D(-_invSqrt2, _invSqrt2),
-        vAxis: const CadPoint2D(-_invSqrt2, -_invSqrt2),
-        heightHoriz: effectiveP1H,
-        dHeightHoriz: dH1,
-        heightVert: effectiveP4H,
-        dHeightVert: dH4,
+        u0: const CadPoint2D(-_invSqrt2, _invSqrt2),
+        v0: const CadPoint2D(-_invSqrt2, -_invSqrt2),
+        vFunc: (u) => CadPoint2D(-u.y, u.x),
+        p0: newF16Verts[2],
+        p1: newF16Verts[1],
+        heightHoriz: effectiveP2H,
+        dHeightHoriz: dH2,
+        heightVert: effectiveP1H,
+        dHeightVert: dH1,
         punchRotation: 45.0,
         newPunchVertId: 'SLOT_3_B',
       ),
-      _QuadrantSpec(
+      makeQuad(
         name: 'Q3_SE',
         cheekId: 'F_11',
         flapHorizId: 'F_9',
@@ -357,17 +463,19 @@ class UnequalCrossScaler {
         punchesHoriz: const ['SLOT_10', 'SLOT_11'],
         punchesVert: const ['SLOT_12'],
         p0Base: const CadPoint2D(202.65180361560638, 188.00714267493942),
-        dp0: CadPoint2D(dW3 / 2.0, dW2 / 2.0),
-        uAxis: const CadPoint2D(_invSqrt2, -_invSqrt2),
-        vAxis: const CadPoint2D(_invSqrt2, _invSqrt2),
-        heightHoriz: effectiveP3H,
-        dHeightHoriz: dH3,
-        heightVert: effectiveP2H,
-        dHeightVert: dH2,
+        u0: const CadPoint2D(_invSqrt2, -_invSqrt2),
+        v0: const CadPoint2D(_invSqrt2, _invSqrt2),
+        vFunc: (u) => CadPoint2D(-u.y, u.x),
+        p0: newF16Verts[6],
+        p1: newF16Verts[5],
+        heightHoriz: effectiveP4H,
+        dHeightHoriz: dH4,
+        heightVert: effectiveP3H,
+        dHeightVert: dH3,
         punchRotation: 45.0,
         newPunchVertId: 'SLOT_12_B',
       ),
-      _QuadrantSpec(
+      makeQuad(
         name: 'Q4_SW',
         cheekId: 'F_15',
         flapHorizId: 'F_13',
@@ -384,13 +492,15 @@ class UnequalCrossScaler {
         punchesHoriz: const ['SLOT_4', 'SLOT_5'],
         punchesVert: const ['SLOT_6'],
         p0Base: const CadPoint2D(104.65180361560647, 188.00714267493925),
-        dp0: CadPoint2D(-dW3 / 2.0, dW4 / 2.0),
-        uAxis: const CadPoint2D(-_invSqrt2, -_invSqrt2),
-        vAxis: const CadPoint2D(-_invSqrt2, _invSqrt2),
-        heightHoriz: effectiveP3H,
-        dHeightHoriz: dH3,
-        heightVert: effectiveP4H,
-        dHeightVert: dH4,
+        u0: const CadPoint2D(-_invSqrt2, -_invSqrt2),
+        v0: const CadPoint2D(-_invSqrt2, _invSqrt2),
+        vFunc: (u) => CadPoint2D(u.y, -u.x),
+        p0: newF16Verts[7],
+        p1: newF16Verts[0],
+        heightHoriz: effectiveP4H,
+        dHeightHoriz: dH4,
+        heightVert: effectiveP1H,
+        dHeightVert: dH1,
         punchRotation: 135.0,
         newPunchVertId: 'SLOT_6_B',
       ),
@@ -426,30 +536,28 @@ class UnequalCrossScaler {
     }
 
     // 3. Local-to-Global Point Transformation in Quadrant Frame
-    CadPoint2D transformQuadPt(
-      CadPoint2D pt,
-      _QuadrantSpec q, {
-      String? fid,
-      String? bid,
-      String? pid,
-      String? aid,
-    }) {
-      final p0 = q.p0Base;
-      final dp0 = q.dp0;
-      final u = q.uAxis;
-      final v = q.vAxis;
+    CadPoint2D transformQuadPt(CadPoint2D pt, _QuadrantSpec q, {String? fid, String? bid, String? pid, String? aid}) {
+      final p0Base = q.p0Base;
+      final u0 = q.u0;
+      final v0 = q.v0;
 
-      final rx = pt.x - p0.x;
-      final ry = pt.y - p0.y;
-      final lu = rx * u.x + ry * u.y;
-      final lv = rx * v.x + ry * v.y;
+      final rx = pt.x - p0Base.x;
+      final ry = pt.y - p0Base.y;
+      final lu = rx * u0.x + ry * u0.y;
+      final lv = rx * v0.x + ry * v0.y;
+
+      final double luStar;
+      if (lu > 20.0) {
+        luStar = q.lB + (lu - 40.0);
+      } else {
+        luStar = lu;
+      }
 
       final dHh = q.dHeightHoriz;
       final dHv = q.dHeightVert;
       final hh = q.heightHoriz;
       final hv = q.heightVert;
 
-      final double luStar = lu;
       double lvStar = lv;
 
       if (fid == q.flapHorizId || bid == q.bendHorizId) {
@@ -461,13 +569,13 @@ class UnequalCrossScaler {
       } else if (fid == q.cheekId) {
         if (lv < 5.0) {
           lvStar = lv;
-        } else if ((lu - 40.0).abs() < 5.0) {
+        } else if (lu > 20.0) {
           if (lv < 70.0) {
             lvStar = lv + dHv;
           } else {
             lvStar = lv + dHBody;
           }
-        } else if (lu.abs() < 5.0) {
+        } else {
           lvStar = lv + dHBody;
         }
       } else if (aid != null) {
@@ -498,29 +606,12 @@ class UnequalCrossScaler {
         }
       }
 
-      final gx = p0.x + dp0.x + luStar * u.x + lvStar * v.x;
-      final gy = p0.y + dp0.y + luStar * u.y + lvStar * v.y;
+      final gx = q.p0.x + luStar * q.uAxis.x + lvStar * q.vAxis.x;
+      final gy = q.p0.y + luStar * q.uAxis.y + lvStar * q.vAxis.y;
       return CadPoint2D(gx, gy);
     }
 
-    // 4. Transform Base Floor F_16 (exact analytical formula)
-    final unbentW1 = 98.0 + dW1;
-    final unbentW2 = 48.0 + dW2;
-    final unbentW3 = 98.0 + dW3;
-    final unbentW4 = 48.0 + dW4;
-
-    final newF16Verts = [
-      CadPoint2D(_x0 - unbentW3 / 2 - _c, _y0 + unbentW4 / 2),     // v0: P4 bottom
-      CadPoint2D(_x0 - unbentW1 / 2 - _c, _y0 - unbentW4 / 2),     // v1: P4 top
-      CadPoint2D(_x0 - unbentW1 / 2,      _y0 - unbentW4 / 2 - _c), // v2: P1 left
-      CadPoint2D(_x0 + unbentW1 / 2,      _y0 - unbentW2 / 2 - _c), // v3: P1 right
-      CadPoint2D(_x0 + unbentW1 / 2 + _c, _y0 - unbentW2 / 2),     // v4: P2 top
-      CadPoint2D(_x0 + unbentW3 / 2 + _c, _y0 + unbentW2 / 2),     // v5: P2 bottom
-      CadPoint2D(_x0 + unbentW3 / 2,      _y0 + unbentW2 / 2 + _c), // v6: P3 right
-      CadPoint2D(_x0 - unbentW3 / 2,      _y0 + unbentW4 / 2 + _c), // v7: P3 left
-    ];
-
-    // 5. Transform Faces
+    // 4. Transform Faces
     final faceVertexMap = <String, CadPoint2D>{};
     final newFaces = <PlanarSheetFace>[];
 
@@ -551,21 +642,17 @@ class UnequalCrossScaler {
       if (fid == q.cheekId && dHBody > q.dHeightHoriz + 1e-4) {
         // Synthesize the horizontal flange junction vertex at (lu=0, lv=98.0 + dHBody)
         // to form a closed orthogonal vertical step down to the coupler flap at (lu=0, lv=98.0 + dHh).
-        final p0 = q.p0Base;
-        final dp0 = q.dp0;
+        final p0 = q.p0;
         final v = q.vAxis;
         final lvFlange = 98.0 + dHBody;
-        final stepJunction = CadPoint2D(
-          p0.x + dp0.x + lvFlange * v.x,
-          p0.y + dp0.y + lvFlange * v.y,
-        );
+        final stepJunction = CadPoint2D(p0.x + lvFlange * v.x, p0.y + lvFlange * v.y);
         nverts.add(stepJunction);
       }
 
       newFaces.add(f.copyWith(vertices: nverts));
     }
 
-    // 6. Transform Bends
+    // 5. Transform Bends
     final newBends = baseline.bends.map((b) {
       final bid = b.id;
       final q = quadByBend[bid];
@@ -573,37 +660,49 @@ class UnequalCrossScaler {
 
       final np1 = transformQuadPt(b.p1, q, bid: bid);
       final np2 = transformQuadPt(b.p2, q, bid: bid);
-      return b.copyWith(p1: np1, p2: np2);
+
+      double newTargetAngle = b.targetAngleDeg;
+      if (bid == q.bendHorizId) {
+        newTargetAngle = q.angleHorizDeg;
+      } else if (bid == q.bendVertId) {
+        newTargetAngle = q.angleVertDeg;
+      }
+
+      return b.copyWith(
+        p1: np1,
+        p2: np2,
+        targetAngleDeg: newTargetAngle,
+      );
     }).toList();
 
-    // 7. Transform Arcs (preserving radius 10.0mm and rotating startAngle cleanly)
+    // 6. Transform Arcs (preserving radius 10.0mm and rotating startAngle cleanly)
     final newArcs = baseline.arcs.map((a) {
       final aid = a.id;
       final q = quadByArc[aid];
       if (q == null) return a;
 
       final nc = transformQuadPt(a.center, q, aid: aid);
-      return a.copyWith(center: nc);
+      final newStartAngle = a.startAngleRad + q.deltaTheta;
+      return a.copyWith(center: nc, startAngleRad: newStartAngle);
     }).toList();
 
-    // 8. Transform Punches with Universal 95mm Coupler Rule
+    // 7. Transform Punches with Universal 95mm Coupler Rule
     final suppressedPunchIds = <String>{};
-    if (effectiveP1H < 95.0) {
+    if (effectiveP2H < 95.0) {
       suppressedPunchIds.addAll({'SLOT_8', 'PUNCH_CPY_8064'});
     }
-    if (effectiveP3H < 95.0) {
+    if (effectiveP4H < 95.0) {
       suppressedPunchIds.addAll({'SLOT_5', 'SLOT_11'});
     }
 
-    final newPunches = baseline.punches
-        .where((p) => !suppressedPunchIds.contains(p.id))
-        .map((p) {
+    final newPunches = baseline.punches.where((p) => !suppressedPunchIds.contains(p.id)).map((p) {
       final pid = p.id;
       final q = quadByPunch[pid];
       if (q == null) return p;
 
       final nc = transformQuadPt(p.center, q, pid: pid);
-      return p.copyWith(center: nc);
+      final newRot = p.rotationDeg + (q.deltaTheta * 180.0 / math.pi);
+      return p.copyWith(center: nc, rotationDeg: newRot);
     }).toList();
 
     // Synthesize second coupler slot on vertical flaps when height >= 95mm (at 50mm pitch)
@@ -611,25 +710,24 @@ class UnequalCrossScaler {
       if (q.heightVert >= 95.0) {
         const uStar = 58.0;
         final vStar = 74.0 + (q.dHeightVert > 50.0 ? (q.dHeightVert - 50.0) : 0.0);
-        final p0 = q.p0Base;
-        final dp0 = q.dp0;
+        final luStar = q.lB + (uStar - 40.0);
+        final p0 = q.p0;
         final u = q.uAxis;
         final v = q.vAxis;
-        final slotCenter = CadPoint2D(
-          p0.x + dp0.x + uStar * u.x + vStar * v.x,
-          p0.y + dp0.y + uStar * u.y + vStar * v.y,
+        final slotCenter = CadPoint2D(p0.x + luStar * u.x + vStar * v.x, p0.y + luStar * u.y + vStar * v.y);
+        newPunches.add(
+          CncPunchPrimitive(
+            id: q.newPunchVertId,
+            type: PunchType.obroundSlot,
+            center: slotCenter,
+            widthMm: 8.0,
+            lengthMm: 20.0,
+            rotationDeg: q.punchRotation + (q.deltaTheta * 180.0 / math.pi),
+            role: CncPunchRole.coupler,
+            parentFaceId: q.flapVertId,
+            associatedPortId: q.name == 'Q1_NE' || q.name == 'Q3_SE' ? 'PORT_3' : 'PORT_1',
+          ),
         );
-        newPunches.add(CncPunchPrimitive(
-          id: q.newPunchVertId,
-          type: PunchType.obroundSlot,
-          center: slotCenter,
-          widthMm: 8.0,
-          lengthMm: 20.0,
-          rotationDeg: q.punchRotation,
-          role: CncPunchRole.coupler,
-          parentFaceId: q.flapVertId,
-          associatedPortId: q.name == 'Q1_NE' || q.name == 'Q3_SE' ? 'PORT_2' : 'PORT_4',
-        ));
       }
     }
 

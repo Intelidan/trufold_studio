@@ -82,15 +82,24 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
           return 'Main';
       }
     } else if (widget.controller.baselinePorts.length == 4) {
+      if (idx < widget.controller.baselinePorts.length) {
+        final port = widget.controller.baselinePorts[idx];
+        final nx = port.normal.x;
+        final ny = port.normal.y;
+        if (nx < -0.5) return 'West';
+        if (nx > 0.5) return 'East';
+        if (ny < -0.5) return 'North';
+        if (ny > 0.5) return 'South';
+      }
       switch (idx) {
         case 0:
-          return 'North';
-        case 1:
-          return 'East';
-        case 2:
-          return 'South';
-        case 3:
           return 'West';
+        case 1:
+          return 'North';
+        case 2:
+          return 'East';
+        case 3:
+          return 'South';
       }
     }
     return 'P${idx + 1}';

@@ -9,6 +9,7 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import '../models/cad_primitives.dart';
 import '../models/fold_bend_line.dart';
 import '../models/planar_sheet_face.dart';
@@ -40,11 +41,7 @@ class BendSequenceReport {
   final bool isCollisionFree;
   final List<String> recommendedSequence;
 
-  const BendSequenceReport({
-    required this.steps,
-    required this.isCollisionFree,
-    required this.recommendedSequence,
-  });
+  const BendSequenceReport({required this.steps, required this.isCollisionFree, required this.recommendedSequence});
 
   BendSequenceStep? stepForBend(String bendId) {
     for (final s in steps) {
@@ -63,11 +60,7 @@ class BendSequenceEngine {
     bool computeOptimal = true,
   }) {
     if (doc.bends.isEmpty) {
-      return const BendSequenceReport(
-        steps: [],
-        isCollisionFree: true,
-        recommendedSequence: [],
-      );
+      return const BendSequenceReport(steps: [], isCollisionFree: true, recommendedSequence: []);
     }
 
     // Default sequence is document bend order
@@ -83,35 +76,20 @@ class BendSequenceEngine {
       if (currentBend == null) continue;
 
       // Check if any previously folded bend interferes with the punch entering currentBend
-      BendSequenceStep step = _checkStepInterference(
-        stepIndex: i + 1,
-        currentBend: currentBend,
-        previouslyFolded: foldedBends,
-        doc: doc,
-        machine: machine,
-      );
+      BendSequenceStep step = _checkStepInterference(stepIndex: i + 1, currentBend: currentBend, previouslyFolded: foldedBends, doc: doc, machine: machine);
 
       steps.add(step);
       foldedBends.add(currentBend);
     }
 
     final hasAnyCollision = steps.any((s) => s.hasCollision);
-    final optimalSequence = computeOptimal
-        ? autoSequence(doc: doc, machine: machine)
-        : orderedBendIds;
+    final optimalSequence = computeOptimal ? autoSequence(doc: doc, machine: machine) : orderedBendIds;
 
-    return BendSequenceReport(
-      steps: steps,
-      isCollisionFree: !hasAnyCollision,
-      recommendedSequence: optimalSequence,
-    );
+    return BendSequenceReport(steps: steps, isCollisionFree: !hasAnyCollision, recommendedSequence: optimalSequence);
   }
 
   /// Automatically computes a collision-free or collision-minimized sequence
-  static List<String> autoSequence({
-    required DsfDocument doc,
-    required PressBrakeMachine machine,
-  }) {
+  static List<String> autoSequence({required DsfDocument doc, required PressBrakeMachine machine}) {
     if (doc.bends.length <= 1) {
       return doc.bends.map((b) => b.id).toList();
     }
@@ -128,12 +106,10 @@ class BendSequenceEngine {
     }
 
     // Candidate 1: Outer return flanges first (ascending depth from edge inwards)
-    final candidate1 = List<FoldBendLine>.from(bends)
-      ..sort((a, b) => flangeDepths[a.id]!.compareTo(flangeDepths[b.id]!));
+    final candidate1 = List<FoldBendLine>.from(bends)..sort((a, b) => flangeDepths[a.id]!.compareTo(flangeDepths[b.id]!));
 
     // Candidate 2: Inside out (descending)
-    final candidate2 = List<FoldBendLine>.from(bends)
-      ..sort((a, b) => flangeDepths[b.id]!.compareTo(flangeDepths[a.id]!));
+    final candidate2 = List<FoldBendLine>.from(bends)..sort((a, b) => flangeDepths[b.id]!.compareTo(flangeDepths[a.id]!));
 
     // Evaluate Candidate 1
     final report1 = _evaluateCandidate(candidate1.map((b) => b.id).toList(), doc, machine);
@@ -150,22 +126,11 @@ class BendSequenceEngine {
     // Return the candidate with fewer collisions
     final col1 = report1.steps.where((s) => s.hasCollision).length;
     final col2 = report2.steps.where((s) => s.hasCollision).length;
-    return col1 <= col2
-        ? candidate1.map((b) => b.id).toList()
-        : candidate2.map((b) => b.id).toList();
+    return col1 <= col2 ? candidate1.map((b) => b.id).toList() : candidate2.map((b) => b.id).toList();
   }
 
-  static BendSequenceReport _evaluateCandidate(
-    List<String> order,
-    DsfDocument doc,
-    PressBrakeMachine machine,
-  ) {
-    return validateSequence(
-      doc: doc,
-      machine: machine,
-      sequenceOrder: order,
-      computeOptimal: false,
-    );
+  static BendSequenceReport _evaluateCandidate(List<String> order, DsfDocument doc, PressBrakeMachine machine) {
+    return validateSequence(doc: doc, machine: machine, sequenceOrder: order, computeOptimal: false);
   }
 
   static BendSequenceStep _checkStepInterference({
@@ -200,7 +165,8 @@ class BendSequenceEngine {
               bendId: currentBend.id,
               hasCollision: true,
               collidingBendId: prev.id,
-              reason: 'Flange from ${prev.id} overhangs by ${overhang.toStringAsFixed(1)}mm, colliding with ${machine.punchType.name} punch shank (relief: ${punchReliefMm.toStringAsFixed(0)}mm).',
+              reason:
+                  'Flange from ${prev.id} overhangs by ${overhang.toStringAsFixed(1)}mm, colliding with ${machine.punchType.name} punch shank (relief: ${punchReliefMm.toStringAsFixed(0)}mm).',
               recommendedTool: PunchToolType.gooseneck,
               flangeHeightMm: currentFlangeDepth,
             );
@@ -219,12 +185,7 @@ class BendSequenceEngine {
       }
     }
 
-    return BendSequenceStep(
-      stepIndex: stepIndex,
-      bendId: currentBend.id,
-      hasCollision: false,
-      flangeHeightMm: currentFlangeDepth,
-    );
+    return BendSequenceStep(stepIndex: stepIndex, bendId: currentBend.id, hasCollision: false, flangeHeightMm: currentFlangeDepth);
   }
 
   static double _computeFlangeDepth(FoldBendLine bend, DsfDocument doc) {

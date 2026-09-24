@@ -60,11 +60,24 @@ class CmsPortMatcher {
       );
     }
 
+    double openingAngle(CmsMeasuredOpening o) {
+      double nx = o.normal.x;
+      double ny = o.normal.y;
+      if (nx.abs() < 1e-4) nx = 0.0;
+      if (ny.abs() < 1e-4) ny = 0.0;
+      // Normal West (-1, 0): math.atan2(0.0, -1.0) can return +pi or -pi depending on sign bit.
+      // Normalize West to -math.pi so it consistently sorts first before North (-pi/2).
+      if (nx < -0.5 && ny.abs() < 1e-3) {
+        return -math.pi;
+      }
+      return math.atan2(ny, nx);
+    }
+
     // Sort openings topologically (by primary axis or angle) for stable, deterministic ordering
     validOpenings.sort((a, b) {
       // Sort primarily by normal angle or position
-      final angleA = math.atan2(a.normal.y, a.normal.x);
-      final angleB = math.atan2(b.normal.y, b.normal.x);
+      final angleA = openingAngle(a);
+      final angleB = openingAngle(b);
       if ((angleA - angleB).abs() > 0.05) {
         return angleA.compareTo(angleB);
       }
