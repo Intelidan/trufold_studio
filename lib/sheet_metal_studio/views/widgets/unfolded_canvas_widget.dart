@@ -60,6 +60,7 @@ import '../../models/cms/cms_ux_state.dart';
 import '../../models/canvas_display_settings.dart';
 import '../../models/trunking_cover_data.dart';
 import '../../engine/covers/trunking_cover_generator.dart';
+import 'cover_flange_dialog.dart';
 part 'canvas/canvas_painter.dart';
 part 'canvas/canvas_dimension_editor.dart';
 part 'canvas/canvas_legend.dart';

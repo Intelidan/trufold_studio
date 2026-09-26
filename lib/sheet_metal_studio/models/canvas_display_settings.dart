@@ -7,6 +7,8 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import 'cms/cms_physical_port.dart';
+export 'cms/cms_physical_port.dart' show toNominalSize, toFabricatedSize, standardNominalSizes;
 
 // ---------------------------------------------------------------------------
 // Unit of Measure
@@ -276,31 +278,38 @@ class CanvasDisplaySettings {
 // ---------------------------------------------------------------------------
 
 /// Formats a millimetre value to a display string according to [settings].
-String formatMeasure(double mm, CanvasDisplaySettings settings) {
+/// If [roundToNominal] is true, internal fabricated sizes (e.g. 98mm, 48mm, 148mm)
+/// are formatted as rounded catalog nominal figures (e.g. 100mm, 50mm, 150mm).
+String formatMeasure(double mm, CanvasDisplaySettings settings, {bool roundToNominal = false}) {
+  final val = roundToNominal ? toNominalSize(mm) : mm;
   switch (settings.uom) {
     case CanvasUom.mm:
-      return '${mm.toStringAsFixed(settings.decimalPlaces)} mm';
+      final dp = roundToNominal ? 0 : settings.decimalPlaces;
+      return '${val.toStringAsFixed(dp)} mm';
     case CanvasUom.inch:
-      final inches = mm / 25.4;
+      final inches = val / 25.4;
       return '${inches.toStringAsFixed(settings.decimalPlaces)}"';
     case CanvasUom.fractionalInch:
-      return _toFractionalInch(mm);
+      return _toFractionalInch(val);
   }
 }
 
 /// Formats two mm dimensions as a "W × H" string according to [settings].
-String formatDimPair(double aMm, double bMm, CanvasDisplaySettings settings) {
+/// If [roundToNominal] is true, dimensions are rounded to standard catalog figures.
+String formatDimPair(double aMm, double bMm, CanvasDisplaySettings settings, {bool roundToNominal = false}) {
+  final aVal = roundToNominal ? toNominalSize(aMm) : aMm;
+  final bVal = roundToNominal ? toNominalSize(bMm) : bMm;
   switch (settings.uom) {
     case CanvasUom.mm:
-      final dp = settings.decimalPlaces;
-      return '${aMm.toStringAsFixed(dp)} × ${bMm.toStringAsFixed(dp)} mm';
+      final dp = roundToNominal ? 0 : settings.decimalPlaces;
+      return '${aVal.toStringAsFixed(dp)} × ${bVal.toStringAsFixed(dp)} mm';
     case CanvasUom.inch:
       final dp = settings.decimalPlaces;
-      final a = (aMm / 25.4).toStringAsFixed(dp);
-      final b = (bMm / 25.4).toStringAsFixed(dp);
+      final a = (aVal / 25.4).toStringAsFixed(dp);
+      final b = (bVal / 25.4).toStringAsFixed(dp);
       return '$a × $b"';
     case CanvasUom.fractionalInch:
-      return '${_toFractionalInch(aMm)} × ${_toFractionalInch(bMm)}';
+      return '${_toFractionalInch(aVal)} × ${_toFractionalInch(bVal)}';
   }
 }
 

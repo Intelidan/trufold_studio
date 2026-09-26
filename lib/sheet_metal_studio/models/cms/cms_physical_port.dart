@@ -57,9 +57,52 @@ enum CmsPortRole {
   }
 }
 
+/// Standard catalog nominal sizes for cable trunking & fittings.
+const List<double> standardNominalSizes = [
+  25.0, 50.0, 75.0, 100.0, 125.0, 150.0, 175.0, 200.0, 225.0, 250.0, 300.0, 350.0, 400.0, 450.0, 500.0, 600.0, 750.0, 900.0,
+];
+
+/// Converts an internal fabricated or expanded dimension to its clean rounded catalog nominal figure.
+/// E.g. 98mm or 101mm -> 100mm, 47mm/48mm or 51mm -> 50mm, 148mm/151mm -> 150mm.
+double toNominalSize(double valMm) {
+  if (valMm < 20.0) return valMm;
+  for (final nom in standardNominalSizes) {
+    if ((valMm - nom).abs() <= 1.6 ||
+        (valMm - (nom - 2.0)).abs() <= 1.2 ||
+        (valMm - (nom - 3.0)).abs() <= 0.8 ||
+        (valMm - (nom + 1.5)).abs() <= 0.8 ||
+        (valMm - (nom + 2.0)).abs() <= 1.0) {
+      return nom;
+    }
+  }
+  final candidate = (valMm / 5.0).round() * 5.0;
+  if ((valMm - candidate).abs() <= 1.6 ||
+      (valMm - (candidate - 2.0)).abs() <= 1.2 ||
+      (valMm - (candidate - 3.0)).abs() <= 0.8 ||
+      (valMm - (candidate + 1.5)).abs() <= 0.8) {
+    return candidate;
+  }
+  return valMm;
+}
+
+/// Converts a nominal catalog/user-assigned dimension to the internal fabricated
+/// sketch dimension (strictly 2mm lesser than shown in drawings, e.g. 100mm -> 98mm).
+double toFabricatedSize(double nominalMm) {
+  if (nominalMm < 20.0) return nominalMm;
+  return nominalMm - 2.0;
+}
+
 /// Represents an actual physical terminal opening of the folded sheet-metal fitting.
 @immutable
 class CmsPhysicalPort {
+  /// Clean nominal catalog width (e.g. 100mm for fabricated 98mm).
+  double get nominalWidth => toNominalSize(width);
+
+  /// Clean nominal catalog height (e.g. 50mm for fabricated 48mm).
+  double get nominalHeight => toNominalSize(height);
+
+  /// Formatted nominal dimensions string (e.g. "100 × 50 mm").
+  String get displayDimensions => '${nominalWidth.toStringAsFixed(0)} × ${nominalHeight.toStringAsFixed(0)} mm';
   /// Stable physical port identifier (e.g. 'PORT_1', 'PORT_2').
   final String id;
 

@@ -946,9 +946,11 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       }
     }
 
+    final currentFlangeDepth = (curCover.properties['flangeDepthMm'] as num?)?.toDouble() ?? _coverFlangeDepth;
     return TrunkingCoverGenerator.generateCover(
       targetBaseDoc,
       parameterOverrides: effectiveOverrides,
+      flangeDepth: currentFlangeDepth,
       isVisible2D: curCover.isVisible2D,
       isVisible3D: curCover.isVisible3D,
       placementMode2D: curCover.placementMode2D,
@@ -961,9 +963,51 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   /// Builds the 3D folded mesh for [coverData], supporting snapped, beside, and custom offset modes.
   FoldedMeshResult? _buildCover3DMesh(TrunkingCoverData? coverData) {
     if (coverData == null) return null;
-    final baseCoverMesh = KinematicFoldEngine.foldDocument(coverData.document, foldProgress: _foldProgress, curveResolution3D: _curveResolution3D);
-    final double tx, ty, tz;
+    final baseCoverMesh = KinematicFoldEngine.foldDocument(
+      coverData.document,
+      foldProgress: _foldProgress,
+      curveResolution3D: _curveResolution3D,
+      ensureBaseFloorAtBottom: false,
+    );
+
+    final isReducer = coverData.properties['isReducerCover'] == true;
     final clearanceZ = (coverData.properties['snappedClearanceZ'] as num?)?.toDouble() ?? TrunkingCoverGenerator.defaultCoverClearanceZ;
+
+    if (isReducer && coverData.placementMode3D != CoverPlacementMode3D.besideBase) {
+      final h1 = (coverData.properties['port1Height'] as num?)?.toDouble() ?? 100.0;
+      final y1 = (coverData.properties['port1Y'] as num?)?.toDouble() ?? 0.0;
+      final alpha = (coverData.properties['slopeAngleRad'] as num?)?.toDouble() ?? 0.0;
+      final cosA = math.cos(alpha);
+      final sinA = math.sin(alpha);
+
+      final ox = coverData.offset3D.x;
+      final oy = coverData.offset3D.y;
+      final oz = coverData.offset3D.z;
+
+      CadPoint3D transformPt(CadPoint3D p) {
+        final yLocal = p.y - y1;
+        final x3d = p.x + ox;
+        final y3d = y1 + yLocal * cosA + p.z * sinA + oy;
+        final z3d = (h1 + clearanceZ) - yLocal * sinA + p.z * cosA + oz;
+        return CadPoint3D(x3d, y3d, z3d);
+      }
+
+      CadPoint3D transformNormal(CadPoint3D n) {
+        final nx = n.x;
+        final ny = n.y * cosA + n.z * sinA;
+        final nz = -n.y * sinA + n.z * cosA;
+        return CadPoint3D(nx, ny, nz);
+      }
+
+      return baseCoverMesh.transform(
+        transformPt,
+        transformNormal: transformNormal,
+        colorOverride: const Color(0xFF64748B),
+        faceIdPrefix: 'COVER',
+      );
+    }
+
+    final double tx, ty, tz;
     if (coverData.placementMode3D == CoverPlacementMode3D.snappedToBase) {
       final bodyHeight = (coverData.properties['bodyHeightMm'] as num?)?.toDouble() ?? 100.0;
       tx = coverData.offset3D.x;
@@ -980,7 +1024,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       ty = coverData.offset3D.y;
       tz = bodyHeight + clearanceZ + coverData.offset3D.z;
     }
-    return baseCoverMesh.translate(tx, ty, tz, colorOverride: const Color(0xFF64748B));
+    return baseCoverMesh.translate(tx, ty, tz, colorOverride: const Color(0xFF64748B), faceIdPrefix: 'COVER');
   }
 
   void _onScalingControllerChanged() {
@@ -1106,9 +1150,52 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     notifyListeners();
   }
 
+  double _coverFlangeDepth = TrunkingCoverGenerator.defaultFlangeDepth;
+
+  /// Current user-configured or document-stored cover side flange depth (in mm).
+  double get coverFlangeDepth =>
+      (_document.cover?.properties['flangeDepthMm'] as num?)?.toDouble() ?? _coverFlangeDepth;
+
+  /// Updates the cover flange depth and regenerates the 2D & 3D cover document.
+  void setCoverFlangeDepth(double depth) {
+    final clamped = depth.clamp(5.0, 50.0);
+    _coverFlangeDepth = clamped;
+    if (_document.cover != null) {
+      final curCover = _document.cover!;
+      final effectiveOverrides = _scalingController != null
+          ? Map<String, double>.fromEntries(_scalingController!.model.parameters.entries.map((e) => MapEntry(e.key, e.value.currentValue)))
+          : null;
+      final newCover = TrunkingCoverGenerator.generateCover(
+        _document,
+        parameterOverrides: effectiveOverrides,
+        flangeDepth: clamped,
+        isVisible2D: curCover.isVisible2D,
+        isVisible3D: curCover.isVisible3D,
+        placementMode2D: curCover.placementMode2D,
+        placementMode3D: curCover.placementMode3D,
+        offset2D: curCover.offset2D,
+        offset3D: curCover.offset3D,
+      );
+      if (newCover != null) {
+        _document = _document.copyWith(cover: newCover);
+        _recomputeMesh();
+        _recordHistory('Set Cover Flange Depth: ${clamped.toStringAsFixed(1)} mm');
+        notifyListeners();
+      }
+    }
+  }
+
   void createCoverForCurrentFitting() {
-    final newCover = TrunkingCoverGenerator.generateCover(_document);
+    final effectiveOverrides = _scalingController != null
+        ? Map<String, double>.fromEntries(_scalingController!.model.parameters.entries.map((e) => MapEntry(e.key, e.value.currentValue)))
+        : null;
+    final newCover = TrunkingCoverGenerator.generateCover(
+      _document,
+      parameterOverrides: effectiveOverrides,
+      flangeDepth: _coverFlangeDepth,
+    );
     if (newCover == null) return;
+    _isCoverLocked = true;
     _document = _document.copyWith(cover: newCover);
     _recomputeMesh();
     _recordHistory('Create Trunking Cover');
@@ -1170,16 +1257,31 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   double get coverLiftZ => document.cover?.offset3D.z ?? 0.0;
 
+  bool _isCoverLocked = true;
+  bool get isCoverLocked => _isCoverLocked;
+  void toggleCoverLock() {
+    _isCoverLocked = !_isCoverLocked;
+    notifyListeners();
+  }
+
+  void setCoverLocked(bool locked) {
+    if (_isCoverLocked == locked) return;
+    _isCoverLocked = locked;
+    notifyListeners();
+  }
+
   bool _isCover3DMoveActive = false;
   bool get isCover3DMoveActive => _isCover3DMoveActive;
   void toggleCover3DMoveActive() {
     _isCover3DMoveActive = !_isCover3DMoveActive;
+    if (_isCover3DMoveActive) _isCoverLocked = false;
     notifyListeners();
   }
 
   void setCover3DMoveActive(bool active) {
     if (_isCover3DMoveActive == active) return;
     _isCover3DMoveActive = active;
+    if (active) _isCoverLocked = false;
     notifyListeners();
   }
 
@@ -8246,7 +8348,35 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     notifyListeners();
   }
 
+  /// Normalizes bend directions so the primary base floor folds upwards into +Z,
+  /// ensuring the 3D model rests upright on its bottom base floor in isometric view.
+  DsfDocument _normalizeUprightBends(DsfDocument doc) {
+    if (doc.bends.isEmpty || doc.faces.isEmpty) return doc;
+    final baseFace = doc.faces.firstWhere(
+      (f) => f.id == doc.baseFaceId || f.role == FaceRole.baseFloor || f.isBaseAnchor,
+      orElse: () => doc.faces.first,
+    );
+    final baseBends = doc.bends.where(
+      (b) => b.parentFaceId == baseFace.id || b.childFaceId == baseFace.id,
+    ).toList();
+    if (baseBends.isEmpty) return doc;
+
+    final downCount = baseBends.where((b) => b.direction == BendDirection.down).length;
+    if (downCount > baseBends.length / 2) {
+      final invertedBends = doc.bends.map((b) {
+        return b.copyWith(
+          direction: b.direction == BendDirection.down ? BendDirection.up : BendDirection.down,
+          layer: b.direction == BendDirection.down ? 'BEND_UP' : 'BEND_DOWN',
+        );
+      }).toList();
+      return doc.copyWith(bends: invertedBends);
+    }
+    return doc;
+  }
+
   void loadDocument(DsfDocument doc) {
+    doc = _normalizeUprightBends(doc);
+    _isCoverLocked = true;
     _document = doc;
 
     _historyCheckpointDoc = null;

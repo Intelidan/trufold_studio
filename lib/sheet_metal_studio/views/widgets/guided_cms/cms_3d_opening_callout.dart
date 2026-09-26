@@ -91,7 +91,7 @@ class Cms3DOpeningCallout extends StatelessWidget {
                           ),
                           const SizedBox(height: 2.0),
                           Text(
-                            '${port.width.toStringAsFixed(1)} × ${port.height.toStringAsFixed(1)} mm',
+                            port.displayDimensions,
                             style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Color(0xFF0F172A), fontFamily: 'monospace'),
                           ),
                         ],

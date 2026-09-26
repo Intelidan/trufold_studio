@@ -1,0 +1,1536 @@
+{
+  "format": "DANISH_SHEET_FOLD",
+  "version": "2.0",
+  "productType": "90_deg_outside_riser_100x100",
+  "itemName": "90_deg_outside_riser_100x100.dxf",
+  "material": {
+    "thicknessMm": 1.5,
+    "materialGrade": "Pre-Galvanized Steel",
+    "materialType": "mildSteel",
+    "finish": "electroGalvanized",
+    "kFactor": 0.4,
+    "defaultBendRadius": 1.5,
+    "edgeChamferMm": 0.0
+  },
+  "outerContour": [
+    {
+      "x": 82.08400050812679,
+      "y": 204.00000000000003
+    },
+    {
+      "x": 82.08400050812679,
+      "y": 106.00000000000007
+    },
+    {
+      "x": 67.9349202996845,
+      "y": 120.14908020844224
+    },
+    {
+      "x": 53.79973551886536,
+      "y": 120.15602422539847
+    },
+    {
+      "x": 0.006950842911805921,
+      "y": 66.46884027787799
+    },
+    {
+      "x": 0.0,
+      "y": 52.31976063719083
+    },
+    {
+      "x": 42.31976063719051,
+      "y": 10.0
+    },
+    {
+      "x": 52.319760637190484,
+      "y": 10.0
+    },
+    {
+      "x": 52.319760637190484,
+      "y": 0.0
+    },
+    {
+      "x": 175.48785037906333,
+      "y": 0.0
+    },
+    {
+      "x": 175.48785037906333,
+      "y": 9.999999999999922
+    },
+    {
+      "x": 185.48785037906322,
+      "y": 9.999999999999922
+    },
+    {
+      "x": 227.80761101625353,
+      "y": 52.319760637190996
+    },
+    {
+      "x": 227.80066017334184,
+      "y": 66.46884027787813
+    },
+    {
+      "x": 174.0078754973885,
+      "y": 120.15602422539854
+    },
+    {
+      "x": 159.87269071656914,
+      "y": 120.14908020844229
+    },
+    {
+      "x": 145.72361050812702,
+      "y": 106.00000000000007
+    },
+    {
+      "x": 145.7236105081269,
+      "y": 204.00000000000003
+    },
+    {
+      "x": 159.87269071656942,
+      "y": 189.85091979155771
+    },
+    {
+      "x": 174.0078754973885,
+      "y": 189.84397577460152
+    },
+    {
+      "x": 227.80066017334178,
+      "y": 243.5311597221219
+    },
+    {
+      "x": 227.80761101625365,
+      "y": 257.68023936280906
+    },
+    {
+      "x": 185.48785037906322,
+      "y": 300.0000000000002
+    },
+    {
+      "x": 175.48785037906333,
+      "y": 300.0000000000002
+    },
+    {
+      "x": 175.48785037906333,
+      "y": 310.0000000000001
+    },
+    {
+      "x": 52.319760637190484,
+      "y": 310.0000000000001
+    },
+    {
+      "x": 52.319760637190484,
+      "y": 300.0000000000001
+    },
+    {
+      "x": 42.3197606371906,
+      "y": 300.0000000000001
+    },
+    {
+      "x": 1.1368683772161603e-13,
+      "y": 257.6802393628091
+    },
+    {
+      "x": 0.006950842911891186,
+      "y": 243.53115972212203
+    },
+    {
+      "x": 53.79973551886519,
+      "y": 189.84397577460163
+    },
+    {
+      "x": 67.93492029968434,
+      "y": 189.8509197915578
+    },
+    {
+      "x": 82.08400050812679,
+      "y": 204.00000000000003
+    }
+  ],
+  "outerContourLayer": "OUTLINE",
+  "bends": [
+    {
+      "id": "B1",
+      "p1": {
+        "x": 82.08400050812679,
+        "y": 106.00000000000007
+      },
+      "p2": {
+        "x": 145.72361050812702,
+        "y": 106.00000000000007
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_4",
+      "childFaceId": "F_1",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "FL1",
+      "p1": {
+        "x": 52.319760637190484,
+        "y": 10.0
+      },
+      "p2": {
+        "x": 175.48785037906333,
+        "y": 9.999999999999922
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 0.5,
+      "role": "flange",
+      "layer": "FLANGE",
+      "parentFaceId": "F_1",
+      "childFaceId": "F_0",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "B2",
+      "p1": {
+        "x": 145.7236105081269,
+        "y": 204.00000000000003
+      },
+      "p2": {
+        "x": 82.08400050812679,
+        "y": 204.00000000000003
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_4",
+      "childFaceId": "F_3",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "FL2",
+      "p1": {
+        "x": 175.48785037906333,
+        "y": 300.0000000000002
+      },
+      "p2": {
+        "x": 52.319760637190484,
+        "y": 300.0000000000001
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 0.5,
+      "role": "flange",
+      "layer": "FLANGE",
+      "parentFaceId": "F_3",
+      "childFaceId": "F_2",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    }
+  ],
+  "faces": [
+    {
+      "id": "F_0",
+      "label": "Return Flange",
+      "vertices": [
+        {
+          "x": 52.319760637190484,
+          "y": 10.0
+        },
+        {
+          "x": 52.319760637190484,
+          "y": 0.0
+        },
+        {
+          "x": 175.48785037906333,
+          "y": 0.0
+        },
+        {
+          "x": 175.48785037906333,
+          "y": 9.999999999999922
+        }
+      ],
+      "role": "returnFlange",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_1",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 175.48785037906333,
+          "y": 9.999999999999922
+        },
+        {
+          "x": 185.48785037906322,
+          "y": 9.999999999999922
+        },
+        {
+          "x": 227.80761101625353,
+          "y": 52.319760637190996
+        },
+        {
+          "x": 227.80066017334184,
+          "y": 66.46884027787813
+        },
+        {
+          "x": 174.0078754973885,
+          "y": 120.15602422539854
+        },
+        {
+          "x": 159.87269071656914,
+          "y": 120.14908020844229
+        },
+        {
+          "x": 145.72361050812702,
+          "y": 106.00000000000007
+        },
+        {
+          "x": 82.08400050812679,
+          "y": 106.00000000000007
+        },
+        {
+          "x": 67.9349202996845,
+          "y": 120.14908020844224
+        },
+        {
+          "x": 53.79973551886536,
+          "y": 120.15602422539847
+        },
+        {
+          "x": 0.006950842911805921,
+          "y": 66.46884027787799
+        },
+        {
+          "x": 0.0,
+          "y": 52.31976063719083
+        },
+        {
+          "x": 42.31976063719051,
+          "y": 10.0
+        },
+        {
+          "x": 52.319760637190484,
+          "y": 10.0
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_2",
+      "label": "Return Flange",
+      "vertices": [
+        {
+          "x": 175.48785037906333,
+          "y": 300.0000000000002
+        },
+        {
+          "x": 175.48785037906333,
+          "y": 310.0000000000001
+        },
+        {
+          "x": 52.319760637190484,
+          "y": 310.0000000000001
+        },
+        {
+          "x": 52.319760637190484,
+          "y": 300.0000000000001
+        }
+      ],
+      "role": "returnFlange",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_3",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 52.319760637190484,
+          "y": 300.0000000000001
+        },
+        {
+          "x": 42.3197606371906,
+          "y": 300.0000000000001
+        },
+        {
+          "x": 1.1368683772161603e-13,
+          "y": 257.6802393628091
+        },
+        {
+          "x": 0.006950842911891186,
+          "y": 243.53115972212203
+        },
+        {
+          "x": 53.79973551886519,
+          "y": 189.84397577460163
+        },
+        {
+          "x": 67.93492029968434,
+          "y": 189.8509197915578
+        },
+        {
+          "x": 82.08400050812679,
+          "y": 204.00000000000003
+        },
+        {
+          "x": 145.7236105081269,
+          "y": 204.00000000000003
+        },
+        {
+          "x": 159.87269071656942,
+          "y": 189.85091979155771
+        },
+        {
+          "x": 174.0078754973885,
+          "y": 189.84397577460152
+        },
+        {
+          "x": 227.80066017334178,
+          "y": 243.5311597221219
+        },
+        {
+          "x": 227.80761101625365,
+          "y": 257.68023936280906
+        },
+        {
+          "x": 185.48785037906322,
+          "y": 300.0000000000002
+        },
+        {
+          "x": 175.48785037906333,
+          "y": 300.0000000000002
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_4",
+      "label": "Bottom Base Floor",
+      "vertices": [
+        {
+          "x": 82.08400050812679,
+          "y": 204.00000000000003
+        },
+        {
+          "x": 82.08400050812679,
+          "y": 106.00000000000007
+        },
+        {
+          "x": 145.72361050812702,
+          "y": 106.00000000000007
+        },
+        {
+          "x": 145.7236105081269,
+          "y": 204.00000000000003
+        }
+      ],
+      "role": "baseFloor",
+      "isBaseAnchor": true,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    }
+  ],
+  "punches": [
+    {
+      "id": "SLOT_1",
+      "type": "obroundSlot",
+      "center": {
+        "x": 52.396096407360574,
+        "y": 103.16130208829429
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.000000177853266,
+      "diameterMm": 8.0,
+      "rotationDeg": 45.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_2",
+      "type": "obroundSlot",
+      "center": {
+        "x": 17.08923937372066,
+        "y": 67.75801998283505
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.000000177853273,
+      "diameterMm": 8.0,
+      "rotationDeg": 45.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_3",
+      "type": "obroundSlot",
+      "center": {
+        "x": 175.4115146088933,
+        "y": 103.16130208829424
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.00000017785348,
+      "diameterMm": 8.0,
+      "rotationDeg": 135.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_4",
+      "type": "obroundSlot",
+      "center": {
+        "x": 210.71837164253293,
+        "y": 67.75801998283505
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.000000177853416,
+      "diameterMm": 8.0,
+      "rotationDeg": 135.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_5",
+      "type": "obroundSlot",
+      "center": {
+        "x": 52.396096407360574,
+        "y": 206.83869791170582
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.00000017785328,
+      "diameterMm": 8.0,
+      "rotationDeg": 135.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_6",
+      "type": "obroundSlot",
+      "center": {
+        "x": 17.089239373720716,
+        "y": 242.24198001716508
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.000000177853178,
+      "diameterMm": 8.0,
+      "rotationDeg": 135.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_7",
+      "type": "obroundSlot",
+      "center": {
+        "x": 175.4115146088933,
+        "y": 206.8386979117059
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.00000017785354,
+      "diameterMm": 8.0,
+      "rotationDeg": 45.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_8",
+      "type": "obroundSlot",
+      "center": {
+        "x": 210.71837164253293,
+        "y": 242.24198001716508
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.0000001778534,
+      "diameterMm": 8.0,
+      "rotationDeg": 45.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    }
+  ],
+  "perforationPatterns": [],
+  "corners": [],
+  "cutLines": [],
+  "arcs": [
+    {
+      "type": "arc",
+      "id": "ARC_BND_1",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 166.94375852843478,
+        "y": 196.92198760342322
+      },
+      "radius": 10.0,
+      "startAngleRad": 3.926990816987247,
+      "sweepAngleRad": 1.5698138116731877,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_2",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 220.7365432043881,
+        "y": 250.6091715509436
+      },
+      "radius": 10.0,
+      "startAngleRad": 5.496804628660434,
+      "sweepAngleRad": 1.571778841916591,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_3",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 60.86385248781892,
+        "y": 196.92198760342333
+      },
+      "radius": 10.0,
+      "startAngleRad": 3.927973332108947,
+      "sweepAngleRad": 1.5698138116731823,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_4",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 7.071067811865618,
+        "y": 250.60917155094373
+      },
+      "radius": 10.0,
+      "startAngleRad": 2.3561944901923515,
+      "sweepAngleRad": 1.571778841916595,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_5",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 166.9437585284346,
+        "y": 113.07801239657678
+      },
+      "radius": 10.0,
+      "startAngleRad": 0.786380678519154,
+      "sweepAngleRad": 1.569813811673189,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_6",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 220.7365432043881,
+        "y": 59.39082844905642
+      },
+      "radius": 10.0,
+      "startAngleRad": 5.497787143782147,
+      "sweepAngleRad": 1.5717788419165932,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_7",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 7.071067811865504,
+        "y": 59.390828449056286
+      },
+      "radius": 10.0,
+      "startAngleRad": 2.355211975070639,
+      "sweepAngleRad": 1.5717788419165986,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_8",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 60.86385248781909,
+        "y": 113.07801239657675
+      },
+      "radius": 10.0,
+      "startAngleRad": 0.7853981633974523,
+      "sweepAngleRad": 1.569813811673187,
+      "showLabel": true
+    }
+  ],
+  "dimensions": [],
+  "constraints": [],
+  "constraintDefinitions": [],
+  "referenceGeometries": [],
+  "templateParameters": [],
+  "layers": [
+    {
+      "name": "OUTLINE",
+      "colorHex": 4279179050,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 2.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "HOLES",
+      "colorHex": 4278556265,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "0",
+      "colorHex": 4284773515,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    }
+  ],
+  "baseFaceId": "F_4",
+  "edgeChamfers": {},
+  "parameters": {},
+  "metadata": {
+    "featureHistory": [
+      {
+        "step": 1,
+        "action": "update_punch",
+        "description": "Auto-identified 8 coupler slot(s)",
+        "timestamp": "2026-09-26T00:03:05.519355",
+        "targetId": "SLOT_1",
+        "delta": {
+          "description": "Auto-identified 8 coupler slot(s)",
+          "actionType": "update_punch",
+          "timestamp": "2026-09-26T00:03:05.519355",
+          "targetId": "SLOT_1",
+          "oldPunches": [
+            {
+              "id": "SLOT_1",
+              "type": "obroundSlot",
+              "center": {
+                "x": 52.396096407360574,
+                "y": 103.16130208829429
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000177853266,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_2",
+              "type": "obroundSlot",
+              "center": {
+                "x": 17.08923937372066,
+                "y": 67.75801998283505
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000177853273,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_3",
+              "type": "obroundSlot",
+              "center": {
+                "x": 175.4115146088933,
+                "y": 103.16130208829424
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000017785348,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_4",
+              "type": "obroundSlot",
+              "center": {
+                "x": 210.71837164253293,
+                "y": 67.75801998283505
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000177853416,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_5",
+              "type": "obroundSlot",
+              "center": {
+                "x": 52.396096407360574,
+                "y": 206.83869791170582
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000017785328,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_6",
+              "type": "obroundSlot",
+              "center": {
+                "x": 17.089239373720716,
+                "y": 242.24198001716508
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000177853178,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_7",
+              "type": "obroundSlot",
+              "center": {
+                "x": 175.4115146088933,
+                "y": 206.8386979117059
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000017785354,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_8",
+              "type": "obroundSlot",
+              "center": {
+                "x": 210.71837164253293,
+                "y": 242.24198001716508
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.0000001778534,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            }
+          ],
+          "newPunches": [
+            {
+              "id": "SLOT_1",
+              "type": "obroundSlot",
+              "center": {
+                "x": 52.396096407360574,
+                "y": 103.16130208829429
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000177853266,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_2",
+              "type": "obroundSlot",
+              "center": {
+                "x": 17.08923937372066,
+                "y": 67.75801998283505
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000177853273,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_3",
+              "type": "obroundSlot",
+              "center": {
+                "x": 175.4115146088933,
+                "y": 103.16130208829424
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000017785348,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_4",
+              "type": "obroundSlot",
+              "center": {
+                "x": 210.71837164253293,
+                "y": 67.75801998283505
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000177853416,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_5",
+              "type": "obroundSlot",
+              "center": {
+                "x": 52.396096407360574,
+                "y": 206.83869791170582
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000017785328,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_6",
+              "type": "obroundSlot",
+              "center": {
+                "x": 17.089239373720716,
+                "y": 242.24198001716508
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000177853178,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_7",
+              "type": "obroundSlot",
+              "center": {
+                "x": 175.4115146088933,
+                "y": 206.8386979117059
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000017785354,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_8",
+              "type": "obroundSlot",
+              "center": {
+                "x": 210.71837164253293,
+                "y": 242.24198001716508
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.0000001778534,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            }
+          ]
+        }
+      },
+      {
+        "step": 2,
+        "action": "modify",
+        "description": "Auto-identified 8 coupler slot(s)",
+        "timestamp": "2026-09-26T00:03:38.571070",
+        "delta": {
+          "description": "Auto-identified 8 coupler slot(s)",
+          "actionType": "modify",
+          "timestamp": "2026-09-26T00:03:38.571070"
+        }
+      },
+      {
+        "step": 3,
+        "action": "modify",
+        "description": "Auto-identified 8 coupler slot(s)",
+        "timestamp": "2026-09-26T00:03:40.566896",
+        "delta": {
+          "description": "Auto-identified 8 coupler slot(s)",
+          "actionType": "modify",
+          "timestamp": "2026-09-26T00:03:40.566896"
+        }
+      },
+      {
+        "step": 4,
+        "action": "modify",
+        "description": "Auto-identified 8 coupler slot(s)",
+        "timestamp": "2026-09-26T00:03:41.956483",
+        "delta": {
+          "description": "Auto-identified 8 coupler slot(s)",
+          "actionType": "modify",
+          "timestamp": "2026-09-26T00:03:41.956483"
+        }
+      },
+      {
+        "step": 5,
+        "action": "modify",
+        "description": "Auto-identified 8 coupler slot(s)",
+        "timestamp": "2026-09-26T00:03:42.255735",
+        "delta": {
+          "description": "Auto-identified 8 coupler slot(s)",
+          "actionType": "modify",
+          "timestamp": "2026-09-26T00:03:42.255735"
+        }
+      },
+      {
+        "step": 6,
+        "action": "modify",
+        "description": "Auto-identified 8 coupler slot(s)",
+        "timestamp": "2026-09-26T00:03:42.498591",
+        "delta": {
+          "description": "Auto-identified 8 coupler slot(s)",
+          "actionType": "modify",
+          "timestamp": "2026-09-26T00:03:42.498591"
+        }
+      }
+    ],
+    "undoDeltas": [
+      {
+        "description": "Auto-identified 8 coupler slot(s)",
+        "actionType": "update_punch",
+        "timestamp": "2026-09-26T00:03:05.519355",
+        "targetId": "SLOT_1",
+        "oldPunches": [
+          {
+            "id": "SLOT_1",
+            "type": "obroundSlot",
+            "center": {
+              "x": 52.396096407360574,
+              "y": 103.16130208829429
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000177853266,
+            "diameterMm": 8.0,
+            "rotationDeg": 45.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_2",
+            "type": "obroundSlot",
+            "center": {
+              "x": 17.08923937372066,
+              "y": 67.75801998283505
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000177853273,
+            "diameterMm": 8.0,
+            "rotationDeg": 45.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_3",
+            "type": "obroundSlot",
+            "center": {
+              "x": 175.4115146088933,
+              "y": 103.16130208829424
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.00000017785348,
+            "diameterMm": 8.0,
+            "rotationDeg": 135.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_4",
+            "type": "obroundSlot",
+            "center": {
+              "x": 210.71837164253293,
+              "y": 67.75801998283505
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000177853416,
+            "diameterMm": 8.0,
+            "rotationDeg": 135.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_5",
+            "type": "obroundSlot",
+            "center": {
+              "x": 52.396096407360574,
+              "y": 206.83869791170582
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.00000017785328,
+            "diameterMm": 8.0,
+            "rotationDeg": 135.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_6",
+            "type": "obroundSlot",
+            "center": {
+              "x": 17.089239373720716,
+              "y": 242.24198001716508
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000177853178,
+            "diameterMm": 8.0,
+            "rotationDeg": 135.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_7",
+            "type": "obroundSlot",
+            "center": {
+              "x": 175.4115146088933,
+              "y": 206.8386979117059
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.00000017785354,
+            "diameterMm": 8.0,
+            "rotationDeg": 45.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_8",
+            "type": "obroundSlot",
+            "center": {
+              "x": 210.71837164253293,
+              "y": 242.24198001716508
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.0000001778534,
+            "diameterMm": 8.0,
+            "rotationDeg": 45.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          }
+        ],
+        "newPunches": [
+          {
+            "id": "SLOT_1",
+            "type": "obroundSlot",
+            "center": {
+              "x": 52.396096407360574,
+              "y": 103.16130208829429
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000177853266,
+            "diameterMm": 8.0,
+            "rotationDeg": 45.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_2",
+            "type": "obroundSlot",
+            "center": {
+              "x": 17.08923937372066,
+              "y": 67.75801998283505
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000177853273,
+            "diameterMm": 8.0,
+            "rotationDeg": 45.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_3",
+            "type": "obroundSlot",
+            "center": {
+              "x": 175.4115146088933,
+              "y": 103.16130208829424
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.00000017785348,
+            "diameterMm": 8.0,
+            "rotationDeg": 135.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_4",
+            "type": "obroundSlot",
+            "center": {
+              "x": 210.71837164253293,
+              "y": 67.75801998283505
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000177853416,
+            "diameterMm": 8.0,
+            "rotationDeg": 135.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_5",
+            "type": "obroundSlot",
+            "center": {
+              "x": 52.396096407360574,
+              "y": 206.83869791170582
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.00000017785328,
+            "diameterMm": 8.0,
+            "rotationDeg": 135.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_6",
+            "type": "obroundSlot",
+            "center": {
+              "x": 17.089239373720716,
+              "y": 242.24198001716508
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000177853178,
+            "diameterMm": 8.0,
+            "rotationDeg": 135.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_7",
+            "type": "obroundSlot",
+            "center": {
+              "x": 175.4115146088933,
+              "y": 206.8386979117059
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.00000017785354,
+            "diameterMm": 8.0,
+            "rotationDeg": 45.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_8",
+            "type": "obroundSlot",
+            "center": {
+              "x": 210.71837164253293,
+              "y": 242.24198001716508
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.0000001778534,
+            "diameterMm": 8.0,
+            "rotationDeg": 45.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          }
+        ]
+      },
+      {
+        "description": "Auto-identified 8 coupler slot(s)",
+        "actionType": "modify",
+        "timestamp": "2026-09-26T00:03:38.571070"
+      },
+      {
+        "description": "Auto-identified 8 coupler slot(s)",
+        "actionType": "modify",
+        "timestamp": "2026-09-26T00:03:40.566896"
+      },
+      {
+        "description": "Auto-identified 8 coupler slot(s)",
+        "actionType": "modify",
+        "timestamp": "2026-09-26T00:03:41.956483"
+      },
+      {
+        "description": "Auto-identified 8 coupler slot(s)",
+        "actionType": "modify",
+        "timestamp": "2026-09-26T00:03:42.255735"
+      },
+      {
+        "description": "Auto-identified 8 coupler slot(s)",
+        "actionType": "modify",
+        "timestamp": "2026-09-26T00:03:42.498591"
+      }
+    ],
+    "cmsWorkflow": {
+      "stage": "manufacturing_defined",
+      "stageIndex": 1
+    }
+  }
+}

@@ -20,6 +20,7 @@ enum CmsScalingProfile {
   tee,
   cross,
   straight,
+  reducer,
   generic;
 
   String get displayName {
@@ -44,6 +45,8 @@ enum CmsScalingProfile {
         return 'Unequal Cross Fitting';
       case CmsScalingProfile.straight:
         return 'Straight Cable Tray';
+      case CmsScalingProfile.reducer:
+        return 'Straight Reducer';
       case CmsScalingProfile.generic:
         return 'Standard Fitting';
     }
@@ -162,17 +165,19 @@ class CmsProductContract {
 
   static const tee = equalTee;
 
-  static const concentricReducer = CmsProductContract(
+  static const straightReducer = CmsProductContract(
     productType: 'reducer',
-    variationName: 'concentric_reducer',
-    displayName: 'Concentric Reducer',
-    scalingProfile: CmsScalingProfile.generic,
+    variationName: 'straight_reducer',
+    displayName: 'Straight Reducer',
+    scalingProfile: CmsScalingProfile.reducer,
     expectedPortCount: 2,
     expectedStructuralBends: 2,
     expectedFlanges: 2,
-    expectedCouplerSlotsPerPort: 4,
+    expectedCouplerSlotsPerPort: 2,
     hasRoleSuggestionRule: true,
   );
+
+  static const concentricReducer = straightReducer;
 
   static const equalCross = CmsProductContract(
     productType: 'cross',
@@ -291,7 +296,7 @@ class CmsProductContract {
     }
 
     // 4. Reducers, Tees, Crosses, Straights
-    if (combined.contains('reducer')) return concentricReducer;
+    if (combined.contains('reducer')) return straightReducer;
     if (combined.contains('unequal') && combined.contains('tee')) return unequalTee;
     if (combined.contains('equal') && combined.contains('tee')) return equalTee;
     if (combined.contains('tee')) return equalTee;

@@ -134,8 +134,8 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
         final delta = previewVal - baselineVal;
         final isHeight = param.id.endsWith('_height') || param.id == 'height';
 
-        final profileName = widget.controller.effectiveScalingProfile == CmsScalingProfile.insideRiser
-            ? '45° Inside Riser'
+        final profileName = widget.controller.contract.displayName.isNotEmpty
+            ? widget.controller.contract.displayName
             : widget.controller.effectiveScalingProfile.displayName;
 
         final isMultiPort = !widget.controller.isLinkedPorts && widget.controller.baselinePorts.length >= 3;

@@ -7,7 +7,9 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import '../../../models/cms/cms_physical_port.dart';
 import '../../../models/cms/cms_ux_state.dart';
 
@@ -17,12 +19,7 @@ class Cms2DOverlayPainter extends CustomPainter {
   final CmsVisualFocus focus;
   final Offset Function(double x, double y) worldToScreen;
 
-  Cms2DOverlayPainter({
-    this.ports = const [],
-    this.suggestedBends = const [],
-    required this.focus,
-    required this.worldToScreen,
-  });
+  Cms2DOverlayPainter({this.ports = const [], this.suggestedBends = const [], required this.focus, required this.worldToScreen});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -34,12 +31,14 @@ class Cms2DOverlayPainter extends CustomPainter {
     if (suggestedBends.isEmpty) return;
 
     final bendPaint = Paint()
-      ..color = const Color(0xFF0284C7) // Sky blue
+      ..color =
+          const Color(0xFF0284C7) // Sky blue
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
     final flangePaint = Paint()
-      ..color = const Color(0xFF0D9488) // Teal
+      ..color =
+          const Color(0xFF0D9488) // Teal
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
@@ -75,25 +74,13 @@ class Cms2DOverlayPainter extends CustomPainter {
       final labelText = '${bend.label} (${bend.targetAngleDeg.toInt()}°)';
       final textSpan = TextSpan(
         text: labelText,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 9.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.2,
-        ),
+        style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w700, letterSpacing: 0.2),
       );
-      final textPainter = TextPainter(
-        text: textSpan,
-        textDirection: TextDirection.ltr,
-      )..layout();
+      final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
 
       const padX = 6.0;
       const padY = 3.0;
-      final badgeRect = Rect.fromCenter(
-        center: mid,
-        width: textPainter.width + padX * 2,
-        height: textPainter.height + padY * 2,
-      );
+      final badgeRect = Rect.fromCenter(center: mid, width: textPainter.width + padX * 2, height: textPainter.height + padY * 2);
 
       final rrect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(5.0));
       final badgeBgPaint = Paint()
@@ -107,10 +94,7 @@ class Cms2DOverlayPainter extends CustomPainter {
         ..strokeWidth = 1.0;
       canvas.drawRRect(rrect, badgeBorderPaint);
 
-      textPainter.paint(
-        canvas,
-        Offset(badgeRect.left + padX, badgeRect.top + padY),
-      );
+      textPainter.paint(canvas, Offset(badgeRect.left + padX, badgeRect.top + padY));
     }
   }
 
@@ -121,12 +105,7 @@ class Cms2DOverlayPainter extends CustomPainter {
       ..color = const Color(0xFF0284C7)
       ..style = PaintingStyle.fill;
 
-    const textStyle = TextStyle(
-      color: Colors.white,
-      fontSize: 10.0,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 0.2,
-    );
+    const textStyle = TextStyle(color: Colors.white, fontSize: 10.0, fontWeight: FontWeight.w700, letterSpacing: 0.2);
 
     for (final port in ports) {
       final isFocused = port.id == focus.activePortId;
@@ -141,20 +120,13 @@ class Cms2DOverlayPainter extends CustomPainter {
       }
 
       // Draw port pill badge
-      final label = '${port.id} (${port.width.toInt()}×${port.height.toInt()})';
+      final label = '${port.id} (${port.nominalWidth.toInt()}×${port.nominalHeight.toInt()})';
       final textSpan = TextSpan(text: label, style: textStyle);
-      final textPainter = TextPainter(
-        text: textSpan,
-        textDirection: TextDirection.ltr,
-      )..layout();
+      final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
 
       const padX = 8.0;
       const padY = 4.0;
-      final badgeRect = Rect.fromCenter(
-        center: screenPos,
-        width: textPainter.width + padX * 2,
-        height: textPainter.height + padY * 2,
-      );
+      final badgeRect = Rect.fromCenter(center: screenPos, width: textPainter.width + padX * 2, height: textPainter.height + padY * 2);
 
       final rrect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(6.0));
       badgePaint.color = isFocused ? const Color(0xFF0284C7) : const Color(0xFF0F172A);
@@ -167,21 +139,11 @@ class Cms2DOverlayPainter extends CustomPainter {
         ..strokeWidth = 1.0;
       canvas.drawRRect(rrect, borderPaint);
 
-      textPainter.paint(
-        canvas,
-        Offset(badgeRect.left + padX, badgeRect.top + padY),
-      );
+      textPainter.paint(canvas, Offset(badgeRect.left + padX, badgeRect.top + padY));
     }
   }
 
-  void _drawDashedLine(
-    Canvas canvas,
-    Offset p1,
-    Offset p2,
-    Paint paint, {
-    double dash = 6.0,
-    double gap = 4.0,
-  }) {
+  void _drawDashedLine(Canvas canvas, Offset p1, Offset p2, Paint paint, {double dash = 6.0, double gap = 4.0}) {
     final dx = p2.dx - p1.dx;
     final dy = p2.dy - p1.dy;
     final totalLen = math.sqrt(dx * dx + dy * dy);
@@ -193,19 +155,13 @@ class Cms2DOverlayPainter extends CustomPainter {
 
     while (d < totalLen) {
       final segLen = math.min(dash, totalLen - d);
-      canvas.drawLine(
-        Offset(p1.dx + ux * d, p1.dy + uy * d),
-        Offset(p1.dx + ux * (d + segLen), p1.dy + uy * (d + segLen)),
-        paint,
-      );
+      canvas.drawLine(Offset(p1.dx + ux * d, p1.dy + uy * d), Offset(p1.dx + ux * (d + segLen), p1.dy + uy * (d + segLen)), paint);
       d += dash + gap;
     }
   }
 
   @override
   bool shouldRepaint(covariant Cms2DOverlayPainter oldDelegate) {
-    return oldDelegate.ports != ports ||
-        oldDelegate.suggestedBends != suggestedBends ||
-        oldDelegate.focus != focus;
+    return oldDelegate.ports != ports || oldDelegate.suggestedBends != suggestedBends || oldDelegate.focus != focus;
   }
 }

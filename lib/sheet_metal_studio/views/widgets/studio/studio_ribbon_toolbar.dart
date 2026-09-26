@@ -22,6 +22,7 @@ import 'studio_3d_tool_icons.dart';
 import 'studio_menu_bar.dart';
 import 'studio_tool_button_3d.dart';
 import '../branding/trufold_3d_icon.dart';
+import '../dds/dds_workspace_screen.dart';
 
 class StudioRibbonToolbar extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -185,6 +186,53 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
                     Text(
                       'Save',
                       style: TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 6),
+
+          // TDS Studio (.dds) Action Button
+          Tooltip(
+            message: 'Technical Data Sheet (TDS) Studio (.dds / Excel Import)',
+            child: InkWell(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => DdsWorkspaceScreen(
+                      onOpenInEditor: (dsfDoc) {
+                        widget.viewModel.loadDocument(dsfDoc);
+                      },
+                    ),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0284C7), Color(0xFF0369A1)],
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0284C7).withValues(alpha: 0.35),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.description_outlined, size: 13, color: Colors.white),
+                    SizedBox(width: 4),
+                    Text(
+                      'TDS Studio',
+                      style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),

@@ -7,8 +7,11 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
+import 'cms_scaling_controller.dart';
 import '../kinematic_fold_engine.dart';
 import '../../models/cad_primitives.dart';
+import '../../models/cnc_punch_primitive.dart';
 import '../../models/dsf_document.dart';
 import '../../models/planar_sheet_face.dart';
 import '../../models/fold_bend_line.dart';
@@ -41,10 +44,7 @@ class CmsRaw3DOpening {
 /// Discovers open channel mouth boundaries from the folded 3D mesh.
 class Cms3DOpeningDetector {
   /// Extracts all candidate channel openings from the document and its folded 3D mesh.
-  static List<CmsRaw3DOpening> detectOpenings({
-    required DsfDocument document,
-    required FoldedMeshResult foldResult,
-  }) {
+  static List<CmsRaw3DOpening> detectOpenings({required DsfDocument document, required FoldedMeshResult foldResult}) {
     if (document.faces.isEmpty || foldResult.polygons.isEmpty) return const [];
 
     // 1. Identify all Floor Web faces (anchor base + connected riser segments)
@@ -62,14 +62,11 @@ class Cms3DOpeningDetector {
       final candidateFloorEdges = _findOpenFloorEdges(document, floorFace, sidewallFaces, foldResult);
 
       for (final floorEdge in candidateFloorEdges) {
-        final p1Flat = floorEdge.p1;
-        final p2Flat = floorEdge.p2;
+        var p1Flat = floorEdge.p1;
+        var p2Flat = floorEdge.p2;
 
         // Transform flat floor edge to 3D using floor polygon vertices
-        final floor3DPoly = foldResult.polygons.firstWhere(
-          (p) => p.faceId == floorFace.id,
-          orElse: () => foldResult.polygons.first,
-        );
+        final floor3DPoly = foldResult.polygons.firstWhere((p) => p.faceId == floorFace.id, orElse: () => foldResult.polygons.first);
 
         final p1_3d = _mapFlatTo3D(p1Flat, floorFace.vertices, floor3DPoly.vertices);
         final p2_3d = _mapFlatTo3D(p2Flat, floorFace.vertices, floor3DPoly.vertices);
@@ -96,11 +93,7 @@ class Cms3DOpeningDetector {
         }
 
         // Ensure outward normal points AWAY from floor center
-        final mid3D = CadPoint3D(
-          (p1_3d.x + p2_3d.x) / 2.0,
-          (p1_3d.y + p2_3d.y) / 2.0,
-          (p1_3d.z + p2_3d.z) / 2.0,
-        );
+        final mid3D = CadPoint3D((p1_3d.x + p2_3d.x) / 2.0, (p1_3d.y + p2_3d.y) / 2.0, (p1_3d.z + p2_3d.z) / 2.0);
         final floorCenter = _polygonCenter3D(floor3DPoly.vertices);
         final toMidX = mid3D.x - floorCenter.x;
         final toMidY = mid3D.y - floorCenter.y;
@@ -118,20 +111,319 @@ class Cms3DOpeningDetector {
           adjacentSidewallIds.add(sw.id);
         }
 
-        // Collect loop vertices (Floor edge P1 -> P2)
-        final loop3D = <CadPoint3D>[p1_3d, p2_3d];
+        CadPoint3D finalP1_3d = p1_3d;
+        CadPoint3D finalP2_3d = p2_3d;
+        CadPoint3D finalNormal = outwardNormal;
 
-        rawOpenings.add(CmsRaw3DOpening(
-          openingId: 'raw_opening_$index',
-          boundary3DVertices: loop3D,
-          floorEdgeP1: p1_3d,
-          floorEdgeP2: p2_3d,
-          flatFloorEdgeP1: p1Flat,
-          flatFloorEdgeP2: p2Flat,
-          floorFaceId: floorFace.id,
-          sidewallFaceIds: adjacentSidewallIds,
-          outwardNormal: outwardNormal,
-        ));
+        // SS1: Outside Riser angled mouth and bending architecture support
+        final docType = '${document.productType} ${document.itemName}'.toLowerCase();
+        final isReducer = docType.contains('reducer') || CmsScalingController.isReducerGeometry(document);
+        final isOutsideRiser = !isReducer && docType.contains('outside') && (docType.contains('riser') || docType.contains('rise'));
+        final isInsideRiser = !isReducer && ((docType.contains('inside') && (docType.contains('riser') || docType.contains('rise'))) ||
+            CmsScalingController.isInsideRiserGeometry(document));
+
+        if (isOutsideRiser) {
+          final cheekBends = document.bends
+              .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
+              .toList();
+          final isHorizontal = cheekBends.isNotEmpty &&
+              (cheekBends.first.p2.x - cheekBends.first.p1.x).abs() > (cheekBends.first.p2.y - cheekBends.first.p1.y).abs();
+
+          final nominalH = (document.parameters['height'] as num?)?.toDouble() ?? 100.0;
+          final halfH = nominalH / 2.0;
+
+          if (isHorizontal) {
+            // 90° Outside Riser: mouths pass directly through coupler holes on cheeks
+            final isPort1 = (p1_3d.x + p2_3d.x) / 2.0 < floorCenter.x;
+
+            cheekBends.sort((a, b) => ((a.p1.y + a.p2.y) / 2.0).compareTo((b.p1.y + b.p2.y) / 2.0));
+            final b1Y = (cheekBends.first.p1.y + cheekBends.first.p2.y) / 2.0;
+            final b2Y = (cheekBends.last.p1.y + cheekBends.last.p2.y) / 2.0;
+            final yMid = (b1Y + b2Y) / 2.0;
+
+            final portPunches = document.punches.where((p) {
+              final isMatchingSide = isPort1 ? (p.center.x < floorCenter.x) : (p.center.x > floorCenter.x);
+              return isMatchingSide && (p.isSlot || p.type == PunchType.obroundSlot || p.role == CncPunchRole.coupler);
+            }).toList();
+
+            final cheek1Punches = portPunches.where((p) => p.center.y < yMid).toList();
+            final cheek2Punches = portPunches.where((p) => p.center.y > yMid).toList();
+
+            CadPoint3D? m1_3d;
+            CadPoint3D? m2_3d;
+
+            if (cheek1Punches.isNotEmpty) {
+              double sx = 0, sy = 0, sz = 0;
+              for (final p in cheek1Punches) {
+                final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+                sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
+              }
+              m1_3d = CadPoint3D(sx / cheek1Punches.length, sy / cheek1Punches.length, sz / cheek1Punches.length);
+            }
+
+            if (cheek2Punches.isNotEmpty) {
+              double sx = 0, sy = 0, sz = 0;
+              for (final p in cheek2Punches) {
+                final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+                sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
+              }
+              m2_3d = CadPoint3D(sx / cheek2Punches.length, sy / cheek2Punches.length, sz / cheek2Punches.length);
+            }
+
+            if (m1_3d != null && m2_3d != null) {
+              final vHx = isPort1 ? -1.0 / math.sqrt(2) : 1.0 / math.sqrt(2);
+              final vHz = 1.0 / math.sqrt(2);
+
+              final normX = isPort1 ? -1.0 / math.sqrt(2) : 1.0 / math.sqrt(2);
+              const normY = 0.0;
+              final normZ = -1.0 / math.sqrt(2);
+              finalNormal = CadPoint3D(normX, normY, normZ);
+
+              finalP1_3d = CadPoint3D(
+                m1_3d.x - halfH * vHx,
+                m1_3d.y,
+                m1_3d.z - halfH * vHz,
+              );
+              finalP2_3d = CadPoint3D(
+                m2_3d.x - halfH * vHx,
+                m2_3d.y,
+                m2_3d.z - halfH * vHz,
+              );
+
+              final c1FlatX = cheek1Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek1Punches.length;
+              final c1FlatY = cheek1Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek1Punches.length;
+              final c2FlatX = cheek2Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek2Punches.length;
+              final c2FlatY = cheek2Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek2Punches.length;
+              p1Flat = CadPoint2D(c1FlatX, c1FlatY);
+              p2Flat = CadPoint2D(c2FlatX, c2FlatY);
+            }
+          } else {
+            // 45° Outside Riser: cheek bends run along Y.
+            cheekBends.sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+            final b1X = (cheekBends.first.p1.x + cheekBends.first.p2.x) / 2.0;
+            final b2X = (cheekBends.last.p1.x + cheekBends.last.p2.x) / 2.0;
+            final xMid = (b1X + b2X) / 2.0;
+
+            final isStraightPort = (p1_3d.y + p2_3d.y) / 2.0 < floorCenter.y;
+            final portPunches = document.punches.where((p) {
+              final isMatchingSide = isStraightPort ? (p.center.y < 60.0) : (p.center.y > 60.0);
+              return isMatchingSide && (p.isSlot || p.type == PunchType.obroundSlot || p.role == CncPunchRole.coupler);
+            }).toList();
+
+            final cheek1Punches = portPunches.where((p) => p.center.x < xMid).toList();
+            final cheek2Punches = portPunches.where((p) => p.center.x > xMid).toList();
+
+            CadPoint3D? m1_3d;
+            CadPoint3D? m2_3d;
+
+            if (cheek1Punches.isNotEmpty) {
+              double sx = 0, sy = 0, sz = 0;
+              for (final p in cheek1Punches) {
+                final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+                sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
+              }
+              m1_3d = CadPoint3D(sx / cheek1Punches.length, sy / cheek1Punches.length, sz / cheek1Punches.length);
+            }
+
+            if (cheek2Punches.isNotEmpty) {
+              double sx = 0, sy = 0, sz = 0;
+              for (final p in cheek2Punches) {
+                final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+                sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
+              }
+              m2_3d = CadPoint3D(sx / cheek2Punches.length, sy / cheek2Punches.length, sz / cheek2Punches.length);
+            }
+
+            if (m1_3d != null && m2_3d != null) {
+              if (isStraightPort) {
+                finalNormal = const CadPoint3D(0.0, -1.0, 0.0);
+                finalP1_3d = CadPoint3D(m1_3d.x, m1_3d.y, m1_3d.z - halfH);
+                finalP2_3d = CadPoint3D(m2_3d.x, m2_3d.y, m2_3d.z - halfH);
+              } else {
+                finalNormal = const CadPoint3D(0.0, 0.7071067811865475, -0.7071067811865475);
+                const vHy = 0.7071067811865475;
+                const vHz = 0.7071067811865475;
+                finalP1_3d = CadPoint3D(m1_3d.x, m1_3d.y - halfH * vHy, m1_3d.z - halfH * vHz);
+                finalP2_3d = CadPoint3D(m2_3d.x, m2_3d.y - halfH * vHy, m2_3d.z - halfH * vHz);
+              }
+
+              final c1FlatX = cheek1Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek1Punches.length;
+              final c1FlatY = cheek1Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek1Punches.length;
+              final c2FlatX = cheek2Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek2Punches.length;
+              final c2FlatY = cheek2Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek2Punches.length;
+              p1Flat = CadPoint2D(c1FlatX, c1FlatY);
+              p2Flat = CadPoint2D(c2FlatX, c2FlatY);
+            }
+          }
+        } else if (isInsideRiser) {
+          final cheekBends = document.bends
+              .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
+              .toList()
+            ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+
+          final xMid = cheekBends.isNotEmpty ? (cheekBends.first.p1.x + cheekBends.last.p1.x) / 2.0 : floorCenter.x;
+
+          final bends45 = document.bends.where((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0).toList()
+            ..sort((a, b) => ((a.p1.y + a.p2.y) / 2.0).compareTo((b.p1.y + b.p2.y) / 2.0));
+          final is90InsideRiser = bends45.length >= 2;
+
+          final yMid = bends45.isNotEmpty
+              ? (bends45.first.p1.y + bends45.last.p1.y) / 2.0
+              : floorCenter.y;
+
+          final nominalH = (document.parameters['height'] as num?)?.toDouble() ?? 100.0;
+          final halfH = nominalH / 2.0;
+
+          final isPort1 = (p1Flat.y + p2Flat.y) / 2.0 > yMid;
+
+          final portPunches = document.punches.where((p) {
+            final isMatchingSide = isPort1 ? (p.center.y > yMid) : (p.center.y < yMid);
+            return isMatchingSide && (p.isSlot || p.type == PunchType.obroundSlot || p.role == CncPunchRole.coupler);
+          }).toList();
+
+          final cheek1Punches = portPunches.where((p) => p.center.x < xMid).toList();
+          final cheek2Punches = portPunches.where((p) => p.center.x > xMid).toList();
+
+          CadPoint3D? m1_3d;
+          CadPoint3D? m2_3d;
+
+          if (cheek1Punches.isNotEmpty) {
+            double sx = 0, sy = 0, sz = 0;
+            for (final p in cheek1Punches) {
+              final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+              sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
+            }
+            m1_3d = CadPoint3D(sx / cheek1Punches.length, sy / cheek1Punches.length, sz / cheek1Punches.length);
+          }
+
+          if (cheek2Punches.isNotEmpty) {
+            double sx = 0, sy = 0, sz = 0;
+            for (final p in cheek2Punches) {
+              final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+              sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
+            }
+            m2_3d = CadPoint3D(sx / cheek2Punches.length, sy / cheek2Punches.length, sz / cheek2Punches.length);
+          }
+
+          if (m1_3d != null && m2_3d != null) {
+            if (isPort1) {
+              // Port 1 (Top Port): floor flap tilted 45° UP along +Y
+              finalNormal = const CadPoint3D(0.0, 0.7071067811865475, 0.7071067811865475);
+              const vHy = -0.7071067811865475;
+              const vHz = 0.7071067811865475;
+              finalP1_3d = CadPoint3D(m1_3d.x, m1_3d.y - halfH * vHy, m1_3d.z - halfH * vHz);
+              finalP2_3d = CadPoint3D(m2_3d.x, m2_3d.y - halfH * vHy, m2_3d.z - halfH * vHz);
+            } else {
+              // Port 2 (Bottom Port):
+              if (is90InsideRiser) {
+                // 90° Inside Riser: floor flap tilted 45° UP along -Y
+                finalNormal = const CadPoint3D(0.0, -0.7071067811865475, 0.7071067811865475);
+                const vHy = 0.7071067811865475;
+                const vHz = 0.7071067811865475;
+                finalP1_3d = CadPoint3D(m1_3d.x, m1_3d.y - halfH * vHy, m1_3d.z - halfH * vHz);
+                finalP2_3d = CadPoint3D(m2_3d.x, m2_3d.y - halfH * vHy, m2_3d.z - halfH * vHz);
+              } else {
+                // 45° Inside Riser: bottom port is straight (horizontal floor)
+                finalNormal = const CadPoint3D(0.0, -1.0, 0.0);
+                finalP1_3d = CadPoint3D(m1_3d.x, m1_3d.y, m1_3d.z - halfH);
+                finalP2_3d = CadPoint3D(m2_3d.x, m2_3d.y, m2_3d.z - halfH);
+              }
+            }
+
+            final c1FlatX = cheek1Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek1Punches.length;
+            final c1FlatY = cheek1Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek1Punches.length;
+            final c2FlatX = cheek2Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek2Punches.length;
+            final c2FlatY = cheek2Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek2Punches.length;
+            p1Flat = CadPoint2D(c1FlatX, c1FlatY);
+            p2Flat = CadPoint2D(c2FlatX, c2FlatY);
+          }
+        } else if (isReducer) {
+          final cheekBends = document.bends
+              .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
+              .toList()
+            ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+
+          final xMid = cheekBends.isNotEmpty ? (cheekBends.first.p1.x + cheekBends.last.p1.x) / 2.0 : floorCenter.x;
+          final yMid = (floorFace.vertices.map((v) => v.y).reduce(math.min) + floorFace.vertices.map((v) => v.y).reduce(math.max)) / 2.0;
+
+          final isPort1 = (p1Flat.y + p2Flat.y) / 2.0 < yMid;
+          double? nominalH = isPort1
+              ? ((document.parameters['port1_height'] as num?)?.toDouble() ?? (document.parameters['height'] as num?)?.toDouble())
+              : ((document.parameters['port2_height'] as num?)?.toDouble());
+
+          if (nominalH == null || nominalH <= 15.0) {
+            final fullMatch = RegExp(r'(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
+            if (fullMatch != null) {
+              nominalH = isPort1 ? double.tryParse(fullMatch.group(2)!) : double.tryParse(fullMatch.group(4)!);
+            } else {
+              final simpleMatch = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
+              if (simpleMatch != null) {
+                nominalH = isPort1 ? double.tryParse(simpleMatch.group(2)!) : (double.tryParse(simpleMatch.group(2)!) ?? 100.0) / 2.0;
+              }
+            }
+          }
+          nominalH ??= isPort1 ? 100.0 : 50.0;
+          final halfH = nominalH / 2.0;
+
+          final portPunches = document.punches.where((p) {
+            final isMatchingSide = isPort1 ? (p.center.y < yMid) : (p.center.y > yMid);
+            return isMatchingSide && (p.isSlot || p.type == PunchType.obroundSlot || p.role == CncPunchRole.coupler);
+          }).toList();
+
+          final cheek1Punches = portPunches.where((p) => p.center.x < xMid).toList();
+          final cheek2Punches = portPunches.where((p) => p.center.x > xMid).toList();
+
+          CadPoint3D? m1_3d;
+          CadPoint3D? m2_3d;
+
+          if (cheek1Punches.isNotEmpty) {
+            double sx = 0, sy = 0, sz = 0;
+            for (final p in cheek1Punches) {
+              final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+              sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
+            }
+            m1_3d = CadPoint3D(sx / cheek1Punches.length, sy / cheek1Punches.length, sz / cheek1Punches.length);
+          }
+
+          if (cheek2Punches.isNotEmpty) {
+            double sx = 0, sy = 0, sz = 0;
+            for (final p in cheek2Punches) {
+              final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+              sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
+            }
+            m2_3d = CadPoint3D(sx / cheek2Punches.length, sy / cheek2Punches.length, sz / cheek2Punches.length);
+          }
+
+          if (m1_3d != null && m2_3d != null) {
+            finalNormal = isPort1 ? const CadPoint3D(0.0, -1.0, 0.0) : const CadPoint3D(0.0, 1.0, 0.0);
+            finalP1_3d = CadPoint3D(m1_3d.x, m1_3d.y, m1_3d.z - halfH);
+            finalP2_3d = CadPoint3D(m2_3d.x, m2_3d.y, m2_3d.z - halfH);
+
+            final c1FlatX = cheek1Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek1Punches.length;
+            final c1FlatY = cheek1Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek1Punches.length;
+            final c2FlatX = cheek2Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek2Punches.length;
+            final c2FlatY = cheek2Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek2Punches.length;
+            p1Flat = CadPoint2D(c1FlatX, c1FlatY);
+            p2Flat = CadPoint2D(c2FlatX, c2FlatY);
+          }
+        }
+
+        // Collect loop vertices (Floor edge P1 -> P2)
+        final loop3D = <CadPoint3D>[finalP1_3d, finalP2_3d];
+
+        rawOpenings.add(
+          CmsRaw3DOpening(
+            openingId: 'raw_opening_$index',
+            boundary3DVertices: loop3D,
+            floorEdgeP1: finalP1_3d,
+            floorEdgeP2: finalP2_3d,
+            flatFloorEdgeP1: p1Flat,
+            flatFloorEdgeP2: p2Flat,
+            floorFaceId: floorFace.id,
+            sidewallFaceIds: adjacentSidewallIds,
+            outwardNormal: finalNormal,
+          ),
+        );
         index++;
       }
     }
@@ -149,9 +441,7 @@ class Cms3DOpeningDetector {
     for (final face in doc.faces) {
       int structuralBends = 0;
       for (final b in doc.bends) {
-        if (b.role != BendLineRole.flange &&
-            (b.parentFaceId == face.id || b.childFaceId == face.id) &&
-            (b.targetAngleDeg.abs() - 90.0).abs() < 15.0) {
+        if (b.role != BendLineRole.flange && (b.parentFaceId == face.id || b.childFaceId == face.id) && (b.targetAngleDeg.abs() - 90.0).abs() < 15.0) {
           structuralBends++;
         }
       }
@@ -166,7 +456,7 @@ class Cms3DOpeningDetector {
 
       double score = structuralBends * 10000.0 + face.areaMm2;
       if (face.isBaseAnchor || face.id == doc.baseFaceId) {
-        score += 500.0;
+        score += 50000.0;
       }
 
       if (score > bestScore) {
@@ -180,9 +470,7 @@ class Cms3DOpeningDetector {
     // 2. Identify initial sidewalls attached to baseFace via 90° bends
     final sidewallIds = <String>{};
     for (final b in doc.bends) {
-      if ((b.parentFaceId == baseFace.id || b.childFaceId == baseFace.id) &&
-          b.role != BendLineRole.flange &&
-          (b.targetAngleDeg.abs() - 90.0).abs() < 15.0) {
+      if ((b.parentFaceId == baseFace.id || b.childFaceId == baseFace.id) && b.role != BendLineRole.flange && (b.targetAngleDeg.abs() - 90.0).abs() < 15.0) {
         final otherId = b.parentFaceId == baseFace.id ? b.childFaceId : b.parentFaceId;
         sidewallIds.add(otherId);
       }
@@ -225,6 +513,8 @@ class Cms3DOpeningDetector {
     final sidewalls = <PlanarSheetFace>[];
     final floorFaceIds = floorFaces.map((f) => f.id).toSet();
 
+    // 1. Initial sidewalls directly attached to floor via 90° structural bends
+    final queue = <String>[];
     for (final bend in doc.bends) {
       final parentIsFloor = floorFaceIds.contains(bend.parentFaceId);
       final childIsFloor = floorFaceIds.contains(bend.childFaceId);
@@ -242,18 +532,42 @@ class Cms3DOpeningDetector {
       if (otherFace.vertices.isNotEmpty && (bend.targetAngleDeg.abs() - 90.0).abs() < 15.0) {
         if (!sidewalls.any((s) => s.id == otherFace.id)) {
           sidewalls.add(otherFace);
+          queue.add(otherFace.id);
         }
       }
     }
+
+    // 2. Multi-faceted sidewalls connected via angle bends (e.g. 45° bend cheek facets in 90° bend)
+    while (queue.isNotEmpty) {
+      final currentId = queue.removeAt(0);
+      for (final bend in doc.bends) {
+        if (bend.role == BendLineRole.flange) continue;
+        final connects = bend.parentFaceId == currentId || bend.childFaceId == currentId;
+        if (!connects) continue;
+
+        final neighborId = bend.parentFaceId == currentId ? bend.childFaceId : bend.parentFaceId;
+        if (floorFaceIds.contains(neighborId) || sidewalls.any((s) => s.id == neighborId)) continue;
+
+        final neighborFace = doc.faces.firstWhere(
+          (f) => f.id == neighborId,
+          orElse: () => PlanarSheetFace(id: neighborId, vertices: const []),
+        );
+        if (neighborFace.vertices.isEmpty) continue;
+
+        // If neighbor is tagged as sideWall or stands vertical in 3D, add it to sidewalls!
+        final polyMatches = mesh.polygons.where((p) => p.faceId == neighborId);
+        final isVertical = polyMatches.isNotEmpty && polyMatches.first.normal.z.abs() < 0.2;
+        if (neighborFace.role == FaceRole.sideWall || isVertical) {
+          sidewalls.add(neighborFace);
+          queue.add(neighborId);
+        }
+      }
+    }
+
     return sidewalls;
   }
 
-  static bool _isEdgeAlongSidewall(
-    CadPoint3D p1,
-    CadPoint3D p2,
-    List<PlanarSheetFace> sidewalls,
-    FoldedMeshResult foldResult,
-  ) {
+  static bool _isEdgeAlongSidewall(CadPoint3D p1, CadPoint3D p2, List<PlanarSheetFace> sidewalls, FoldedMeshResult foldResult) {
     for (final sw in sidewalls) {
       final swPolys = foldResult.polygons.where((p) => p.faceId == sw.id);
       if (swPolys.isEmpty) continue;
@@ -284,10 +598,7 @@ class Cms3DOpeningDetector {
     final verts = floor.vertices;
     if (verts.length < 3) return openEdges;
 
-    final floor3DPoly = mesh.polygons.firstWhere(
-      (p) => p.faceId == floor.id,
-      orElse: () => mesh.polygons.first,
-    );
+    final floor3DPoly = mesh.polygons.firstWhere((p) => p.faceId == floor.id, orElse: () => mesh.polygons.first);
 
     final n = verts.length;
     for (int i = 0; i < n; i++) {

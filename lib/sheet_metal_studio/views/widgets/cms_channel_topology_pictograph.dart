@@ -40,10 +40,10 @@ class CmsChannelTopologyPictograph extends StatelessWidget {
     final port1 = ports.isNotEmpty ? ports.first : null;
     final port2 = ports.length > 1 ? ports[1] : null;
 
-    final double width1 = port1?.width ?? 98.0;
-    final double height1 = port1?.height ?? 92.0;
-    final double width2 = port2?.width ?? width1;
-    final double height2 = port2?.height ?? height1;
+    final double width1 = toNominalSize(port1?.width ?? 98.0);
+    final double height1 = toNominalSize(port1?.height ?? 92.0);
+    final double width2 = toNominalSize(port2?.width ?? width1);
+    final double height2 = toNominalSize(port2?.height ?? height1);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -369,13 +369,13 @@ class CmsChannelTopologyPictograph extends StatelessWidget {
                   const Icon(Icons.straighten, size: 13, color: Color(0xFF64748B)),
                   const SizedBox(width: 5),
                   Text(
-                    'Port 1: ${w1.toStringAsFixed(1)} × ${h1.toStringAsFixed(1)} mm',
+                    'Port 1: ${w1.toStringAsFixed(0)} × ${h1.toStringAsFixed(0)} mm',
                     style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155), fontFamily: 'monospace'),
                   ),
                 ],
               ),
               Text(
-                'Port 2: ${w2.toStringAsFixed(1)} × ${h2.toStringAsFixed(1)} mm',
+                'Port 2: ${w2.toStringAsFixed(0)} × ${h2.toStringAsFixed(0)} mm',
                 style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155), fontFamily: 'monospace'),
               ),
               Text(

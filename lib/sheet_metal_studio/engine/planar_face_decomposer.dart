@@ -7,6 +7,7 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import '../models/cad_primitives.dart';
 import '../models/fold_bend_line.dart';
 import '../models/planar_sheet_face.dart';
@@ -14,11 +15,7 @@ import '../models/planar_sheet_face.dart';
 class PlanarFaceDecomposer {
   /// Decomposes an outer contour, cut lines, and bend lines into planar faces and establishes
   /// parent-child topology for kinematic folding.
-  static ({
-    List<PlanarSheetFace> faces,
-    List<FoldBendLine> connectedBends,
-    String baseFaceId,
-  }) decompose({
+  static ({List<PlanarSheetFace> faces, List<FoldBendLine> connectedBends, String baseFaceId}) decompose({
     required List<CadPoint2D> outerContour,
     required List<FoldBendLine> bends,
     List<CadLineSegment> cutLines = const [],
@@ -82,12 +79,7 @@ class PlanarFaceDecomposer {
     // 3. Wrap into PlanarSheetFace objects with guaranteed Counter-Clockwise (CCW) winding
     final faces = <PlanarSheetFace>[];
     for (int i = 0; i < activePolygons.length; i++) {
-      faces.add(PlanarSheetFace(
-        id: 'F_$i',
-        label: 'Panel $i',
-        vertices: _normalizeCCW(activePolygons[i]),
-        role: FaceRole.custom,
-      ));
+      faces.add(PlanarSheetFace(id: 'F_$i', label: 'Panel $i', vertices: _normalizeCCW(activePolygons[i]), role: FaceRole.custom));
     }
 
     // 3. Find adjacent faces for each bend line
@@ -95,10 +87,7 @@ class PlanarFaceDecomposer {
     for (final bend in bends) {
       if (!successfulSplits.contains(bend.id)) {
         // Bend did not partition any face (incomplete / open bend)
-        updatedBends.add(bend.copyWith(
-          parentFaceId: '',
-          childFaceId: '',
-        ));
+        updatedBends.add(bend.copyWith(parentFaceId: '', childFaceId: ''));
         continue;
       }
 
@@ -125,19 +114,14 @@ class PlanarFaceDecomposer {
 
       // If probe was outside due to concavity, fallback to closest centroids
       if (faceAId.isEmpty || faceBId.isEmpty || faceAId == faceBId) {
-        final sortedByDist = faces.toList()
-          ..sort((f1, f2) =>
-              f1.centroid.distanceTo(mid).compareTo(f2.centroid.distanceTo(mid)));
+        final sortedByDist = faces.toList()..sort((f1, f2) => f1.centroid.distanceTo(mid).compareTo(f2.centroid.distanceTo(mid)));
         if (sortedByDist.length >= 2) {
           faceAId = sortedByDist[0].id;
           faceBId = sortedByDist[1].id;
         }
       }
 
-      updatedBends.add(bend.copyWith(
-        parentFaceId: faceAId,
-        childFaceId: faceBId,
-      ));
+      updatedBends.add(bend.copyWith(parentFaceId: faceAId, childFaceId: faceBId));
     }
 
     // 4. Determine the Base Anchor Face (Root of DAG)
@@ -147,7 +131,7 @@ class PlanarFaceDecomposer {
     for (final f in faces) {
       int structuralBends = 0;
       for (final b in updatedBends) {
-        if (b.role != BendLineRole.flange && (b.parentFaceId == f.id || b.childFaceId == f.id)) {
+        if (b.role != BendLineRole.flange && (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && (b.parentFaceId == f.id || b.childFaceId == f.id)) {
           structuralBends++;
         }
       }
@@ -182,30 +166,16 @@ class PlanarFaceDecomposer {
       } else {
         role = FaceRole.custom;
       }
-      return f.copyWith(
-        isBaseAnchor: isBase,
-        role: role,
-        label: isBase
-            ? 'Bottom Base Floor'
-            : (depth == 1 ? 'Side Wall' : 'Return Flange'),
-      );
+      return f.copyWith(isBaseAnchor: isBase, role: role, label: isBase ? 'Bottom Base Floor' : (depth == 1 ? 'Side Wall' : 'Return Flange'));
     }).toList();
 
-    return (
-      faces: finalizedFaces,
-      connectedBends: directedBends,
-      baseFaceId: baseId,
-    );
+    return (faces: finalizedFaces, connectedBends: directedBends, baseFaceId: baseId);
   }
 
   /// Slices a polygon by a finite segment passing between p1 and p2.
   /// Returns null if the segment does not completely span between two boundaries of the polygon.
   /// This prevents halfway bend lines from erroneously cutting faces or creating gaps.
-  static (List<CadPoint2D>, List<CadPoint2D>)? _slicePolygon(
-    List<CadPoint2D> poly,
-    CadPoint2D p1,
-    CadPoint2D p2,
-  ) {
+  static (List<CadPoint2D>, List<CadPoint2D>)? _slicePolygon(List<CadPoint2D> poly, CadPoint2D p1, CadPoint2D p2) {
     final dx = p2.x - p1.x;
     final dy = p2.y - p1.y;
     final len = math.sqrt(dx * dx + dy * dy);
@@ -276,10 +246,7 @@ class PlanarFaceDecomposer {
 
       // Project all boundary crossing points onto segment parameter t:
       // t = 0.0 at p1, t = 1.0 at p2
-      final tValues = intersections
-          .map((pt) => ((pt.x - p1.x) * dx + (pt.y - p1.y) * dy) / (len * len))
-          .toList()
-        ..sort();
+      final tValues = intersections.map((pt) => ((pt.x - p1.x) * dx + (pt.y - p1.y) * dy) / (len * len)).toList()..sort();
 
       final snapTolT = 3.5 / len;
       final tMin = tValues.first;
@@ -307,11 +274,7 @@ class PlanarFaceDecomposer {
 
   /// Slices a polygon along a chord segment [p1, p2] where both endpoints lie on
   /// boundary edges or vertices (such as corner cuts or slits snapped to ends).
-  static (List<CadPoint2D>, List<CadPoint2D>)? _tryChordSlice(
-    List<CadPoint2D> poly,
-    CadPoint2D p1,
-    CadPoint2D p2,
-  ) {
+  static (List<CadPoint2D>, List<CadPoint2D>)? _tryChordSlice(List<CadPoint2D> poly, CadPoint2D p1, CadPoint2D p2) {
     if (poly.length < 3) return null;
     const snapTol = 3.5;
 
@@ -353,7 +316,8 @@ class PlanarFaceDecomposer {
 
     // Midpoint of segment must lie inside or on polygon boundary
     final mid = CadPoint2D((proj1.x + proj2.x) / 2.0, (proj1.y + proj2.y) / 2.0);
-    final isInside = _isPointInsidePolygon(CadPoint2D(mid.x + 1e-3, mid.y + 1e-3), poly) ||
+    final isInside =
+        _isPointInsidePolygon(CadPoint2D(mid.x + 1e-3, mid.y + 1e-3), poly) ||
         _isPointInsidePolygon(CadPoint2D(mid.x - 1e-3, mid.y - 1e-3), poly) ||
         _isPointInsidePolygon(mid, poly);
     if (!isInside) {
@@ -444,11 +408,7 @@ class PlanarFaceDecomposer {
   /// Attempts to insert an incision slit cut into a polygon boundary.
   /// If one endpoint lies on an edge and the other is in the interior,
   /// inserts the slit loop into the polygon perimeter so subsequent bends can snap to it.
-  static List<CadPoint2D>? _tryInsertSlit(
-    List<CadPoint2D> poly,
-    CadPoint2D p1,
-    CadPoint2D p2,
-  ) {
+  static List<CadPoint2D>? _tryInsertSlit(List<CadPoint2D> poly, CadPoint2D p1, CadPoint2D p2) {
     if (poly.length < 3) return null;
     const snapTol = 3.5;
 
@@ -484,12 +444,7 @@ class PlanarFaceDecomposer {
     return null;
   }
 
-  static List<CadPoint2D> _buildSlitPolygon(
-    List<CadPoint2D> poly,
-    int edgeIdx,
-    CadPoint2D pEdge,
-    CadPoint2D pTip,
-  ) {
+  static List<CadPoint2D> _buildSlitPolygon(List<CadPoint2D> poly, int edgeIdx, CadPoint2D pEdge, CadPoint2D pTip) {
     final result = <CadPoint2D>[];
     for (int i = 0; i <= edgeIdx; i++) {
       result.add(poly[i]);
@@ -549,11 +504,7 @@ class PlanarFaceDecomposer {
     bool inside = false;
     int j = poly.length - 1;
     for (int i = 0; i < poly.length; i++) {
-      if ((poly[i].y > pt.y) != (poly[j].y > pt.y) &&
-          pt.x <
-              (poly[j].x - poly[i].x) * (pt.y - poly[i].y) /
-                      (poly[j].y - poly[i].y) +
-                  poly[i].x) {
+      if ((poly[i].y > pt.y) != (poly[j].y > pt.y) && pt.x < (poly[j].x - poly[i].x) * (pt.y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x) {
         inside = !inside;
       }
       j = i;
@@ -561,15 +512,10 @@ class PlanarFaceDecomposer {
     return inside;
   }
 
-  static bool _isPointInsidePolygon(CadPoint2D pt, List<CadPoint2D> poly) =>
-      isPointInsidePolygon(pt, poly);
+  static bool _isPointInsidePolygon(CadPoint2D pt, List<CadPoint2D> poly) => isPointInsidePolygon(pt, poly);
 
   /// Re-orients all bends so parentFaceId is closer to Base than childFaceId
-  static List<FoldBendLine> _orientBendsFromBase(
-    String baseId,
-    List<FoldBendLine> bends,
-    List<PlanarSheetFace> faces,
-  ) {
+  static List<FoldBendLine> _orientBendsFromBase(String baseId, List<FoldBendLine> bends, List<PlanarSheetFace> faces) {
     final visited = <String>{baseId};
     final directed = <FoldBendLine>[];
     final remainingBends = bends.toList();
@@ -586,10 +532,7 @@ class PlanarFaceDecomposer {
           break;
         } else if (visited.contains(b.childFaceId) && !visited.contains(b.parentFaceId)) {
           // Invert parent and child so parent is the known/closer face
-          directed.add(b.copyWith(
-            parentFaceId: b.childFaceId,
-            childFaceId: b.parentFaceId,
-          ));
+          directed.add(b.copyWith(parentFaceId: b.childFaceId, childFaceId: b.parentFaceId));
           visited.add(b.parentFaceId);
           remainingBends.removeAt(i);
           progress = true;
@@ -607,10 +550,7 @@ class PlanarFaceDecomposer {
   }
 
   /// Computes graph depth (distance in bends) from the base anchor face
-  static Map<String, int> _computeFaceDepths(
-    String baseId,
-    List<FoldBendLine> directedBends,
-  ) {
+  static Map<String, int> _computeFaceDepths(String baseId, List<FoldBendLine> directedBends) {
     final depths = <String, int>{baseId: 0};
     for (final b in directedBends) {
       final pDepth = depths[b.parentFaceId] ?? 0;

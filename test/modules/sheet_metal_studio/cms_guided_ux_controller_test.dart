@@ -7,7 +7,6 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dsf_document.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_product_contract.dart';
@@ -71,7 +70,6 @@ void main() {
       expect(vm.cmsGuidedController.phase, anyOf(equals(CmsUxPhase.idle), equals(CmsUxPhase.confirmingBends)));
 
       await vm.startCleanCmsDiscovery(contract: CmsProductContract.bend45);
-
       expect(vm.cmsGuidedController.phase, equals(CmsUxPhase.complete));
       expect(vm.cmsGuidedController.state.discoveredPorts.length, equals(2));
       expect(vm.cmsGuidedController.state.discoveredPorts[0].id, equals('PORT_1'));

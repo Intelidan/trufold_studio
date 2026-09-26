@@ -18,6 +18,7 @@ import '../template_library_gallery_dialog.dart';
 import '../template_authoring_wizard_dialog.dart';
 import '../branding/trufold_app_icon_painter.dart';
 import '../canvas/canvas_display_settings_dialog.dart';
+import '../dds/dds_workspace_screen.dart';
 
 class StudioMenuBar extends StatelessWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -292,6 +293,25 @@ class StudioMenuBar extends StatelessWidget {
         enabled: onSaveDdsProject != null,
         themeColor: const Color(0xFFF59E0B),
         onTap: onSaveDdsProject ?? () {},
+      ),
+      const PopupMenuDivider(),
+      _buildItem(
+        icon: Icons.description_outlined,
+        title: 'Technical Data Sheet (TDS) Studio',
+        subtitle: 'Full .dds authoring, A4/A3 drawing submittals & Excel order import',
+        shortcut: 'TDS',
+        themeColor: const Color(0xFF0284C7),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => DdsWorkspaceScreen(
+                onOpenInEditor: (dsfDoc) {
+                  viewModel.loadDocument(dsfDoc);
+                },
+              ),
+            ),
+          );
+        },
       ),
       const PopupMenuDivider(),
       _buildItem(

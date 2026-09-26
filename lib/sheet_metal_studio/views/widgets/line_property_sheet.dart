@@ -50,17 +50,8 @@ class LinePropertySheet extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8.0),
-        border: Border.all(
-          color: themeColor.withValues(alpha: 0.5),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 16.0,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: themeColor.withValues(alpha: 0.5), width: 1.5),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16.0, offset: const Offset(0, 4))],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -73,28 +64,19 @@ class LinePropertySheet extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             child: Row(
               children: [
-                const Icon(
-                  Icons.drag_indicator,
-                  size: 14,
-                  color: Color(0xFF94A3B8),
-                ),
+                const Icon(Icons.drag_indicator, size: 14, color: Color(0xFF94A3B8)),
                 const SizedBox(width: 4),
                 Container(
                   width: 10,
                   height: 10,
-                  decoration: const BoxDecoration(
-                    color: themeColor,
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: const BoxDecoration(color: themeColor, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     '${line.id} (LINE SEGMENT)',
                     style: TextStyle(
-                      color: line.isVisible
-                          ? const Color(0xFF0F172A)
-                          : const Color(0xFF94A3B8),
+                      color: line.isVisible ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.6,
@@ -110,9 +92,7 @@ class LinePropertySheet extends StatelessWidget {
                     child: Icon(
                       line.isVisible ? Icons.visibility : Icons.visibility_off,
                       size: 14,
-                      color: line.isVisible
-                          ? const Color(0xFF475569)
-                          : const Color(0xFFDC2626),
+                      color: line.isVisible ? const Color(0xFF475569) : const Color(0xFFDC2626),
                     ),
                   ),
                 ),
@@ -123,11 +103,7 @@ class LinePropertySheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                     child: Padding(
                       padding: const EdgeInsets.all(2),
-                      child: Icon(
-                        isCollapsed ? Icons.expand_more : Icons.expand_less,
-                        size: 16,
-                        color: const Color(0xFF64748B),
-                      ),
+                      child: Icon(isCollapsed ? Icons.expand_more : Icons.expand_less, size: 16, color: const Color(0xFF64748B)),
                     ),
                   ),
                 const SizedBox(width: 4),
@@ -137,11 +113,7 @@ class LinePropertySheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                     child: Padding(
                       padding: const EdgeInsets.all(2),
-                      child: const Icon(
-                        Icons.close,
-                        size: 14,
-                        color: Color(0xFF64748B),
-                      ),
+                      child: const Icon(Icons.close, size: 14, color: Color(0xFF64748B)),
                     ),
                   ),
               ],
@@ -159,11 +131,7 @@ class LinePropertySheet extends StatelessWidget {
                   width: 32,
                   child: Text(
                     'P1',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF64748B),
-                    ),
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
                   ),
                 ),
                 Expanded(
@@ -171,10 +139,7 @@ class LinePropertySheet extends StatelessWidget {
                     label: 'X',
                     value: line.x1,
                     onSubmitted: (v) {
-                      _updateLine(
-                        viewModel,
-                        line.copyWith(p1: CadPoint2D(v, line.y1)),
-                      );
+                      _updateLine(viewModel, line.copyWith(p1: CadPoint2D(v, line.y1)));
                     },
                   ),
                 ),
@@ -184,10 +149,7 @@ class LinePropertySheet extends StatelessWidget {
                     label: 'Y',
                     value: line.y1,
                     onSubmitted: (v) {
-                      _updateLine(
-                        viewModel,
-                        line.copyWith(p1: CadPoint2D(line.x1, v)),
-                      );
+                      _updateLine(viewModel, line.copyWith(p1: CadPoint2D(line.x1, v)));
                     },
                   ),
                 ),
@@ -202,11 +164,7 @@ class LinePropertySheet extends StatelessWidget {
                   width: 32,
                   child: Text(
                     'P2',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF64748B),
-                    ),
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
                   ),
                 ),
                 Expanded(
@@ -214,10 +172,7 @@ class LinePropertySheet extends StatelessWidget {
                     label: 'X',
                     value: line.x2,
                     onSubmitted: (v) {
-                      _updateLine(
-                        viewModel,
-                        line.copyWith(p2: CadPoint2D(v, line.y2)),
-                      );
+                      _updateLine(viewModel, line.copyWith(p2: CadPoint2D(v, line.y2)));
                     },
                   ),
                 ),
@@ -227,10 +182,7 @@ class LinePropertySheet extends StatelessWidget {
                     label: 'Y',
                     value: line.y2,
                     onSubmitted: (v) {
-                      _updateLine(
-                        viewModel,
-                        line.copyWith(p2: CadPoint2D(line.x2, v)),
-                      );
+                      _updateLine(viewModel, line.copyWith(p2: CadPoint2D(line.x2, v)));
                     },
                   ),
                 ),
@@ -250,20 +202,14 @@ class LinePropertySheet extends StatelessWidget {
                         final factor = newLen / length;
                         final newX2 = line.x1 + dx * factor;
                         final newY2 = line.y1 + dy * factor;
-                        _updateLine(
-                          viewModel,
-                          line.copyWith(p2: CadPoint2D(newX2, newY2)),
-                        );
+                        _updateLine(viewModel, line.copyWith(p2: CadPoint2D(newX2, newY2)));
                       }
                     },
                   ),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: _buildReadOnlyField(
-                    label: 'Angle',
-                    value: '${angleDeg.toStringAsFixed(1)}°',
-                  ),
+                  child: _buildReadOnlyField(label: 'Angle', value: '${angleDeg.toStringAsFixed(1)}°'),
                 ),
               ],
             ),
@@ -274,11 +220,7 @@ class LinePropertySheet extends StatelessWidget {
               children: [
                 const Text(
                   'Layer: ',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: 4),
                 Expanded(
@@ -288,30 +230,17 @@ class LinePropertySheet extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: const Color(0xFFCBD5E1),
-                        width: 0.8,
-                      ),
+                      border: Border.all(color: const Color(0xFFCBD5E1), width: 0.8),
                     ),
                     child: DropdownButtonHideUnderline(
-                      child:  DropdownButton<String>(
+                      child: DropdownButton<String>(
                         value: line.layer.isNotEmpty ? line.layer : 'CUT',
                         isExpanded: true,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Color(0xFF0F172A),
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: const TextStyle(fontSize: 10, color: Color(0xFF0F172A), fontWeight: FontWeight.bold),
                         items: const [
                           DropdownMenuItem(value: 'CUT', child: Text('CUT')),
-                          DropdownMenuItem(
-                            value: 'OUTLINE',
-                            child: Text('OUTLINE'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'CONSTRUCTION',
-                            child: Text('CONSTRUCTION'),
-                          ),
+                          DropdownMenuItem(value: 'OUTLINE', child: Text('OUTLINE')),
+                          DropdownMenuItem(value: 'CONSTRUCTION', child: Text('CONSTRUCTION')),
                         ],
                         onChanged: (val) {
                           if (val != null) {
@@ -328,34 +257,20 @@ class LinePropertySheet extends StatelessWidget {
                   onTap: () => viewModel.deleteCut(line.id),
                   borderRadius: BorderRadius.circular(4),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 4,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFEE2E2),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: const Color(0xFFFCA5A5),
-                        width: 0.8,
-                      ),
+                      border: Border.all(color: const Color(0xFFFCA5A5), width: 0.8),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.delete_outline,
-                          size: 12,
-                          color: Color(0xFFDC2626),
-                        ),
+                        Icon(Icons.delete_outline, size: 12, color: Color(0xFFDC2626)),
                         SizedBox(width: 2),
                         Text(
                           'Del',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: Color(0xFFDC2626),
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: TextStyle(fontSize: 9, color: Color(0xFFDC2626), fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -372,11 +287,7 @@ class LinePropertySheet extends StatelessWidget {
                 const Expanded(
                   child: Text(
                     'Size Dimension:',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Color(0xFF64748B),
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -384,9 +295,7 @@ class LinePropertySheet extends StatelessWidget {
                   icon: Icon(
                     line.showLabel ? Icons.visibility : Icons.visibility_off,
                     size: 16,
-                    color: line.showLabel
-                        ? const Color(0xFF6366F1)
-                        : const Color(0xFF94A3B8),
+                    color: line.showLabel ? const Color(0xFF6366F1) : const Color(0xFF94A3B8),
                   ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
@@ -403,12 +312,7 @@ class LinePropertySheet extends StatelessWidget {
             // Geometric Constraints Section
             const Text(
               'CONSTRAINTS',
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
-                color: Color(0xFF64748B),
-              ),
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: Color(0xFF64748B)),
             ),
             const SizedBox(height: 4),
             Row(
@@ -416,28 +320,19 @@ class LinePropertySheet extends StatelessWidget {
                 _buildConstraintButton(
                   label: 'H',
                   tooltip: 'Make Horizontal',
-                  onTap: () => viewModel.applyConstraint(
-                    CadConstraintType.horizontal,
-                    targetEntityIds: [line.id],
-                  ),
+                  onTap: () => viewModel.applyConstraint(CadConstraintType.horizontal, targetEntityIds: [line.id]),
                 ),
                 const SizedBox(width: 4),
                 _buildConstraintButton(
                   label: 'V',
                   tooltip: 'Make Vertical',
-                  onTap: () => viewModel.applyConstraint(
-                    CadConstraintType.vertical,
-                    targetEntityIds: [line.id],
-                  ),
+                  onTap: () => viewModel.applyConstraint(CadConstraintType.vertical, targetEntityIds: [line.id]),
                 ),
                 const SizedBox(width: 4),
                 _buildConstraintButton(
                   label: '🔒',
                   tooltip: 'Fix Line',
-                  onTap: () => viewModel.applyConstraint(
-                    CadConstraintType.fixed,
-                    targetEntityIds: [line.id],
-                  ),
+                  onTap: () => viewModel.applyConstraint(CadConstraintType.fixed, targetEntityIds: [line.id]),
                 ),
               ],
             ),
@@ -449,40 +344,20 @@ class LinePropertySheet extends StatelessWidget {
                     child: Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE0F2FE),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(color: const Color(0xFFE0F2FE), borderRadius: BorderRadius.circular(3)),
                           child: Text(
                             c.symbol,
-                            style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0284C7),
-                            ),
+                            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
                           ),
                         ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: Text(
-                            c.label,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFF334155),
-                            ),
-                          ),
+                          child: Text(c.label, style: const TextStyle(fontSize: 10, color: Color(0xFF334155))),
                         ),
                         InkWell(
                           onTap: () => viewModel.removeConstraint(c.id),
-                          child: const Icon(
-                            Icons.close,
-                            size: 12,
-                            color: Color(0xFF94A3B8),
-                          ),
+                          child: const Icon(Icons.close, size: 12, color: Color(0xFF94A3B8)),
                         ),
                       ],
                     ),
@@ -494,11 +369,7 @@ class LinePropertySheet extends StatelessWidget {
     );
   }
 
-  Widget _buildConstraintButton({
-    required String label,
-    required String tooltip,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildConstraintButton({required String label, required String tooltip, required VoidCallback onTap}) {
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -513,11 +384,7 @@ class LinePropertySheet extends StatelessWidget {
           ),
           child: Text(
             label,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF0F172A),
-            ),
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
           ),
         ),
       ),
@@ -528,34 +395,12 @@ class LinePropertySheet extends StatelessWidget {
     vm.updateCutLine(updated);
   }
 
-  Widget _buildCoordinateField({
-    required String label,
-    required double value,
-    required ValueChanged<double> onSubmitted,
-  }) {
-    return CadNumberSpinner(
-      label: label,
-      value: value,
-      step: 1.0,
-      decimals: 1,
-      suffix: 'mm',
-      onChanged: onSubmitted,
-    );
+  Widget _buildCoordinateField({required String label, required double value, required ValueChanged<double> onSubmitted}) {
+    return CadNumberSpinner(label: label, value: value, step: 1.0, decimals: 1, suffix: 'mm', onChanged: onSubmitted);
   }
 
-  Widget _buildValueField({
-    required String label,
-    required double value,
-    required ValueChanged<double> onSubmitted,
-  }) {
-    return CadNumberSpinner(
-      label: label,
-      value: value,
-      step: 1.0,
-      decimals: 1,
-      suffix: label.contains('Angle') ? '°' : 'mm',
-      onChanged: onSubmitted,
-    );
+  Widget _buildValueField({required String label, required double value, required ValueChanged<double> onSubmitted}) {
+    return CadNumberSpinner(label: label, value: value, step: 1.0, decimals: 1, suffix: label.contains('Angle') ? '°' : 'mm', onChanged: onSubmitted);
   }
 
   Widget _buildReadOnlyField({required String label, required String value}) {
@@ -564,11 +409,7 @@ class LinePropertySheet extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 9,
-            color: Color(0xFF64748B),
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 9, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 2),
         Container(
@@ -582,11 +423,7 @@ class LinePropertySheet extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: Text(
             value,
-            style: const TextStyle(
-              fontSize: 10,
-              color: Color(0xFF334155),
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 10, color: Color(0xFF334155), fontWeight: FontWeight.bold),
           ),
         ),
       ],

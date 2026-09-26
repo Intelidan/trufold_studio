@@ -26,6 +26,27 @@ import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../../engine/kinematic_fold_engine.dart';
 import 'studio/studio_view_cube.dart';
 
+typedef _DrawFacet = ({
+  Path fillPath,
+  Path? strokePath,
+  Path? holesPath,
+  Path? selectedHolesPath,
+  Path? clipBoundary,
+  double depth,
+  double minDepth,
+  double maxDepth,
+  Rect bounds,
+  CadPoint3D camNormal,
+  Offset p0Screen,
+  double p0Depth,
+  Color color,
+  List<List<Offset>> cuts,
+  String faceId,
+  bool isFillet,
+  bool isBore,
+  bool isHighlighted,
+});
+
 class Viewport3dWidget extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
 
@@ -45,6 +66,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
   bool _isPointOverCover(Offset localPos, Size size) {
     final coverMesh = viewModel.coverMesh;
     if (coverMesh == null || !viewModel.isCoverVisible3D) return false;
+    if (viewModel.isCoverLocked && !viewModel.isCover3DMoveActive) return false;
     if (size.width <= 0 || size.height <= 0) return false;
 
     final cx = size.width / 2.0 + viewModel.pan3D.dx;
@@ -59,10 +81,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
     final sinEl = math.sin(elRad);
 
     final mesh = viewModel.currentMesh;
-    final maxDim = math.max(
-      mesh.boundWidth,
-      math.max(mesh.boundLength, mesh.boundHeight),
-    );
+    final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
     final fitDim = maxDim > 0 ? maxDim : 200.0;
     final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
     final scale = baseScale * viewModel.cameraZoom;
@@ -113,10 +132,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
     final sinEl = math.sin(elRad);
 
     final mesh = viewModel.currentMesh;
-    final maxDim = math.max(
-      mesh.boundWidth,
-      math.max(mesh.boundLength, mesh.boundHeight),
-    );
+    final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
     final fitDim = maxDim > 0 ? maxDim : 200.0;
     final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
     final scale = baseScale * viewModel.cameraZoom;
@@ -146,6 +162,133 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
     }
   }
 
+  void _showCoverFlangeDialog(BuildContext context) {
+    double currentVal = viewModel.coverFlangeDepth;
+    final controller = TextEditingController(text: currentVal.toStringAsFixed(0));
+    final presets = [8.0, 10.0, 12.0, 15.0, 20.0, 25.0];
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              title: Row(
+                children: [
+                  const Icon(Icons.straighten, size: 20, color: Color(0xFF0284C7)),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Cover Flange Depth',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 320,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Choose or enter the downward flange height for the trunking cover.', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Standard Presets:',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: presets.map((p) {
+                        final isSel = (currentVal - p).abs() < 0.5;
+                        return InkWell(
+                          onTap: () {
+                            setDialogState(() {
+                              currentVal = p;
+                              controller.text = p.toStringAsFixed(0);
+                            });
+                            viewModel.setCoverFlangeDepth(p);
+                          },
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isSel ? const Color(0xFF0284C7) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: isSel ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1)),
+                            ),
+                            child: Text(
+                              '${p.toStringAsFixed(0)} mm${p == 12.0 ? ' (Def)' : ''}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                                color: isSel ? Colors.white : const Color(0xFF334155),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Text(
+                          'Custom (mm):',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 80,
+                          height: 32,
+                          child: TextField(
+                            controller: controller,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                            onSubmitted: (txt) {
+                              final val = double.tryParse(txt);
+                              if (val != null && val >= 5.0 && val <= 100.0) {
+                                setDialogState(() => currentVal = val);
+                                viewModel.setCoverFlangeDepth(val);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () {
+                            final val = double.tryParse(controller.text);
+                            if (val != null && val >= 5.0 && val <= 100.0) {
+                              setDialogState(() => currentVal = val);
+                              viewModel.setCoverFlangeDepth(val);
+                            }
+                          },
+                          child: const Text('Apply', style: TextStyle(fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ClipRect(
@@ -154,11 +297,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
           final size = constraints.biggest;
           return Container(
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFFF8FAFC), Color(0xFFE2E8F0)],
-              ),
+              gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFF8FAFC), Color(0xFFE2E8F0)]),
             ),
             child: Stack(
               children: [
@@ -166,9 +305,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                 MouseRegion(
                   cursor: _isDraggingCover
                       ? SystemMouseCursors.grabbing
-                      : (_isHoveringCover || viewModel.isCover3DMoveActive
-                          ? SystemMouseCursors.grab
-                          : SystemMouseCursors.basic),
+                      : (!viewModel.isCoverLocked && (_isHoveringCover || viewModel.isCover3DMoveActive) ? SystemMouseCursors.grab : SystemMouseCursors.basic),
                   onHover: (event) {
                     if (_isDraggingCover) return;
                     final over = _isPointOverCover(event.localPosition, size);
@@ -187,10 +324,12 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                     },
                     onPointerDown: (event) {
                       if ((event.buttons & kPrimaryMouseButton) != 0) {
-                        final overCover = _isPointOverCover(event.localPosition, size);
-                        if (overCover || viewModel.isCover3DMoveActive) {
-                          _isDraggingCover = true;
-                          setState(() {});
+                        if (!viewModel.isCoverLocked) {
+                          final overCover = _isPointOverCover(event.localPosition, size);
+                          if (overCover || viewModel.isCover3DMoveActive) {
+                            _isDraggingCover = true;
+                            setState(() {});
+                          }
                         }
                       }
                     },
@@ -223,17 +362,12 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                         isShiftHeld = HardwareKeyboard.instance.isShiftPressed;
                       } catch (_) {}
 
-                      if (isMiddleMouse ||
-                          (isShiftHeld &&
-                              (event.buttons & kPrimaryMouseButton) != 0)) {
+                      if (isMiddleMouse || (isShiftHeld && (event.buttons & kPrimaryMouseButton) != 0)) {
                         // Middle mouse or Shift+Left drag -> Pan 3D camera
                         viewModel.pan3DCanvas(event.delta);
                       } else if ((event.buttons & kPrimaryMouseButton) != 0) {
                         // Left mouse drag -> Orbit turntable
-                        viewModel.orbit3D(
-                          event.delta.dx * 0.5,
-                          -event.delta.dy * 0.5,
-                        );
+                        viewModel.orbit3D(event.delta.dx * 0.5, -event.delta.dy * 0.5);
                       }
                     },
                     child: GestureDetector(
@@ -265,453 +399,399 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                   ),
                 ),
 
-            // 2. Viewport Header Overlay (Light CAD Card)
-            Positioned(
-              top: 12,
-              left: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFCBD5E1)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.view_in_ar, size: 14, color: Color(0xFF0284C7)),
-                    const SizedBox(width: 6),
-                    const Text(
-                      '3D FOLDED MESH',
-                      style: TextStyle(
-                        color: Color(0xFF0F172A),
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
+                // 2. Viewport Responsive Top Controls Bar (Header Card + Presets)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  right: 88, // Clears StudioViewCube at right: 12
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Left: Status & Cover Controls Card (Scrollable if constrained)
+                      Flexible(
+                        flex: 1,
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.92),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFCBD5E1)),
+                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))],
+                            ),
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.view_in_ar, size: 14, color: Color(0xFF0284C7)),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    '3D FOLDED MESH',
+                                    style: TextStyle(color: Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                                  ),
+                                  if (viewModel.hasCover) ...[
+                                    const SizedBox(width: 8),
+                                    Container(width: 1, height: 12, color: const Color(0xFFCBD5E1)),
+                                    const SizedBox(width: 8),
+                                    Tooltip(
+                                      message: viewModel.isCoverVisible3D ? 'Hide Cover (3D)' : 'Show Cover (3D)',
+                                      child: InkWell(
+                                        onTap: viewModel.toggleCoverVisibility3D,
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                viewModel.isCoverVisible3D ? Icons.shield : Icons.shield_outlined,
+                                                size: 13,
+                                                color: viewModel.isCoverVisible3D ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                viewModel.isCoverVisible3D ? 'Cover On' : 'Cover Off',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: viewModel.isCoverVisible3D ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    if (viewModel.isCoverVisible3D) ...[
+                                      const SizedBox(width: 4),
+                                      Tooltip(
+                                        message: viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
+                                            ? '3D Mode: Snapped on Base (Click to Move Beside)'
+                                            : (viewModel.coverPlacementMode3D == CoverPlacementMode3D.custom
+                                                  ? '3D Mode: Custom Offset (Click to Snap on Base)'
+                                                  : '3D Mode: Beside Base (Click to Snap on Base)'),
+                                        child: InkWell(
+                                          onTap: () {
+                                            final nextMode = viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
+                                                ? CoverPlacementMode3D.besideBase
+                                                : CoverPlacementMode3D.snappedToBase;
+                                            viewModel.setCoverPlacementMode3D(nextMode);
+                                          },
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
+                                                      ? Icons.flip_to_front
+                                                      : (viewModel.coverPlacementMode3D == CoverPlacementMode3D.custom ? Icons.open_with : Icons.flip_to_back),
+                                                  size: 13,
+                                                  color: const Color(0xFF8B5CF6),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
+                                                      ? 'Snapped'
+                                                      : (viewModel.coverPlacementMode3D == CoverPlacementMode3D.custom ? 'Moved' : 'Beside'),
+                                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF8B5CF6)),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      // Lock / Unlock Cover in Position
+                                      Tooltip(
+                                        message: viewModel.isCoverLocked
+                                            ? 'Cover Locked in Position (Click to Unlock & Move)'
+                                            : 'Cover Unlocked for 3D Dragging & Move (Click to Lock)',
+                                        child: InkWell(
+                                          onTap: viewModel.toggleCoverLock,
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: viewModel.isCoverLocked ? const Color(0xFFF1F5F9) : const Color(0xFFFDE68A).withValues(alpha: 0.35),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: viewModel.isCoverLocked ? const Color(0xFFCBD5E1) : const Color(0xFFD97706)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  viewModel.isCoverLocked ? Icons.lock : Icons.lock_open,
+                                                  size: 13,
+                                                  color: viewModel.isCoverLocked ? const Color(0xFF64748B) : const Color(0xFFB45309),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  viewModel.isCoverLocked ? 'Locked' : 'Unlocked',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: viewModel.isCoverLocked ? const Color(0xFF64748B) : const Color(0xFFB45309),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Tooltip(
+                                        message: 'Move & Explode 3D Cover (Elevation Lift & Position Controls)',
+                                        child: InkWell(
+                                          onTap: () {
+                                            viewModel.toggleCover3DMoveActive();
+                                          },
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: viewModel.isCover3DMoveActive ? const Color(0xFF8B5CF6).withValues(alpha: 0.15) : Colors.transparent,
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: viewModel.isCover3DMoveActive ? const Color(0xFF8B5CF6) : Colors.transparent),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.open_with,
+                                                  size: 13,
+                                                  color: viewModel.isCover3DMoveActive ? const Color(0xFF7C3AED) : const Color(0xFF64748B),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'Move / Explode',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: viewModel.isCover3DMoveActive ? const Color(0xFF7C3AED) : const Color(0xFF475569),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Tooltip(
+                                        message: 'Cover Flange Depth Settings',
+                                        child: InkWell(
+                                          onTap: () => _showCoverFlangeDialog(context),
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF1F5F9),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: const Color(0xFFCBD5E1)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.straighten, size: 13, color: Color(0xFF0284C7)),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'Flange ${viewModel.coverFlangeDepth.toStringAsFixed(0)}mm',
+                                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF0284C7)),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Tooltip(
+                                        message: 'Open Independent 3D Cover Inspector Window',
+                                        child: InkWell(
+                                          onTap: () {
+                                            viewModel.setCover3DViewerOpen(!viewModel.isCover3DViewerOpen);
+                                          },
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                            child: Icon(
+                                              Icons.open_in_new,
+                                              size: 13,
+                                              color: viewModel.isCover3DViewerOpen ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    if (viewModel.hasCover) ...[
                       const SizedBox(width: 8),
-                      Container(width: 1, height: 12, color: const Color(0xFFCBD5E1)),
-                      const SizedBox(width: 8),
-                      Tooltip(
-                        message: viewModel.isCoverVisible3D ? 'Hide Cover (3D)' : 'Show Cover (3D)',
-                        child: InkWell(
-                          onTap: viewModel.toggleCoverVisibility3D,
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      // Right: Preset View & Display Buttons (ISO, TOP, FRONT, SIDE, GLASS, WIREFRAME, RESET)
+                      Flexible(
+                        flex: 0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.92),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))],
+                          ),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  viewModel.isCoverVisible3D ? Icons.shield : Icons.shield_outlined,
-                                  size: 13,
-                                  color: viewModel.isCoverVisible3D ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
+                                _cameraButton('ISO', () => viewModel.setPresetView(azimuth: 45, elevation: 30)),
+                                _cameraButton('TOP', () => viewModel.setPresetView(azimuth: 0, elevation: 89)),
+                                _cameraButton('FRONT', () => viewModel.setPresetView(azimuth: 0, elevation: 0)),
+                                _cameraButton('SIDE', () => viewModel.setPresetView(azimuth: 90, elevation: 0)),
+                                _modeButton(
+                                  label: viewModel.currentEdgeChamfer > 0 ? 'CHAMFER ${viewModel.currentEdgeChamfer.toStringAsFixed(1)}mm' : 'CHAMFER',
+                                  isActive: viewModel.currentEdgeChamfer > 0,
+                                  icon: Icons.change_history,
+                                  tooltip: 'Sheet Edge Chamfer (Bevel / Weld Prep)',
+                                  onTap: () => _showChamferDialog(context),
                                 ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  viewModel.isCoverVisible3D ? 'Cover On' : 'Cover Off',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: viewModel.isCoverVisible3D ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
+                                _modeButton(
+                                  label: 'GLASS',
+                                  isActive: viewModel.isGlassMode,
+                                  icon: Icons.opacity,
+                                  tooltip: 'Toggle Glass / X-Ray Mode (See Back Part)',
+                                  onTap: viewModel.toggleGlassMode,
+                                ),
+                                if (viewModel.persistentCmsPorts.isNotEmpty)
+                                  _modeButton(
+                                    label: 'PORTS',
+                                    isActive: viewModel.showCmsPortHighlights,
+                                    icon: Icons.tag,
+                                    tooltip: 'Toggle 3D Channel Port Callouts & Highlights',
+                                    onTap: viewModel.toggleCmsPortHighlights,
                                   ),
+                                IconButton(
+                                  icon: Icon(
+                                    viewModel.showWireframe ? Icons.grid_on : Icons.grid_off,
+                                    size: 14,
+                                    color: viewModel.showWireframe ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                                  ),
+                                  tooltip: 'Toggle Wireframe',
+                                  onPressed: viewModel.toggleWireframe,
+                                  padding: const EdgeInsets.all(4),
+                                  constraints: const BoxConstraints(),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.refresh, size: 14, color: Color(0xFF64748B)),
+                                  tooltip: 'Reset Camera',
+                                  onPressed: viewModel.resetCamera,
+                                  padding: const EdgeInsets.all(4),
+                                  constraints: const BoxConstraints(),
                                 ),
                               ],
                             ),
                           ),
                         ),
                       ),
-                      if (viewModel.isCoverVisible3D) ...[
-                        const SizedBox(width: 4),
-                        Tooltip(
-                          message: viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
-                              ? '3D Mode: Snapped on Base (Click to Move Beside)'
-                              : (viewModel.coverPlacementMode3D == CoverPlacementMode3D.custom
-                                  ? '3D Mode: Custom Offset (Click to Snap on Base)'
-                                  : '3D Mode: Beside Base (Click to Snap on Base)'),
-                          child: InkWell(
-                            onTap: () {
-                              final nextMode = viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
-                                  ? CoverPlacementMode3D.besideBase
-                                  : CoverPlacementMode3D.snappedToBase;
-                              viewModel.setCoverPlacementMode3D(nextMode);
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
-                                        ? Icons.flip_to_front
-                                        : (viewModel.coverPlacementMode3D == CoverPlacementMode3D.custom
-                                            ? Icons.open_with
-                                            : Icons.flip_to_back),
-                                    size: 13,
-                                    color: const Color(0xFF8B5CF6),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    viewModel.coverPlacementMode3D == CoverPlacementMode3D.snappedToBase
-                                        ? 'Snapped'
-                                        : (viewModel.coverPlacementMode3D == CoverPlacementMode3D.custom
-                                            ? 'Moved'
-                                            : 'Beside'),
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF8B5CF6),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Tooltip(
-                          message: 'Move & Explode 3D Cover (Elevation Lift & Position Controls)',
-                          child: InkWell(
-                            onTap: () {
-                              viewModel.toggleCover3DMoveActive();
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: viewModel.isCover3DMoveActive
-                                    ? const Color(0xFF8B5CF6).withValues(alpha: 0.15)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: viewModel.isCover3DMoveActive
-                                      ? const Color(0xFF8B5CF6)
-                                      : Colors.transparent,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.open_with,
-                                    size: 13,
-                                    color: viewModel.isCover3DMoveActive
-                                        ? const Color(0xFF7C3AED)
-                                        : const Color(0xFF64748B),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Move / Explode',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: viewModel.isCover3DMoveActive
-                                          ? const Color(0xFF7C3AED)
-                                          : const Color(0xFF475569),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Tooltip(
-                          message: 'Open Independent 3D Cover Inspector Window',
-                          child: InkWell(
-                            onTap: () {
-                              viewModel.setCover3DViewerOpen(!viewModel.isCover3DViewerOpen);
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              child: Icon(
-                                Icons.open_in_new,
-                                size: 13,
-                                color: viewModel.isCover3DViewerOpen ? const Color(0xFF0284C7) : const Color(0xFF64748B),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
-                  ],
-                ),
-              ),
-            ),
-
-            // 3. Preset View & Display Buttons (ISO, TOP, FRONT, SIDE, GLASS, WIREFRAME, RESET)
-            Positioned(
-              top: 12,
-              right: 90,
-              left: 160,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return Align(
-                    alignment: Alignment.topRight,
-                    child: Container(
-                      constraints: BoxConstraints(
-                        maxWidth: math.max(100.0, constraints.maxWidth),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFCBD5E1)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: ScrollConfiguration(
-                        behavior: ScrollConfiguration.of(context).copyWith(
-                          dragDevices: {
-                            PointerDeviceKind.touch,
-                            PointerDeviceKind.mouse,
-                            PointerDeviceKind.trackpad,
-                            PointerDeviceKind.stylus,
-                          },
-                        ),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _cameraButton(
-                                'ISO',
-                                () => viewModel.setPresetView(
-                                  azimuth: 45,
-                                  elevation: 30,
-                                ),
-                              ),
-                              _cameraButton(
-                                'TOP',
-                                () => viewModel.setPresetView(
-                                  azimuth: 0,
-                                  elevation: 89,
-                                ),
-                              ),
-                              _cameraButton(
-                                'FRONT',
-                                () => viewModel.setPresetView(
-                                  azimuth: 0,
-                                  elevation: 0,
-                                ),
-                              ),
-                              _cameraButton(
-                                'SIDE',
-                                () => viewModel.setPresetView(
-                                  azimuth: 90,
-                                  elevation: 0,
-                                ),
-                              ),
-                              _modeButton(
-                                label: viewModel.currentEdgeChamfer > 0
-                                    ? 'CHAMFER ${viewModel.currentEdgeChamfer.toStringAsFixed(1)}mm'
-                                    : 'CHAMFER',
-                                isActive: viewModel.currentEdgeChamfer > 0,
-                                icon: Icons.change_history,
-                                tooltip:
-                                    'Sheet Edge Chamfer (Bevel / Weld Prep)',
-                                onTap: () => _showChamferDialog(context),
-                              ),
-                              _modeButton(
-                                label: 'GLASS',
-                                isActive: viewModel.isGlassMode,
-                                icon: Icons.opacity,
-                                tooltip:
-                                    'Toggle Glass / X-Ray Mode (See Back Part)',
-                                onTap: viewModel.toggleGlassMode,
-                              ),
-                              if (viewModel.activeCmsPorts.isNotEmpty)
-                                _modeButton(
-                                  label: 'PORTS',
-                                  isActive: viewModel.showCmsPortHighlights,
-                                  icon: Icons.tag,
-                                  tooltip: 'Toggle 3D Channel Port Callouts & Highlights',
-                                  onTap: viewModel.toggleCmsPortHighlights,
-                                ),
-                              IconButton(
-                                icon: Icon(
-                                  viewModel.showWireframe
-                                      ? Icons.grid_on
-                                      : Icons.grid_off,
-                                  size: 14,
-                                  color: viewModel.showWireframe
-                                      ? const Color(0xFF0284C7)
-                                      : const Color(0xFF64748B),
-                                ),
-                                tooltip: 'Toggle Wireframe',
-                                onPressed: viewModel.toggleWireframe,
-                                padding: const EdgeInsets.all(4),
-                                constraints: const BoxConstraints(),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.refresh,
-                                  size: 14,
-                                  color: Color(0xFF64748B),
-                                ),
-                                tooltip: 'Reset Camera',
-                                onPressed: viewModel.resetCamera,
-                                padding: const EdgeInsets.all(4),
-                                constraints: const BoxConstraints(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // 3b. Interactive 3D ViewCube (Top Right 3D Orientation Marker)
-            Positioned(
-              top: 12,
-              right: 12,
-              child: StudioViewCube(
-                azimuthDeg: viewModel.azimuthDeg,
-                elevationDeg: viewModel.elevationDeg,
-                onResetView: viewModel.resetCamera,
-                onOrbit: (dAz, dEl) => viewModel.orbit3D(dAz, dEl),
-                onSetView: (azimuth, elevation) {
-                  viewModel.setPresetView(azimuth: azimuth, elevation: elevation);
-                },
-              ),
-            ),
-
-            // 4. Live 3D Dimensions Pill
-            Positioned(
-              bottom: 12,
-              right: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFFCBD5E1)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 3,
-                    ),
-                  ],
-                ),
-                child: Text(
-                  '3D Bounding: ${viewModel.currentMesh.boundWidth.toStringAsFixed(0)} x ${viewModel.currentMesh.boundLength.toStringAsFixed(0)} x ${viewModel.currentMesh.boundHeight.toStringAsFixed(0)} mm',
-                  style: const TextStyle(
-                    color: Color(0xFF0284C7),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'monospace',
                   ),
                 ),
-              ),
-            ),
 
-            // 5. Port tags are rendered coplanar directly on the aperture face in _Viewport3dPainter PASS 3
+                // 3b. Interactive 3D ViewCube (Top Right 3D Orientation Marker)
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: StudioViewCube(
+                    azimuthDeg: viewModel.azimuthDeg,
+                    elevationDeg: viewModel.elevationDeg,
+                    onResetView: viewModel.resetCamera,
+                    onOrbit: (dAz, dEl) => viewModel.orbit3D(dAz, dEl),
+                    onSetView: (azimuth, elevation) {
+                      viewModel.setPresetView(azimuth: azimuth, elevation: elevation);
+                    },
+                  ),
+                ),
 
-            // 6. Secondary Floating / Draggable 3D Cover Viewer Window
-            if (viewModel.isCover3DViewerOpen &&
-                viewModel.hasCover &&
-                viewModel.coverMesh != null)
-              _FloatingCover3DViewer(viewModel: viewModel),
-
-            // 7. Interactive 3D Cover Movement & Explode HUD
-            if (viewModel.isCover3DMoveActive &&
-                viewModel.hasCover &&
-                viewModel.isCoverVisible3D)
-              _Cover3DMoveHud(
-                viewModel: viewModel,
-                isVerticalOnly: _pureVerticalDrag,
-                onToggleVerticalOnly: (v) => setState(() => _pureVerticalDrag = v),
-              ),
-
-            // 8. Real-time drag / hover status banner
-            if (_isDraggingCover)
-              Positioned(
-                top: 54,
-                left: 0,
-                right: 0,
-                child: Center(
+                // 4. Live 3D Dimensions Pill
+                Positioned(
+                  bottom: 12,
+                  right: 12,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E1B4B).withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
+                      color: Colors.white.withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 3)],
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.open_with, size: 13, color: Color(0xFFA78BFA)),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Cover 3D:  X: ${viewModel.coverOffset3D.x.toStringAsFixed(0)}mm  Y: ${viewModel.coverOffset3D.y.toStringAsFixed(0)}mm  Z: ${viewModel.coverOffset3D.z >= 0 ? "+" : ""}${viewModel.coverOffset3D.z.toStringAsFixed(0)}mm',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          (HardwareKeyboard.instance.isShiftPressed || _pureVerticalDrag)
-                              ? '(Vertical Z Lift)'
-                              : '(Shift: Lock to Z)',
-                          style: const TextStyle(
-                            color: Color(0xFFC4B5FD),
-                            fontSize: 9.5,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      '3D Bounding: ${toNominalSize(viewModel.currentMesh.boundWidth).toStringAsFixed(0)} x ${toNominalSize(viewModel.currentMesh.boundLength).toStringAsFixed(0)} x ${toNominalSize(viewModel.currentMesh.boundHeight).toStringAsFixed(0)} mm',
+                      style: const TextStyle(color: Color(0xFF0284C7), fontSize: 10, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
                     ),
                   ),
                 ),
-              ),
-          ],
-        ),
-      );
-    },
-    ),
+
+                // 5. Port tags are rendered coplanar directly on the aperture face in _Viewport3dPainter PASS 3
+
+                // 6. Secondary Floating / Draggable 3D Cover Viewer Window
+                if (viewModel.isCover3DViewerOpen && viewModel.hasCover && viewModel.coverMesh != null) _FloatingCover3DViewer(viewModel: viewModel),
+
+                // 7. Interactive 3D Cover Movement & Explode HUD
+                if (viewModel.isCover3DMoveActive && viewModel.hasCover && viewModel.isCoverVisible3D)
+                  _Cover3DMoveHud(viewModel: viewModel, isVerticalOnly: _pureVerticalDrag, onToggleVerticalOnly: (v) => setState(() => _pureVerticalDrag = v)),
+
+                // 8. Real-time drag / hover status banner
+                if (_isDraggingCover)
+                  Positioned(
+                    top: 54,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1B4B).withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 2))],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.open_with, size: 13, color: Color(0xFFA78BFA)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Cover 3D:  X: ${viewModel.coverOffset3D.x.toStringAsFixed(0)}mm  Y: ${viewModel.coverOffset3D.y.toStringAsFixed(0)}mm  Z: ${viewModel.coverOffset3D.z >= 0 ? "+" : ""}${viewModel.coverOffset3D.z.toStringAsFixed(0)}mm',
+                              style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              (HardwareKeyboard.instance.isShiftPressed || _pureVerticalDrag) ? '(Vertical Z Lift)' : '(Shift: Lock to Z)',
+                              style: const TextStyle(color: Color(0xFFC4B5FD), fontSize: 9.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
   void _showChamferDialog(BuildContext context) {
     final currentChamfer = viewModel.currentEdgeChamfer;
     const presets = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0];
-    final controller = TextEditingController(
-      text: currentChamfer > 0 ? currentChamfer.toStringAsFixed(1) : '1.0',
-    );
+    final controller = TextEditingController(text: currentChamfer > 0 ? currentChamfer.toStringAsFixed(1) : '1.0');
 
     showDialog(
       context: context,
@@ -720,10 +800,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
           children: const [
             Icon(Icons.change_history, color: Color(0xFF0284C7), size: 20),
             SizedBox(width: 8),
-            Text(
-              '3D Sheet Edge Chamfer (Weld Prep)',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-            ),
+            Text('3D Sheet Edge Chamfer (Weld Prep)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           ],
         ),
         content: SizedBox(
@@ -743,19 +820,13 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                 children: presets.map((ch) {
                   final isSelected = (ch - currentChamfer).abs() < 1e-3;
                   return ChoiceChip(
-                    label: Text(
-                      ch == 0 ? 'None (Sharp)' : '${ch.toStringAsFixed(1)} mm',
-                    ),
+                    label: Text(ch == 0 ? 'None (Sharp)' : '${ch.toStringAsFixed(1)} mm'),
                     selected: isSelected,
                     selectedColor: const Color(0xFFE0F2FE),
                     labelStyle: TextStyle(
                       fontSize: 11,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                      color: isSelected
-                          ? const Color(0xFF0284C7)
-                          : const Color(0xFF334155),
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF334155),
                     ),
                     onSelected: (_) {
                       viewModel.setGlobalEdgeChamfer(ch);
@@ -767,14 +838,8 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Custom Chamfer Width (mm)',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Custom Chamfer Width (mm)', border: OutlineInputBorder(), isDense: true),
               ),
             ],
           ),
@@ -789,20 +854,12 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                 }
                 Navigator.of(ctx).pop();
               },
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFFEF4444),
-              ),
+              style: TextButton.styleFrom(foregroundColor: const Color(0xFFEF4444)),
               child: const Text('Clear All'),
             ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0284C7),
-              foregroundColor: Colors.white,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7), foregroundColor: Colors.white),
             onPressed: () {
               final val = double.tryParse(controller.text);
               if (val != null && val >= 0) {
@@ -831,23 +888,13 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
         ),
         child: Text(
           label,
-          style: const TextStyle(
-            color: Color(0xFF334155),
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(color: Color(0xFF334155), fontSize: 10, fontWeight: FontWeight.bold),
         ),
       ),
     );
   }
 
-  Widget _modeButton({
-    required String label,
-    required bool isActive,
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onTap,
-  }) {
+  Widget _modeButton({required String label, required bool isActive, required IconData icon, required String tooltip, required VoidCallback onTap}) {
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -859,33 +906,16 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
           decoration: BoxDecoration(
             color: isActive ? const Color(0xFFE0F2FE) : const Color(0xFFF1F5F9),
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: isActive
-                  ? const Color(0xFF0284C7)
-                  : const Color(0xFFCBD5E1),
-              width: isActive ? 1.2 : 0.8,
-            ),
+            border: Border.all(color: isActive ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1), width: isActive ? 1.2 : 0.8),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                size: 13,
-                color: isActive
-                    ? const Color(0xFF0284C7)
-                    : const Color(0xFF475569),
-              ),
+              Icon(icon, size: 13, color: isActive ? const Color(0xFF0284C7) : const Color(0xFF475569)),
               const SizedBox(width: 4),
               Text(
                 label,
-                style: TextStyle(
-                  color: isActive
-                      ? const Color(0xFF0284C7)
-                      : const Color(0xFF334155),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(color: isActive ? const Color(0xFF0284C7) : const Color(0xFF334155), fontSize: 10, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -950,10 +980,7 @@ class _Viewport3dPainter extends CustomPainter {
     const lightDir = CadPoint3D(0.577, 0.577, 0.577);
 
     // Compute automatic scaling
-    final maxDim = math.max(
-      mesh.boundWidth,
-      math.max(mesh.boundLength, mesh.boundHeight),
-    );
+    final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
     final fitDim = maxDim > 0 ? maxDim : 200.0;
     final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
     final scale = baseScale * zoom;
@@ -982,23 +1009,7 @@ class _Viewport3dPainter extends CustomPainter {
     }
 
     // List of drawable facets sorted by camera depth
-    final drawList =
-        <
-          ({
-            Path fillPath,
-            Path? strokePath,
-            Path? holesPath,
-            Path? selectedHolesPath,
-            Path? clipBoundary,
-            double depth,
-            Color color,
-            List<List<Offset>> cuts,
-            String faceId,
-            bool isFillet,
-            bool isBore,
-            bool isHighlighted,
-          })
-        >[];
+    final drawList = <_DrawFacet>[];
 
     for (final poly in mesh.allPolygons) {
       if (poly.vertices.length < 3) continue;
@@ -1008,26 +1019,23 @@ class _Viewport3dPainter extends CustomPainter {
       final isFaceSelected = (poly.faceId == selectedFaceId);
       final isFaceHovered = (poly.faceId == hoveredFaceId);
       final isBendHighlighted =
-          (selectedBendId != null && poly.faceId.contains(selectedBendId!)) ||
-          (hoveredBendId != null && poly.faceId.contains(hoveredBendId!));
-      final isPunchHighlighted = isBore &&
-          ((selectedPunchId != null && poly.faceId.contains(selectedPunchId!)) ||
-           (hoveredPunchId != null && poly.faceId.contains(hoveredPunchId!)));
-      final isHighlighted =
-          isFaceSelected || isFaceHovered || isBendHighlighted || isPunchHighlighted;
+          (selectedBendId != null && poly.faceId.contains(selectedBendId!)) || (hoveredBendId != null && poly.faceId.contains(hoveredBendId!));
+      final isPunchHighlighted =
+          isBore && ((selectedPunchId != null && poly.faceId.contains(selectedPunchId!)) || (hoveredPunchId != null && poly.faceId.contains(hoveredPunchId!)));
+      final isHighlighted = isFaceSelected || isFaceHovered || isBendHighlighted || isPunchHighlighted;
 
       final n = poly.normal;
 
-      // Camera-space outward normal Z component (dot product with view direction)
-      final camNormalZ = (n.x * sinAz + n.y * cosAz) * sinEl + n.z * cosEl;
+      // Camera-space outward normal vector
+      final nx1 = n.x * cosAz - n.y * sinAz;
+      final ny1 = n.x * sinAz + n.y * cosAz;
+      final camNormalZ = ny1 * sinEl + n.z * cosEl;
+      final polyCamNormal = CadPoint3D(nx1, ny1 * cosEl - n.z * sinEl, camNormalZ);
 
       // Solid/Glass Opaque Mode: Selective back-face culling
-      // Never cull rims, chamfers, or annular fillet caps (boundary shell).
+      // Thickness shell (RIM, CHAMFER, FILLET_CAP) is culled when back-facing in solid mode.
       if (mesh.thicknessPolygons.isNotEmpty) {
-        final isRimOrChamfer =
-            poly.faceId.startsWith('RIM_') ||
-            poly.faceId.startsWith('CHAMFER_') ||
-            poly.faceId.startsWith('FILLET_CAP');
+        final isRimOrChamfer = poly.faceId.startsWith('RIM_') || poly.faceId.startsWith('CHAMFER_') || poly.faceId.startsWith('FILLET_CAP');
         if (!isRimOrChamfer) {
           // In glass mode: _BOT face is suppressed — top face at alpha + opaque rim avoids hollow look
           if (isGlassMode && poly.faceId.endsWith('_BOT')) continue;
@@ -1039,25 +1047,24 @@ class _Viewport3dPainter extends CustomPainter {
             // Bottom face of sheet metal when viewing from above
             if (poly.faceId.endsWith('_BOT') && camNormalZ <= 0.0) continue;
             // Top face of sheet metal when viewing from below
-            if (!poly.faceId.endsWith('_BOT') &&
-                !isFillet &&
-                !isBore &&
-                camNormalZ <= 0.0) {
+            if (!poly.faceId.endsWith('_BOT') && !isFillet && !isBore && camNormalZ <= 0.0) {
               continue;
             }
             // Curved bend fillet inside/outside
             if (poly.faceId.startsWith('FILLET_OUT_') && camNormalZ <= -0.1) {
               continue;
             }
-            if (poly.faceId.startsWith('FILLET_') &&
-                !poly.faceId.startsWith('FILLET_OUT_') &&
-                camNormalZ <= -0.1) {
+            if (poly.faceId.startsWith('FILLET_') && !poly.faceId.startsWith('FILLET_OUT_') && camNormalZ <= -0.1) {
               continue;
             }
             // Bore walls: only show when mostly facing the camera (tight culling)
             // This prevents bore walls from being visible from outside looking at the flat face
             if (isBore && camNormalZ <= 0.0) continue;
           }
+        } else {
+          // In solid mode: back-facing thickness rims, chamfers, and fillet caps must be culled
+          // so that back-edge strokes do not bleed through front surfaces.
+          if (!isGlassMode && camNormalZ <= 0.0) continue;
         }
       }
 
@@ -1073,11 +1080,8 @@ class _Viewport3dPainter extends CustomPainter {
       }
 
       // Diffuse CAD lighting with two-sided fallback
-      final dotLight = (n.x * lightDir.x + n.y * lightDir.y + n.z * lightDir.z)
-          .clamp(-1.0, 1.0);
-      final lightFactor = dotLight > 0
-          ? (0.65 + 0.35 * dotLight)
-          : (0.45 + 0.20 * (-dotLight));
+      final dotLight = (n.x * lightDir.x + n.y * lightDir.y + n.z * lightDir.z).clamp(-1.0, 1.0);
+      final lightFactor = dotLight > 0 ? (0.65 + 0.35 * dotLight) : (0.45 + 0.20 * (-dotLight));
 
       final baseColor = poly.color;
       Color shadedColor;
@@ -1108,8 +1112,24 @@ class _Viewport3dPainter extends CustomPainter {
 
       // Project full face boundary
       final prjVerts = poly.vertices.map((v) => project(v)).toList();
-      final outerPath = Path()
-        ..moveTo(prjVerts.first.pt.dx, prjVerts.first.pt.dy);
+      double minD = prjVerts.first.depth;
+      double maxD = prjVerts.first.depth;
+      double minX = prjVerts.first.pt.dx;
+      double maxX = prjVerts.first.pt.dx;
+      double minY = prjVerts.first.pt.dy;
+      double maxY = prjVerts.first.pt.dy;
+      for (int i = 1; i < prjVerts.length; i++) {
+        final p = prjVerts[i];
+        if (p.depth < minD) minD = p.depth;
+        if (p.depth > maxD) maxD = p.depth;
+        if (p.pt.dx < minX) minX = p.pt.dx;
+        if (p.pt.dx > maxX) maxX = p.pt.dx;
+        if (p.pt.dy < minY) minY = p.pt.dy;
+        if (p.pt.dy > maxY) maxY = p.pt.dy;
+      }
+      final polyBounds = Rect.fromLTRB(minX, minY, maxX, maxY);
+
+      final outerPath = Path()..moveTo(prjVerts.first.pt.dx, prjVerts.first.pt.dy);
       for (int i = 1; i < prjVerts.length; i++) {
         outerPath.lineTo(prjVerts[i].pt.dx, prjVerts[i].pt.dy);
       }
@@ -1135,8 +1155,7 @@ class _Viewport3dPainter extends CustomPainter {
           holePaths.add(hPath);
 
           final punchId = hIdx < poly.holePunchIds.length ? poly.holePunchIds[hIdx] : null;
-          if (punchId != null &&
-              (punchId == selectedPunchId || punchId == hoveredPunchId)) {
+          if (punchId != null && (punchId == selectedPunchId || punchId == hoveredPunchId)) {
             selectedHolesPath.addPath(hPath, Offset.zero);
             hasSelectedHoles = true;
           }
@@ -1204,6 +1223,12 @@ class _Viewport3dPainter extends CustomPainter {
         selectedHolesPath: hasSelectedHoles ? selectedHolesPath : null,
         clipBoundary: hasHoles ? outerPath : null,
         depth: avgDepth,
+        minDepth: minD,
+        maxDepth: maxD,
+        bounds: polyBounds,
+        camNormal: polyCamNormal,
+        p0Screen: prjVerts.first.pt,
+        p0Depth: prjVerts.first.depth,
         color: shadedColor,
         cuts: prjCuts,
         faceId: poly.faceId,
@@ -1213,12 +1238,253 @@ class _Viewport3dPainter extends CustomPainter {
       ));
     }
 
-    // Sort from back to front (Painter's Algorithm) with deterministic category tiebreaker
+    // Add 3D Channel Mouth Aperture Port Facets to drawList so they participate in true 3D depth occlusion
+    for (final port in activePorts) {
+      List<CadPoint3D> corners = port.derivedMouthCorners;
+      if (corners.length < 4 && port.width > 1.0 && port.height > 1.0) {
+        final floorCenter = CadPoint3D(
+          port.center.x - (port.height / 2.0) * port.heightDirection.x,
+          port.center.y - (port.height / 2.0) * port.heightDirection.y,
+          port.center.z - (port.height / 2.0) * port.heightDirection.z,
+        );
+        final p0 = CadPoint3D(
+          floorCenter.x - (port.width / 2.0) * port.widthDirection.x,
+          floorCenter.y - (port.width / 2.0) * port.widthDirection.y,
+          floorCenter.z - (port.width / 2.0) * port.widthDirection.z,
+        );
+        final p3 = CadPoint3D(
+          floorCenter.x + (port.width / 2.0) * port.widthDirection.x,
+          floorCenter.y + (port.width / 2.0) * port.widthDirection.y,
+          floorCenter.z + (port.width / 2.0) * port.widthDirection.z,
+        );
+        final p1 = CadPoint3D(
+          p0.x + port.height * port.heightDirection.x,
+          p0.y + port.height * port.heightDirection.y,
+          p0.z + port.height * port.heightDirection.z,
+        );
+        final p2 = CadPoint3D(
+          p3.x + port.height * port.heightDirection.x,
+          p3.y + port.height * port.heightDirection.y,
+          p3.z + port.height * port.heightDirection.z,
+        );
+        corners = [p0, p1, p2, p3];
+      }
+
+      if (corners.length >= 4) {
+        final prjVerts = corners.map((v) => project(v)).toList();
+        final p0 = prjVerts[0].pt;
+        final p1 = prjVerts[1].pt;
+        final p2 = prjVerts[2].pt;
+        final p3 = prjVerts[3].pt;
+
+        final mouthPath = Path()
+          ..moveTo(p0.dx, p0.dy)
+          ..lineTo(p1.dx, p1.dy)
+          ..lineTo(p2.dx, p2.dy)
+          ..lineTo(p3.dx, p3.dy)
+          ..close();
+
+        double minD = prjVerts.first.depth;
+        double maxD = prjVerts.first.depth;
+        double minX = prjVerts.first.pt.dx;
+        double maxX = prjVerts.first.pt.dx;
+        double minY = prjVerts.first.pt.dy;
+        double maxY = prjVerts.first.pt.dy;
+        for (int i = 1; i < prjVerts.length; i++) {
+          final p = prjVerts[i];
+          if (p.depth < minD) minD = p.depth;
+          if (p.depth > maxD) maxD = p.depth;
+          if (p.pt.dx < minX) minX = p.pt.dx;
+          if (p.pt.dx > maxX) maxX = p.pt.dx;
+          if (p.pt.dy < minY) minY = p.pt.dy;
+          if (p.pt.dy > maxY) maxY = p.pt.dy;
+        }
+        final polyBounds = Rect.fromLTRB(minX, minY, maxX, maxY);
+
+        // Compute 3D camera normal for exact depthAt evaluation
+        CadPoint3D n = port.normal;
+        if (n.x * n.x + n.y * n.y + n.z * n.z < 0.1 && corners.length >= 4) {
+          final v1 = CadPoint3D(corners[1].x - corners[0].x, corners[1].y - corners[0].y, corners[1].z - corners[0].z);
+          final v2 = CadPoint3D(corners[3].x - corners[0].x, corners[3].y - corners[0].y, corners[3].z - corners[0].z);
+          final cx = v1.y * v2.z - v1.z * v2.y;
+          final cy = v1.z * v2.x - v1.x * v2.z;
+          final cz = v1.x * v2.y - v1.y * v2.x;
+          final len = math.sqrt(cx * cx + cy * cy + cz * cz);
+          if (len > 1e-4) n = CadPoint3D(cx / len, cy / len, cz / len);
+        }
+        final nx1 = n.x * cosAz - n.y * sinAz;
+        final ny1 = n.x * sinAz + n.y * cosAz;
+        final camNormalZ = ny1 * sinEl + n.z * cosEl;
+        final polyCamNormal = CadPoint3D(nx1, ny1 * cosEl - n.z * sinEl, camNormalZ);
+
+        final sumDepth = prjVerts.fold(0.0, (acc, p) => acc + p.depth);
+        final avgDepth = sumDepth / prjVerts.length;
+
+        final isFocused = port.id == focusedPortId;
+
+        drawList.add((
+          fillPath: mouthPath,
+          strokePath: mouthPath,
+          holesPath: null,
+          selectedHolesPath: null,
+          clipBoundary: null,
+          depth: avgDepth,
+          minDepth: minD,
+          maxDepth: maxD,
+          bounds: polyBounds,
+          camNormal: polyCamNormal,
+          p0Screen: prjVerts.first.pt,
+          p0Depth: prjVerts.first.depth,
+          color: isFocused ? const Color(0xFF00E5FF) : const Color(0xFF00E5FF),
+          cuts: [
+            [p0, p3],
+          ], // Floor threshold edge
+          faceId: 'PORT_MOUTH_${port.id}',
+          isFillet: false,
+          isBore: false,
+          isHighlighted: isFocused,
+        ));
+      }
+    }
+
+    // Pre-calculate base vs cover average world Z to determine assembly relationship
+    double sumBaseZ = 0.0;
+    int countBaseZ = 0;
+    double sumCoverZ = 0.0;
+    int countCoverZ = 0;
+    for (final poly in mesh.allPolygons) {
+      if (poly.vertices.isEmpty) continue;
+      final polyZ = poly.vertices.fold(0.0, (acc, v) => acc + v.z) / poly.vertices.length;
+      if (poly.faceId.contains('COVER')) {
+        sumCoverZ += polyZ;
+        countCoverZ++;
+      } else {
+        sumBaseZ += polyZ;
+        countBaseZ++;
+      }
+    }
+    final isCoverAssemblyOnTop = countCoverZ > 0 && countBaseZ > 0 && ((sumCoverZ / countCoverZ) > (sumBaseZ / countBaseZ));
+
+    // Exact camera depth of a planar facet at screen point (sx, sy).
+    // STRICTLY restricted to points inside the facet's 2D boundary to prevent wild extrapolation!
+    double? depthAt(_DrawFacet item, Offset screenPt) {
+      if (!item.bounds.contains(screenPt) || !item.fillPath.contains(screenPt)) return null;
+      final nz = item.camNormal.z;
+      if (nz.abs() < 1e-4) return null;
+      final dx = (screenPt.dx - item.p0Screen.dx) / scale;
+      final dy = -(screenPt.dy - item.p0Screen.dy) / scale;
+      final d = item.p0Depth - (item.camNormal.x * dx + item.camNormal.y * dy) / nz;
+      return d.clamp(item.minDepth, item.maxDepth);
+    }
+
+    Offset? findCommonPoint(_DrawFacet a, _DrawFacet b) {
+      final overlap = a.bounds.intersect(b.bounds);
+      if (overlap.width <= 2.0 || overlap.height <= 2.0) return null;
+      final center = overlap.center;
+      if (a.fillPath.contains(center) && b.fillPath.contains(center)) {
+        return center;
+      }
+      final candidates = [
+        Offset(overlap.left + overlap.width * 0.25, overlap.top + overlap.height * 0.25),
+        Offset(overlap.left + overlap.width * 0.75, overlap.top + overlap.height * 0.25),
+        Offset(overlap.left + overlap.width * 0.25, overlap.top + overlap.height * 0.75),
+        Offset(overlap.left + overlap.width * 0.75, overlap.top + overlap.height * 0.75),
+        Offset(overlap.left + overlap.width * 0.50, overlap.top + overlap.height * 0.25),
+        Offset(overlap.left + overlap.width * 0.50, overlap.top + overlap.height * 0.75),
+      ];
+      for (final pt in candidates) {
+        if (a.fillPath.contains(pt) && b.fillPath.contains(pt)) {
+          return pt;
+        }
+      }
+      return null;
+    }
+
+    // Sort from back to front (Painter's Algorithm) with verified local-depth overlap resolution
     drawList.sort((a, b) {
+      final isCoverA = a.faceId.contains('COVER');
+      final isCoverB = b.faceId.contains('COVER');
+
+      // 1. Within Cover assembly:
+      if (isCoverA && isCoverB) {
+        final isMainA = a.faceId.contains('MAIN');
+        final isMainB = b.faceId.contains('MAIN');
+        if (isMainA != isMainB) {
+          return elevationDeg > 0 ? (isMainA ? 1 : -1) : (isMainA ? -1 : 1);
+        }
+        if (a.maxDepth < b.minDepth - 1.0) return -1;
+        if (b.maxDepth < a.minDepth - 1.0) return 1;
+
+        final commonPt = findCommonPoint(a, b);
+        if (commonPt != null) {
+          final dA = depthAt(a, commonPt);
+          final dB = depthAt(b, commonPt);
+          if (dA != null && dB != null) {
+            final diff = dA - dB;
+            if (diff.abs() > 1.5) {
+              return diff < 0 ? -1 : 1;
+            }
+          }
+        }
+
+        final depthDiff = a.depth - b.depth;
+        if (depthDiff.abs() > 0.05) return depthDiff < 0 ? -1 : 1;
+        final pa = _facePriority(a.faceId);
+        final pb = _facePriority(b.faceId);
+        return pa.compareTo(pb);
+      }
+
+      // 2. Between Cover and Base Fitting:
+      if (isCoverA != isCoverB) {
+        if (a.maxDepth < b.minDepth - 1.0) return -1;
+        if (b.maxDepth < a.minDepth - 1.0) return 1;
+
+        final commonPt = findCommonPoint(a, b);
+        if (commonPt != null) {
+          final dA = depthAt(a, commonPt);
+          final dB = depthAt(b, commonPt);
+          if (dA != null && dB != null) {
+            final diff = dA - dB;
+            if (diff.abs() > 1.5) {
+              return diff < 0 ? -1 : 1;
+            }
+          }
+          // Direct mechanical contact / near-coplanar alignment (< 1.5mm)
+          if (isCoverAssemblyOnTop) {
+            return elevationDeg > 0 ? (isCoverA ? 1 : -1) : (isCoverA ? -1 : 1);
+          }
+        }
+
+        final depthDiff = a.depth - b.depth;
+        if (depthDiff.abs() > 1.5) {
+          return depthDiff < 0 ? -1 : 1;
+        }
+
+        if (isCoverAssemblyOnTop) {
+          return elevationDeg > 0 ? (isCoverA ? 1 : -1) : (isCoverA ? -1 : 1);
+        }
+        return depthDiff < 0 ? -1 : 1;
+      }
+
+      // 3. Between Base facets (and Port Mouth openings):
+      if (a.maxDepth < b.minDepth - 1.0) return -1;
+      if (b.maxDepth < a.minDepth - 1.0) return 1;
+
+      final commonPt = findCommonPoint(a, b);
+      if (commonPt != null) {
+        final dA = depthAt(a, commonPt);
+        final dB = depthAt(b, commonPt);
+        if (dA != null && dB != null) {
+          final diff = dA - dB;
+          if (diff.abs() > 1.0) {
+            return diff < 0 ? -1 : 1;
+          }
+        }
+      }
+
       final depthDiff = a.depth - b.depth;
-      // When depths differ by more than the max categorical bias, use true 3D depth
-      if (depthDiff.abs() > 0.01) return depthDiff < 0 ? -1 : 1;
-      // Within the same depth band: sort by face category priority (back → front)
+      if (depthDiff.abs() > 0.05) return depthDiff < 0 ? -1 : 1;
+
       final pa = _facePriority(a.faceId);
       final pb = _facePriority(b.faceId);
       return pa.compareTo(pb);
@@ -1256,10 +1522,7 @@ class _Viewport3dPainter extends CustomPainter {
     // In glass mode, thickness-shell faces (RIM, CHAMFER, BORE, FILLET) are rendered opaque
     // and only the planar plate faces receive alpha transparency.
     bool isThicknessShell(String faceId) =>
-        faceId.startsWith('RIM_') ||
-        faceId.startsWith('CHAMFER_') ||
-        faceId.startsWith('BORE_') ||
-        faceId.startsWith('FILLET_');
+        faceId.startsWith('RIM_') || faceId.startsWith('CHAMFER_') || faceId.startsWith('BORE_') || faceId.startsWith('FILLET_');
 
     // Fix 3: In glass mode, pre-render the opaque thickness shell first so it
     // always sits on top of the transparent plate surfaces.
@@ -1282,16 +1545,41 @@ class _Viewport3dPainter extends CustomPainter {
       // and draw them in Pass 2 below.
       if (isGlassMode && isThicknessShell(item.faceId)) continue;
 
+      if (item.faceId.startsWith('PORT_MOUTH_')) {
+        // Glowing thick border of port (no loud aperture wash; hidden behind front metal)
+        final glowBorderPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5.2
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = const Color(0xFF00E5FF).withValues(alpha: item.isHighlighted ? 0.55 : 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.2);
+        canvas.drawPath(item.fillPath, glowBorderPaint);
+
+        final coreBorderPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = item.isHighlighted ? 3.0 : 2.4
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = const Color(0xFF00E5FF);
+        canvas.drawPath(item.fillPath, coreBorderPaint);
+
+        // Floor threshold marker line
+        if (item.cuts.isNotEmpty && item.cuts.first.length >= 2) {
+          final floorThresholdPaint = Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3.0
+            ..color = const Color(0xFF0284C7);
+          canvas.drawLine(item.cuts.first[0], item.cuts.first[1], floorThresholdPaint);
+        }
+        continue;
+      }
+
       if (!item.fillPath.getBounds().isEmpty && item.color.a > 0.0) {
         Color drawColor = item.color;
         if (isGlassMode) {
           // Plate faces: render as translucent steel
-          drawColor = Color.from(
-            alpha: 0.35,
-            red: item.color.r,
-            green: item.color.g,
-            blue: item.color.b,
-          );
+          drawColor = Color.from(alpha: 0.35, red: item.color.r, green: item.color.g, blue: item.color.b);
         }
         facePaint.color = drawColor;
         if (item.clipBoundary != null) {
@@ -1350,9 +1638,7 @@ class _Viewport3dPainter extends CustomPainter {
         ..strokeWidth = 0.9;
 
       // Only compare plate faces (top and _BOT): skip the thickness shell entirely
-      final panelItems = drawList
-          .where((item) => !isThicknessShell(item.faceId))
-          .toList();
+      final panelItems = drawList.where((item) => !isThicknessShell(item.faceId)).toList();
 
       for (int i = 0; i < panelItems.length; i++) {
         final backItem = panelItems[i];
@@ -1361,19 +1647,13 @@ class _Viewport3dPainter extends CustomPainter {
         for (int j = i + 1; j < panelItems.length; j++) {
           final frontItem = panelItems[j];
           if (frontItem.fillPath.getBounds().isEmpty) continue;
-          if (!backItem.fillPath.getBounds().overlaps(
-            frontItem.fillPath.getBounds(),
-          )) {
+          if (!backItem.fillPath.getBounds().overlaps(frontItem.fillPath.getBounds())) {
             continue;
           }
 
           // Compute exact region where back face was covered by front face
           try {
-            final covered = Path.combine(
-              PathOperation.intersect,
-              backItem.fillPath,
-              frontItem.fillPath,
-            );
+            final covered = Path.combine(PathOperation.intersect, backItem.fillPath, frontItem.fillPath);
             if (!covered.getBounds().isEmpty) {
               canvas.drawPath(covered, glassOccludedPaint);
 
@@ -1392,7 +1672,7 @@ class _Viewport3dPainter extends CustomPainter {
       }
     }
 
-    // PASS 3: Render 3D Channel Mouth Aperture Perimeter Highlight Loops
+    // PASS 3: Render Coplanar Port Tag Pill Callouts (visible over the body)
     for (final port in activePorts) {
       List<CadPoint3D> corners = port.derivedMouthCorners;
       if (corners.length < 4 && port.width > 1.0 && port.height > 1.0) {
@@ -1430,44 +1710,9 @@ class _Viewport3dPainter extends CustomPainter {
         final p2 = project(corners[2]).pt;
         final p3 = project(corners[3]).pt;
 
-        final mouthPath = Path()
-          ..moveTo(p0.dx, p0.dy)
-          ..lineTo(p1.dx, p1.dy)
-          ..lineTo(p2.dx, p2.dy)
-          ..lineTo(p3.dx, p3.dy)
-          ..close();
-
-        // High-visibility cyan aperture wash
-        final fillPaint = Paint()
-          ..style = PaintingStyle.fill
-          ..color = const Color(0xFF00E5FF).withValues(alpha: 0.18);
-        canvas.drawPath(mouthPath, fillPaint);
-
-        // Vibrant glowing border line loop (P1 -> P3 -> P4 -> P2 -> P1)
-        final borderPaint = Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.4
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..color = const Color(0xFF00E5FF);
-        canvas.drawPath(mouthPath, borderPaint);
-
-        // Floor threshold marker line (P1 -> P2)
-        final floorThresholdPaint = Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.0
-          ..color = const Color(0xFF0284C7);
-        canvas.drawLine(p0, p3, floorThresholdPaint);
-
-        // --- Sleeping Coplanar Port Tag Pill (laying flat on the glassy face) ---
-        final faceCenter = Offset(
-          (p0.dx + p1.dx + p2.dx + p3.dx) / 4.0,
-          (p0.dy + p1.dy + p2.dy + p3.dy) / 4.0,
-        );
-        final vWidth = Offset(
-          (p3.dx - p0.dx + p2.dx - p1.dx) / 2.0,
-          (p3.dy - p0.dy + p2.dy - p1.dy) / 2.0,
-        );
+        // --- Sleeping Coplanar Port Tag Pill (laying flat on the mouth plane) ---
+        final faceCenter = Offset((p0.dx + p1.dx + p2.dx + p3.dx) / 4.0, (p0.dy + p1.dy + p2.dy + p3.dy) / 4.0);
+        final vWidth = Offset((p3.dx - p0.dx + p2.dx - p1.dx) / 2.0, (p3.dy - p0.dy + p2.dy - p1.dy) / 2.0);
         var tagAngle = math.atan2(vWidth.dy, vWidth.dx);
         if (tagAngle > math.pi / 2.0) tagAngle -= math.pi;
         if (tagAngle < -math.pi / 2.0) tagAngle += math.pi;
@@ -1475,10 +1720,7 @@ class _Viewport3dPainter extends CustomPainter {
         final isFocused = port.id == focusedPortId;
         const pillWidth = 114.0;
         const pillHeight = 32.0;
-        final pillRRect = RRect.fromRectAndRadius(
-          Rect.fromCenter(center: Offset.zero, width: pillWidth, height: pillHeight),
-          const Radius.circular(6.0),
-        );
+        final pillRRect = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: pillWidth, height: pillHeight), const Radius.circular(6.0));
 
         canvas.save();
         canvas.translate(faceCenter.dx, faceCenter.dy);
@@ -1521,26 +1763,15 @@ class _Viewport3dPainter extends CustomPainter {
             letterSpacing: 0.5,
           ),
         );
-        final idPainter = TextPainter(
-          text: idSpan,
-          textDirection: TextDirection.ltr,
-        )..layout();
+        final idPainter = TextPainter(text: idSpan, textDirection: TextDirection.ltr)..layout();
         idPainter.paint(canvas, Offset(-pillWidth / 2.0 + 20.0, -pillHeight / 2.0 + 4.0));
 
         // Dimensions (bottom line)
         final dimSpan = TextSpan(
-          text: '${port.width.toStringAsFixed(1)} × ${port.height.toStringAsFixed(1)} mm',
-          style: const TextStyle(
-            fontSize: 9.0,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-            fontFamily: 'monospace',
-          ),
+          text: port.displayDimensions,
+          style: const TextStyle(fontSize: 9.0, fontWeight: FontWeight.w700, color: Colors.white, fontFamily: 'monospace'),
         );
-        final dimPainter = TextPainter(
-          text: dimSpan,
-          textDirection: TextDirection.ltr,
-        )..layout();
+        final dimPainter = TextPainter(text: dimSpan, textDirection: TextDirection.ltr)..layout();
         dimPainter.paint(canvas, Offset(-pillWidth / 2.0 + 20.0, -pillHeight / 2.0 + 16.5));
 
         canvas.restore();
@@ -1553,24 +1784,25 @@ class _Viewport3dPainter extends CustomPainter {
   /// Higher priority → drawn last (in front).
   static int _facePriority(String faceId) {
     // Thickness shell: always in front of plate faces
-    if (faceId.startsWith('FILLET_CAP')) return 5;
-    if (faceId.startsWith('CHAMFER_CAP')) return 5;
-    if (faceId.startsWith('RIM_')) return 5;
-    if (faceId.startsWith('CHAMFER_')) return 5;
+    if (faceId.startsWith('FILLET_CAP')) return 6;
+    if (faceId.startsWith('CHAMFER_CAP')) return 6;
+    if (faceId.startsWith('RIM_')) return 6;
+    if (faceId.startsWith('CHAMFER_')) return 6;
     // Outer convex fillet surface
-    if (faceId.startsWith('FILLET_OUT_')) return 4;
-    // Standard top plate face
-    if (!faceId.endsWith('_BOT') &&
-        !faceId.startsWith('FILLET_') &&
-        !faceId.startsWith('BORE_')) {
+    if (faceId.startsWith('FILLET_OUT_')) return 5;
+    // Cover main top plate
+    if (faceId.startsWith('COVER_MAIN') || faceId.endsWith('MAIN_FACE')) return 4;
+    // Standard plate face (both top and _BOT surfaces)
+    if (!faceId.startsWith('FILLET_') && !faceId.startsWith('BORE_') && !faceId.startsWith('COVER_CF_')) {
       return 3;
     }
-    // Bore walls: behind rim but in front of bottom plate
+    // Cover downward flange
+    if (faceId.startsWith('COVER_CF_')) return 2;
+    // Bore walls: inside holes
     if (faceId.startsWith('BORE_')) return 2;
-    // Inner concave fillet: behind the top plate
+    // Inner concave fillet: behind the plate
     if (faceId.startsWith('FILLET_')) return 1;
-    // Bottom plate face: always behind
-    if (faceId.endsWith('_BOT')) return 0;
+    if (faceId.startsWith('PORT_MOUTH_')) return 2;
     return 3;
   }
 
@@ -1657,13 +1889,7 @@ class _FloatingCover3DViewerState extends State<_FloatingCover3DViewer> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFF0284C7), width: 1.4),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Column(
           children: [
@@ -1678,10 +1904,7 @@ class _FloatingCover3DViewerState extends State<_FloatingCover3DViewer> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: const BoxDecoration(
                   color: Color(0xFF0F172A),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(6.6),
-                    topRight: Radius.circular(6.6),
-                  ),
+                  borderRadius: BorderRadius.only(topLeft: Radius.circular(6.6), topRight: Radius.circular(6.6)),
                 ),
                 child: Row(
                   children: [
@@ -1690,12 +1913,7 @@ class _FloatingCover3DViewerState extends State<_FloatingCover3DViewer> {
                     const Expanded(
                       child: Text(
                         'COVER 3D VIEWER',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.6,
-                        ),
+                        style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.6),
                       ),
                     ),
                     InkWell(
@@ -1732,8 +1950,7 @@ class _FloatingCover3DViewerState extends State<_FloatingCover3DViewer> {
                   onPointerSignal: (event) {
                     if (event is PointerScrollEvent) {
                       setState(() {
-                        _zoom = (_zoom * (event.scrollDelta.dy < 0 ? 1.15 : 0.87))
-                            .clamp(0.2, 5.0);
+                        _zoom = (_zoom * (event.scrollDelta.dy < 0 ? 1.15 : 0.87)).clamp(0.2, 5.0);
                       });
                     }
                   },
@@ -1769,30 +1986,16 @@ class _FloatingCover3DViewerState extends State<_FloatingCover3DViewer> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: const BoxDecoration(
                 color: Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(6.6),
-                  bottomRight: Radius.circular(6.6),
-                ),
+                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(6.6), bottomRight: Radius.circular(6.6)),
               ),
               child: Row(
                 children: [
                   Text(
-                    '${coverMesh.boundWidth.toStringAsFixed(0)} x ${coverMesh.boundLength.toStringAsFixed(0)} x ${coverMesh.boundHeight.toStringAsFixed(0)} mm',
-                    style: const TextStyle(
-                      color: Color(0xFF0284C7),
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'monospace',
-                    ),
+                    '${toNominalSize(coverMesh.boundWidth).toStringAsFixed(0)} x ${toNominalSize(coverMesh.boundLength).toStringAsFixed(0)} x ${coverMesh.boundHeight.toStringAsFixed(0)} mm',
+                    style: const TextStyle(color: Color(0xFF0284C7), fontSize: 9.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
                   ),
                   const Spacer(),
-                  const Text(
-                    'Drag to orbit • Scroll to zoom',
-                    style: TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 9,
-                    ),
-                  ),
+                  const Text('Drag to orbit • Scroll to zoom', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9)),
                 ],
               ),
             ),
@@ -1808,11 +2011,7 @@ class _Cover3DMoveHud extends StatefulWidget {
   final bool isVerticalOnly;
   final ValueChanged<bool> onToggleVerticalOnly;
 
-  const _Cover3DMoveHud({
-    required this.viewModel,
-    required this.isVerticalOnly,
-    required this.onToggleVerticalOnly,
-  });
+  const _Cover3DMoveHud({required this.viewModel, required this.isVerticalOnly, required this.onToggleVerticalOnly});
 
   @override
   State<_Cover3DMoveHud> createState() => _Cover3DMoveHudState();
@@ -1839,13 +2038,7 @@ class _Cover3DMoveHudState extends State<_Cover3DMoveHud> {
           color: Colors.white.withValues(alpha: 0.96),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFF8B5CF6), width: 1.4),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1862,10 +2055,7 @@ class _Cover3DMoveHudState extends State<_Cover3DMoveHud> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: const BoxDecoration(
                   color: Color(0xFF1E1B4B),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(6.6),
-                    topRight: Radius.circular(6.6),
-                  ),
+                  borderRadius: BorderRadius.only(topLeft: Radius.circular(6.6), topRight: Radius.circular(6.6)),
                 ),
                 child: Row(
                   children: [
@@ -1874,12 +2064,7 @@ class _Cover3DMoveHudState extends State<_Cover3DMoveHud> {
                     const Expanded(
                       child: Text(
                         '3D COVER POSITION & EXPLODE',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.4,
-                        ),
+                        style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold, letterSpacing: 0.4),
                       ),
                     ),
                     InkWell(
@@ -1917,12 +2102,7 @@ class _Cover3DMoveHudState extends State<_Cover3DMoveHud> {
                         ),
                         child: Text(
                           liftZ >= 0 ? '+${liftZ.toStringAsFixed(0)} mm' : '${liftZ.toStringAsFixed(0)} mm',
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF7E22CE),
-                            fontFamily: 'monospace',
-                          ),
+                          style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF7E22CE), fontFamily: 'monospace'),
                         ),
                       ),
                     ],
@@ -1975,6 +2155,37 @@ class _Cover3DMoveHudState extends State<_Cover3DMoveHud> {
                         vm.setCoverLiftZ(150);
                         vm.commitCover3DMove();
                       }),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 8),
+
+                  // Cover Flange Depth Controls
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Flange Depth:',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                      ),
+                      Text(
+                        '${vm.coverFlangeDepth.toStringAsFixed(0)} mm',
+                        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF0284C7), fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      _presetChip('8mm', (vm.coverFlangeDepth - 8).abs() < 0.5, () => vm.setCoverFlangeDepth(8)),
+                      _presetChip('10mm', (vm.coverFlangeDepth - 10).abs() < 0.5, () => vm.setCoverFlangeDepth(10)),
+                      _presetChip('12mm (Def)', (vm.coverFlangeDepth - 12).abs() < 0.5, () => vm.setCoverFlangeDepth(12)),
+                      _presetChip('15mm', (vm.coverFlangeDepth - 15).abs() < 0.5, () => vm.setCoverFlangeDepth(15)),
+                      _presetChip('20mm', (vm.coverFlangeDepth - 20).abs() < 0.5, () => vm.setCoverFlangeDepth(20)),
                     ],
                   ),
 
@@ -2079,10 +2290,7 @@ class _Cover3DMoveHudState extends State<_Cover3DMoveHud> {
                       IconButton(
                         icon: const Icon(Icons.replay, size: 14),
                         tooltip: 'Reset 3D Offset to (0,0,0)',
-                        style: IconButton.styleFrom(
-                          padding: const EdgeInsets.all(6),
-                          backgroundColor: const Color(0xFFF1F5F9),
-                        ),
+                        style: IconButton.styleFrom(padding: const EdgeInsets.all(6), backgroundColor: const Color(0xFFF1F5F9)),
                         onPressed: () {
                           vm.resetCover3DOffset();
                         },
@@ -2102,9 +2310,7 @@ class _Cover3DMoveHudState extends State<_Cover3DMoveHud> {
                       decoration: BoxDecoration(
                         color: widget.isVerticalOnly ? const Color(0xFFF3E8FF) : const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: widget.isVerticalOnly ? const Color(0xFFC084FC) : const Color(0xFFE2E8F0),
-                        ),
+                        border: Border.all(color: widget.isVerticalOnly ? const Color(0xFFC084FC) : const Color(0xFFE2E8F0)),
                       ),
                       child: Row(
                         children: [
@@ -2168,22 +2374,13 @@ class _Cover3DMoveHudState extends State<_Cover3DMoveHud> {
         ),
         child: Text(
           label,
-          style: TextStyle(
-            fontSize: 9,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? Colors.white : const Color(0xFF475569),
-          ),
+          style: TextStyle(fontSize: 9, fontWeight: isSelected ? FontWeight.bold : FontWeight.w500, color: isSelected ? Colors.white : const Color(0xFF475569)),
         ),
       ),
     );
   }
 
-  Widget _axisStepper({
-    required String label,
-    required double val,
-    required VoidCallback onDec,
-    required VoidCallback onInc,
-  }) {
+  Widget _axisStepper({required String label, required double val, required VoidCallback onDec, required VoidCallback onInc}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
       decoration: BoxDecoration(
@@ -2196,8 +2393,14 @@ class _Cover3DMoveHudState extends State<_Cover3DMoveHud> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label, style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
-              Text(val.toStringAsFixed(0), style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF0F172A), fontFamily: 'monospace')),
+              Text(
+                label,
+                style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+              ),
+              Text(
+                val.toStringAsFixed(0),
+                style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF0F172A), fontFamily: 'monospace'),
+              ),
             ],
           ),
           const SizedBox(height: 2),

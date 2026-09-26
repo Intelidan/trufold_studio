@@ -12,6 +12,7 @@ import '../../models/cad_primitives.dart';
 import '../../models/dsf_document.dart';
 import '../../models/cms/cms_ux_state.dart';
 import 'cms_3d_opening_detector.dart';
+import 'cms_scaling_controller.dart';
 
 class CmsMeasuredOpening {
   final String openingId;
@@ -78,6 +79,12 @@ class CmsOpeningPlaneAnalyzer {
     final p1 = raw.floorEdgeP1;
     final p2 = raw.floorEdgeP2;
 
+    final docType = '${document.productType} ${document.itemName}'.toLowerCase();
+    final isReducer = docType.contains('reducer') || CmsScalingController.isReducerGeometry(document);
+    final isOutsideRiser = !isReducer && docType.contains('outside') && (docType.contains('riser') || docType.contains('rise'));
+    final isInsideRiser = !isReducer && ((docType.contains('inside') && (docType.contains('riser') || docType.contains('rise'))) ||
+        CmsScalingController.isInsideRiserGeometry(document));
+
     // 1. Measure opening width directly from floor edge length
     final dx = p2.x - p1.x;
     final dy = p2.y - p1.y;
@@ -111,6 +118,10 @@ class CmsOpeningPlaneAnalyzer {
       for (final poly in foldResult.polygons) {
         if (raw.sidewallFaceIds.contains(poly.faceId)) {
           for (final v in poly.vertices) {
+            final distNormal = ((v.x - p1.x) * normal.x +
+                                (v.y - p1.y) * normal.y +
+                                (v.z - p1.z) * normal.z).abs();
+            if (distNormal > 10.0) continue;
             final proj = (v.x - p1.x) * hx + (v.y - p1.y) * hy + (v.z - p1.z) * hz;
             if (proj.abs() > 2.0) {
               dotSum += proj;
@@ -157,7 +168,27 @@ class CmsOpeningPlaneAnalyzer {
     // 5. Measure height and find top lip from 3D folded mesh
     // Determine nominal height from parameters or file name if available
     double? nominalH = fallbackHeight ?? (document.parameters['height'] as num?)?.toDouble();
-    if (nominalH == null || nominalH <= 15.0) {
+    if (isReducer) {
+      final floorFace = document.faces.firstWhere((f) => f.id == raw.floorFaceId, orElse: () => document.faces.first);
+      final yMid = (floorFace.vertices.map((v) => v.y).reduce(math.min) + floorFace.vertices.map((v) => v.y).reduce(math.max)) / 2.0;
+      final isPort1 = (raw.flatFloorEdgeP1.y + raw.flatFloorEdgeP2.y) / 2.0 < yMid;
+      nominalH = isPort1
+          ? ((document.parameters['port1_height'] as num?)?.toDouble() ?? (document.parameters['height'] as num?)?.toDouble())
+          : ((document.parameters['port2_height'] as num?)?.toDouble());
+
+      if (nominalH == null || nominalH <= 15.0) {
+        final fullMatch = RegExp(r'(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
+        if (fullMatch != null) {
+          nominalH = isPort1 ? double.tryParse(fullMatch.group(2)!) : double.tryParse(fullMatch.group(4)!);
+        } else {
+          final simpleMatch = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
+          if (simpleMatch != null) {
+            nominalH = isPort1 ? double.tryParse(simpleMatch.group(2)!) : (double.tryParse(simpleMatch.group(2)!) ?? 100.0) / 2.0;
+          }
+        }
+      }
+      nominalH ??= isPort1 ? 100.0 : 50.0;
+    } else if (nominalH == null || nominalH <= 15.0) {
       final match = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
       if (match != null) {
         nominalH = double.tryParse(match.group(2)!);
@@ -198,7 +229,9 @@ class CmsOpeningPlaneAnalyzer {
 
       if (candidateHeights.isNotEmpty) {
         candidateHeights.sort();
-        if (nominalH != null && nominalH > 15.0) {
+        if ((isOutsideRiser || isInsideRiser || isReducer) && nominalH != null && nominalH > 15.0) {
+          measuredHeight = nominalH;
+        } else if (nominalH != null && nominalH > 15.0) {
           // If nominal height is known (e.g. 100mm), choose the candidate closest to nominal height
           // that does not exceed nominal (to avoid picking up flange/coupler tabs that stick above the channel)
           final validCandidates = candidateHeights.where((h) => h <= nominalH! * 1.05).toList();
@@ -253,7 +286,7 @@ class CmsOpeningPlaneAnalyzer {
       }
       if (maxZ.isFinite && minZ.isFinite) {
         // Check +Z protrusion
-        if (heightDirection.z > 1e-4) {
+        if (!isOutsideRiser && !isInsideRiser && heightDirection.z > 1e-4) {
           final currentMaxZ = math.max(
             p1.z + measuredHeight * heightDirection.z,
             p2.z + measuredHeight * heightDirection.z,
