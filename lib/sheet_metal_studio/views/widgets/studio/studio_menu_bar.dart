@@ -34,6 +34,7 @@ class StudioMenuBar extends StatelessWidget {
   final VoidCallback? onLoadSampleTray;
   final VoidCallback? onOpenTemplateLibrary;
   final VoidCallback? onOpenTemplateAuthoring;
+  final VoidCallback? onOpenTdsWindow;
   final Future<void> Function(BuildContext, SheetMetalStudioViewModel) onConfirmClearAll;
 
   const StudioMenuBar({
@@ -51,6 +52,7 @@ class StudioMenuBar extends StatelessWidget {
     this.onLoadSampleTray,
     this.onOpenTemplateLibrary,
     this.onOpenTemplateAuthoring,
+    this.onOpenTdsWindow,
     required this.onConfirmClearAll,
   });
 
@@ -302,15 +304,21 @@ class StudioMenuBar extends StatelessWidget {
         shortcut: 'TDS',
         themeColor: const Color(0xFF0284C7),
         onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => DdsWorkspaceScreen(
-                onOpenInEditor: (dsfDoc) {
-                  viewModel.loadDocument(dsfDoc);
-                },
+          if (onOpenTdsWindow != null) {
+            onOpenTdsWindow!();
+          } else {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => DdsWorkspaceScreen(
+                  linkedViewModel: viewModel,
+                  isLightTheme: true,
+                  onOpenInEditor: (dsfDoc) {
+                    viewModel.loadDocument(dsfDoc);
+                  },
+                ),
               ),
-            ),
-          );
+            );
+          }
         },
       ),
       const PopupMenuDivider(),

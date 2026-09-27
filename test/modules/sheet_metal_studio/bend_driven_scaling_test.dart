@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/constraints/geometric_constraint_solver.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/kinematic_fold_engine.dart';
@@ -70,11 +70,7 @@ void main() {
       final scaledB1 = scaled.bends.firstWhere((b) => b.id == 'B1');
       final origB1Len = (origB1.p2.x - origB1.p1.x).abs();
       final scaledB1Len = (scaledB1.p2.x - scaledB1.p1.x).abs();
-      expect(
-        (scaledB1Len - origB1Len).abs(),
-        lessThan(0.5),
-        reason: 'Outer B1 spine length must be fixed (drawing length does not expand)',
-      );
+      expect((scaledB1Len - origB1Len).abs(), lessThan(0.5), reason: 'Outer B1 spine length must be fixed (drawing length does not expand)');
 
       // ── Invariant W2: Port 1 and Port 2 floor edge widths expand by dW ──────
       final origB3 = doc.bends.firstWhere((b) => b.id == 'B3');
@@ -86,11 +82,7 @@ void main() {
 
       final origPort1W = origB3Base.distanceTo(origB1Left);
       final scaledPort1W = scaledB3Base.distanceTo(scaledB1Left);
-      expect(
-        (scaledPort1W - (origPort1W + dW)).abs(),
-        lessThan(0.5),
-        reason: 'Port 1 mouth width must expand by exactly dW',
-      );
+      expect((scaledPort1W - (origPort1W + dW)).abs(), lessThan(0.5), reason: 'Port 1 mouth width must expand by exactly dW');
 
       final origB2 = doc.bends.firstWhere((b) => b.id == 'B2');
       final scaledB2 = scaled.bends.firstWhere((b) => b.id == 'B2');
@@ -101,11 +93,7 @@ void main() {
 
       final origPort2W = origB2Base.distanceTo(origB1Right);
       final scaledPort2W = scaledB2Base.distanceTo(scaledB1Right);
-      expect(
-        (scaledPort2W - (origPort2W + dW)).abs(),
-        lessThan(0.5),
-        reason: 'Port 2 mouth width must expand by exactly dW',
-      );
+      expect((scaledPort2W - (origPort2W + dW)).abs(), lessThan(0.5), reason: 'Port 2 mouth width must expand by exactly dW');
 
       // ── Invariant W3: All 8 coupler punches rigid (size unchanged) ────────────
       expect(scaled.punches.length, equals(8));
@@ -118,17 +106,9 @@ void main() {
       // ── Invariant W4: Apex remains on symmetry axis ─────────────────────────
       final origBounds = _computeContourBounds(doc.outerContour);
       final origXCenter = (origBounds.minX + origBounds.maxX) / 2.0;
-      final origApexB2 = doc.bends.firstWhere(
-        (b) => (b.p1.x - origXCenter).abs() < 5.0 && b.p1.y > 150.0,
-      );
-      final scaledApexB2 = scaled.bends.firstWhere(
-        (b) => b.id == origApexB2.id,
-      );
-      expect(
-        (scaledApexB2.p1.x - origXCenter).abs(),
-        lessThan(2.0),
-        reason: 'Apex x must remain on symmetry axis',
-      );
+      final origApexB2 = doc.bends.firstWhere((b) => (b.p1.x - origXCenter).abs() < 5.0 && b.p1.y > 150.0);
+      final scaledApexB2 = scaled.bends.firstWhere((b) => b.id == origApexB2.id);
+      expect((scaledApexB2.p1.x - origXCenter).abs(), lessThan(2.0), reason: 'Apex x must remain on symmetry axis');
 
       // ── Invariant W5: 3D fold and port topology preserved ────────────────────
       final foldResult = KinematicFoldEngine.foldDocument(scaled);
@@ -177,21 +157,13 @@ void main() {
       // ── Invariant H2: Outer wall grows down by dH away from B1 ───────────────
       final origB1 = doc.bends.firstWhere((b) => b.id == 'B1');
       final scaledB1 = scaled.bends.firstWhere((b) => b.id == 'B1');
-      expect(
-        (scaledB1.p1.y - origB1.p1.y).abs(),
-        lessThan(0.5),
-        reason: 'B1 outer wall fold line remains fixed on the floor',
-      );
+      expect((scaledB1.p1.y - origB1.p1.y).abs(), lessThan(0.5), reason: 'B1 outer wall fold line remains fixed on the floor');
 
       final origFL1 = doc.bends.firstWhere((b) => b.id == 'FL1');
       final scaledFL1 = scaled.bends.firstWhere((b) => b.id == 'FL1');
       final origOuterWallH = (origB1.p1.y - origFL1.p1.y).abs();
       final scaledOuterWallH = (scaledB1.p1.y - scaledFL1.p1.y).abs();
-      expect(
-        (scaledOuterWallH - (origOuterWallH + dH)).abs(),
-        lessThan(1.0),
-        reason: 'Outer wall height must increase by dH',
-      );
+      expect((scaledOuterWallH - (origOuterWallH + dH)).abs(), lessThan(1.0), reason: 'Outer wall height must increase by dH');
 
       // ── Invariant H3: Left inner wall grows in height by dH ──────────────────
       final origB3 = doc.bends.firstWhere((b) => b.id == 'B3');
@@ -199,19 +171,11 @@ void main() {
       final origFL3 = doc.bends.firstWhere((b) => b.id == 'FL3');
       final scaledFL3 = scaled.bends.firstWhere((b) => b.id == 'FL3');
       // B3 bend line remains stationary on the floor web
-      expect(
-        scaledB3.p1.distanceTo(origB3.p1),
-        lessThan(0.5),
-        reason: 'B3 bend line must stay fixed on the floor when height scales',
-      );
+      expect(scaledB3.p1.distanceTo(origB3.p1), lessThan(0.5), reason: 'B3 bend line must stay fixed on the floor when height scales');
       // Distance from B3 to FL3 increases by dH
       final origLeftWallH = origB3.p1.distanceTo(origFL3.p1);
       final scaledLeftWallH = scaledB3.p1.distanceTo(scaledFL3.p1);
-      expect(
-        (scaledLeftWallH - (origLeftWallH + dH)).abs(),
-        lessThan(1.0),
-        reason: 'Left inner wall must grow by dH (not a sitting duck)',
-      );
+      expect((scaledLeftWallH - (origLeftWallH + dH)).abs(), lessThan(1.0), reason: 'Left inner wall must grow by dH (not a sitting duck)');
 
       // ── Invariant H4: Right inner wall grows in height by dH ─────────────────
       final origB2 = doc.bends.firstWhere((b) => b.id == 'B2');
@@ -219,27 +183,15 @@ void main() {
       final origFL2 = doc.bends.firstWhere((b) => b.id == 'FL2');
       final scaledFL2 = scaled.bends.firstWhere((b) => b.id == 'FL2');
       // B2 bend line remains stationary on the floor web
-      expect(
-        scaledB2.p2.distanceTo(origB2.p2),
-        lessThan(0.5),
-        reason: 'B2 bend line must stay fixed on the floor when height scales',
-      );
+      expect(scaledB2.p2.distanceTo(origB2.p2), lessThan(0.5), reason: 'B2 bend line must stay fixed on the floor when height scales');
       final origRightWallH = origB2.p2.distanceTo(origFL2.p2);
       final scaledRightWallH = scaledB2.p2.distanceTo(scaledFL2.p2);
-      expect(
-        (scaledRightWallH - (origRightWallH + dH)).abs(),
-        lessThan(1.0),
-        reason: 'Right inner wall must grow by dH (not a sitting duck)',
-      );
+      expect((scaledRightWallH - (origRightWallH + dH)).abs(), lessThan(1.0), reason: 'Right inner wall must grow by dH (not a sitting duck)');
 
       // ── Invariant H5: Floor apex is invariant to dH (slit angle preserved) ───
       final origApex = origB2.p1;
       final scaledApex = scaledB2.p1;
-      expect(
-        scaledApex.distanceTo(origApex),
-        lessThan(0.5),
-        reason: 'Floor apex must not move when height changes; slit angle preserved',
-      );
+      expect(scaledApex.distanceTo(origApex), lessThan(0.5), reason: 'Floor apex must not move when height changes; slit angle preserved');
 
       // ── Invariant H6: 3D fold and port topology preserved ────────────────────
       final foldResult = KinematicFoldEngine.foldDocument(scaled);
@@ -287,19 +239,11 @@ void main() {
       // ── Invariant FL2: FL3 and FL2 flange roots unchanged (wall height unchanged) ─
       final origFL3 = doc.bends.firstWhere((b) => b.id == 'FL3');
       final scaledFL3 = scaled.bends.firstWhere((b) => b.id == 'FL3');
-      expect(
-        scaledFL3.p1.distanceTo(origFL3.p1),
-        lessThan(0.5),
-        reason: 'FL3 bend line must not move when only dFL changes',
-      );
+      expect(scaledFL3.p1.distanceTo(origFL3.p1), lessThan(0.5), reason: 'FL3 bend line must not move when only dFL changes');
 
       final origFL2 = doc.bends.firstWhere((b) => b.id == 'FL2');
       final scaledFL2 = scaled.bends.firstWhere((b) => b.id == 'FL2');
-      expect(
-        scaledFL2.p2.distanceTo(origFL2.p2),
-        lessThan(0.5),
-        reason: 'FL2 bend line must not move when only dFL changes',
-      );
+      expect(scaledFL2.p2.distanceTo(origFL2.p2), lessThan(0.5), reason: 'FL2 bend line must not move when only dFL changes');
 
       // ── Invariant FL3: 3D fold and port topology preserved ───────────────────
       final foldResult = KinematicFoldEngine.foldDocument(scaled);
@@ -320,11 +264,7 @@ void main() {
         name: '45 Deg Bend Fitting',
         category: 'Trunking Fittings',
         productType: 'Bend',
-        baselineParameters: {
-          'width': 100.0,
-          'height': 50.0,
-          'flangeWidth': 15.0,
-        },
+        baselineParameters: {'width': 100.0, 'height': 50.0, 'flangeWidth': 15.0},
         parameters: const [
           CadParameter(id: 'width', name: 'Width', value: 100.0),
           CadParameter(id: 'height', name: 'Height', value: 50.0),
@@ -336,11 +276,7 @@ void main() {
       final morphedDoc = TopologicalZoneMorpher.morph(
         baselineDocument: doc,
         template: template,
-        targetParameters: {
-          'width': 160.0,
-          'height': 75.0,
-          'flangeWidth': 20.0,
-        },
+        targetParameters: {'width': 160.0, 'height': 75.0, 'flangeWidth': 20.0},
       );
 
       expect(morphedDoc.punches.length, equals(8));
@@ -352,13 +288,7 @@ void main() {
       }
 
       // 2. Solve through GeometricConstraintSolver
-      final solveResult = GeometricConstraintSolver.solve(
-        document: morphedDoc,
-        parameterOverrides: {
-          'width': 160.0,
-          'height': 75.0,
-        },
-      );
+      final solveResult = GeometricConstraintSolver.solve(document: morphedDoc, parameterOverrides: {'width': 160.0, 'height': 75.0});
 
       expect(solveResult.success, isTrue);
       final finalDoc = solveResult.updatedDocument;
@@ -402,4 +332,3 @@ class CadBounds2D {
   final double minX, maxX, minY, maxY;
   const CadBounds2D({required this.minX, required this.maxX, required this.minY, required this.maxY});
 }
-

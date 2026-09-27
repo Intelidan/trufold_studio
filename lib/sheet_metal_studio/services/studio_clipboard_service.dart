@@ -16,6 +16,8 @@ import '../models/cnc_punch_primitive.dart';
 import '../models/perforation_pattern.dart';
 import '../models/fold_bend_line.dart';
 import '../models/cad_primitives.dart';
+import '../models/dds/dds_annotation.dart';
+import '../models/dds/dds_sheet.dart';
 import '../viewmodels/sheet_metal_studio_viewmodel.dart';
 
 enum ClipboardContentType {
@@ -23,6 +25,7 @@ enum ClipboardContentType {
   pattern,
   bend,
   cut,
+  annotation,
   multiple,
 }
 
@@ -64,8 +67,37 @@ class StudioClipboardService {
   /// Returns true if there is an item in memory or available on the clipboard
   static bool get hasContent => _inMemoryItem != null;
 
+  /// Returns true if an annotation component is held in clipboard
+  static bool get hasAnnotationContent => _inMemoryItem?.type == ClipboardContentType.annotation;
+
+  /// Returns true if a CAD primitive is held in clipboard
+  static bool get hasCadContent => _inMemoryItem != null && _inMemoryItem!.type != ClipboardContentType.annotation;
+
   /// Label of current item in clipboard
   static String get currentLabel => _inMemoryItem?.label ?? 'Empty';
+
+  /// Copies a DDS drawing annotation into the dedicated component clipboard.
+  /// Preserves the user's OS plain text clipboard untouched.
+  static bool copyAnnotation(DdsAnnotation annotation) {
+    final item = StudioClipboardItem(
+      type: ClipboardContentType.annotation,
+      data: annotation.toJson(),
+      label: 'Annotation (${annotation.type.name.toUpperCase()} ${annotation.id})',
+    );
+    _inMemoryItem = item;
+    return true;
+  }
+
+  /// Pastes the component / annotation currently in clipboard into the given TDS Sheet.
+  static DdsAnnotation? pasteAnnotationIntoSheet(DdsSheet sheet, {double offsetX = 10.0, double offsetY = 10.0}) {
+    if (_inMemoryItem == null || _inMemoryItem!.type != ClipboardContentType.annotation) {
+      return null;
+    }
+    final original = DdsAnnotation.fromJson(_inMemoryItem!.data);
+    final timestamp = DateTime.now().millisecondsSinceEpoch % 10000;
+    final newId = '${original.id}_cpy_$timestamp';
+    return original.withOffset(offsetX, offsetY, newId: newId);
+  }
 
   /// Copies currently selected entity from the given ViewModel into clipboard
   static Future<bool> copySelection(SheetMetalStudioViewModel vm) async {
@@ -138,23 +170,25 @@ class StudioClipboardService {
     return false;
   }
 
-  static Future<bool> _storeClipboard(StudioClipboardItem item) async {
+  static Future<bool> _storeClipboard(StudioClipboardItem item, {bool syncToSystemClipboard = false}) async {
     _inMemoryItem = item;
-    try {
-      final jsonStr = jsonEncode(item.toJson());
-      await Clipboard.setData(ClipboardData(text: jsonStr));
-    } catch (_) {}
+    if (syncToSystemClipboard) {
+      try {
+        final jsonStr = jsonEncode(item.toJson());
+        await Clipboard.setData(ClipboardData(text: jsonStr));
+      } catch (_) {}
+    }
     return true;
   }
 
   /// Pastes clipboard content into the target ViewModel
   static Future<String?> pasteInto(SheetMetalStudioViewModel vm, {double offsetX = 15.0, double offsetY = 15.0}) async {
-    // 1. Check system clipboard if memory is empty
+    // 1. Check in-memory item first
     StudioClipboardItem? item = _inMemoryItem;
     if (item == null) {
       try {
         final sysData = await Clipboard.getData(Clipboard.kTextPlain);
-        if (sysData?.text != null && sysData!.text!.isNotEmpty) {
+        if (sysData?.text != null && sysData!.text!.isNotEmpty && sysData.text!.contains('DANISH_STUDIO_CLIPBOARD')) {
           final decoded = jsonDecode(sysData.text!);
           if (decoded is Map<String, dynamic>) {
             item = StudioClipboardItem.fromJson(decoded);
@@ -164,6 +198,10 @@ class StudioClipboardService {
     }
 
     if (item == null) return null;
+
+    if (item.type == ClipboardContentType.annotation) {
+      return 'Annotation item cannot be pasted onto 2D CAD canvas. Paste onto a TDS sheet instead.';
+    }
 
     final doc = vm.document;
     final timestamp = DateTime.now().millisecondsSinceEpoch % 10000;
@@ -219,6 +257,9 @@ class StudioClipboardService {
         vm.updateDocument(doc.copyWith(cutLines: newCuts));
         vm.selectCut(newId);
         return 'Pasted ${item.label} as $newId';
+
+      case ClipboardContentType.annotation:
+        return 'Annotation item cannot be pasted onto 2D CAD canvas. Paste onto a TDS sheet instead.';
 
       case ClipboardContentType.multiple:
         return null;

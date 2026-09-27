@@ -120,9 +120,15 @@ class DdsProjectInfo {
   final String consultant;
   final String contractor;
   final String preparedBy;
+  final String designedBy;
+  final String drawnBy;
   final String checkedBy;
   final String approvedBy;
   final String issueDate;
+  final String designedDate;
+  final String drawnDate;
+  final String checkedDate;
+  final String approvedDate;
   final DdsOrderInfo? orderInfo;
   final List<String> generalNotes;
 
@@ -136,9 +142,15 @@ class DdsProjectInfo {
     this.consultant = '',
     this.contractor = '',
     this.preparedBy = '',
-    this.checkedBy = '',
-    this.approvedBy = '',
+    this.designedBy = 'Amir Khan',
+    this.drawnBy = 'Sandeep',
+    this.checkedBy = 'Nasser Anani',
+    this.approvedBy = 'Consultant QA/QC',
     this.issueDate = '',
+    this.designedDate = '',
+    this.drawnDate = '',
+    this.checkedDate = '',
+    this.approvedDate = '',
     this.orderInfo,
     this.generalNotes = const [
       'All trunking and fittings manufactured in strict accordance with BS EN 50085-1.',
@@ -147,6 +159,20 @@ class DdsProjectInfo {
       'Integral coupler flaps feature pre-punched holes/slots to accept standard M6 fasteners.',
     ],
   });
+
+  /// Formats the current date as DD/MM/YYYY
+  static String get formattedToday {
+    final now = DateTime.now();
+    final day = now.day.toString().padLeft(2, '0');
+    final month = now.month.toString().padLeft(2, '0');
+    return '$day/$month/${now.year}';
+  }
+
+  String get effectiveIssueDate => issueDate.isNotEmpty ? issueDate : formattedToday;
+  String get effectiveDesignedDate => designedDate.isNotEmpty ? designedDate : effectiveIssueDate;
+  String get effectiveDrawnDate => drawnDate.isNotEmpty ? drawnDate : effectiveIssueDate;
+  String get effectiveCheckedDate => checkedDate.isNotEmpty ? checkedDate : formattedToday;
+  String get effectiveApprovedDate => approvedDate.isNotEmpty ? approvedDate : formattedToday;
 
   Map<String, dynamic> toJson() => {
         'documentTitle': documentTitle,
@@ -158,9 +184,15 @@ class DdsProjectInfo {
         'consultant': consultant,
         'contractor': contractor,
         'preparedBy': preparedBy,
+        'designedBy': designedBy,
+        'drawnBy': drawnBy,
         'checkedBy': checkedBy,
         'approvedBy': approvedBy,
         'issueDate': issueDate,
+        'designedDate': designedDate,
+        'drawnDate': drawnDate,
+        'checkedDate': checkedDate,
+        'approvedDate': approvedDate,
         if (orderInfo != null) 'orderInfo': orderInfo!.toJson(),
         'generalNotes': generalNotes,
       };
@@ -177,9 +209,15 @@ class DdsProjectInfo {
       consultant: json['consultant'] as String? ?? '',
       contractor: json['contractor'] as String? ?? '',
       preparedBy: json['preparedBy'] as String? ?? '',
-      checkedBy: json['checkedBy'] as String? ?? '',
-      approvedBy: json['approvedBy'] as String? ?? '',
-      issueDate: json['issueDate'] as String? ?? '',
+      designedBy: json['designedBy'] as String? ?? (json['preparedBy'] as String? ?? 'Amir Khan'),
+      drawnBy: json['drawnBy'] as String? ?? (json['preparedBy'] as String? ?? 'Sandeep'),
+      checkedBy: json['checkedBy'] as String? ?? 'Nasser Anani',
+      approvedBy: json['approvedBy'] as String? ?? 'Consultant QA/QC',
+      issueDate: json['issueDate'] as String? ?? formattedToday,
+      designedDate: json['designedDate'] as String? ?? (json['issueDate'] as String? ?? formattedToday),
+      drawnDate: json['drawnDate'] as String? ?? (json['issueDate'] as String? ?? formattedToday),
+      checkedDate: json['checkedDate'] as String? ?? formattedToday,
+      approvedDate: json['approvedDate'] as String? ?? formattedToday,
       orderInfo: json['orderInfo'] != null
           ? DdsOrderInfo.fromJson(json['orderInfo'] as Map<String, dynamic>)
           : null,
@@ -197,9 +235,15 @@ class DdsProjectInfo {
     String? consultant,
     String? contractor,
     String? preparedBy,
+    String? designedBy,
+    String? drawnBy,
     String? checkedBy,
     String? approvedBy,
     String? issueDate,
+    String? designedDate,
+    String? drawnDate,
+    String? checkedDate,
+    String? approvedDate,
     DdsOrderInfo? orderInfo,
     List<String>? generalNotes,
   }) {
@@ -213,9 +257,15 @@ class DdsProjectInfo {
       consultant: consultant ?? this.consultant,
       contractor: contractor ?? this.contractor,
       preparedBy: preparedBy ?? this.preparedBy,
+      designedBy: designedBy ?? this.designedBy,
+      drawnBy: drawnBy ?? this.drawnBy,
       checkedBy: checkedBy ?? this.checkedBy,
       approvedBy: approvedBy ?? this.approvedBy,
       issueDate: issueDate ?? this.issueDate,
+      designedDate: designedDate ?? this.designedDate,
+      drawnDate: drawnDate ?? this.drawnDate,
+      checkedDate: checkedDate ?? this.checkedDate,
+      approvedDate: approvedDate ?? this.approvedDate,
       orderInfo: orderInfo ?? this.orderInfo,
       generalNotes: generalNotes ?? this.generalNotes,
     );
@@ -257,8 +307,16 @@ class DdsDocument {
         client: client,
         consultant: consultant,
         contractor: contractor,
-        preparedBy: preparedBy,
-        issueDate: DateTime.now().toIso8601String().substring(0, 10),
+        preparedBy: preparedBy.isNotEmpty ? preparedBy : 'Amir Khan',
+        designedBy: 'Amir Khan',
+        drawnBy: 'Sandeep',
+        checkedBy: 'Nasser Anani',
+        approvedBy: 'Consultant QA/QC',
+        issueDate: DdsProjectInfo.formattedToday,
+        designedDate: DdsProjectInfo.formattedToday,
+        drawnDate: DdsProjectInfo.formattedToday,
+        checkedDate: DdsProjectInfo.formattedToday,
+        approvedDate: DdsProjectInfo.formattedToday,
       ),
       productInstances: const [],
       sheets: const [

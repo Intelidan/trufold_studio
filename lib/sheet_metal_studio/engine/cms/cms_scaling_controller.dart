@@ -54,9 +54,15 @@ class CmsScalingPreviewResult {
 
 /// Controller governing the interactive Teach Scaling workflow.
 class CmsScalingController extends ChangeNotifier {
-  final DsfDocument baselineDocument;
+  DsfDocument baselineDocument;
   final CmsProductContract contract;
   final List<CmsPhysicalPort> baselinePorts;
+
+  void updateBaselineDocument(DsfDocument newBase) {
+    baselineDocument = _ensureFaces(newBase);
+    evaluateMorph(_previewMorphValue);
+    notifyListeners();
+  }
 
   late CmsScalingModel _model;
   String _activeParameterId = 'width';
@@ -191,7 +197,9 @@ class CmsScalingController extends ChangeNotifier {
       }
       _model = _model.copyWith(parameters: params);
       final activeWId = 'port${_model.activePortIndex + 1}_width';
-      _activeParameterId = params.containsKey(activeWId) ? activeWId : params.keys.first;
+      _activeParameterId = params.containsKey(activeWId)
+          ? activeWId
+          : (params.isNotEmpty ? params.keys.first : 'width');
       _previewMorphValue = params[_activeParameterId]?.currentValue ?? 100.0;
     }
 

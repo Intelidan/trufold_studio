@@ -43,6 +43,8 @@ class StudioRibbonToolbar extends StatefulWidget {
   final VoidCallback? onLoadSampleTray;
   final VoidCallback? onOpenTemplateLibrary;
   final VoidCallback? onOpenTemplateAuthoring;
+  final VoidCallback? onOpenTdsWindow;
+  final VoidCallback? onOpenCmsInspector;
 
   const StudioRibbonToolbar({
     super.key,
@@ -64,6 +66,8 @@ class StudioRibbonToolbar extends StatefulWidget {
     this.onLoadSampleTray,
     this.onOpenTemplateLibrary,
     this.onOpenTemplateAuthoring,
+    this.onOpenTdsWindow,
+    this.onOpenCmsInspector,
   });
 
   @override
@@ -154,6 +158,7 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
               onLoadSampleTray: widget.onLoadSampleTray,
               onOpenTemplateLibrary: widget.onOpenTemplateLibrary,
               onOpenTemplateAuthoring: widget.onOpenTemplateAuthoring,
+              onOpenTdsWindow: widget.onOpenTdsWindow,
               onConfirmClearAll: _confirmClearAll,
             ),
           ),
@@ -200,15 +205,21 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
             message: 'Technical Data Sheet (TDS) Studio (.dds / Excel Import)',
             child: InkWell(
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => DdsWorkspaceScreen(
-                      onOpenInEditor: (dsfDoc) {
-                        widget.viewModel.loadDocument(dsfDoc);
-                      },
+                if (widget.onOpenTdsWindow != null) {
+                  widget.onOpenTdsWindow!();
+                } else {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => DdsWorkspaceScreen(
+                        linkedViewModel: widget.viewModel,
+                        isLightTheme: true,
+                        onOpenInEditor: (dsfDoc) {
+                          widget.viewModel.loadDocument(dsfDoc);
+                        },
+                      ),
                     ),
-                  ),
-                );
+                  );
+                }
               },
               borderRadius: BorderRadius.circular(4),
               child: Container(
@@ -239,6 +250,37 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
               ),
             ),
           ),
+
+          // Consolidated CMS Parameter Inspector Action Button
+          if (widget.onOpenCmsInspector != null) ...[
+            const SizedBox(width: 6),
+            Tooltip(
+              message: 'Consolidated CMS Parameters Inspector (Detachable Panel)',
+              child: InkWell(
+                onTap: widget.onOpenCmsInspector,
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF6366F1), width: 0.8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.tune, size: 13, color: Color(0xFF818CF8)),
+                      SizedBox(width: 4),
+                      Text(
+                        'CMS Params',
+                        style: TextStyle(color: Color(0xFF818CF8), fontSize: 10.5, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
 
           if (widget.onMaterialDialog != null) ...[
             const SizedBox(width: 6),

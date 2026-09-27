@@ -35,6 +35,7 @@ class EvaluatedDdsInstance {
   final FoldedMeshResult? coverMesh3D;
   final FoldedMeshResult combinedMesh3D;
   final DdsCalculatedTakeoff calculatedTakeoff;
+  final List<CmsPhysicalPort> scaledPorts;
 
   const EvaluatedDdsInstance({
     required this.instance,
@@ -44,6 +45,7 @@ class EvaluatedDdsInstance {
     this.coverMesh3D,
     required this.combinedMesh3D,
     required this.calculatedTakeoff,
+    this.scaledPorts = const [],
   });
 }
 
@@ -112,6 +114,7 @@ class DdsInstanceEvaluator {
 
     // 7. Calculate Material Takeoff
     final takeoff = _calculateTakeoff(scaledBaseDoc, coverData?.document, instance.material);
+    final scaledPorts = controller.currentPreview?.derivedPorts ?? baselinePorts;
 
     return EvaluatedDdsInstance(
       instance: instance.copyWith(calculatedTakeoff: takeoff),
@@ -121,6 +124,7 @@ class DdsInstanceEvaluator {
       coverMesh3D: coverMesh3D,
       combinedMesh3D: combinedMesh3D,
       calculatedTakeoff: takeoff,
+      scaledPorts: scaledPorts,
     );
   }
 

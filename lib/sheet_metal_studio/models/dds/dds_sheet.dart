@@ -145,19 +145,83 @@ class DdsViewSettings {
   final double splitRatio2D3D; // 0.50 means 50% 2D on left, 50% 3D on right
   final DdsCamera3DSettings camera3D;
   final DdsDrawing2DSettings drawing2D;
+  final bool showCover3D;
+  final bool showFasteners3D;
+  final bool showDimWidth;
+  final bool showDimHeight;
+  final bool showDimPorts;
+  final bool showDimSlots;
+  final bool showDimFlange;
+  final bool showDimThickness;
+  final bool showCadDimensionLines;
+  final bool showDimensionTags;
 
   const DdsViewSettings({
     this.paperSize = 'A4_Landscape',
     this.splitRatio2D3D = 0.50,
     this.camera3D = const DdsCamera3DSettings(),
     this.drawing2D = const DdsDrawing2DSettings(),
+    this.showCover3D = true,
+    this.showFasteners3D = false,
+    this.showDimWidth = true,
+    this.showDimHeight = true,
+    this.showDimPorts = true,
+    this.showDimSlots = true,
+    this.showDimFlange = true,
+    this.showDimThickness = true,
+    this.showCadDimensionLines = true,
+    this.showDimensionTags = true,
   });
+
+  DdsViewSettings copyWith({
+    String? paperSize,
+    double? splitRatio2D3D,
+    DdsCamera3DSettings? camera3D,
+    DdsDrawing2DSettings? drawing2D,
+    bool? showCover3D,
+    bool? showFasteners3D,
+    bool? showDimWidth,
+    bool? showDimHeight,
+    bool? showDimPorts,
+    bool? showDimSlots,
+    bool? showDimFlange,
+    bool? showDimThickness,
+    bool? showCadDimensionLines,
+    bool? showDimensionTags,
+  }) {
+    return DdsViewSettings(
+      paperSize: paperSize ?? this.paperSize,
+      splitRatio2D3D: splitRatio2D3D ?? this.splitRatio2D3D,
+      camera3D: camera3D ?? this.camera3D,
+      drawing2D: drawing2D ?? this.drawing2D,
+      showCover3D: showCover3D ?? this.showCover3D,
+      showFasteners3D: showFasteners3D ?? this.showFasteners3D,
+      showDimWidth: showDimWidth ?? this.showDimWidth,
+      showDimHeight: showDimHeight ?? this.showDimHeight,
+      showDimPorts: showDimPorts ?? this.showDimPorts,
+      showDimSlots: showDimSlots ?? this.showDimSlots,
+      showDimFlange: showDimFlange ?? this.showDimFlange,
+      showDimThickness: showDimThickness ?? this.showDimThickness,
+      showCadDimensionLines: showCadDimensionLines ?? this.showCadDimensionLines,
+      showDimensionTags: showDimensionTags ?? this.showDimensionTags,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'paperSize': paperSize,
         'splitRatio2D3D': splitRatio2D3D,
         'camera3D': camera3D.toJson(),
         'drawing2D': drawing2D.toJson(),
+        'showCover3D': showCover3D,
+        'showFasteners3D': showFasteners3D,
+        'showDimWidth': showDimWidth,
+        'showDimHeight': showDimHeight,
+        'showDimPorts': showDimPorts,
+        'showDimSlots': showDimSlots,
+        'showDimFlange': showDimFlange,
+        'showDimThickness': showDimThickness,
+        'showCadDimensionLines': showCadDimensionLines,
+        'showDimensionTags': showDimensionTags,
       };
 
   factory DdsViewSettings.fromJson(Map<String, dynamic> json) {
@@ -170,6 +234,16 @@ class DdsViewSettings {
       drawing2D: json['drawing2D'] != null
           ? DdsDrawing2DSettings.fromJson(json['drawing2D'] as Map<String, dynamic>)
           : const DdsDrawing2DSettings(),
+      showCover3D: json['showCover3D'] as bool? ?? true,
+      showFasteners3D: json['showFasteners3D'] as bool? ?? false,
+      showDimWidth: json['showDimWidth'] as bool? ?? true,
+      showDimHeight: json['showDimHeight'] as bool? ?? true,
+      showDimPorts: json['showDimPorts'] as bool? ?? true,
+      showDimSlots: json['showDimSlots'] as bool? ?? true,
+      showDimFlange: json['showDimFlange'] as bool? ?? true,
+      showDimThickness: json['showDimThickness'] as bool? ?? true,
+      showCadDimensionLines: json['showCadDimensionLines'] as bool? ?? true,
+      showDimensionTags: json['showDimensionTags'] as bool? ?? true,
     );
   }
 }

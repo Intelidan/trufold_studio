@@ -41,6 +41,9 @@ import 'widgets/guided_cms/cms_ambiguity_resolver_dialog.dart';
 import 'widgets/guided_cms/cms_teach_scaling_overlay.dart';
 import '../models/cms/cms_ux_state.dart';
 import '../models/cms/cms_product_contract.dart';
+import '../models/dds/dds_document.dart';
+import 'widgets/dds/dds_workspace_screen.dart';
+import 'widgets/dds/dds_cms_parameter_inspector.dart';
 
 
 class SheetMetalStudioScreen extends StatefulWidget {
@@ -70,6 +73,21 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
   bool _isInspectorCollapsed = false;
   Offset? _inspectorDragStartGlobal;
   Offset? _inspectorDragStartPanel;
+
+  // TDS Studio Linked Viewport & Detachable CMS Parameter Inspector State
+  bool _isTdsWindowOpen = false;
+  bool _isTdsWindowDockedSplit = false;
+  bool _isTdsWindowMinimized = false;
+  bool _isTdsMaximized = false;
+  Offset _tdsWindowPosition = const Offset(60, 40);
+  Size _tdsWindowSize = const Size(1220, 780);
+  Offset? _tdsDragOffset;
+  DdsDocument? _linkedDdsDocument;
+  final GlobalKey _tdsWorkspaceKey = GlobalKey();
+
+  bool _isCmsInspectorOpen = false;
+  Offset _cmsInspectorPosition = const Offset(280, 50);
+  Offset? _cmsInspectorDragStart;
 
   SheetMetalStudioViewModel get _viewModel => _tabs[_activeTabIndex].viewModel;
   @visibleForTesting
@@ -110,6 +128,43 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
       _tabs.add(tab);
       _activeTabIndex = _tabs.length - 1;
     });
+  }
+
+  void _openTdsItemInNewTab(DsfDocument dsfDoc) {
+    final title = dsfDoc.itemName.isNotEmpty ? '${dsfDoc.itemName}.dsf' : 'TDS_Item_${_tabs.length + 1}.dsf';
+    final vm = SheetMetalStudioViewModel(initialDocument: dsfDoc);
+
+    // Bidirectional live link: updates in the CAD tab update TDS screen state
+    vm.addListener(() {
+      if (_linkedDdsDocument != null && mounted) {
+        setState(() {});
+      }
+    });
+
+    final tab = StudioTab(
+      id: 'TAB_TDS_${DateTime.now().microsecondsSinceEpoch}',
+      title: title,
+      viewModel: vm,
+    );
+
+    setState(() {
+      _tabs.add(tab);
+      _activeTabIndex = _tabs.length - 1;
+      _isTdsWindowMinimized = true; // Minimize TDS so user sees the newly opened tab in CAD
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Opened "$title" in new CAD tab. Changes will synchronize with TDS.'),
+        backgroundColor: const Color(0xFF0284C7),
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'RESTORE TDS',
+          textColor: Colors.white,
+          onPressed: () => setState(() => _isTdsWindowMinimized = false),
+        ),
+      ),
+    );
   }
 
   Future<void> _handleCloseTab(int index) async {
@@ -318,12 +373,19 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
   }
 
   Future<void> _handleCopySelection() async {
+    if (_isEditingText()) {
+      final focus = FocusManager.instance.primaryFocus;
+      if (focus?.context != null && focus!.context!.mounted) {
+        Actions.maybeInvoke(focus.context!, CopySelectionTextIntent.copy);
+      }
+      return;
+    }
     final ok = await StudioClipboardService.copySelection(_viewModel);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            ok ? 'Copied ${StudioClipboardService.currentLabel} to clipboard!' : 'No CAD feature selected to copy. Select a punch, pattern, bend, or cut line.',
+            ok ? 'Copied ${StudioClipboardService.currentLabel} to drawing component clipboard!' : 'No CAD feature selected to copy. Select a punch, pattern, bend, or cut line.',
           ),
           backgroundColor: ok ? const Color(0xFF0284C7) : const Color(0xFF64748B),
           duration: const Duration(seconds: 2),
@@ -334,11 +396,18 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
   }
 
   Future<void> _handlePasteClipboard() async {
+    if (_isEditingText()) {
+      final focus = FocusManager.instance.primaryFocus;
+      if (focus?.context != null && focus!.context!.mounted) {
+        Actions.maybeInvoke(focus.context!, const PasteTextIntent(SelectionChangedCause.keyboard));
+      }
+      return;
+    }
     final res = await StudioClipboardService.pasteInto(_viewModel);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(res ?? 'Clipboard is empty or does not contain compatible CAD primitives.'),
+          content: Text(res ?? 'Drawing component clipboard is empty or does not contain compatible CAD primitives.'),
           backgroundColor: res != null ? const Color(0xFF059669) : const Color(0xFFD97706),
           duration: const Duration(seconds: 2),
         ),
@@ -581,10 +650,24 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
         },
         SingleActivator(LogicalKeyboardKey.escape): () => _handleEscapeKey(context),
         SingleActivator(LogicalKeyboardKey.keyA, control: true): () {
+          if (_isEditingText()) {
+            final focus = FocusManager.instance.primaryFocus;
+            if (focus?.context != null && focus!.context!.mounted) {
+              Actions.maybeInvoke(focus.context!, const SelectAllTextIntent(SelectionChangedCause.keyboard));
+            }
+            return;
+          }
           _viewModel.selectAll();
           setState(() {});
         },
         SingleActivator(LogicalKeyboardKey.keyA, meta: true): () {
+          if (_isEditingText()) {
+            final focus = FocusManager.instance.primaryFocus;
+            if (focus?.context != null && focus!.context!.mounted) {
+              Actions.maybeInvoke(focus.context!, const SelectAllTextIntent(SelectionChangedCause.keyboard));
+            }
+            return;
+          }
           _viewModel.selectAll();
           setState(() {});
         },
@@ -797,7 +880,15 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
               child: ListenableBuilder(
                 listenable: _viewModel,
                 builder: (context, _) {
-                  return Column(
+                  return LayoutBuilder(
+                    builder: (context, screenConstraints) {
+                      final screenW = screenConstraints.maxWidth;
+                      final screenH = screenConstraints.maxHeight;
+
+                      return Stack(
+                        children: [
+                          // Base CAD Application Window
+                          Column(
                     children: [
                       // truFold Studio Ribbon Toolbar
                       StudioRibbonToolbar(
@@ -816,6 +907,11 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                         onLoadSampleBracket: _loadSampleBracket,
                         onFittingDetails: () => _viewModel.setPropertyInspectorOpen(true),
                         onLoadSampleTray: () => _viewModel.loadSampleCableTray(width: 100, height: 50, length: 3000),
+                        onOpenTdsWindow: () => setState(() {
+                          _isTdsWindowOpen = true;
+                          _isTdsWindowMinimized = false;
+                        }),
+                        onOpenCmsInspector: () => setState(() => _isCmsInspectorOpen = !_isCmsInspectorOpen),
                         onFinishSketch: () {
                           _viewModel.setToolMode(StudioToolMode.select);
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -844,36 +940,93 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    // Left Viewport: 2D Unfolded Flat Pattern (CAD Sketch View)
-                                    SizedBox(
-                                      width: leftW,
-                                      child: ClipRect(
-                                        child: Stack(
+                                    if (_isTdsWindowOpen && !_isTdsWindowMinimized && _isTdsWindowDockedSplit) ...[
+                                      // Docked Split View: Left half CAD (2D + 3D)
+                                      SizedBox(
+                                        width: (totalW * 0.50).clamp(320.0, totalW - 350.0),
+                                        child: Row(
                                           children: [
-                                            UnfoldedCanvasWidget(
-                                              key: const ValueKey('unfolded_canvas_viewport'),
-                                              viewModel: _viewModel,
-                                              renderFloatingInspectors: false,
-                                              showInCanvasToolRibbon: false,
+                                            Expanded(
+                                              child: ClipRect(
+                                                child: Stack(
+                                                  children: [
+                                                    UnfoldedCanvasWidget(
+                                                      key: const ValueKey('unfolded_canvas_viewport'),
+                                                      viewModel: _viewModel,
+                                                      renderFloatingInspectors: false,
+                                                      showInCanvasToolRibbon: false,
+                                                    ),
+                                                    _buildCanvasTopTipBanner(_viewModel),
+                                                  ],
+                                                ),
+                                              ),
                                             ),
-                                            _buildCanvasTopTipBanner(_viewModel),
+                                            SplitPaneDivider(
+                                              splitRatio: 0.5,
+                                              onRatioChanged: (_) {},
+                                              onDoubleTapReset: () {},
+                                            ),
+                                            Expanded(
+                                              child: ClipRect(child: Viewport3dWidget(viewModel: _viewModel)),
+                                            ),
                                           ],
                                         ),
                                       ),
-                                    ),
+                                      // Center Dock Divider
+                                      Container(
+                                        width: 4,
+                                        color: const Color(0xFF0284C7),
+                                      ),
+                                      // Right half: TDS Linked Studio (Light Theme)
+                                      Expanded(
+                                        child: ClipRect(
+                                          child: DdsWorkspaceScreen(
+                                            key: _tdsWorkspaceKey,
+                                            initialDocument: _linkedDdsDocument,
+                                            linkedViewModel: _viewModel,
+                                            isLightTheme: true,
+                                            isWindowMode: true,
+                                            onDocumentChanged: (doc) => setState(() => _linkedDdsDocument = doc),
+                                            onExit: () => setState(() => _isTdsWindowOpen = false),
+                                            onMinimize: () => setState(() => _isTdsWindowMinimized = true),
+                                            onToggleWindowMode: () => setState(() => _isTdsWindowDockedSplit = false),
+                                            onDockSplit: () => setState(() => _isTdsWindowDockedSplit = false),
+                                            onOpenInEditor: (dsfDoc) => _openTdsItemInNewTab(dsfDoc),
+                                          ),
+                                        ),
+                                      ),
+                                    ] else ...[
+                                      // Left Viewport: 2D Unfolded Flat Pattern (CAD Sketch View)
+                                      SizedBox(
+                                        width: leftW,
+                                        child: ClipRect(
+                                          child: Stack(
+                                            children: [
+                                              UnfoldedCanvasWidget(
+                                                key: const ValueKey('unfolded_canvas_viewport'),
+                                                viewModel: _viewModel,
+                                                renderFloatingInspectors: false,
+                                                showInCanvasToolRibbon: false,
+                                              ),
+                                              _buildCanvasTopTipBanner(_viewModel),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
 
-                                    // Draggable Split Divider
-                                    SplitPaneDivider(
-                                      splitRatio: _viewModel.splitRatio,
-                                      onRatioChanged: _viewModel.setSplitRatio,
-                                      onDoubleTapReset: () => _viewModel.setSplitRatio(0.50),
-                                    ),
+                                      // Draggable Split Divider
+                                      SplitPaneDivider(
+                                        splitRatio: _viewModel.splitRatio,
+                                        onRatioChanged: _viewModel.setSplitRatio,
+                                        onDoubleTapReset: () => _viewModel.setSplitRatio(0.50),
+                                      ),
 
-                                    // Right Viewport: 3D Folded Mesh
-                                    SizedBox(
-                                      width: rightW,
-                                      child: ClipRect(child: Viewport3dWidget(viewModel: _viewModel)),
-                                    ),
+                                      // Right Viewport: 3D Folded Mesh
+                                      SizedBox(
+                                        width: rightW,
+                                        child: ClipRect(child: Viewport3dWidget(viewModel: _viewModel)),
+                                      ),
+                                    ],
                                   ],
                                 ),
 
@@ -1115,19 +1268,250 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                       ),
                                     ),
                                   ),
+
+                                // Floating Detachable Consolidated CMS Parameter Inspector (Available to Main Window)
+                                if (_isCmsInspectorOpen)
+                                  Positioned(
+                                    left: _cmsInspectorPosition.dx.clamp(8.0, math.max(8.0, totalW - 350.0)),
+                                    top: _cmsInspectorPosition.dy.clamp(8.0, math.max(8.0, totalH - 420.0)),
+                                    child: DdsCmsParameterInspector(
+                                      viewModel: _viewModel,
+                                      isLightTheme: true,
+                                      isDetached: true,
+                                      onClose: () => setState(() => _isCmsInspectorOpen = false),
+                                      onDragStart: (details) {
+                                        _cmsInspectorDragStart = details.globalPosition - _cmsInspectorPosition;
+                                      },
+                                      onDragUpdate: (details) {
+                                        if (_cmsInspectorDragStart != null) {
+                                          setState(() {
+                                            _cmsInspectorPosition = details.globalPosition - _cmsInspectorDragStart!;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+
+                                // Floating Restore Pill when TDS Window is Minimized
+                                if (_isTdsWindowOpen && _isTdsWindowMinimized)
+                                  Positioned(
+                                    bottom: 16,
+                                    right: 16,
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF0F172A),
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(color: const Color(0xFF00E5FF), width: 1.2),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFF00E5FF).withValues(alpha: 0.35),
+                                              blurRadius: 10,
+                                              spreadRadius: 1,
+                                            ),
+                                          ],
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.picture_as_pdf, color: Color(0xFF00E5FF), size: 16),
+                                            const SizedBox(width: 8),
+                                            const Text(
+                                              'TDS Studio (Linked)',
+                                              style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            InkWell(
+                                              onTap: () => setState(() => _isTdsWindowMinimized = false),
+                                              borderRadius: BorderRadius.circular(10),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF00E5FF).withValues(alpha: 0.2),
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                child: const Text('RESTORE', style: TextStyle(color: Color(0xFF00E5FF), fontSize: 9.0, fontWeight: FontWeight.bold)),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            InkWell(
+                                              onTap: () => setState(() {
+                                                _isTdsWindowOpen = false;
+                                                _isTdsWindowMinimized = false;
+                                              }),
+                                              child: const Icon(Icons.close, color: Color(0xFF94A3B8), size: 15),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                               ],
                             );
                           },
                         ),
                       ),
 
-                      // 3. Bottom Fold Progression Dock (0% Flat to 100% Folded)
-                      FoldProgressSlider(viewModel: _viewModel),
+                      // 3. Bottom Fold Progression Dock (0% Flat to 100% Folded) - shown when in CAD or Split mode
+                      if (!_isTdsWindowOpen || _isTdsWindowMinimized || _isTdsWindowDockedSplit)
+                        FoldProgressSlider(viewModel: _viewModel),
                     ],
-                  );
-                },
-              ),
-            ),
+                  ),
+
+                  // Floating / Maximized Independent TDS Studio Window
+                  if (_isTdsWindowOpen && !_isTdsWindowMinimized && !_isTdsWindowDockedSplit) ...[
+                    if (_isTdsMaximized)
+                      Positioned.fill(
+                        child: Material(
+                          color: Colors.black,
+                          child: DdsWorkspaceScreen(
+                            key: _tdsWorkspaceKey,
+                            initialDocument: _linkedDdsDocument,
+                            linkedViewModel: _viewModel,
+                            isLightTheme: true,
+                            isWindowMode: true,
+                            isMaximized: true,
+                            onDocumentChanged: (doc) => setState(() => _linkedDdsDocument = doc),
+                            onExit: () => setState(() => _isTdsWindowOpen = false),
+                            onMinimize: () => setState(() => _isTdsWindowMinimized = true),
+                            onToggleMaximize: () => setState(() => _isTdsMaximized = false),
+                            onDockSplit: () => setState(() => _isTdsWindowDockedSplit = true),
+                            onOpenInEditor: (dsfDoc) => _openTdsItemInNewTab(dsfDoc),
+                          ),
+                        ),
+                      )
+                    else
+                      Positioned(
+                        left: _tdsWindowPosition.dx.clamp(0.0, math.max(0.0, screenW - 400.0)),
+                        top: _tdsWindowPosition.dy.clamp(0.0, math.max(0.0, screenH - 300.0)),
+                        width: _tdsWindowSize.width.clamp(640.0, screenW),
+                        height: _tdsWindowSize.height.clamp(480.0, screenH),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned.fill(
+                              child: Material(
+                                elevation: 24,
+                                shadowColor: Colors.black.withValues(alpha: 0.65),
+                                borderRadius: BorderRadius.circular(8),
+                                clipBehavior: Clip.antiAlias,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFF0284C7), width: 1.5),
+                                  ),
+                                  child: DdsWorkspaceScreen(
+                                    key: _tdsWorkspaceKey,
+                                    initialDocument: _linkedDdsDocument,
+                                    linkedViewModel: _viewModel,
+                                    isLightTheme: true,
+                                    isWindowMode: true,
+                                    isMaximized: false,
+                                    onDocumentChanged: (doc) => setState(() => _linkedDdsDocument = doc),
+                                    onExit: () => setState(() => _isTdsWindowOpen = false),
+                                    onMinimize: () => setState(() => _isTdsWindowMinimized = true),
+                                    onToggleMaximize: () => setState(() => _isTdsMaximized = true),
+                                    onDockSplit: () => setState(() => _isTdsWindowDockedSplit = true),
+                                    onOpenInEditor: (dsfDoc) => _openTdsItemInNewTab(dsfDoc),
+                                    onWindowDragStart: (details) {
+                                      _tdsDragOffset = details.globalPosition - _tdsWindowPosition;
+                                    },
+                                    onWindowDragUpdate: (details) {
+                                      if (_tdsDragOffset != null) {
+                                        setState(() {
+                                          _tdsWindowPosition = details.globalPosition - _tdsDragOffset!;
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Right Edge Resize Handle
+                            Positioned(
+                              top: 36,
+                              right: 0,
+                              bottom: 24,
+                              width: 8,
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.resizeLeftRight,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onPanUpdate: (details) {
+                                    setState(() {
+                                      _tdsWindowSize = Size(
+                                        (_tdsWindowSize.width + details.delta.dx).clamp(640.0, screenW),
+                                        _tdsWindowSize.height,
+                                      );
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                            // Bottom Edge Resize Handle
+                            Positioned(
+                              left: 24,
+                              right: 24,
+                              bottom: 0,
+                              height: 8,
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.resizeUpDown,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onPanUpdate: (details) {
+                                    setState(() {
+                                      _tdsWindowSize = Size(
+                                        _tdsWindowSize.width,
+                                        (_tdsWindowSize.height + details.delta.dy).clamp(480.0, screenH),
+                                      );
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                            // Bottom-Right Corner Resize Grip Handle
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              width: 24,
+                              height: 24,
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.resizeDownRight,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onPanUpdate: (details) {
+                                    setState(() {
+                                      _tdsWindowSize = Size(
+                                        (_tdsWindowSize.width + details.delta.dx).clamp(640.0, screenW),
+                                        (_tdsWindowSize.height + details.delta.dy).clamp(480.0, screenH),
+                                      );
+                                    });
+                                  },
+                                  child: Container(
+                                    alignment: Alignment.bottomRight,
+                                    padding: const EdgeInsets.all(4.0),
+                                    child: const Icon(
+                                      Icons.south_east,
+                                      size: 13,
+                                      color: Color(0xFF0284C7),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ],
+              );
+            },
+          );
+        },
+      ),
+    ),
           ),
         ),
       ),

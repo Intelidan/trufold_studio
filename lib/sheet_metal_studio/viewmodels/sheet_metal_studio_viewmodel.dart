@@ -765,6 +765,12 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   List<CmsPhysicalPort> get persistentCmsPorts => _persistentCmsPorts;
 
   bool get showCmsPortHighlights => _showCmsPortHighlights;
+  set showCmsPortHighlights(bool value) {
+    if (_showCmsPortHighlights != value) {
+      _showCmsPortHighlights = value;
+      notifyListeners();
+    }
+  }
   bool get isTeachScalingActive => _isTeachScalingActive;
   CmsScalingController? get scalingController => _scalingController;
 
@@ -838,16 +844,17 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
               )
             : null) ??
         cmsGuidedController.state.contract ??
+        (CmsScalingController.isCrossFitting(_document, portCount: portCount)
+            ? (hasUnequalFlag || portsAreUnequal ? CmsProductContract.unequalCross : CmsProductContract.equalCross)
+            : CmsScalingController.isTeeFitting(_document, portCount: portCount)
+            ? (hasUnequalFlag || portsAreUnequal ? CmsProductContract.unequalTee : CmsProductContract.equalTee)
+            : null) ??
         CmsProductContract.lookup(_detectedFittingMetadata?.product, _detectedFittingMetadata?.variantName) ??
         CmsProductContract.lookup(_document.metadata['fittingProduct'] as String?, _document.metadata['fittingVariant'] as String?) ??
         CmsProductContract.lookup(_document.productType, _document.itemName) ??
         CmsProductContract.lookup(null, _document.itemName) ??
         CmsProductContract.lookup(null, _document.productType) ??
-        (CmsScalingController.isCrossFitting(_document, portCount: portCount)
-            ? (hasUnequalFlag || portsAreUnequal ? CmsProductContract.unequalCross : CmsProductContract.equalCross)
-            : CmsScalingController.isTeeFitting(_document, portCount: portCount)
-            ? (hasUnequalFlag || portsAreUnequal ? CmsProductContract.unequalTee : CmsProductContract.equalTee)
-            : (CmsScalingController.isInsideRiserGeometry(_document) ? CmsProductContract.insideRiser45 : CmsProductContract.bend45));
+        (CmsScalingController.isInsideRiserGeometry(_document) ? CmsProductContract.insideRiser45 : CmsProductContract.bend45);
 
     if ((cmsGuidedController.state.phase == CmsUxPhase.complete || cmsGuidedController.state.discoveredPorts.isNotEmpty) &&
         !_document.metadata.containsKey('cmsTemplate')) {
@@ -910,6 +917,139 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     _scalingController!.evaluateMorph(_scalingController!.previewMorphValue);
     _onScalingControllerChanged();
     notifyListeners();
+  }
+
+  /// Live morph dispatcher called from the Consolidated CMS Parameter Inspector.
+  /// Seamlessly activates the scaling engine if inactive, selects the target parameter,
+  /// triggers 2D contour morphing and 3D folding in real time, and broadcasts to CAD & TDS.
+  void applyCmsMorphParameter(String key, double value) {
+    if (_scalingController == null) {
+      startTeachScaling();
+    }
+    if (_scalingController != null) {
+      // If a port-specific parameter is changed, make sure ports are unlinked
+      if (key.startsWith('port') &&
+          _scalingController!.model.isLinkedPorts &&
+          _scalingController!.baselinePorts.isNotEmpty) {
+        _scalingController!.togglePortLinking(false);
+      }
+
+      if (_scalingController!.model.parameters.containsKey(key)) {
+        _scalingController!.selectParameter(key);
+        _scalingController!.evaluateMorph(value);
+      } else if (key == 'width' || key == 'height') {
+        _scalingController!.selectParameter(key);
+        _scalingController!.evaluateMorph(value);
+      }
+
+      // Handle sheet thickness live update
+      if (key == 'thickness') {
+        _document = _document.copyWith(
+          material: _document.material.copyWith(thicknessMm: value),
+        );
+        if (_scalingController != null) {
+          final updatedBase = _scalingController!.baselineDocument.copyWith(
+            material: _scalingController!.baselineDocument.material.copyWith(thicknessMm: value),
+          );
+          _scalingController!.updateBaselineDocument(updatedBase);
+        }
+        _previewDocWithCover = null;
+        _recomputeMesh();
+      }
+
+      // Handle base flange direction live update (0.0 = Outside Return Lip, 1.0 = Inside Flush)
+      if (key == 'flange_direction') {
+        final isInside = value == 1.0;
+        final targetDir = isInside ? BendDirection.up : BendDirection.down;
+        final targetLayer = isInside ? 'BEND_UP' : 'BEND_DOWN';
+
+        List<FoldBendLine> updateBends(List<FoldBendLine> bends) {
+          return bends.map((b) {
+            final isFlange = b.role == BendLineRole.flange ||
+                b.layer.toUpperCase().contains('FLANGE') ||
+                b.id.toUpperCase().startsWith('FL') ||
+                b.parentFaceId.toUpperCase().contains('FLANGE') ||
+                b.childFaceId.toUpperCase().contains('FLANGE');
+            if (isFlange) {
+              return b.copyWith(direction: targetDir, layer: targetLayer);
+            }
+            return b;
+          }).toList();
+        }
+
+        _document = _document.copyWith(bends: updateBends(_document.bends));
+        if (_scalingController != null) {
+          final updatedBase = _scalingController!.baselineDocument.copyWith(
+            bends: updateBends(_scalingController!.baselineDocument.bends),
+          );
+          _scalingController!.updateBaselineDocument(updatedBase);
+        }
+        _previewDocWithCover = null;
+        _recomputeMesh();
+      }
+
+      // Handle coupler slots dimensions live update
+      if (key == 'coupler_slot_length' || key == 'coupler_slot_width' || key == 'coupler_slot_pitch') {
+        List<CncPunchPrimitive> updatePunches(List<CncPunchPrimitive> punches) {
+          return punches.map((p) {
+            final isCoupler = p.role == CncPunchRole.coupler ||
+                p.isSlot ||
+                p.type == PunchType.obroundSlot ||
+                p.id.toUpperCase().contains('SLOT') ||
+                p.id.toUpperCase().contains('COUPLER');
+            if (isCoupler) {
+              final newL = key == 'coupler_slot_length' ? value : p.lengthMm;
+              final newW = key == 'coupler_slot_width' ? value : p.widthMm;
+              return p.copyWith(lengthMm: newL, widthMm: newW);
+            }
+            return p;
+          }).toList();
+        }
+
+        _document = _document.copyWith(punches: updatePunches(_document.punches));
+        if (_scalingController != null) {
+          final updatedBase = _scalingController!.baselineDocument.copyWith(
+            punches: updatePunches(_scalingController!.baselineDocument.punches),
+          );
+          _scalingController!.updateBaselineDocument(updatedBase);
+        }
+        if (_previewCouplerPunches != null) {
+          _previewCouplerPunches = updatePunches(_previewCouplerPunches!);
+        }
+        _previewDocWithCover = null;
+        _recomputeMesh();
+      }
+
+      // Handle cover flange size live update
+      if (key == 'cover_flange_size') {
+        _coverFlangeDepth = value;
+        if (_document.cover != null) {
+          final curCover = _document.cover!;
+          final updatedProps = Map<String, dynamic>.from(curCover.properties);
+          updatedProps['flangeDepthMm'] = value;
+          final updatedCover = curCover.copyWith(properties: updatedProps);
+          _document = _document.copyWith(cover: updatedCover);
+          _previewCoverMesh = _buildCover3DMesh(updatedCover);
+        }
+      }
+
+      // Cache parameter in metadata
+      final cmsParams = Map<String, dynamic>.from(_document.metadata['cmsParameters'] as Map? ?? {});
+      cmsParams[key] = value;
+      _document.metadata['cmsParameters'] = cmsParams;
+      _document.metadata['cms_param_$key'] = value;
+      notifyListeners();
+    }
+  }
+
+  /// Commits live CMS scaling into the canonical DSF document and refreshes meshes.
+  void commitCmsScaling() {
+    if (_scalingController != null) {
+      acceptTeachScaling();
+    } else {
+      _recomputeMesh();
+      notifyListeners();
+    }
   }
 
   /// Helper to generate a synced cover for [targetBaseDoc] ensuring no 2D/3D overlapping.
@@ -1430,12 +1570,28 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   bool get magneticSnapEnabled => _magneticSnapEnabled;
 
   double get azimuthDeg => _azimuthDeg;
+  set azimuthDeg(double val) {
+    _azimuthDeg = val;
+    notifyListeners();
+  }
 
   double get elevationDeg => _elevationDeg;
+  set elevationDeg(double val) {
+    _elevationDeg = val;
+    notifyListeners();
+  }
 
   double get cameraZoom => _cameraZoom;
+  set cameraZoom(double val) {
+    _cameraZoom = val;
+    notifyListeners();
+  }
 
   Offset get pan3D => _pan3D;
+  set pan3D(Offset val) {
+    _pan3D = val;
+    notifyListeners();
+  }
 
   Offset get pan2D => _pan2D;
 

@@ -77,6 +77,35 @@ abstract class DdsAnnotation {
         return DdsApprovalStampAnnotation.fromJson(json);
     }
   }
+
+  /// Clones this annotation with an offset (dx, dy) and an optional new id.
+  DdsAnnotation withOffset(double dx, double dy, {String? newId}) {
+    final effectiveId = newId ?? '${id}_cpy_${DateTime.now().millisecondsSinceEpoch % 10000}';
+    final ann = this;
+    if (ann is DdsNoteBoxAnnotation) {
+      return ann.copyWith(id: effectiveId, x: ann.x + dx, y: ann.y + dy);
+    } else if (ann is DdsApprovalStampAnnotation) {
+      return ann.copyWith(id: effectiveId, x: ann.x + dx, y: ann.y + dy);
+    } else if (ann is DdsLeaderNoteAnnotation) {
+      return ann.copyWith(
+        id: effectiveId,
+        targetPoint: CadPoint2D(ann.targetPoint.x + dx, ann.targetPoint.y + dy),
+        textPosition: CadPoint2D(ann.textPosition.x + dx, ann.textPosition.y + dy),
+      );
+    } else if (ann is DdsLinearDimensionAnnotation) {
+      return ann.copyWith(
+        id: effectiveId,
+        p1: CadPoint2D(ann.p1.x + dx, ann.p1.y + dy),
+        p2: CadPoint2D(ann.p2.x + dx, ann.p2.y + dy),
+      );
+    } else if (ann is DdsRevisionCloudAnnotation) {
+      return ann.copyWith(
+        id: effectiveId,
+        points: ann.points.map((p) => CadPoint2D(p.x + dx, p.y + dy)).toList(),
+      );
+    }
+    return ann;
+  }
 }
 
 /// Linear dimension annotation displaying a measurement with extension lines.
@@ -109,6 +138,31 @@ class DdsLinearDimensionAnnotation extends DdsAnnotation {
     final pre = prefix ?? '';
     final suf = suffix ?? '';
     return '$pre${measuredLength.toStringAsFixed(1)}$suf';
+  }
+
+  DdsLinearDimensionAnnotation copyWith({
+    String? id,
+    CadPoint2D? p1,
+    CadPoint2D? p2,
+    String? anchorEntity,
+    String? prefix,
+    String? suffix,
+    String? textOverride,
+    double? offsetDistance,
+    bool? isVisible,
+  }) {
+    return DdsLinearDimensionAnnotation(
+      id: id ?? this.id,
+      space: space,
+      isVisible: isVisible ?? this.isVisible,
+      p1: p1 ?? this.p1,
+      p2: p2 ?? this.p2,
+      anchorEntity: anchorEntity ?? this.anchorEntity,
+      prefix: prefix ?? this.prefix,
+      suffix: suffix ?? this.suffix,
+      textOverride: textOverride ?? this.textOverride,
+      offsetDistance: offsetDistance ?? this.offsetDistance,
+    );
   }
 
   @override
@@ -164,6 +218,25 @@ class DdsLeaderNoteAnnotation extends DdsAnnotation {
     this.anchorEntity,
   }) : super(type: DdsAnnotationType.leaderNote);
 
+  DdsLeaderNoteAnnotation copyWith({
+    String? id,
+    CadPoint2D? targetPoint,
+    CadPoint2D? textPosition,
+    String? text,
+    String? anchorEntity,
+    bool? isVisible,
+  }) {
+    return DdsLeaderNoteAnnotation(
+      id: id ?? this.id,
+      space: space,
+      isVisible: isVisible ?? this.isVisible,
+      targetPoint: targetPoint ?? this.targetPoint,
+      textPosition: textPosition ?? this.textPosition,
+      text: text ?? this.text,
+      anchorEntity: anchorEntity ?? this.anchorEntity,
+    );
+  }
+
   @override
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -217,6 +290,31 @@ class DdsNoteBoxAnnotation extends DdsAnnotation {
     this.hasBorder = true,
   }) : super(type: DdsAnnotationType.noteBox);
 
+  DdsNoteBoxAnnotation copyWith({
+    String? id,
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+    String? text,
+    double? fontSize,
+    bool? hasBorder,
+    bool? isVisible,
+  }) {
+    return DdsNoteBoxAnnotation(
+      id: id ?? this.id,
+      space: space,
+      isVisible: isVisible ?? this.isVisible,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      text: text ?? this.text,
+      fontSize: fontSize ?? this.fontSize,
+      hasBorder: hasBorder ?? this.hasBorder,
+    );
+  }
+
   @override
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -265,6 +363,23 @@ class DdsRevisionCloudAnnotation extends DdsAnnotation {
     this.revisionTag = 'Δ1',
     this.arcRadius = 8.0,
   }) : super(type: DdsAnnotationType.revisionCloud);
+
+  DdsRevisionCloudAnnotation copyWith({
+    String? id,
+    List<CadPoint2D>? points,
+    String? revisionTag,
+    double? arcRadius,
+    bool? isVisible,
+  }) {
+    return DdsRevisionCloudAnnotation(
+      id: id ?? this.id,
+      space: space,
+      isVisible: isVisible ?? this.isVisible,
+      points: points ?? this.points,
+      revisionTag: revisionTag ?? this.revisionTag,
+      arcRadius: arcRadius ?? this.arcRadius,
+    );
+  }
 
   @override
   Map<String, dynamic> toJson() => {
@@ -323,6 +438,33 @@ class DdsApprovalStampAnnotation extends DdsAnnotation {
     this.reviewDate = '',
     this.comments = '',
   }) : super(type: DdsAnnotationType.approvalStamp);
+
+  DdsApprovalStampAnnotation copyWith({
+    String? id,
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+    String? status,
+    String? reviewedBy,
+    String? reviewDate,
+    String? comments,
+    bool? isVisible,
+  }) {
+    return DdsApprovalStampAnnotation(
+      id: id ?? this.id,
+      space: space,
+      isVisible: isVisible ?? this.isVisible,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      status: status ?? this.status,
+      reviewedBy: reviewedBy ?? this.reviewedBy,
+      reviewDate: reviewDate ?? this.reviewDate,
+      comments: comments ?? this.comments,
+    );
+  }
 
   @override
   Map<String, dynamic> toJson() => {

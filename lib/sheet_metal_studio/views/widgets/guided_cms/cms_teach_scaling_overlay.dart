@@ -15,20 +15,15 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+
 import '../../../engine/cms/cms_scaling_controller.dart';
-import '../../../models/cms/cms_product_contract.dart';
 
 class CmsTeachScalingOverlay extends StatefulWidget {
   final CmsScalingController controller;
   final VoidCallback onAccept;
   final VoidCallback onCancel;
 
-  const CmsTeachScalingOverlay({
-    super.key,
-    required this.controller,
-    required this.onAccept,
-    required this.onCancel,
-  });
+  const CmsTeachScalingOverlay({super.key, required this.controller, required this.onAccept, required this.onCancel});
 
   @override
   State<CmsTeachScalingOverlay> createState() => _CmsTeachScalingOverlayState();
@@ -174,12 +169,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                           const SizedBox(width: 4.0),
                           const Text(
                             'TEMPLATE SCALING',
-                            style: TextStyle(
-                              fontSize: 12.0,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF0F172A),
-                              letterSpacing: 0.6,
-                            ),
+                            style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.w800, color: Color(0xFF0F172A), letterSpacing: 0.6),
                           ),
                           const Spacer(),
                           Container(
@@ -191,11 +181,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                             ),
                             child: Text(
                               profileName,
-                              style: const TextStyle(
-                                fontSize: 10.0,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF15803D),
-                              ),
+                              style: const TextStyle(fontSize: 10.0, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -235,19 +221,8 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                                 decoration: BoxDecoration(
                                   color: isSelected ? const Color(0xFFEDE9FE) : const Color(0xFFF8FAFC),
                                   borderRadius: BorderRadius.circular(8.0),
-                                  border: Border.all(
-                                    color: isSelected ? const Color(0xFF7C3AED) : const Color(0xFFE2E8F0),
-                                    width: isSelected ? 1.5 : 1.0,
-                                  ),
-                                  boxShadow: isSelected
-                                      ? [
-                                          const BoxShadow(
-                                            color: Color(0x1F7C3AED),
-                                            blurRadius: 4.0,
-                                            offset: Offset(0, 1.5),
-                                          )
-                                        ]
-                                      : null,
+                                  border: Border.all(color: isSelected ? const Color(0xFF7C3AED) : const Color(0xFFE2E8F0), width: isSelected ? 1.5 : 1.0),
+                                  boxShadow: isSelected ? [const BoxShadow(color: Color(0x1F7C3AED), blurRadius: 4.0, offset: Offset(0, 1.5))] : null,
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -364,11 +339,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                             Expanded(
                               child: Text(
                                 param.displayName,
-                                style: const TextStyle(
-                                  fontSize: 12.0,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF0F172A),
-                                ),
+                                style: const TextStyle(fontSize: 12.0, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -397,9 +368,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                                 decoration: BoxDecoration(
                                   color: previewVal >= 95.0 ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
                                   borderRadius: BorderRadius.circular(4.0),
-                                  border: Border.all(
-                                    color: previewVal >= 95.0 ? const Color(0xFF86EFAC) : const Color(0xFFFDE68A),
-                                  ),
+                                  border: Border.all(color: previewVal >= 95.0 ? const Color(0xFF86EFAC) : const Color(0xFFFDE68A)),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -450,12 +419,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                                         focusNode: _focusNode,
                                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                         textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          fontSize: 13.0,
-                                          fontWeight: FontWeight.bold,
-                                          fontFamily: 'monospace',
-                                          color: Color(0xFF0F172A),
-                                        ),
+                                        style: const TextStyle(fontSize: 13.0, fontWeight: FontWeight.bold, fontFamily: 'monospace', color: Color(0xFF0F172A)),
                                         decoration: InputDecoration(
                                           contentPadding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 4.0),
                                           filled: true,
@@ -548,10 +512,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                         Wrap(
                           spacing: 4.5,
                           runSpacing: 4.0,
-                          children: (isHeight
-                                  ? const [50.0, 75.0, 95.0, 100.0, 150.0, 200.0]
-                                  : const [50.0, 75.0, 100.0, 150.0, 200.0, 300.0])
-                              .map((size) {
+                          children: (isHeight ? const [50.0, 75.0, 95.0, 100.0, 150.0, 200.0] : const [50.0, 75.0, 100.0, 150.0, 200.0, 300.0]).map((size) {
                             final isSelected = (previewVal - size).abs() < 0.5;
                             final isThreshold = isHeight && size == 95.0;
                             return InkWell(
@@ -581,9 +542,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : (isThreshold ? const Color(0xFF15803D) : const Color(0xFF1E293B)),
+                                    color: isSelected ? Colors.white : (isThreshold ? const Color(0xFF15803D) : const Color(0xFF1E293B)),
                                   ),
                                 ),
                               ),
@@ -620,11 +579,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                                     SizedBox(width: 2.0),
                                     Text(
                                       'Reset',
-                                      style: TextStyle(
-                                        fontSize: 10.0,
-                                        fontWeight: FontWeight.w700,
-                                        color: Color(0xFF0284C7),
-                                      ),
+                                      style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.w700, color: Color(0xFF0284C7)),
                                     ),
                                   ],
                                 ),
@@ -658,10 +613,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                             padding: const EdgeInsets.symmetric(vertical: 9.0),
                           ),
                           icon: const Icon(Icons.check_circle_rounded, size: 16.0),
-                          label: const Text(
-                            'Apply Scaling',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
-                          ),
+                          label: const Text('Apply Scaling', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
                           onPressed: widget.onAccept,
                         ),
                       ),
@@ -705,10 +657,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
         decoration: BoxDecoration(
           color: isSelected ? activeBg : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(7.0),
-          border: Border.all(
-            color: isSelected ? activeColor : const Color(0xFFE2E8F0),
-            width: isSelected ? 1.4 : 1.0,
-          ),
+          border: Border.all(color: isSelected ? activeColor : const Color(0xFFE2E8F0), width: isSelected ? 1.4 : 1.0),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -725,12 +674,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
             ),
             Text(
               '${dimensionValue.toStringAsFixed(0)}mm',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'monospace',
-                color: isSelected ? activeColor : const Color(0xFF0F172A),
-              ),
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, fontFamily: 'monospace', color: isSelected ? activeColor : const Color(0xFF0F172A)),
             ),
           ],
         ),
@@ -738,12 +682,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
     );
   }
 
-  Widget _buildStepButton({
-    required IconData icon,
-    required String label,
-    required String tooltip,
-    required VoidCallback onPressed,
-  }) {
+  Widget _buildStepButton({required IconData icon, required String label, required String tooltip, required VoidCallback onPressed}) {
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -763,11 +702,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
               Icon(icon, size: 13.0, color: const Color(0xFF475569)),
               Text(
                 label.replaceFirst('+', '').replaceFirst('-', ''),
-                style: const TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF475569),
-                ),
+                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
               ),
             ],
           ),

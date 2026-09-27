@@ -1,13 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/cms/cms_3d_opening_detector.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/cms/cms_opening_plane_analyzer.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/kinematic_fold_engine.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/planar_face_decomposer.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dsf_document.dart';
-import 'package:trufold_studio/sheet_metal_studio/models/planar_sheet_face.dart';
-
 import 'package:trufold_studio/sheet_metal_studio/engine/dxf_dsf_importer.dart';
 
 void main() {
@@ -45,11 +44,7 @@ void main() {
       print('  Decomp face ${f.id}: role=${f.role}, label=${f.label}');
     }
 
-    final foldDoc = dsf.copyWith(
-      faces: decomp.faces,
-      bends: decomp.connectedBends,
-      baseFaceId: decomp.baseFaceId,
-    );
+    final foldDoc = dsf.copyWith(faces: decomp.faces, bends: decomp.connectedBends, baseFaceId: decomp.baseFaceId);
 
     // Save decomposed faces and bends to the file
     file.writeAsStringSync(jsonEncode(foldDoc.toJson()));

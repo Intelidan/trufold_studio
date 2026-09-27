@@ -291,9 +291,12 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
+    return ListenableBuilder(
+      listenable: widget.viewModel,
+      builder: (context, _) {
+        return ClipRect(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
           final size = constraints.biggest;
           return Container(
             decoration: const BoxDecoration(
@@ -786,7 +789,9 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
         },
       ),
     );
-  }
+  },
+);
+}
 
   void _showChamferDialog(BuildContext context) {
     final currentChamfer = viewModel.currentEdgeChamfer;

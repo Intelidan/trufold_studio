@@ -20,46 +20,69 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
-import '../../../engine/kinematic_fold_engine.dart';
 import '../../../models/cad_primitives.dart';
+import '../../../models/cnc_punch_primitive.dart';
+import '../../../models/dsf_document.dart';
 import '../../../models/dds/dds_annotation.dart';
 import '../../../models/dds/dds_document.dart';
 import '../../../models/dds/dds_product_instance.dart';
 import '../../../models/dds/dds_sheet.dart';
 import '../../../engine/dds/dds_instance_evaluator.dart';
+import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
+import '../viewport_3d_widget.dart';
 import 'dds_drawing_painters.dart';
 
-enum DdsViewportMode {
-  transitionWipe,
-  split,
-  kinematicFold,
-}
+enum DdsViewportMode { presentation3D, transitionWipe }
 
 class DdsPaperCanvas extends StatefulWidget {
   final DdsDocument document;
   final DdsSheet sheet;
   final EvaluatedDdsInstance? evaluatedInstance;
+  final SheetMetalStudioViewModel? viewModel;
   final DdsMarkupTool activeMarkupTool;
   final String? selectedAnnotationId;
   final void Function(List<DdsAnnotation> updatedAnnotations)? onAnnotationsChanged;
   final void Function(String? annotationId)? onAnnotationSelected;
   final VoidCallback? onNextSheet;
   final VoidCallback? onPrevSheet;
+  final VoidCallback? onDeleteSheet;
+  final bool? showDimWidth;
+  final bool? showDimHeight;
+  final bool? showDimPorts;
+  final bool? showDimSlots;
+  final bool? showDimFlange;
+  final bool? showDimThickness;
+  final void Function(String dim, bool visible)? onDimensionToggled;
+  final ValueChanged<DdsViewSettings>? onViewSettingsChanged;
+  final ValueChanged<DdsProjectInfo>? onProjectInfoChanged;
 
   const DdsPaperCanvas({
     super.key,
     required this.document,
     required this.sheet,
     this.evaluatedInstance,
+    this.viewModel,
     this.activeMarkupTool = DdsMarkupTool.select,
     this.selectedAnnotationId,
     this.onAnnotationsChanged,
     this.onAnnotationSelected,
     this.onNextSheet,
     this.onPrevSheet,
+    this.onDeleteSheet,
+    this.showDimWidth,
+    this.showDimHeight,
+    this.showDimPorts,
+    this.showDimSlots,
+    this.showDimFlange,
+    this.showDimThickness,
+    this.onDimensionToggled,
+    this.onViewSettingsChanged,
+    this.onProjectInfoChanged,
   });
 
   @override
@@ -67,56 +90,210 @@ class DdsPaperCanvas extends StatefulWidget {
 }
 
 class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStateMixin {
+  // Dedicated fitting ViewModel for this sheet's specific evaluated model (Reducer, Cross, Bend, Tee)
+  SheetMetalStudioViewModel? _sheetViewModel;
+  String? _activeLoadedInstanceId;
+
   // Temporary interactive drawing state
   CadPoint2D? _pendingStartPoint;
   CadPoint2D? _currentHoverPoint;
   final List<CadPoint2D> _pendingCloudPoints = [];
 
+  // Dragging annotations state
+  bool _isDraggingAnnotation = false;
+  String? _draggedAnnotationId;
+  CadPoint2D? _dragLastPointMm;
+
   // Hit test radius in sheet mm
   static const double _hitTestRadiusMm = 8.0;
 
-  // Viewport mode and 2D/3D transition parameters
-  DdsViewportMode _viewportMode = DdsViewportMode.transitionWipe;
+  // Viewport mode and 3D technical presentation parameters
+  DdsViewportMode _viewportMode = DdsViewportMode.presentation3D;
   double _transitionProgress = 0.50; // 0.0 to 1.0 (sweep divider line)
   bool _showHatching = true;
   bool _isAutoSweeping = false;
   late AnimationController _sweepController;
 
-  // Kinematic fold simulation parameters
-  double _foldProgress = 1.0; // 0.0 (flat sheet) to 1.0 (folded 90 deg channel)
-  bool _isAutoFolding = false;
-  late AnimationController _foldController;
+  // 3D Presentation Dimension Annotations & Companion Model Toggle State
+  bool _showCover3D = true;
+  bool _showFasteners3D = false;
+  bool _showDimWidth = true;
+  bool _showDimHeight = true;
+  bool _showDimPorts = true;
+  bool _showDimSlots = true;
+  bool _showDimFlange = true;
+  bool _showDimThickness = true;
+  bool _showCadDimensionLines = true;
+  bool _showDimensionTags = true;
+
+  void _onSheetVmChanged() {
+    if (mounted) {
+      _persistSheetViewSettings();
+      if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      } else {
+        setState(() {});
+      }
+    }
+  }
+
+  void _restoreFromSheetViewSettings() {
+    final vs = widget.sheet.viewSettings;
+    _showCover3D = vs.showCover3D;
+    _showFasteners3D = vs.showFasteners3D;
+    _showDimWidth = widget.showDimWidth ?? vs.showDimWidth;
+    _showDimHeight = widget.showDimHeight ?? vs.showDimHeight;
+    _showDimPorts = widget.showDimPorts ?? vs.showDimPorts;
+    _showDimSlots = widget.showDimSlots ?? vs.showDimSlots;
+    _showDimFlange = widget.showDimFlange ?? vs.showDimFlange;
+    _showDimThickness = widget.showDimThickness ?? vs.showDimThickness;
+    _showCadDimensionLines = vs.showCadDimensionLines;
+    _showDimensionTags = vs.showDimensionTags;
+
+    if (_sheetViewModel != null) {
+      if (_sheetViewModel!.isCoverVisible3D != vs.showCover3D) {
+        _sheetViewModel!.toggleCoverVisibility3D();
+      }
+      _sheetViewModel!.azimuthDeg = vs.camera3D.azimuthDeg;
+      _sheetViewModel!.elevationDeg = vs.camera3D.elevationDeg;
+      _sheetViewModel!.cameraZoom = vs.camera3D.zoom;
+      _sheetViewModel!.pan3D = Offset(vs.camera3D.panOffset.x, vs.camera3D.panOffset.y);
+      _sheetViewModel!.showCmsPortHighlights = _showDimPorts;
+    }
+  }
+
+  void _persistSheetViewSettings() {
+    if (!mounted) return;
+    final cam = _sheetViewModel != null
+        ? DdsCamera3DSettings(
+            elevationDeg: _sheetViewModel!.elevationDeg,
+            azimuthDeg: _sheetViewModel!.azimuthDeg,
+            zoom: _sheetViewModel!.cameraZoom,
+            panOffset: CadPoint2D(_sheetViewModel!.pan3D.dx, _sheetViewModel!.pan3D.dy),
+          )
+        : widget.sheet.viewSettings.camera3D;
+
+    final updated = widget.sheet.viewSettings.copyWith(
+      showCover3D: _sheetViewModel?.isCoverVisible3D ?? _showCover3D,
+      showFasteners3D: _showFasteners3D,
+      showDimWidth: _showDimWidth,
+      showDimHeight: _showDimHeight,
+      showDimPorts: _showDimPorts,
+      showDimSlots: _showDimSlots,
+      showDimFlange: _showDimFlange,
+      showDimThickness: _showDimThickness,
+      showCadDimensionLines: _showCadDimensionLines,
+      showDimensionTags: _showDimensionTags,
+      camera3D: cam,
+    );
+
+    if (updated != widget.sheet.viewSettings) {
+      if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) widget.onViewSettingsChanged?.call(updated);
+        });
+      } else {
+        widget.onViewSettingsChanged?.call(updated);
+      }
+    }
+  }
+
+  void _syncSheetViewModel() {
+    final eval = widget.evaluatedInstance;
+    if (eval != null) {
+      final newInstId = eval.instance.instanceId;
+      if (_activeLoadedInstanceId == newInstId && _sheetViewModel != null) {
+        return;
+      }
+      _sheetViewModel?.removeListener(_onSheetVmChanged);
+      _sheetViewModel?.dispose();
+      var doc = eval.scaledBaseDocument;
+      if (eval.coverData != null) {
+        doc = doc.copyWith(cover: eval.coverData);
+      }
+      _sheetViewModel = SheetMetalStudioViewModel(initialDocument: doc);
+      final vs = widget.sheet.viewSettings;
+      if (_sheetViewModel!.isCoverVisible3D != vs.showCover3D) {
+        _sheetViewModel!.toggleCoverVisibility3D();
+      }
+      _sheetViewModel!.azimuthDeg = vs.camera3D.azimuthDeg;
+      _sheetViewModel!.elevationDeg = vs.camera3D.elevationDeg;
+      _sheetViewModel!.cameraZoom = vs.camera3D.zoom;
+      _sheetViewModel!.pan3D = Offset(vs.camera3D.panOffset.x, vs.camera3D.panOffset.y);
+      _sheetViewModel!.showCmsPortHighlights = _showDimPorts;
+      _sheetViewModel!.addListener(_onSheetVmChanged);
+      _activeLoadedInstanceId = newInstId;
+    } else {
+      _sheetViewModel?.removeListener(_onSheetVmChanged);
+      _sheetViewModel?.dispose();
+      _sheetViewModel = null;
+      _activeLoadedInstanceId = null;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _sweepController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 3500),
-    )..addListener(() {
+    _restoreFromSheetViewSettings();
+    _syncSheetViewModel();
+
+    _sweepController = AnimationController(vsync: this, duration: const Duration(milliseconds: 3500))
+      ..addListener(() {
         if (_isAutoSweeping) {
           setState(() {
             _transitionProgress = _sweepController.value;
           });
         }
       });
+  }
 
-    _foldController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2500),
-    )..addListener(() {
-        if (_isAutoFolding) {
-          setState(() {
-            _foldProgress = _foldController.value;
-          });
-        }
-      });
+  @override
+  void didUpdateWidget(covariant DdsPaperCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeMarkupTool != widget.activeMarkupTool) {
+      _pendingStartPoint = null;
+      _pendingCloudPoints.clear();
+      _currentHoverPoint = null;
+    }
+    if (oldWidget.sheet.sheetId != widget.sheet.sheetId) {
+      _restoreFromSheetViewSettings();
+    }
+    if (widget.showDimWidth != null && widget.showDimWidth != _showDimWidth) {
+      _showDimWidth = widget.showDimWidth!;
+    }
+    if (widget.showDimHeight != null && widget.showDimHeight != _showDimHeight) {
+      _showDimHeight = widget.showDimHeight!;
+    }
+    if (widget.showDimPorts != null && widget.showDimPorts != _showDimPorts) {
+      _showDimPorts = widget.showDimPorts!;
+    }
+    if (widget.showDimSlots != null && widget.showDimSlots != _showDimSlots) {
+      _showDimSlots = widget.showDimSlots!;
+    }
+    if (widget.showDimFlange != null && widget.showDimFlange != _showDimFlange) {
+      _showDimFlange = widget.showDimFlange!;
+    }
+    if (widget.showDimThickness != null && widget.showDimThickness != _showDimThickness) {
+      _showDimThickness = widget.showDimThickness!;
+    }
+
+    if (oldWidget.evaluatedInstance != widget.evaluatedInstance ||
+        oldWidget.sheet.sheetId != widget.sheet.sheetId ||
+        oldWidget.evaluatedInstance?.instance.instanceId != widget.evaluatedInstance?.instance.instanceId) {
+      _syncSheetViewModel();
+    }
+    if (_sheetViewModel != null) {
+      _sheetViewModel!.showCmsPortHighlights = _showDimPorts;
+    }
   }
 
   @override
   void dispose() {
+    _sheetViewModel?.removeListener(_onSheetVmChanged);
+    _sheetViewModel?.dispose();
     _sweepController.dispose();
-    _foldController.dispose();
     super.dispose();
   }
 
@@ -129,27 +306,6 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
         _sweepController.stop();
       }
     });
-  }
-
-  void _toggleAutoFold() {
-    setState(() {
-      _isAutoFolding = !_isAutoFolding;
-      if (_isAutoFolding) {
-        _foldController.repeat(reverse: true);
-      } else {
-        _foldController.stop();
-      }
-    });
-  }
-
-  @override
-  void didUpdateWidget(covariant DdsPaperCanvas oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.activeMarkupTool != widget.activeMarkupTool) {
-      _pendingStartPoint = null;
-      _pendingCloudPoints.clear();
-      _currentHoverPoint = null;
-    }
   }
 
   // ===========================================================================
@@ -224,6 +380,9 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
         final mid = CadPoint2D((ann.p1.x + ann.p2.x) / 2, (ann.p1.y + ann.p2.y) / 2);
         final dMid = (mid - clickMm).length;
         if (d1 < _hitTestRadiusMm || d2 < _hitTestRadiusMm || dMid < _hitTestRadiusMm) {
+          _draggedAnnotationId = ann.id;
+          _isDraggingAnnotation = true;
+          _dragLastPointMm = clickMm;
           widget.onAnnotationSelected?.call(ann.id);
           return;
         }
@@ -231,28 +390,34 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
         final dT = (ann.targetPoint - clickMm).length;
         final dP = (ann.textPosition - clickMm).length;
         if (dT < _hitTestRadiusMm || dP < _hitTestRadiusMm) {
+          _draggedAnnotationId = ann.id;
+          _isDraggingAnnotation = true;
+          _dragLastPointMm = clickMm;
           widget.onAnnotationSelected?.call(ann.id);
           return;
         }
       } else if (ann is DdsNoteBoxAnnotation) {
-        if (clickMm.x >= ann.x &&
-            clickMm.x <= ann.x + ann.width &&
-            clickMm.y >= ann.y &&
-            clickMm.y <= ann.y + ann.height) {
+        if (clickMm.x >= ann.x && clickMm.x <= ann.x + ann.width && clickMm.y >= ann.y && clickMm.y <= ann.y + ann.height) {
+          _draggedAnnotationId = ann.id;
+          _isDraggingAnnotation = true;
+          _dragLastPointMm = clickMm;
           widget.onAnnotationSelected?.call(ann.id);
           return;
         }
       } else if (ann is DdsApprovalStampAnnotation) {
-        if (clickMm.x >= ann.x &&
-            clickMm.x <= ann.x + ann.width &&
-            clickMm.y >= ann.y &&
-            clickMm.y <= ann.y + ann.height) {
+        if (clickMm.x >= ann.x && clickMm.x <= ann.x + ann.width && clickMm.y >= ann.y && clickMm.y <= ann.y + ann.height) {
+          _draggedAnnotationId = ann.id;
+          _isDraggingAnnotation = true;
+          _dragLastPointMm = clickMm;
           widget.onAnnotationSelected?.call(ann.id);
           return;
         }
       } else if (ann is DdsRevisionCloudAnnotation) {
         for (final pt in ann.points) {
           if ((pt - clickMm).length < _hitTestRadiusMm) {
+            _draggedAnnotationId = ann.id;
+            _isDraggingAnnotation = true;
+            _dragLastPointMm = clickMm;
             widget.onAnnotationSelected?.call(ann.id);
             return;
           }
@@ -261,7 +426,50 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     }
 
     // Deselect if clicked blank area
+    _draggedAnnotationId = null;
+    _isDraggingAnnotation = false;
+    _dragLastPointMm = null;
     widget.onAnnotationSelected?.call(null);
+  }
+
+  void _handlePointerMove(PointerMoveEvent event, Size paperSize) {
+    if (!_isDraggingAnnotation || _draggedAnnotationId == null || _dragLastPointMm == null) return;
+    if (paperSize.width <= 0 || paperSize.height <= 0) return;
+
+    final mmX = (event.localPosition.dx / paperSize.width) * 297.0;
+    final mmY = (event.localPosition.dy / paperSize.height) * 210.0;
+    final currentMm = CadPoint2D(mmX, mmY);
+    final dx = currentMm.x - _dragLastPointMm!.x;
+    final dy = currentMm.y - _dragLastPointMm!.y;
+    if (dx.abs() < 0.05 && dy.abs() < 0.05) return;
+    _dragLastPointMm = currentMm;
+
+    final updatedList = widget.sheet.annotations.map((ann) {
+      if (ann.id != _draggedAnnotationId) return ann;
+      if (ann is DdsLinearDimensionAnnotation) {
+        return ann.copyWith(p1: CadPoint2D(ann.p1.x + dx, ann.p1.y + dy), p2: CadPoint2D(ann.p2.x + dx, ann.p2.y + dy));
+      } else if (ann is DdsLeaderNoteAnnotation) {
+        return ann.copyWith(
+          targetPoint: CadPoint2D(ann.targetPoint.x + dx, ann.targetPoint.y + dy),
+          textPosition: CadPoint2D(ann.textPosition.x + dx, ann.textPosition.y + dy),
+        );
+      } else if (ann is DdsNoteBoxAnnotation) {
+        return ann.copyWith(x: ann.x + dx, y: ann.y + dy);
+      } else if (ann is DdsApprovalStampAnnotation) {
+        return ann.copyWith(x: ann.x + dx, y: ann.y + dy);
+      } else if (ann is DdsRevisionCloudAnnotation) {
+        return ann.copyWith(points: ann.points.map((p) => CadPoint2D(p.x + dx, p.y + dy)).toList());
+      }
+      return ann;
+    }).toList();
+
+    widget.onAnnotationsChanged?.call(updatedList);
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    _isDraggingAnnotation = false;
+    _draggedAnnotationId = null;
+    _dragLastPointMm = null;
   }
 
   void _createLinearDimension(CadPoint2D p1, CadPoint2D p2) {
@@ -322,12 +530,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
 
     if (text == null || text.isEmpty) return;
 
-    final annotation = DdsLeaderNoteAnnotation(
-      id: 'leader_${DateTime.now().millisecondsSinceEpoch}',
-      targetPoint: target,
-      textPosition: textPos,
-      text: text,
-    );
+    final annotation = DdsLeaderNoteAnnotation(id: 'leader_${DateTime.now().millisecondsSinceEpoch}', targetPoint: target, textPosition: textPos, text: text);
 
     final list = List<DdsAnnotation>.from(widget.sheet.annotations)..add(annotation);
     widget.onAnnotationsChanged?.call(list);
@@ -335,9 +538,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   }
 
   Future<void> _promptAndCreateNoteBox(CadPoint2D pos) async {
-    final controller = TextEditingController(
-      text: 'NOTE: All dimensions in mm. Confirm site opening before fabrication.',
-    );
+    final controller = TextEditingController(text: 'NOTE: All dimensions in mm. Confirm site opening before fabrication.');
     final text = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -378,14 +579,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
 
     if (text == null || text.isEmpty) return;
 
-    final annotation = DdsNoteBoxAnnotation(
-      id: 'notebox_${DateTime.now().millisecondsSinceEpoch}',
-      x: pos.x,
-      y: pos.y,
-      width: 75.0,
-      height: 25.0,
-      text: text,
-    );
+    final annotation = DdsNoteBoxAnnotation(id: 'notebox_${DateTime.now().millisecondsSinceEpoch}', x: pos.x, y: pos.y, width: 75.0, height: 25.0, text: text);
 
     final list = List<DdsAnnotation>.from(widget.sheet.annotations)..add(annotation);
     widget.onAnnotationsChanged?.call(list);
@@ -418,9 +612,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
       width: 70.0,
       height: 28.0,
       status: 'APPROVED AS NOTED',
-      reviewedBy: widget.document.projectInfo.consultant.isNotEmpty
-          ? widget.document.projectInfo.consultant
-          : 'Consultant Engineer',
+      reviewedBy: widget.document.projectInfo.consultant.isNotEmpty ? widget.document.projectInfo.consultant : 'Consultant Engineer',
       reviewDate: widget.document.projectInfo.issueDate,
     );
 
@@ -464,19 +656,15 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
             cursor: _getCursorForMarkupTool(),
             child: Listener(
               onPointerDown: (e) => _handlePointerDown(e, paperSize),
+              onPointerMove: (e) => _handlePointerMove(e, paperSize),
+              onPointerUp: (e) => _handlePointerUp(e),
               child: Container(
                 width: paperWidth,
                 height: paperHeight,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(4.0),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 16.0,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 16.0, offset: const Offset(0, 6))],
                 ),
                 child: Stack(
                   children: [
@@ -485,27 +673,25 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20.0, 10.0, 10.0, 10.0), // 20mm filing margin
                         child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: const Color(0xFF0F172A), width: 1.2),
-                          ),
-                          child: widget.sheet.isCoverPage
-                              ? _buildCoverPageSheet()
-                              : _buildProductSheet(),
+                          decoration: BoxDecoration(border: Border.all(color: const Color(0xFF0F172A), width: 1.2)),
+                          child: widget.sheet.isCoverPage ? _buildCoverPageSheet() : _buildProductSheet(),
                         ),
                       ),
                     ),
 
                     // Interactive Annotation Layer (Linear dimensions, leader notes, clouds, stamps)
                     Positioned.fill(
-                      child: CustomPaint(
-                        painter: _DdsAnnotationOverlayPainter(
-                          annotations: widget.sheet.annotations,
-                          selectedAnnotationId: widget.selectedAnnotationId,
-                          paperSize: paperSize,
-                          pendingStartPoint: _pendingStartPoint,
-                          hoverPoint: _currentHoverPoint,
-                          pendingCloudPoints: _pendingCloudPoints,
-                          activeTool: widget.activeMarkupTool,
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _DdsAnnotationOverlayPainter(
+                            annotations: widget.sheet.annotations,
+                            selectedAnnotationId: widget.selectedAnnotationId,
+                            paperSize: paperSize,
+                            pendingStartPoint: _pendingStartPoint,
+                            hoverPoint: _currentHoverPoint,
+                            pendingCloudPoints: _pendingCloudPoints,
+                            activeTool: widget.activeMarkupTool,
+                          ),
                         ),
                       ),
                     ),
@@ -600,12 +786,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                 children: [
                   Text(
                     proj.documentTitle.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14.0,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 14.0, fontWeight: FontWeight.bold, letterSpacing: 0.8),
                   ),
                   const SizedBox(height: 2.0),
                   Text(
@@ -614,16 +795,47 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0284C7),
-                  borderRadius: BorderRadius.circular(4.0),
-                ),
-                child: Text(
-                  'REV ${proj.revision}  (${proj.status.toUpperCase()})',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10.5),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
+                    decoration: BoxDecoration(color: const Color(0xFF0284C7), borderRadius: BorderRadius.circular(4.0)),
+                    child: Text(
+                      'REV ${proj.revision}  (${proj.status.toUpperCase()})',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10.5),
+                    ),
+                  ),
+                  if (widget.onDeleteSheet != null && widget.document.sheets.length > 1) ...[
+                    const SizedBox(width: 8),
+                    Tooltip(
+                      message: 'Delete Cover Page',
+                      child: InkWell(
+                        onTap: widget.onDeleteSheet,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.5), width: 0.8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.delete_outline, size: 12, color: Color(0xFFEF4444)),
+                              SizedBox(width: 3),
+                              Text(
+                                'DELETE PAGE',
+                                style: TextStyle(color: Color(0xFFEF4444), fontSize: 8.5, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -658,12 +870,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                     SizedBox(width: 6.0),
                     Text(
                       'PRODUCT TRANSMITTAL SCHEDULE & BILL OF QUANTITIES',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                        letterSpacing: 0.5,
-                      ),
+                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A), letterSpacing: 0.5),
                     ),
                   ],
                 ),
@@ -680,8 +887,14 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                       SizedBox(width: 80, child: Text('CUSTOMER REF', style: _tocHeaderStyle)),
                       Expanded(flex: 4, child: Text('PRODUCT DESCRIPTION', style: _tocHeaderStyle)),
                       Expanded(flex: 3, child: Text('CONFIGURATION & PORTS', style: _tocHeaderStyle)),
-                      SizedBox(width: 44, child: Text('QTY', style: _tocHeaderStyle, textAlign: TextAlign.right)),
-                      SizedBox(width: 60, child: Text('STATUS', style: _tocHeaderStyle, textAlign: TextAlign.center)),
+                      SizedBox(
+                        width: 44,
+                        child: Text('QTY', style: _tocHeaderStyle, textAlign: TextAlign.right),
+                      ),
+                      SizedBox(
+                        width: 60,
+                        child: Text('STATUS', style: _tocHeaderStyle, textAlign: TextAlign.center),
+                      ),
                     ],
                   ),
                 ),
@@ -703,7 +916,10 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                             SizedBox(width: 80, child: Text(item.customerRef, style: _tocRowStyleBold)),
                             Expanded(flex: 4, child: Text(item.productName, style: _tocRowStyleBold)),
                             Expanded(flex: 3, child: Text(item.configuration, style: _tocRowStyle)),
-                            SizedBox(width: 44, child: Text('${item.quantity} pcs', style: _tocRowStyle, textAlign: TextAlign.right)),
+                            SizedBox(
+                              width: 44,
+                              child: Text('${item.quantity} pcs', style: _tocRowStyle, textAlign: TextAlign.right),
+                            ),
                             SizedBox(
                               width: 60,
                               child: Center(
@@ -748,11 +964,23 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('GENERAL NOTES & COMPLIANCE:', style: TextStyle(fontSize: 9.0, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                    Text(
+                      'GENERAL NOTES & COMPLIANCE:',
+                      style: TextStyle(fontSize: 9.0, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    ),
                     SizedBox(height: 3.0),
-                    Text('1. Conforms to BS EN 50085-1: Cable trunking systems and cable ducting systems.', style: TextStyle(fontSize: 8.0, color: Color(0xFF475569))),
-                    Text('2. Material: Pre-Galvanized Mild Steel DX51D + Z275 coating (nominal thickness 1.5 mm).', style: TextStyle(fontSize: 8.0, color: Color(0xFF475569))),
-                    Text('3. Universal 95 mm coupler flap spacing with integral slotted holes (Ø6 mm).', style: TextStyle(fontSize: 8.0, color: Color(0xFF475569))),
+                    Text(
+                      '1. Conforms to BS EN 50085-1: Cable trunking systems and cable ducting systems.',
+                      style: TextStyle(fontSize: 8.0, color: Color(0xFF475569)),
+                    ),
+                    Text(
+                      '2. Material: Pre-Galvanized Mild Steel DX51D + Z275 coating (nominal thickness 1.5 mm).',
+                      style: TextStyle(fontSize: 8.0, color: Color(0xFF475569)),
+                    ),
+                    Text(
+                      '3. Universal 95 mm coupler flap spacing with integral slotted holes (Ø6 mm).',
+                      style: TextStyle(fontSize: 8.0, color: Color(0xFF475569)),
+                    ),
                   ],
                 ),
               ),
@@ -773,7 +1001,10 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('CLIENT / CONSULTANT APPROVAL STAMP', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF0284C7))),
+                          Text(
+                            'CLIENT / CONSULTANT APPROVAL STAMP',
+                            style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+                          ),
                           Text('ISO 7200', style: TextStyle(fontSize: 8.0, color: Color(0xFF64748B))),
                         ],
                       ),
@@ -820,20 +1051,12 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                 children: [
                   Text(
                     inst?.productName ?? widget.sheet.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                   ),
                   const SizedBox(width: 8.0),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0284C7),
-                      borderRadius: BorderRadius.circular(3.0),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF0284C7), borderRadius: BorderRadius.circular(3.0)),
                     child: Text(
                       inst?.productCode ?? 'PRODUCT',
                       style: const TextStyle(color: Colors.white, fontSize: 9.0, fontWeight: FontWeight.bold),
@@ -841,15 +1064,45 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                   ),
                 ],
               ),
-              if (inst?.orderLine != null)
-                Text(
-                  'ORDER: ${inst!.orderLine!.orderNumber}  |  LINE ${inst.orderLine!.lineNumber}  |  QTY: ${inst.orderLine!.quantity} PCS',
-                  style: const TextStyle(
-                    color: Color(0xFF38BDF8),
-                    fontSize: 10.0,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (inst?.orderLine != null)
+                    Text(
+                      'ORDER: ${inst!.orderLine!.orderNumber}  |  LINE ${inst.orderLine!.lineNumber}  |  QTY: ${inst.orderLine!.quantity} PCS',
+                      style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10.0, fontWeight: FontWeight.bold),
+                    ),
+                  if (widget.onDeleteSheet != null) ...[
+                    const SizedBox(width: 10),
+                    Tooltip(
+                      message: 'Delete this Sheet Page',
+                      child: InkWell(
+                        onTap: widget.onDeleteSheet,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.5), width: 0.8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.delete_outline, size: 12, color: Color(0xFFEF4444)),
+                              SizedBox(width: 3),
+                              Text(
+                                'DELETE PAGE',
+                                style: TextStyle(color: Color(0xFFEF4444), fontSize: 8.5, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),
@@ -858,9 +1111,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
         _buildViewportControlBar(eval),
 
         // Active Viewport (2D ⇄ 3D Transition Wipe, Kinematic Fold, or Dual Split)
-        Expanded(
-          child: _buildActiveViewport(eval),
-        ),
+        Expanded(child: _buildActiveViewport(eval)),
 
         // Bottom Technical Strip + Docked ISO 7200 Title Block
         _buildProductBottomDock(inst, eval),
@@ -873,241 +1124,329 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   // ===========================================================================
 
   Widget _buildViewportControlBar(EvaluatedDdsInstance? eval) {
+    final effectiveVm = _sheetViewModel ?? widget.viewModel;
+    final inst = eval?.instance;
     return Container(
-      height: 36,
-      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.5),
       decoration: const BoxDecoration(
-        color: Color(0xFF1E293B),
-        border: Border(bottom: BorderSide(color: Color(0xFF334155), width: 1.0)),
+        color: Color(0xFFF8FAFC),
+        border: Border(bottom: BorderSide(color: Color(0xFFCBD5E1), width: 1.0)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Left: Viewport Mode Switcher
-          Row(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 720),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildModeTab(
-                mode: DdsViewportMode.transitionWipe,
-                icon: Icons.compare_arrows,
-                label: '2D ⇄ 3D Transition Wipe',
-                badgeText: 'REEL FX',
+              // Left: Viewport Mode Switcher
+              Row(
+                children: [
+                  _buildModeTab(mode: DdsViewportMode.presentation3D, icon: Icons.view_in_ar, label: '3D Presentation Model', badgeText: 'ISO 3D'),
+                  const SizedBox(width: 4),
+                  _buildModeTab(mode: DdsViewportMode.transitionWipe, icon: Icons.compare_arrows, label: '3D Wipe'),
+                ],
               ),
-              const SizedBox(width: 4),
-              _buildModeTab(
-                mode: DdsViewportMode.kinematicFold,
-                icon: Icons.view_in_ar,
-                label: 'Kinematic 3D Fold',
-                badgeText: '${(_foldProgress * 90).toInt()}°',
-              ),
-              const SizedBox(width: 4),
-              _buildModeTab(
-                mode: DdsViewportMode.split,
-                icon: Icons.vertical_split,
-                label: 'Dual Split',
-              ),
+
+              // Right: Active Mode Controls
+              if (_viewportMode == DdsViewportMode.presentation3D)
+                Row(
+                  children: [
+                    // Option to display actual CAD Dimension Lines (like 2D sketch) and/or Callout Tags
+                    _buildDisplayModeChip(
+                      label: 'CAD Lines',
+                      icon: Icons.straighten,
+                      active: _showCadDimensionLines,
+                      onTap: () {
+                        setState(() => _showCadDimensionLines = !_showCadDimensionLines);
+                        _persistSheetViewSettings();
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    _buildDisplayModeChip(
+                      label: 'Tags',
+                      icon: Icons.label_outline,
+                      active: _showDimensionTags,
+                      onTap: () {
+                        setState(() => _showDimensionTags = !_showDimensionTags);
+                        _persistSheetViewSettings();
+                      },
+                    ),
+                    if (effectiveVm?.document.cover != null || effectiveVm?.coverMesh != null || inst?.coverConfiguration.included == true) ...[
+                      const SizedBox(width: 4),
+                      _buildDisplayModeChip(
+                        label: (effectiveVm?.isCoverVisible3D ?? true) ? 'Cover On' : 'Cover Off',
+                        icon: (effectiveVm?.isCoverVisible3D ?? true) ? Icons.shield : Icons.shield_outlined,
+                        active: effectiveVm?.isCoverVisible3D ?? true,
+                        onTap: () {
+                          effectiveVm?.toggleCoverVisibility3D();
+                          setState(() {
+                            _showCover3D = effectiveVm?.isCoverVisible3D ?? true;
+                          });
+                          _persistSheetViewSettings();
+                        },
+                      ),
+                    ],
+                    const SizedBox(width: 4),
+                    _buildDisplayModeChip(
+                      label: _showFasteners3D ? 'Fasteners On' : 'Fasteners Off',
+                      icon: _showFasteners3D ? Icons.hardware : Icons.hardware_outlined,
+                      active: _showFasteners3D,
+                      onTap: () {
+                        setState(() => _showFasteners3D = !_showFasteners3D);
+                        _persistSheetViewSettings();
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    Container(width: 1, height: 16, color: const Color(0xFFCBD5E1)),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Features: ',
+                      style: TextStyle(color: Color(0xFF64748B), fontSize: 8.5, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 4),
+                    _buildDimToggleChip('W', _showDimWidth, () {
+                      setState(() => _showDimWidth = !_showDimWidth);
+                      widget.onDimensionToggled?.call('W', _showDimWidth);
+                      _persistSheetViewSettings();
+                    }),
+                    const SizedBox(width: 3),
+                    _buildDimToggleChip('H', _showDimHeight, () {
+                      setState(() => _showDimHeight = !_showDimHeight);
+                      widget.onDimensionToggled?.call('H', _showDimHeight);
+                      _persistSheetViewSettings();
+                    }),
+                    const SizedBox(width: 3),
+                    _buildDimToggleChip('Ports', _showDimPorts, () {
+                      setState(() => _showDimPorts = !_showDimPorts);
+                      widget.onDimensionToggled?.call('Ports', _showDimPorts);
+                      _persistSheetViewSettings();
+                    }),
+                    const SizedBox(width: 3),
+                    _buildDimToggleChip('Slots', _showDimSlots, () {
+                      setState(() => _showDimSlots = !_showDimSlots);
+                      widget.onDimensionToggled?.call('Slots', _showDimSlots);
+                      _persistSheetViewSettings();
+                    }),
+                    const SizedBox(width: 3),
+                    _buildDimToggleChip('Flange', _showDimFlange, () {
+                      setState(() => _showDimFlange = !_showDimFlange);
+                      widget.onDimensionToggled?.call('Flange', _showDimFlange);
+                      _persistSheetViewSettings();
+                    }),
+                    const SizedBox(width: 3),
+                    _buildDimToggleChip('Gauge', _showDimThickness, () {
+                      setState(() => _showDimThickness = !_showDimThickness);
+                      widget.onDimensionToggled?.call('Gauge', _showDimThickness);
+                      _persistSheetViewSettings();
+                    }),
+                    const SizedBox(width: 6),
+                    InkWell(
+                      onTap: () {
+                        final allOn = _showDimWidth && _showDimHeight && _showDimPorts && _showDimSlots && _showDimFlange && _showDimThickness;
+                        final target = !allOn;
+                        setState(() {
+                          _showDimWidth = target;
+                          _showDimHeight = target;
+                          _showDimPorts = target;
+                          _showDimSlots = target;
+                          _showDimFlange = target;
+                          _showDimThickness = target;
+                        });
+                        widget.onDimensionToggled?.call('W', target);
+                        widget.onDimensionToggled?.call('H', target);
+                        widget.onDimensionToggled?.call('Ports', target);
+                        widget.onDimensionToggled?.call('Slots', target);
+                        widget.onDimensionToggled?.call('Flange', target);
+                        widget.onDimensionToggled?.call('Gauge', target);
+                        _persistSheetViewSettings();
+                      },
+                      borderRadius: BorderRadius.circular(3),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border.all(color: const Color(0xFFCBD5E1), width: 0.8),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          (_showDimWidth && _showDimHeight) ? 'Hide All' : 'Show All',
+                          style: const TextStyle(color: Color(0xFF0284C7), fontSize: 8.0, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else if (_viewportMode == DdsViewportMode.transitionWipe)
+                Row(
+                  children: [
+                    // 45 deg Mechanical Section Hatching Toggle
+                    InkWell(
+                      onTap: () => setState(() => _showHatching = !_showHatching),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _showHatching ? const Color(0xFF0284C7).withValues(alpha: 0.2) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: _showHatching ? const Color(0xFF38BDF8) : const Color(0xFF475569), width: 0.8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.texture, size: 11, color: _showHatching ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8)),
+                            const SizedBox(width: 4),
+                            Text(
+                              '45° Hatching',
+                              style: TextStyle(
+                                color: _showHatching ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8),
+                                fontSize: 9.0,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+
+                    // 50% Quick Reset
+                    InkWell(
+                      onTap: () {
+                        if (_isAutoSweeping) {
+                          setState(() {
+                            _isAutoSweeping = false;
+                            _sweepController.stop();
+                          });
+                        }
+                        setState(() => _transitionProgress = 0.50);
+                      },
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFCBD5E1), width: 0.8),
+                        ),
+                        child: const Text(
+                          '50% Split',
+                          style: TextStyle(color: Color(0xFF334155), fontSize: 9.0, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+
+                    // Auto-Sweep Button (60 FPS Cinematic Sweep)
+                    InkWell(
+                      onTap: _toggleAutoSweep,
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: _isAutoSweeping ? [const Color(0xFFE11D48), const Color(0xFFBE123C)] : [const Color(0xFF0284C7), const Color(0xFF0369A1)],
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                          boxShadow: _isAutoSweeping
+                              ? [BoxShadow(color: const Color(0xFFE11D48).withValues(alpha: 0.4), blurRadius: 6, offset: const Offset(0, 1))]
+                              : null,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(_isAutoSweeping ? Icons.pause : Icons.play_arrow, size: 12, color: Colors.white),
+                            const SizedBox(width: 4),
+                            Text(
+                              _isAutoSweeping ? 'Pause Sweep' : 'Auto Sweep',
+                              style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // Transition Percentage Pill
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.4), width: 0.8),
+                      ),
+                      child: Text(
+                        '${(_transitionProgress * 100).toInt()}% 2D  ⬌  ${(100 - _transitionProgress * 100).toInt()}% 3D',
+                        style: const TextStyle(color: Color(0xFF0284C7), fontSize: 9.0, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                const Row(
+                  children: [
+                    Icon(Icons.sync_alt, size: 12, color: Color(0xFF38BDF8)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Synchronized Dual Viewports',
+                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.0, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
             ],
           ),
-
-          // Right: Active Mode Controls
-          if (_viewportMode == DdsViewportMode.transitionWipe)
-            Row(
-              children: [
-                // 45 deg Mechanical Section Hatching Toggle
-                InkWell(
-                  onTap: () => setState(() => _showHatching = !_showHatching),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _showHatching ? const Color(0xFF0284C7).withValues(alpha: 0.2) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: _showHatching ? const Color(0xFF38BDF8) : const Color(0xFF475569),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.texture,
-                          size: 11,
-                          color: _showHatching ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '45° Hatching',
-                          style: TextStyle(
-                            color: _showHatching ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8),
-                            fontSize: 9.0,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-
-                // 50% Quick Reset
-                InkWell(
-                  onTap: () {
-                    if (_isAutoSweeping) {
-                      setState(() {
-                        _isAutoSweeping = false;
-                        _sweepController.stop();
-                      });
-                    }
-                    setState(() => _transitionProgress = 0.50);
-                  },
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF334155),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      '50% Split',
-                      style: TextStyle(color: Colors.white, fontSize: 9.0, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-
-                // Auto-Sweep Button (60 FPS Cinematic Sweep)
-                InkWell(
-                  onTap: _toggleAutoSweep,
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: _isAutoSweeping
-                            ? [const Color(0xFFE11D48), const Color(0xFFBE123C)]
-                            : [const Color(0xFF0284C7), const Color(0xFF0369A1)],
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                      boxShadow: _isAutoSweeping
-                          ? [
-                              BoxShadow(
-                                color: const Color(0xFFE11D48).withValues(alpha: 0.4),
-                                blurRadius: 6,
-                                offset: const Offset(0, 1),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _isAutoSweeping ? Icons.pause : Icons.play_arrow,
-                          size: 12,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _isAutoSweeping ? 'Pause Sweep' : 'Auto Sweep',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-
-                // Transition Percentage Pill
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4), width: 0.8),
-                  ),
-                  child: Text(
-                    '${(_transitionProgress * 100).toInt()}% 2D  ⬌  ${(100 - _transitionProgress * 100).toInt()}% 3D',
-                    style: const TextStyle(
-                      color: Color(0xFF00E5FF),
-                      fontSize: 9.0,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-              ],
-            )
-          else if (_viewportMode == DdsViewportMode.kinematicFold)
-            Row(
-              children: [
-                // Preset Angle Buttons
-                _buildFoldPresetButton(0.0, '0° Flat'),
-                const SizedBox(width: 4),
-                _buildFoldPresetButton(0.5, '45° Half'),
-                const SizedBox(width: 4),
-                _buildFoldPresetButton(1.0, '90° Folded'),
-                const SizedBox(width: 8),
-
-                // Animate Fold Button
-                InkWell(
-                  onTap: _toggleAutoFold,
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: _isAutoFolding
-                            ? [const Color(0xFFE11D48), const Color(0xFFBE123C)]
-                            : [const Color(0xFF10B981), const Color(0xFF059669)],
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _isAutoFolding ? Icons.pause : Icons.play_arrow,
-                          size: 12,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _isAutoFolding ? 'Pause Fold' : 'Animate Fold',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            )
-          else
-            const Row(
-              children: [
-                Icon(Icons.sync_alt, size: 12, color: Color(0xFF38BDF8)),
-                SizedBox(width: 4),
-                Text(
-                  'Synchronized Dual Viewports',
-                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.0, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildModeTab({
-    required DdsViewportMode mode,
-    required IconData icon,
-    required String label,
-    String? badgeText,
-  }) {
+  Widget _buildDisplayModeChip({required String label, required IconData icon, required bool active, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF0284C7) : Colors.white,
+          border: Border.all(color: active ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1), width: 1.0),
+          borderRadius: BorderRadius.circular(4),
+          boxShadow: [if (!active) BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 2, offset: const Offset(0, 1))],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 10, color: active ? Colors.white : const Color(0xFF0284C7)),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(fontSize: 8.5, fontWeight: active ? FontWeight.bold : FontWeight.w600, color: active ? Colors.white : const Color(0xFF334155)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDimToggleChip(String label, bool active, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF0284C7) : Colors.white,
+          border: Border.all(color: active ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1), width: 0.8),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: 7.5, fontWeight: active ? FontWeight.bold : FontWeight.w500, color: active ? Colors.white : const Color(0xFF64748B)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeTab({required DdsViewportMode mode, required IconData icon, required String label, String? badgeText}) {
     final isSelected = _viewportMode == mode;
     return InkWell(
       onTap: () {
@@ -1115,37 +1454,26 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
           _isAutoSweeping = false;
           _sweepController.stop();
         }
-        if (_isAutoFolding) {
-          _isAutoFolding = false;
-          _foldController.stop();
-        }
         setState(() => _viewportMode = mode);
       },
       borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF334155).withValues(alpha: 0.5),
+          color: isSelected ? const Color(0xFF0284C7) : Colors.white,
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF38BDF8) : Colors.transparent,
-            width: 0.8,
-          ),
+          border: Border.all(color: isSelected ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1), width: 0.8),
         ),
         child: Row(
           children: [
-            Icon(
-              icon,
-              size: 11,
-              color: isSelected ? Colors.white : const Color(0xFF94A3B8),
-            ),
+            Icon(icon, size: 11, color: isSelected ? Colors.white : const Color(0xFF64748B)),
             const SizedBox(width: 5),
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? Colors.white : const Color(0xFFCBD5E1),
+                color: isSelected ? Colors.white : const Color(0xFF334155),
                 fontSize: 9.5,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
               ),
             ),
             if (badgeText != null) ...[
@@ -1153,16 +1481,12 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF0284C7),
+                  color: isSelected ? Colors.white.withValues(alpha: 0.25) : const Color(0xFFE2E8F0),
                   borderRadius: BorderRadius.circular(3),
                 ),
                 child: Text(
                   badgeText,
-                  style: TextStyle(
-                    color: isSelected ? const Color(0xFF00E5FF) : Colors.white,
-                    fontSize: 7.5,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(color: isSelected ? Colors.white : const Color(0xFF0284C7), fontSize: 7.5, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -1172,47 +1496,12 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     );
   }
 
-  Widget _buildFoldPresetButton(double val, String label) {
-    final isSelected = (_foldProgress - val).abs() < 0.05;
-    return InkWell(
-      onTap: () {
-        if (_isAutoFolding) {
-          _isAutoFolding = false;
-          _foldController.stop();
-        }
-        setState(() => _foldProgress = val);
-      },
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF334155),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF38BDF8) : Colors.transparent,
-            width: 0.8,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : const Color(0xFFCBD5E1),
-            fontSize: 9.0,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildActiveViewport(EvaluatedDdsInstance? eval) {
     switch (_viewportMode) {
+      case DdsViewportMode.presentation3D:
+        return _build3DPresentationViewport(eval);
       case DdsViewportMode.transitionWipe:
         return _buildTransitionViewport(eval);
-      case DdsViewportMode.kinematicFold:
-        return _buildKinematicFoldViewport(eval);
-      case DdsViewportMode.split:
-        return _buildClassicSplitViewport(eval);
     }
   }
 
@@ -1272,22 +1561,19 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A).withValues(alpha: 0.75),
+                      color: Colors.white.withValues(alpha: 0.95),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3), width: 0.8),
+                      border: Border.all(color: const Color(0xFFBAE6FD), width: 1.0),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4, offset: const Offset(0, 1))],
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.swipe, size: 12, color: Color(0xFF00E5FF)),
-                        const SizedBox(width: 6),
+                        Icon(Icons.swipe, size: 12, color: Color(0xFF0284C7)),
+                        SizedBox(width: 6),
                         Text(
-                          'Drag cyan laser divider left/right or click anywhere to transition between 2D Blueprint & 3D Shaded Solid',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          'Drag laser divider left/right or click anywhere to transition between 2D Blueprint & 3D Shaded Solid',
+                          style: TextStyle(color: Color(0xFF0F172A), fontSize: 8.5, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -1301,202 +1587,1147 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     );
   }
 
-  Widget _buildKinematicFoldViewport(EvaluatedDdsInstance? eval) {
-    final doc = eval?.scaledBaseDocument;
-    FoldedMeshResult? dynamicMesh;
-    if (doc != null) {
-      if ((_foldProgress - 1.0).abs() < 0.001) {
-        dynamicMesh = eval?.combinedMesh3D;
-      } else {
-        dynamicMesh = KinematicFoldEngine.foldDocument(doc, foldProgress: _foldProgress);
-      }
+  Offset _projectMeshPoint(CadPoint3D p, Size size, SheetMetalStudioViewModel? vm) {
+    if (vm == null) return Offset(size.width / 2.0, size.height / 2.0);
+    final mesh = vm.currentMesh;
+    final cx = size.width / 2.0 + vm.pan3D.dx;
+    final cy = size.height / 2.0 + vm.pan3D.dy;
+    final azRad = vm.azimuthDeg * math.pi / 180.0;
+    final elRad = vm.elevationDeg * math.pi / 180.0;
+    final cosAz = math.cos(azRad);
+    final sinAz = math.sin(azRad);
+    final cosEl = math.cos(elRad);
+    final sinEl = math.sin(elRad);
+
+    final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+    final fitDim = maxDim > 0 ? maxDim : 200.0;
+    final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
+    final scale = baseScale * vm.cameraZoom;
+
+    final rx = p.x - mesh.center.x;
+    final ry = p.y - mesh.center.y;
+    final rz = p.z - mesh.center.z;
+
+    final x1 = rx * cosAz - ry * sinAz;
+    final y1 = rx * sinAz + ry * cosAz;
+    final z1 = rz;
+
+    final x2 = x1;
+    final y2 = y1 * cosEl - z1 * sinEl;
+
+    return Offset(cx + x2 * scale, cy - y2 * scale);
+  }
+
+  Widget _build3DPresentationViewport(EvaluatedDdsInstance? eval) {
+    final inst = eval?.instance ?? widget.document.productInstances.firstOrNull;
+    final effectiveVm = _sheetViewModel ?? widget.viewModel;
+    final cmsLive = (effectiveVm?.document.metadata['cmsParameters'] as Map<String, dynamic>?) ?? {};
+    final p = Map<String, dynamic>.from(inst?.instanceParameters ?? {})..addAll(cmsLive);
+    if (effectiveVm != null) {
+      p['thickness'] = effectiveVm.document.material.thicknessMm;
     }
 
-    return Container(
-      color: const Color(0xFF0F172A),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: Dds3DIsometricPainter(
-                mesh: dynamicMesh,
-                backgroundColor: const Color(0xFF0F172A),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 10,
-            left: 12,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'KINEMATIC 3D FLANGE FOLDING SIMULATION',
-                  style: TextStyle(color: Color(0xFF38BDF8), fontSize: 9.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+    final tId = (inst?.templateReference.templateId ?? '').toLowerCase();
+    final pName = (inst?.productName ?? '').toLowerCase();
+    final isCross = tId.contains('cross') || pName.contains('cross') || p.containsKey('port4_width');
+    final isTee = !isCross && (tId.contains('tee') || pName.contains('tee') || p.containsKey('port3_width') || p.containsKey('branch_width'));
+    final isReducer = !isCross && !isTee && (tId.contains('reducer') || pName.contains('reducer') || p.containsKey('port2_width') || p.containsKey('width2'));
+    final hasMultiplePorts = isReducer || isTee || isCross;
+
+    final w1 = (p['port1_width'] ?? p['width'] ?? 100.0).toDouble();
+    final h1 = (p['port1_height'] ?? p['height'] ?? 100.0).toDouble();
+    final w2 = (p['port2_width'] ?? p['width2'] ?? (isReducer ? w1 * 0.5 : w1)).toDouble();
+    final h2 = (p['port2_height'] ?? p['height2'] ?? (isReducer ? h1 * 0.5 : h1)).toDouble();
+    final w3 = (p['port3_width'] ?? p['branch_width'] ?? (isCross ? w1 : 50.0)).toDouble();
+    final h3 = (p['port3_height'] ?? p['branch_height'] ?? (isCross ? h1 : 50.0)).toDouble();
+    final w4 = (p['port4_width'] ?? (isCross ? w2 : 50.0)).toDouble();
+    final h4 = (p['port4_height'] ?? (isCross ? h2 : 50.0)).toDouble();
+
+    final slotW = (p['coupler_slot_width'] ?? 9.0).toDouble();
+    final slotL = (p['coupler_slot_length'] ?? 20.0).toDouble();
+    final slotP = (p['coupler_slot_pitch'] ?? 25.0).toDouble();
+    final baseFlange = (p['base_flange_size'] ?? 20.0).toDouble();
+    final flangeDir = (p['flange_direction'] ?? 0.0) == 1.0 ? 'Inside Flush' : 'Outside Return';
+    final coverFlange = (inst?.coverConfiguration.flangeDepthMm ?? p['cover_flange_size'] ?? 15.0).toDouble();
+    final isCoverActive =
+        (effectiveVm?.isCoverVisible3D ?? true) &&
+        (inst?.coverConfiguration.included == true || effectiveVm?.document.cover != null || effectiveVm?.coverMesh != null);
+    final thickness = (p['thickness'] ?? 1.5).toDouble();
+
+    return LayoutBuilder(
+      builder: (context, viewportConstraints) {
+        final viewportSize = Size(viewportConstraints.maxWidth, viewportConstraints.maxHeight);
+        final m = effectiveVm?.currentMesh;
+        final hasMesh = m != null && m.polygons.isNotEmpty && effectiveVm != null;
+
+        final minX = m != null ? m.center.x - m.boundWidth / 2.0 : -100.0;
+        final maxX = m != null ? m.center.x + m.boundWidth / 2.0 : 100.0;
+        final minY = m != null ? m.center.y - m.boundLength / 2.0 : -100.0;
+        final maxY = m != null ? m.center.y + m.boundLength / 2.0 : 100.0;
+        final minZ = m != null ? m.center.z - m.boundHeight / 2.0 : -50.0;
+        final maxZ = m != null ? m.center.z + m.boundHeight / 2.0 : 50.0;
+
+        // Accurate 3D Coupler Slot Placement on actual coupler flap
+        final punchCenters = m?.punchCenters3D ?? {};
+        final couplerPunches = (effectiveVm?.document.allPunches ?? [])
+            .where((p) => (p.role == CncPunchRole.coupler || p.isSlot || p.id.toUpperCase().contains('SLOT')) && punchCenters.containsKey(p.id))
+            .toList();
+
+        CadPoint3D slotP1_3D;
+        CadPoint3D slotP2_3D;
+        CadPoint3D slotAnchor3D;
+
+        if (couplerPunches.length >= 2) {
+          // Find pair of slots sharing the same coupler ear/flap
+          CncPunchPrimitive bestA = couplerPunches[0];
+          CncPunchPrimitive bestB = couplerPunches[1];
+          double bestDist = double.infinity;
+          for (int i = 0; i < couplerPunches.length; i++) {
+            for (int j = i + 1; j < couplerPunches.length; j++) {
+              final ptA = punchCenters[couplerPunches[i].id]!;
+              final ptB = punchCenters[couplerPunches[j].id]!;
+              final dXY = math.sqrt(math.pow(ptA.x - ptB.x, 2) + math.pow(ptA.y - ptB.y, 2));
+              if (dXY < 25.0 && (ptA.z - ptB.z).abs() > 4.0 && dXY < bestDist) {
+                bestDist = dXY;
+                bestA = couplerPunches[i];
+                bestB = couplerPunches[j];
+              }
+            }
+          }
+          slotP1_3D = punchCenters[bestA.id]!;
+          slotP2_3D = punchCenters[bestB.id]!;
+          slotAnchor3D = CadPoint3D((slotP1_3D.x + slotP2_3D.x) / 2, (slotP1_3D.y + slotP2_3D.y) / 2, (slotP1_3D.z + slotP2_3D.z) / 2);
+        } else if (couplerPunches.length == 1) {
+          final c = punchCenters[couplerPunches.first.id]!;
+          slotP1_3D = CadPoint3D(c.x, c.y, c.z - slotL / 2);
+          slotP2_3D = CadPoint3D(c.x, c.y, c.z + slotL / 2);
+          slotAnchor3D = c;
+        } else {
+          // Geometric fallback anchored to coupler flap ear at port mouth
+          final earY = minY - 8.0;
+          slotP1_3D = CadPoint3D(minX, earY, (minZ + maxZ) / 2 - slotL / 2);
+          slotP2_3D = CadPoint3D(minX, earY, (minZ + maxZ) / 2 + slotL / 2);
+          slotAnchor3D = CadPoint3D(minX, earY, (minZ + maxZ) / 2);
+        }
+
+        // Physical 3D Port Mouth Rim Vertices extraction
+        List<CadPoint3D>? getPhysicalPortCorners(int portIndex) {
+          final ports = (eval?.scaledPorts.isNotEmpty == true) ? eval!.scaledPorts : (effectiveVm?.verifiedCmsPorts ?? []);
+          if (portIndex < ports.length) {
+            final port = ports[portIndex];
+            if (port.derivedMouthCorners.length >= 4) {
+              return port.derivedMouthCorners;
+            }
+            if (port.width > 1.0 && port.height > 1.0) {
+              final floorCenter = CadPoint3D(
+                port.center.x - (port.height / 2.0) * port.heightDirection.x,
+                port.center.y - (port.height / 2.0) * port.heightDirection.y,
+                port.center.z - (port.height / 2.0) * port.heightDirection.z,
+              );
+              final p0 = CadPoint3D(
+                floorCenter.x - (port.width / 2.0) * port.widthDirection.x,
+                floorCenter.y - (port.width / 2.0) * port.widthDirection.y,
+                floorCenter.z - (port.width / 2.0) * port.widthDirection.z,
+              );
+              final p3 = CadPoint3D(
+                floorCenter.x + (port.width / 2.0) * port.widthDirection.x,
+                floorCenter.y + (port.width / 2.0) * port.widthDirection.y,
+                floorCenter.z + (port.width / 2.0) * port.widthDirection.z,
+              );
+              final p1 = CadPoint3D(
+                p0.x + port.height * port.heightDirection.x,
+                p0.y + port.height * port.heightDirection.y,
+                p0.z + port.height * port.heightDirection.z,
+              );
+              final p2 = CadPoint3D(
+                p3.x + port.height * port.heightDirection.x,
+                p3.y + port.height * port.heightDirection.y,
+                p3.z + port.height * port.heightDirection.z,
+              );
+              return [p0, p1, p2, p3];
+            }
+          }
+          return null;
+        }
+
+        final port1Corners = getPhysicalPortCorners(0);
+        final port2Corners = getPhysicalPortCorners(1);
+        final port3Corners = getPhysicalPortCorners(2);
+        final port4Corners = getPhysicalPortCorners(3);
+
+        final topAnchor = port1Corners != null
+            ? _projectMeshPoint(
+                CadPoint3D(
+                  (port1Corners[1].x + port1Corners[2].x) / 2,
+                  (port1Corners[1].y + port1Corners[2].y) / 2,
+                  (port1Corners[1].z + port1Corners[2].z) / 2,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'Current Bend Angle: ${(_foldProgress * 90.0).toStringAsFixed(1)}° (${_foldProgress <= 0.05 ? "Unfolded Flat Pattern" : _foldProgress >= 0.95 ? "Fully Formed 90° Channel" : "Progressive Press-Brake Forming"})',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 8.5),
+                viewportSize,
+                effectiveVm,
+              )
+            : (hasMesh
+                  ? _projectMeshPoint(CadPoint3D(m.center.x, minY, maxZ), viewportSize, effectiveVm)
+                  : Offset(viewportSize.width / 2.0, viewportSize.height * 0.35));
+
+        final port2Anchor = port2Corners != null
+            ? _projectMeshPoint(
+                CadPoint3D(
+                  (port2Corners[1].x + port2Corners[2].x) / 2,
+                  (port2Corners[1].y + port2Corners[2].y) / 2,
+                  (port2Corners[1].z + port2Corners[2].z) / 2,
                 ),
-              ],
+                viewportSize,
+                effectiveVm,
+              )
+            : (hasMesh
+                  ? _projectMeshPoint(CadPoint3D(m.center.x, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
+                  : Offset(viewportSize.width * 0.70, viewportSize.height * 0.40));
+
+        final port3Anchor = port3Corners != null
+            ? _projectMeshPoint(
+                CadPoint3D(
+                  (port3Corners[1].x + port3Corners[2].x) / 2,
+                  (port3Corners[1].y + port3Corners[2].y) / 2,
+                  (port3Corners[1].z + port3Corners[2].z) / 2,
+                ),
+                viewportSize,
+                effectiveVm,
+              )
+            : (hasMesh
+                  ? _projectMeshPoint(CadPoint3D(maxX, m.center.y, minZ + h3), viewportSize, effectiveVm)
+                  : Offset(viewportSize.width * 0.75, viewportSize.height * 0.55));
+
+        final port4Anchor = port4Corners != null
+            ? _projectMeshPoint(
+                CadPoint3D(
+                  (port4Corners[1].x + port4Corners[2].x) / 2,
+                  (port4Corners[1].y + port4Corners[2].y) / 2,
+                  (port4Corners[1].z + port4Corners[2].z) / 2,
+                ),
+                viewportSize,
+                effectiveVm,
+              )
+            : (hasMesh
+                  ? _projectMeshPoint(CadPoint3D(minX, m.center.y, minZ + h4), viewportSize, effectiveVm)
+                  : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
+
+        final rightAnchor = hasMesh
+            ? _projectMeshPoint(CadPoint3D(maxX, m.center.y, (minZ + maxZ) / 2), viewportSize, effectiveVm)
+            : Offset(viewportSize.width * 0.75, viewportSize.height * 0.55);
+        final sAnchor = hasMesh ? _projectMeshPoint(slotAnchor3D, viewportSize, effectiveVm) : Offset(viewportSize.width * 0.28, viewportSize.height * 0.55);
+        final bottomAnchor = hasMesh
+            ? _projectMeshPoint(CadPoint3D(m.center.x, (minY + maxY) / 2, minZ), viewportSize, effectiveVm)
+            : Offset(viewportSize.width / 2.0, viewportSize.height * 0.72);
+
+        // Accurate Return Flange Geometry extracted from actual physical mesh face
+        CadPoint3D? flangeInner3D;
+        CadPoint3D? flangeOuter3D;
+
+        if (hasMesh) {
+          final flangeFaceIds = effectiveVm.document.faces
+              .where((f) => f.role.name == 'returnFlange' ||
+                            f.id.toUpperCase().contains('FLANGE') ||
+                            f.label.toLowerCase().contains('flange'))
+              .map((f) => f.id)
+              .toSet();
+          flangeFaceIds.addAll(['F_2', 'F_6', 'F_10', 'F_14', 'F_8', 'F_9', 'FLANGE_1', 'FLANGE_2']);
+
+          final flangePolys = m.polygons.where((poly) => flangeFaceIds.contains(poly.faceId)).toList();
+          if (flangePolys.isNotEmpty) {
+            CadFoldedPolygon3D? bestPoly;
+            double maxScreenY = -double.infinity;
+            for (final poly in flangePolys) {
+              if (poly.vertices.length >= 4) {
+                final c3D = CadPoint3D(
+                  poly.vertices.map((v) => v.x).reduce((a, b) => a + b) / poly.vertices.length,
+                  poly.vertices.map((v) => v.y).reduce((a, b) => a + b) / poly.vertices.length,
+                  poly.vertices.map((v) => v.z).reduce((a, b) => a + b) / poly.vertices.length,
+                );
+                final c2D = _projectMeshPoint(c3D, viewportSize, effectiveVm);
+                if (c2D.dy > maxScreenY) {
+                  maxScreenY = c2D.dy;
+                  bestPoly = poly;
+                }
+              }
+            }
+
+            if (bestPoly != null && bestPoly.vertices.length >= 4) {
+              final v = bestPoly.vertices;
+              final d01 = (v[0] - v[1]).length;
+              final d12 = (v[1] - v[2]).length;
+              if ((d01 - baseFlange).abs() < (d12 - baseFlange).abs()) {
+                final midA = CadPoint3D((v[0].x + v[3].x) / 2, (v[0].y + v[3].y) / 2, (v[0].z + v[3].z) / 2);
+                final midB = CadPoint3D((v[1].x + v[2].x) / 2, (v[1].y + v[2].y) / 2, (v[1].z + v[2].z) / 2);
+                final distA = (midA - m.center).length;
+                final distB = (midB - m.center).length;
+                flangeInner3D = distA <= distB ? midA : midB;
+                flangeOuter3D = distA <= distB ? midB : midA;
+              } else {
+                final midA = CadPoint3D((v[0].x + v[1].x) / 2, (v[0].y + v[1].y) / 2, (v[0].z + v[1].z) / 2);
+                final midB = CadPoint3D((v[3].x + v[2].x) / 2, (v[3].y + v[2].y) / 2, (v[3].z + v[2].z) / 2);
+                final distA = (midA - m.center).length;
+                final distB = (midB - m.center).length;
+                flangeInner3D = distA <= distB ? midA : midB;
+                flangeOuter3D = distA <= distB ? midB : midA;
+              }
+            }
+          }
+        }
+
+        if (flangeInner3D == null || flangeOuter3D == null) {
+          if (port1Corners != null) {
+            flangeInner3D = port1Corners[1];
+            flangeOuter3D = CadPoint3D(flangeInner3D.x, flangeInner3D.y - baseFlange, flangeInner3D.z);
+          } else {
+            flangeInner3D = CadPoint3D(m != null ? m.center.x : 0.0, minY, maxZ);
+            flangeOuter3D = CadPoint3D(flangeInner3D.x, flangeInner3D.y - baseFlange, maxZ);
+          }
+        }
+
+        final flangeA2D = _projectMeshPoint(flangeInner3D, viewportSize, effectiveVm);
+        final flangeB2D = _projectMeshPoint(flangeOuter3D, viewportSize, effectiveVm);
+        final flangeAnchor = flangeB2D;
+
+        final wBadgePos = Offset((topAnchor.dx - 60).clamp(12.0, viewportSize.width - 150.0), (topAnchor.dy - 44).clamp(38.0, viewportSize.height - 40.0));
+        final p2BadgePos = Offset((port2Anchor.dx + 20).clamp(12.0, viewportSize.width - 160.0), (port2Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0));
+        final p3BadgePos = Offset((port3Anchor.dx + 20).clamp(12.0, viewportSize.width - 160.0), (port3Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0));
+        final p4BadgePos = Offset((port4Anchor.dx - 160).clamp(12.0, viewportSize.width - 160.0), (port4Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0));
+        final hBadgePos = Offset((rightAnchor.dx + 14).clamp(12.0, viewportSize.width - 140.0), (rightAnchor.dy - 16).clamp(38.0, viewportSize.height - 40.0));
+        final sBadgePos = Offset((sAnchor.dx - 180).clamp(12.0, viewportSize.width - 190.0), (sAnchor.dy - 14).clamp(38.0, viewportSize.height - 40.0));
+        final fBadgePos = Offset(
+          (flangeAnchor.dx - 110).clamp(12.0, viewportSize.width - 210.0),
+          (flangeAnchor.dy + 15).clamp(38.0, viewportSize.height - 40.0),
+        );
+        final tBadgePos = Offset(
+          (bottomAnchor.dx - 85).clamp(12.0, viewportSize.width - 200.0),
+          (bottomAnchor.dy - 15).clamp(38.0, viewportSize.height - 40.0),
+        );
+
+        final leaderLines = <({Offset badgePos, Offset anchorPos, Color color})>[];
+        if (_showDimWidth) leaderLines.add((badgePos: Offset(wBadgePos.dx + 55, wBadgePos.dy + 30), anchorPos: topAnchor, color: const Color(0xFF0284C7)));
+        if (_showDimPorts && hasMultiplePorts) {
+          leaderLines.add((badgePos: Offset(p2BadgePos.dx, p2BadgePos.dy + 14), anchorPos: port2Anchor, color: const Color(0xFF059669)));
+        }
+        if (_showDimPorts && (isTee || isCross)) {
+          leaderLines.add((badgePos: Offset(p3BadgePos.dx, p3BadgePos.dy + 14), anchorPos: port3Anchor, color: const Color(0xFFD97706)));
+        }
+        if (_showDimPorts && isCross) {
+          leaderLines.add((badgePos: Offset(p4BadgePos.dx + 140, p4BadgePos.dy + 14), anchorPos: port4Anchor, color: const Color(0xFF7C3AED)));
+        }
+        if (_showDimHeight && !hasMultiplePorts) {
+          leaderLines.add((badgePos: Offset(hBadgePos.dx, hBadgePos.dy + 14), anchorPos: rightAnchor, color: const Color(0xFF0284C7)));
+        }
+        if (_showDimSlots) leaderLines.add((badgePos: Offset(sBadgePos.dx + 165, sBadgePos.dy + 14), anchorPos: sAnchor, color: const Color(0xFF7C3AED)));
+        if (_showDimFlange) leaderLines.add((badgePos: Offset(fBadgePos.dx + 105, fBadgePos.dy), anchorPos: flangeAnchor, color: const Color(0xFFDB2777)));
+        // Note: Gauge tag does NOT need a leader line or dimensional line as requested
+
+        // Compute 2D CAD Dimension Line items projected from 3D geometry
+        final center2D = hasMesh ? _projectMeshPoint(m.center, viewportSize, effectiveVm) : Offset(viewportSize.width / 2.0, viewportSize.height / 2.0);
+
+        Offset calcPerpNormal(Offset a, Offset b, Offset center) {
+          final diff = b - a;
+          final dist = diff.distance;
+          if (dist < 1e-4) return const Offset(0, -1);
+          var perp = Offset(-diff.dy / dist, diff.dx / dist);
+          final mid = Offset((a.dx + b.dx) / 2.0, (a.dy + b.dy) / 2.0);
+          final away = mid - center;
+          if (perp.dx * away.dx + perp.dy * away.dy < 0) {
+            perp = -perp;
+          }
+          return perp;
+        }
+
+        final cadDimensionItems = <DdsCadDimensionItem>[];
+
+        // 1. Port 1 (Inlet) Width & Height
+        final w1Label = hasMultiplePorts ? 'W1' : 'W';
+        final h1Label = hasMultiplePorts ? 'H1' : 'H';
+
+        if (_showDimWidth) {
+          final pA = port1Corners != null
+              ? _projectMeshPoint(port1Corners[1], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(m.center.x - w1 / 2, minY, maxZ), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.35, viewportSize.height * 0.35));
+          final pB = port1Corners != null
+              ? _projectMeshPoint(port1Corners[2], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, maxZ), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
+          final norm = calcPerpNormal(pA, pB, center2D);
+          cadDimensionItems.add(
+            DdsCadDimensionItem(
+              id: 'width1',
+              label: w1Label,
+              valueText: '${w1.toStringAsFixed(0)} mm',
+              p1: pA,
+              p2: pB,
+              offsetVector: norm * 14.0,
+              color: const Color(0xFF0284C7),
             ),
-          ),
-          // Interactive bottom fold scrubber
-          Positioned(
-            bottom: 12,
-            left: 24,
-            right: 24,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B).withValues(alpha: 0.92),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.4)),
+          );
+        }
+
+        if (_showDimHeight) {
+          final pA = port1Corners != null
+              ? _projectMeshPoint(port1Corners[3], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, minZ), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.65, viewportSize.height * 0.65));
+          final pB = port1Corners != null
+              ? _projectMeshPoint(port1Corners[2], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, maxZ), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
+          final norm = calcPerpNormal(pA, pB, center2D);
+          cadDimensionItems.add(
+            DdsCadDimensionItem(
+              id: 'height1',
+              label: h1Label,
+              valueText: '${h1.toStringAsFixed(0)} mm',
+              p1: pA,
+              p2: pB,
+              offsetVector: norm * 14.0,
+              color: const Color(0xFF0284C7),
+            ),
+          );
+        }
+
+        // 2. Port 2 (Outlet) Width & Height (for Reducer, Unequal Tee, Unequal Cross)
+        if (hasMultiplePorts && (_showDimWidth || _showDimPorts)) {
+          final pA = port2Corners != null
+              ? _projectMeshPoint(port2Corners[1], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.65, viewportSize.height * 0.40));
+          final pB = port2Corners != null
+              ? _projectMeshPoint(port2Corners[2], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(m.center.x + w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.85, viewportSize.height * 0.40));
+          final norm = calcPerpNormal(pA, pB, center2D);
+          cadDimensionItems.add(
+            DdsCadDimensionItem(
+              id: 'width2',
+              label: 'W2',
+              valueText: '${w2.toStringAsFixed(0)} mm',
+              p1: pA,
+              p2: pB,
+              offsetVector: norm * 14.0,
+              color: const Color(0xFF0284C7),
+            ),
+          );
+        }
+
+        if (hasMultiplePorts && (_showDimHeight || _showDimPorts)) {
+          final pA = port2Corners != null
+              ? _projectMeshPoint(port2Corners[0], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.35, viewportSize.height * 0.60));
+          final pB = port2Corners != null
+              ? _projectMeshPoint(port2Corners[1], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.35, viewportSize.height * 0.40));
+          final norm = calcPerpNormal(pA, pB, center2D);
+          cadDimensionItems.add(
+            DdsCadDimensionItem(
+              id: 'height2',
+              label: 'H2',
+              valueText: '${h2.toStringAsFixed(0)} mm',
+              p1: pA,
+              p2: pB,
+              offsetVector: norm * 14.0,
+              color: const Color(0xFF0284C7),
+            ),
+          );
+        }
+
+        // 3. Port 3 (East / Branch 1) Width & Height (for Tee & Cross)
+        if ((isTee || isCross) && (_showDimWidth || _showDimPorts)) {
+          final pA = port3Corners != null
+              ? _projectMeshPoint(port3Corners[1], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
+          final pB = port3Corners != null
+              ? _projectMeshPoint(port3Corners[2], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(maxX, m.center.y + w3 / 2, minZ + h3), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.85, viewportSize.height * 0.65));
+          final norm = calcPerpNormal(pA, pB, center2D);
+          cadDimensionItems.add(
+            DdsCadDimensionItem(
+              id: 'width3',
+              label: 'W3',
+              valueText: '${w3.toStringAsFixed(0)} mm',
+              p1: pA,
+              p2: pB,
+              offsetVector: norm * 14.0,
+              color: const Color(0xFFD97706),
+            ),
+          );
+        }
+
+        if ((isTee || isCross) && (_showDimHeight || _showDimPorts)) {
+          final pA = port3Corners != null
+              ? _projectMeshPoint(port3Corners[0], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.70, viewportSize.height * 0.75));
+          final pB = port3Corners != null
+              ? _projectMeshPoint(port3Corners[1], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
+          final norm = calcPerpNormal(pA, pB, center2D);
+          cadDimensionItems.add(
+            DdsCadDimensionItem(
+              id: 'height3',
+              label: 'H3',
+              valueText: '${h3.toStringAsFixed(0)} mm',
+              p1: pA,
+              p2: pB,
+              offsetVector: norm * 14.0,
+              color: const Color(0xFFD97706),
+            ),
+          );
+        }
+
+        // 4. Port 4 (West / Branch 2) Width & Height (for Cross)
+        if (isCross && (_showDimWidth || _showDimPorts)) {
+          final pA = port4Corners != null
+              ? _projectMeshPoint(port4Corners[1], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
+          final pB = port4Corners != null
+              ? _projectMeshPoint(port4Corners[2], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(minX, m.center.y - w4 / 2, minZ + h4), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.15, viewportSize.height * 0.45));
+          final norm = calcPerpNormal(pA, pB, center2D);
+          cadDimensionItems.add(
+            DdsCadDimensionItem(
+              id: 'width4',
+              label: 'W4',
+              valueText: '${w4.toStringAsFixed(0)} mm',
+              p1: pA,
+              p2: pB,
+              offsetVector: norm * 14.0,
+              color: const Color(0xFF7C3AED),
+            ),
+          );
+        }
+
+        if (isCross && (_showDimHeight || _showDimPorts)) {
+          final pA = port4Corners != null
+              ? _projectMeshPoint(port4Corners[0], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.25, viewportSize.height * 0.55));
+          final pB = port4Corners != null
+              ? _projectMeshPoint(port4Corners[1], viewportSize, effectiveVm)
+              : (hasMesh
+                    ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4), viewportSize, effectiveVm)
+                    : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
+          final norm = calcPerpNormal(pA, pB, center2D);
+          cadDimensionItems.add(
+            DdsCadDimensionItem(
+              id: 'height4',
+              label: 'H4',
+              valueText: '${h4.toStringAsFixed(0)} mm',
+              p1: pA,
+              p2: pB,
+              offsetVector: norm * 14.0,
+              color: const Color(0xFF7C3AED),
+            ),
+          );
+        }
+
+        // 5. Coupler Slots Dimension Line (Anchored directly on the coupler flap)
+        if (_showDimSlots) {
+          final pA = hasMesh ? _projectMeshPoint(slotP1_3D, viewportSize, effectiveVm) : Offset(viewportSize.width * 0.26, viewportSize.height * 0.58);
+          final pB = hasMesh ? _projectMeshPoint(slotP2_3D, viewportSize, effectiveVm) : Offset(viewportSize.width * 0.26, viewportSize.height * 0.46);
+          final norm = calcPerpNormal(pA, pB, center2D);
+          cadDimensionItems.add(
+            DdsCadDimensionItem(
+              id: 'slots',
+              label: 'SLOTS',
+              valueText: '${slotL.toStringAsFixed(0)}×${slotW.toStringAsFixed(1)} @ ${slotP.toStringAsFixed(0)}P',
+              p1: pA,
+              p2: pB,
+              offsetVector: norm * 14.0,
+              color: const Color(0xFF7C3AED),
+            ),
+          );
+        }
+
+        // 6. Flange Dimension Line (Accurately anchored on physical flange)
+        if (_showDimFlange) {
+          final norm = calcPerpNormal(flangeA2D, flangeB2D, center2D);
+          cadDimensionItems.add(
+            DdsCadDimensionItem(
+              id: 'flange',
+              label: 'FLANGE',
+              valueText: isCoverActive
+                  ? '${baseFlange.toStringAsFixed(0)}mm (Cover ${coverFlange.toStringAsFixed(0)}mm)'
+                  : '${baseFlange.toStringAsFixed(0)}mm ($flangeDir)',
+              p1: flangeA2D,
+              p2: flangeB2D,
+              offsetVector: norm * 12.0,
+              color: const Color(0xFFDB2777),
+            ),
+          );
+        }
+        // Note: Gauge tag does NOT need a dimensional line as requested
+
+        return Container(
+          color: const Color(0xFFF8FAFC),
+          child: Stack(
+            children: [
+              // Technical Grid Background
+              Positioned.fill(
+                child: IgnorePointer(child: CustomPaint(painter: _ViewportGridPainter())),
               ),
-              child: Row(
-                children: [
-                  const Text('0° (Flat)', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9, fontWeight: FontWeight.bold)),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderThemeData(
-                        activeTrackColor: const Color(0xFF38BDF8),
-                        inactiveTrackColor: const Color(0xFF334155),
-                        thumbColor: const Color(0xFF00E5FF),
-                        overlayColor: const Color(0xFF00E5FF).withValues(alpha: 0.2),
-                        trackHeight: 3.0,
-                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                      ),
-                      child: Slider(
-                        value: _foldProgress,
-                        min: 0.0,
-                        max: 1.0,
-                        onChanged: (val) {
-                          if (_isAutoFolding) {
-                            setState(() {
-                              _isAutoFolding = false;
-                              _foldController.stop();
-                              _foldProgress = val;
-                            });
-                          } else {
-                            setState(() => _foldProgress = val);
-                          }
-                        },
-                      ),
+
+              // 3D Rendering Engine: Reusing the main CAD's Viewport3dWidget directly with the active fitting's ViewModel
+              Positioned.fill(
+                child: effectiveVm != null ? Viewport3dWidget(viewModel: effectiveVm) : CustomPaint(painter: Dds3DIsometricPainter(mesh: eval?.combinedMesh3D)),
+              ),
+
+              // CAD Witness & Dimension Lines Anchored to 3D Model (Engineering 2D Sketch Style)
+              if (_showCadDimensionLines && cadDimensionItems.isNotEmpty)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(painter: _Dds3DCadDimensionLinesPainter(items: cadDimensionItems)),
+                  ),
+                ),
+
+              // Leader Lines for Callout Badges
+              if (_showDimensionTags && leaderLines.isNotEmpty)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(painter: _Dds3DLeaderLinesPainter(lines: leaderLines)),
+                  ),
+                ),
+
+              // 3D Dimension Callout Badges Anchored at the Model (User Option: Tags)
+              if (_showDimensionTags) ...[
+                // 1. Port 1 Dimension Callout
+                if (_showDimWidth)
+                  Positioned(
+                    left: wBadgePos.dx,
+                    top: wBadgePos.dy,
+                    child: _buildDimCalloutBadge(
+                      label: hasMultiplePorts ? 'PORT 1 (INLET)' : 'WIDTH (W)',
+                      value: hasMultiplePorts ? '${w1.toStringAsFixed(0)}×${h1.toStringAsFixed(0)} mm' : '${w1.toStringAsFixed(0)} mm',
+                      accentColor: const Color(0xFF0284C7),
+                      icon: Icons.straighten,
+                      onDismiss: () {
+                        setState(() => _showDimWidth = false);
+                        widget.onDimensionToggled?.call('W', false);
+                      },
                     ),
                   ),
-                  const Text('90° (Formed)', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.bold)),
-                ],
+
+                // 2. Port 2 Dimension Callout (for Reducer, Tee, Cross)
+                if (hasMultiplePorts && (_showDimPorts || _showDimWidth))
+                  Positioned(
+                    left: p2BadgePos.dx,
+                    top: p2BadgePos.dy,
+                    child: _buildDimCalloutBadge(
+                      label: 'PORT 2 (OUTLET)',
+                      value: '${w2.toStringAsFixed(0)}×${h2.toStringAsFixed(0)} mm',
+                      accentColor: const Color(0xFF059669),
+                      icon: Icons.filter_frames,
+                      onDismiss: () {
+                        setState(() => _showDimPorts = false);
+                        widget.onDimensionToggled?.call('Ports', false);
+                      },
+                    ),
+                  ),
+
+                // 2b. Port 3 Dimension Callout (for Tee & Cross)
+                if ((isTee || isCross) && (_showDimPorts || _showDimWidth))
+                  Positioned(
+                    left: p3BadgePos.dx,
+                    top: p3BadgePos.dy,
+                    child: _buildDimCalloutBadge(
+                      label: 'PORT 3 (BRANCH 1)',
+                      value: '${w3.toStringAsFixed(0)}×${h3.toStringAsFixed(0)} mm',
+                      accentColor: const Color(0xFFD97706),
+                      icon: Icons.alt_route,
+                      onDismiss: () {
+                        setState(() => _showDimPorts = false);
+                        widget.onDimensionToggled?.call('Ports', false);
+                      },
+                    ),
+                  ),
+
+                // 2c. Port 4 Dimension Callout (for Cross)
+                if (isCross && (_showDimPorts || _showDimWidth))
+                  Positioned(
+                    left: p4BadgePos.dx,
+                    top: p4BadgePos.dy,
+                    child: _buildDimCalloutBadge(
+                      label: 'PORT 4 (BRANCH 2)',
+                      value: '${w4.toStringAsFixed(0)}×${h4.toStringAsFixed(0)} mm',
+                      accentColor: const Color(0xFF7C3AED),
+                      icon: Icons.alt_route,
+                      onDismiss: () {
+                        setState(() => _showDimPorts = false);
+                        widget.onDimensionToggled?.call('Ports', false);
+                      },
+                    ),
+                  ),
+
+                // 3. Height Dimension Callout (for single port fitting)
+                if (!hasMultiplePorts && _showDimHeight)
+                  Positioned(
+                    left: hBadgePos.dx,
+                    top: hBadgePos.dy,
+                    child: _buildDimCalloutBadge(
+                      label: 'HEIGHT (H)',
+                      value: '${h1.toStringAsFixed(0)} mm',
+                      accentColor: const Color(0xFF0284C7),
+                      icon: Icons.height,
+                      onDismiss: () {
+                        setState(() => _showDimHeight = false);
+                        widget.onDimensionToggled?.call('H', false);
+                      },
+                    ),
+                  ),
+
+                // 4. Coupler Slot Specification Callout (Anchored on the coupler flap)
+                if (_showDimSlots)
+                  Positioned(
+                    left: sBadgePos.dx,
+                    top: sBadgePos.dy,
+                    child: _buildDimCalloutBadge(
+                      label: 'COUPLER SLOTS',
+                      value: '${slotL.toStringAsFixed(0)}×${slotW.toStringAsFixed(1)} @ ${slotP.toStringAsFixed(0)}P',
+                      accentColor: const Color(0xFF7C3AED),
+                      icon: Icons.drag_indicator,
+                      onDismiss: () {
+                        setState(() => _showDimSlots = false);
+                        widget.onDimensionToggled?.call('Slots', false);
+                      },
+                    ),
+                  ),
+
+                // 5. Flange Direction & Size Callout (Linked cover flange omitted when cover is off)
+                if (_showDimFlange)
+                  Positioned(
+                    left: fBadgePos.dx,
+                    top: fBadgePos.dy,
+                    child: _buildDimCalloutBadge(
+                      label: isCoverActive ? 'BASE & COVER FLANGE' : 'BASE FLANGE',
+                      value: isCoverActive
+                          ? '$flangeDir (${baseFlange.toStringAsFixed(0)}mm)  |  Cover: ${coverFlange.toStringAsFixed(0)}mm'
+                          : '$flangeDir (${baseFlange.toStringAsFixed(0)}mm)',
+                      accentColor: const Color(0xFFDB2777),
+                      icon: Icons.crop_square,
+                      onDismiss: () {
+                        setState(() => _showDimFlange = false);
+                        widget.onDimensionToggled?.call('Flange', false);
+                      },
+                    ),
+                  ),
+
+                // 6. Gauge / Sheet Thickness Callout (Bottom Floor of 3D Model)
+                if (_showDimThickness)
+                  Positioned(
+                    left: tBadgePos.dx,
+                    top: tBadgePos.dy,
+                    child: _buildDimCalloutBadge(
+                      label: 'SHEET THICKNESS / GAUGE',
+                      value: '${thickness.toStringAsFixed(1)} mm (Pre-Galv DX51D)',
+                      accentColor: const Color(0xFF4F46E5),
+                      icon: Icons.layers,
+                      onDismiss: () {
+                        setState(() => _showDimThickness = false);
+                        widget.onDimensionToggled?.call('Gauge', false);
+                      },
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDimCalloutBadge({
+    required String label,
+    required String value,
+    required Color accentColor,
+    required IconData icon,
+    required VoidCallback onDismiss,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+      decoration: BoxDecoration(
+        color: const Color(0xEBFFFFFF), // 92% opaque frosted white glass
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: accentColor.withValues(alpha: 0.40), width: 1.1),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 6, offset: const Offset(0, 2)),
+          BoxShadow(color: accentColor.withValues(alpha: 0.12), blurRadius: 5, spreadRadius: 0.5),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(3.5),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: accentColor.withValues(alpha: 0.25), width: 0.7),
+            ),
+            child: Icon(icon, size: 12, color: accentColor),
+          ),
+          const SizedBox(width: 7),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(color: accentColor, fontSize: 7.8, fontWeight: FontWeight.bold, letterSpacing: 0.5),
               ),
+              Text(
+                value,
+                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 9.2, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: onDismiss,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.all(2.5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFE2E8F0), width: 0.6),
+              ),
+              child: const Icon(Icons.close, size: 9.5, color: Color(0xFF64748B)),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildClassicSplitViewport(EvaluatedDdsInstance? eval) {
-    return Row(
-      children: [
-        // Left: 2D Dimensioned Flat/Layout View
-        Expanded(
-          flex: 5,
-          child: Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFF8FAFC),
-              border: Border(right: BorderSide(color: Color(0xFF0F172A), width: 1.0)),
-            ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: Dds2DDrawingPainter(
-                      document: eval?.scaledBaseDocument,
-                      coverData: eval?.coverData,
-                    ),
-                  ),
-                ),
-                const Positioned(
-                  top: 8,
-                  left: 8,
-                  child: Text(
-                    '2D FLAT PATTERN & BEND SPECIFICATION',
-                    style: TextStyle(color: Color(0xFF64748B), fontSize: 8.5, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // Right: 3D Isometric View (Base + Parametric Cover)
-        Expanded(
-          flex: 5,
-          child: Container(
-            color: const Color(0xFF0F172A),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: Dds3DIsometricPainter(
-                      mesh: eval?.combinedMesh3D,
-                    ),
-                  ),
-                ),
-                const Positioned(
-                  top: 8,
-                  left: 8,
-                  child: Text(
-                    '3D ISOMETRIC VIEW (FOLDED BASE + EXPLODED COVER)',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 8.5, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 
   Widget _buildProductBottomDock(DdsProductInstance? inst, EvaluatedDdsInstance? eval) {
     final proj = widget.document.projectInfo;
     final takeoff = eval?.calculatedTakeoff ?? inst?.calculatedTakeoff;
+    final orderLine = inst?.orderLine;
+    final cmsLive = (widget.viewModel?.document.metadata['cmsParameters'] as Map<String, dynamic>?) ?? {};
+    final p = Map<String, dynamic>.from(inst?.instanceParameters ?? {})..addAll(cmsLive);
+    if (widget.viewModel != null) {
+      p['thickness'] = widget.viewModel!.document.material.thicknessMm;
+    }
+
+    // Dynamic port specification string
+    final tId = (inst?.templateReference.templateId ?? '').toLowerCase();
+    String portSpecsStr;
+    if (tId.contains('reducer')) {
+      final w1 = (p['port1_width'] ?? 100.0).toStringAsFixed(0);
+      final h1 = (p['port1_height'] ?? 100.0).toStringAsFixed(0);
+      final w2 = (p['port2_width'] ?? 50.0).toStringAsFixed(0);
+      final h2 = (p['port2_height'] ?? 50.0).toStringAsFixed(0);
+      portSpecsStr = 'P1 (Inlet): $w1×$h1 mm  |  P2 (Outlet): $w2×$h2 mm';
+    } else if (tId.contains('cross')) {
+      if (tId.contains('unequal')) {
+        final w1 = (p['port1_width'] ?? 100.0).toStringAsFixed(0);
+        final h1 = (p['port1_height'] ?? 100.0).toStringAsFixed(0);
+        final w2 = (p['port2_width'] ?? 100.0).toStringAsFixed(0);
+        final h2 = (p['port2_height'] ?? 100.0).toStringAsFixed(0);
+        final w3 = (p['port3_width'] ?? 50.0).toStringAsFixed(0);
+        final h3 = (p['port3_height'] ?? 50.0).toStringAsFixed(0);
+        final w4 = (p['port4_width'] ?? 50.0).toStringAsFixed(0);
+        final h4 = (p['port4_height'] ?? 50.0).toStringAsFixed(0);
+        portSpecsStr = 'P1: $w1×$h1  |  P2: $w2×$h2  |  P3: $w3×$h3  |  P4: $w4×$h4 mm';
+      } else {
+        final w = (p['width'] ?? p['port1_width'] ?? 100.0).toStringAsFixed(0);
+        final h = (p['height'] ?? p['port1_height'] ?? 100.0).toStringAsFixed(0);
+        portSpecsStr = '4 Ports (Equal Cross): $w×$h mm';
+      }
+    } else if (tId.contains('tee')) {
+      if (tId.contains('unequal')) {
+        final w1 = (p['port1_width'] ?? 100.0).toStringAsFixed(0);
+        final h1 = (p['port1_height'] ?? 100.0).toStringAsFixed(0);
+        final w3 = (p['port3_width'] ?? p['branch_width'] ?? 50.0).toStringAsFixed(0);
+        final h3 = (p['port3_height'] ?? p['branch_height'] ?? 50.0).toStringAsFixed(0);
+        portSpecsStr = 'Main Trunk (P1 & P2): $w1×$h1 mm  |  Branch (P3): $w3×$h3 mm';
+      } else {
+        final w = (p['width'] ?? p['port1_width'] ?? 100.0).toStringAsFixed(0);
+        final h = (p['height'] ?? p['port1_height'] ?? 100.0).toStringAsFixed(0);
+        portSpecsStr = '3 Ports (Equal Tee): $w×$h mm';
+      }
+    } else {
+      final w = (p['width'] ?? p['port1_width'] ?? 100.0).toStringAsFixed(0);
+      final h = (p['height'] ?? p['port1_height'] ?? 100.0).toStringAsFixed(0);
+      final angle = tId.contains('45') ? '45°' : '90°';
+      portSpecsStr = 'Trunking Mouth: $w×$h mm  |  Angle: $angle';
+    }
+
+    final baseFlange = (p['base_flange_size'] ?? 20.0).toStringAsFixed(0);
+    final flangeDir = (p['flange_direction'] ?? 0.0) == 1.0 ? 'Inside Flange' : 'Outside Return';
+    final coverFlange = (inst?.coverConfiguration.flangeDepthMm ?? p['cover_flange_size'] ?? 15.0).toStringAsFixed(0);
+    final slotW = (p['coupler_slot_width'] ?? 9.0).toStringAsFixed(1);
+    final slotL = (p['coupler_slot_length'] ?? 20.0).toStringAsFixed(0);
+    final slotP = (p['coupler_slot_pitch'] ?? 25.0).toStringAsFixed(0);
+    final thickness = (p['thickness'] ?? 1.5).toStringAsFixed(1);
+    final qty = orderLine?.quantity ?? 1;
+
+    final effectiveVm = _sheetViewModel ?? widget.viewModel;
+    final isCoverActive =
+        (effectiveVm?.isCoverVisible3D ?? true) &&
+        (inst?.coverConfiguration.included == true || effectiveVm?.document.cover != null || effectiveVm?.coverMesh != null);
+
+    // Compute base and cover takeoff areas & weights dynamically
+    final baseDoc = eval?.scaledBaseDocument ?? (effectiveVm?.document);
+    double baseAreaM2 = 0.0;
+    if (baseDoc != null && baseDoc.faces.isNotEmpty) {
+      for (final f in baseDoc.faces) {
+        baseAreaM2 += f.areaMm2.abs() / 1e6;
+      }
+    }
+    final coverDoc = eval?.coverData?.document ?? (effectiveVm?.document.cover);
+    double coverAreaM2 = 0.0;
+    if (coverDoc is DsfDocument && coverDoc.faces.isNotEmpty) {
+      for (final f in coverDoc.faces) {
+        coverAreaM2 += f.areaMm2.abs() / 1e6;
+      }
+    }
+
+    final double thkVal = double.tryParse(thickness) ?? 1.5;
+    const double densityMildSteel = 7850.0; // DX51D mild steel kg/m³
+    double baseMassKg = baseAreaM2 > 0 ? (baseAreaM2 * (thkVal / 1000.0) * densityMildSteel) : 0.64;
+    double coverMassKg = coverAreaM2 > 0 ? (coverAreaM2 * (thkVal / 1000.0) * densityMildSteel) : 0.20;
+
+    if (baseAreaM2 == 0.0 && takeoff != null) {
+      if (isCoverActive) {
+        baseMassKg = takeoff.estimatedNetWeightKg * 0.75;
+        coverMassKg = takeoff.estimatedNetWeightKg * 0.25;
+        baseAreaM2 = takeoff.blankSurfaceAreaM2 * 0.75;
+        coverAreaM2 = takeoff.blankSurfaceAreaM2 * 0.25;
+      } else {
+        baseMassKg = takeoff.estimatedNetWeightKg;
+        baseAreaM2 = takeoff.blankSurfaceAreaM2;
+      }
+    }
+
+    final double activeTotalUnitMass = isCoverActive ? (baseMassKg + coverMassKg) : baseMassKg;
+    final double activeTotalBlankArea = isCoverActive ? (baseAreaM2 + coverAreaM2) : baseAreaM2;
+    final double activeLineTotalMass = activeTotalUnitMass * qty;
+
+    final blankAreaStr = '${activeTotalBlankArea.toStringAsFixed(3)} m²';
+    final netMassStr = '${activeTotalUnitMass.toStringAsFixed(2)} kg';
+    final lineTotalMassStr = '${activeLineTotalMass.toStringAsFixed(2)} kg';
+
+    final desDate = proj.effectiveDesignedDate;
+    final drwDate = proj.effectiveDrawnDate;
+    final chkDate = proj.effectiveCheckedDate;
+    final appDate = proj.effectiveApprovedDate;
 
     return Container(
-      height: 70,
+      height: 154,
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Color(0xFF0F172A), width: 1.2)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Left: Engineering Parameters Summary Table
+          // ===================================================================
+          // Section 1: Tabular Part Specifications & Displayed Items Schedule
+          // ===================================================================
           Expanded(
-            flex: 6,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
+            flex: 5,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 3.0),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
+                  // Header Strip
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.5),
+                    decoration: const BoxDecoration(color: Color(0xFF0F172A)),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'SCHEDULE OF DISPLAYED ITEMS / BILL OF MATERIALS (LINE ${orderLine?.lineNumber ?? "001"})',
+                          style: const TextStyle(fontSize: 9.0, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.3),
+                        ),
+                        Text(
+                          'PO: ${orderLine?.orderNumber.isNotEmpty == true ? orderLine!.orderNumber : "PO-88210"}  |  QTY: $qty PCS  |  REF: ${orderLine?.customerItemReference.isNotEmpty == true ? orderLine!.customerItemReference : (inst?.productCode ?? "RED-150-75")}',
+                          style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8)),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Table of Displayed Items
+                  Table(
+                    border: TableBorder.all(color: const Color(0xFFCBD5E1), width: 0.8),
+                    columnWidths: const {
+                      0: FixedColumnWidth(28), // ITM
+                      1: FlexColumnWidth(2.2), // COMPONENT
+                      2: FlexColumnWidth(4.6), // SPECS / PORTS / FLANGE
+                      3: FlexColumnWidth(2.4), // MATERIAL & FINISH
+                      4: FixedColumnWidth(44), // THK
+                      5: FixedColumnWidth(40), // QTY
+                      6: FixedColumnWidth(54), // UNIT WT
+                    },
                     children: [
-                      _buildMiniParam('MATERIAL', inst?.material ?? 'Pre-Galvanized DX51D'),
-                      const SizedBox(width: 14.0),
-                      _buildMiniParam('FINISH', inst?.finish ?? 'Mill Galvanized Z275'),
-                      const SizedBox(width: 14.0),
-                      _buildMiniParam('THICKNESS', '1.5 mm'),
+                      // Header Row
+                      TableRow(
+                        decoration: const BoxDecoration(color: Color(0xFFF1F5F9)),
+                        children: [
+                          _buildTableHeaderCell('ITM', align: TextAlign.center),
+                          _buildTableHeaderCell('COMPONENT / PART'),
+                          _buildTableHeaderCell('SPECIFICATIONS / PORTS / FLANGE'),
+                          _buildTableHeaderCell('MATERIAL & FINISH'),
+                          _buildTableHeaderCell('THK', align: TextAlign.center),
+                          _buildTableHeaderCell('QTY', align: TextAlign.center),
+                          _buildTableHeaderCell('UNIT WT', align: TextAlign.right),
+                        ],
+                      ),
+                      // Row 1: Base Fitting
+                      TableRow(
+                        children: [
+                          _buildTableCell('01', isBold: true, align: TextAlign.center),
+                          _buildTableCell(inst?.productName ?? 'Base Fitting', isBold: true),
+                          _buildTableCell('$portSpecsStr  |  Base Flange: ${baseFlange}mm ($flangeDir)  |  Slots: $slotW×$slotL@${slotP}P'),
+                          _buildTableCell('${inst?.material ?? "Pre-Galv DX51D"} ${inst?.finish ?? "Z275"}'),
+                          _buildTableCell('$thickness mm', align: TextAlign.center),
+                          _buildTableCell('$qty', align: TextAlign.center),
+                          _buildTableCell('${baseMassKg.toStringAsFixed(2)} kg', align: TextAlign.right),
+                        ],
+                      ),
+                      // Row 2: Companion Cover (Rendered when cover is active)
+                      if (isCoverActive)
+                        TableRow(
+                          decoration: const BoxDecoration(color: Color(0xFFF8FAFC)),
+                          children: [
+                            _buildTableCell('02', isBold: true, align: TextAlign.center),
+                            _buildTableCell(
+                              'Companion Cover (${inst?.coverConfiguration.placementMode3D == 'exploded' ? 'Exploded' : 'Top Fitted'})',
+                              isBold: true,
+                            ),
+                            _buildTableCell('Cover Flange: ${coverFlange}mm Return  |  Contour Matched Cover Plate'),
+                            _buildTableCell('${inst?.material ?? "Pre-Galv DX51D"} ${inst?.finish ?? "Z275"}'),
+                            _buildTableCell('$thickness mm', align: TextAlign.center),
+                            _buildTableCell('$qty', align: TextAlign.center),
+                            _buildTableCell('${coverMassKg.toStringAsFixed(2)} kg', align: TextAlign.right),
+                          ],
+                        ),
+                      // Row 3: Companion Fasteners (Rendered when fasteners are toggled on)
+                      if (_showFasteners3D)
+                        TableRow(
+                          decoration: const BoxDecoration(color: Color(0xFFF1F5F9)),
+                          children: [
+                            _buildTableCell('03', isBold: true, align: TextAlign.center),
+                            _buildTableCell('Fixing Fasteners (M6 Flange Bolt & Nut)', isBold: true),
+                            _buildTableCell('4× M6×16 Hex Serrated Screws + M6 Flange Nuts @ Coupler Ports'),
+                            _buildTableCell('A2-70 Stainless Steel / BZP'),
+                            _buildTableCell('M6', align: TextAlign.center),
+                            _buildTableCell('${qty * 4}', align: TextAlign.center),
+                            _buildTableCell('0.04 kg', align: TextAlign.right),
+                          ],
+                        ),
                     ],
                   ),
-                  const SizedBox(height: 6.0),
-                  Row(
+
+                  // Footer Strip: Takeoff Summary
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF8FAFC),
+                      border: Border(top: BorderSide(color: Color(0xFFCBD5E1), width: 0.8)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'TOTAL BLANK AREA: $blankAreaStr  |  UNIT NET MASS: $netMassStr  |  LINE TOTAL: $lineTotalMassStr',
+                          style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        const Text(
+                          'STD: BS EN 61537:2007',
+                          style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const VerticalDivider(width: 1, thickness: 1.0, color: Color(0xFF0F172A)),
+
+          // ===================================================================
+          // Section 2: General Tolerances & Engineering Sign-Off Table
+          // ===================================================================
+          Expanded(
+            flex: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 3.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Tolerance Band
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0),
+                    color: const Color(0xFFF1F5F9),
+                    child: const Text(
+                      'GENERAL TOLERANCE (ISO 2768-m):  ≤30: ±0.5  |  30-120: ±0.8  |  >120: ±1.2 mm  |  ANG: ±0.5°',
+                      style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                    ),
+                  ),
+
+                  // 4-Row Quality Sign-off Grid
+                  Table(
+                    border: TableBorder.all(color: const Color(0xFFCBD5E1), width: 0.6),
+                    columnWidths: const {0: FlexColumnWidth(2.2), 1: FlexColumnWidth(4.0), 2: FlexColumnWidth(2.8)},
                     children: [
-                      _buildMiniParam('BLANK AREA', takeoff != null ? '${takeoff.blankSurfaceAreaM2} m²' : '—'),
-                      const SizedBox(width: 14.0),
-                      _buildMiniParam('NET WEIGHT', takeoff != null ? '${takeoff.estimatedNetWeightKg} kg' : '—'),
-                      const SizedBox(width: 14.0),
-                      _buildMiniParam('COVER', inst?.coverConfiguration.included == true ? 'Included (Live Synced)' : 'None'),
+                      _buildSignOffRow('DESIGNED', proj.designedBy, desDate, () => _pickSignOffDate('DESIGNED', desDate)),
+                      _buildSignOffRow('DRAWN', proj.drawnBy, drwDate, () => _pickSignOffDate('DRAWN', drwDate)),
+                      _buildSignOffRow('CHECKED', proj.checkedBy, chkDate, () => _pickSignOffDate('CHECKED', chkDate)),
+                      _buildSignOffRow('APPROVED', proj.approvedBy, appDate, () => _pickSignOffDate('APPROVED', appDate)),
+                    ],
+                  ),
+
+                  // Material / Mass row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'MATERIAL: ASTM A36 / DX51D',
+                        style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+                      ),
+                      Text(
+                        'MASS: $netMassStr',
+                        style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                      ),
+                      Text(
+                        'STATUS: ${proj.status.toUpperCase()}',
+                        style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+                      ),
                     ],
                   ),
                 ],
@@ -1504,53 +2735,119 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
             ),
           ),
 
-          // Right: ISO 7200 Title Block
-          Container(
-            width: 280,
-            decoration: const BoxDecoration(
-              border: Border(left: BorderSide(color: Color(0xFF0F172A), width: 1.2)),
-            ),
+          const VerticalDivider(width: 1, thickness: 1.2, color: Color(0xFF0F172A)),
+
+          // ===================================================================
+          // Section 3: ISO 7200 Title Block & 3rd Angle Projection
+          // ===================================================================
+          SizedBox(
+            width: 300,
             child: Column(
               children: [
-                // Top row: Document Number & Title
+                // Top: Projection Symbol & Doc Title
                 Expanded(
+                  flex: 3,
                   child: Container(
-                    color: const Color(0xFFF1F5F9),
+                    color: const Color(0xFFF8FAFC),
                     padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '${proj.documentNumber} • ${proj.documentTitle}',
-                      style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-                const Divider(height: 1, color: Color(0xFF0F172A)),
-                // Middle row: Client / Project
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('CLIENT: ${proj.client.isNotEmpty ? proj.client : "Standard"}', style: const TextStyle(fontSize: 8.0, color: Color(0xFF334155))),
-                        Text('REV: ${proj.revision}', style: const TextStyle(fontSize: 8.0, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                        // 3rd Angle Projection Symbol
+                        SizedBox(
+                          width: 48,
+                          height: 26,
+                          child: CustomPaint(painter: _ProjectionSymbolPainter(color: const Color(0xFF0F172A))),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                proj.documentNumber,
+                                style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+                              ),
+                              Text(
+                                inst?.productName ?? proj.documentTitle,
+                                style: const TextStyle(fontSize: 11.0, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ),
                 const Divider(height: 1, color: Color(0xFF0F172A)),
-                // Bottom row: Signatures & Sheet Index
+
+                // Middle: Project & Client
                 Expanded(
+                  flex: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'PROJECT: ${proj.projectName.isNotEmpty ? proj.projectName : "Hospital CMS Fitting"}',
+                                style: const TextStyle(fontSize: 9.0, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                'CLIENT: ${proj.client.isNotEmpty ? proj.client : "Standard"}',
+                                style: const TextStyle(fontSize: 8.5, color: Color(0xFF64748B)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: const Color(0xFF0284C7).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(3)),
+                          child: Text(
+                            'REV ${proj.revision}',
+                            style: const TextStyle(fontSize: 9.0, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 1, color: Color(0xFF0F172A)),
+
+                // Bottom: Engineering Controls & Sheet Number
+                Expanded(
+                  flex: 3,
                   child: Container(
                     color: const Color(0xFF0F172A),
                     padding: const EdgeInsets.symmetric(horizontal: 6.0),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('PREPARED: ${proj.preparedBy.isNotEmpty ? proj.preparedBy : "TruFold"}', style: const TextStyle(fontSize: 8.0, color: Colors.white)),
-                        Text('SHEET ${widget.sheet.sheetNumber} OF ${widget.document.totalSheets}', style: const TextStyle(fontSize: 8.0, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8))),
+                        const Text(
+                          'SCALE: NTS  |  SIZE: A4  |  UNIT: MM',
+                          style: TextStyle(fontSize: 8.5, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold),
+                        ),
+                        Row(
+                          children: [
+                            const Icon(Icons.verified, size: 12, color: Color(0xFF00E5FF)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'SHEET ${widget.sheet.sheetNumber} OF ${widget.document.totalSheets}',
+                              style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF00E5FF)),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -1560,6 +2857,136 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTableHeaderCell(String text, {TextAlign align = TextAlign.left}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 3.5),
+      child: Text(
+        text,
+        textAlign: align,
+        style: const TextStyle(fontSize: 9.0, fontWeight: FontWeight.bold, color: Color(0xFF334155), letterSpacing: 0.2),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Widget _buildTableCell(String text, {bool isBold = false, TextAlign align = TextAlign.left}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 3.0),
+      child: Text(
+        text,
+        textAlign: align,
+        style: TextStyle(fontSize: 9.0, fontWeight: isBold ? FontWeight.bold : FontWeight.w500, color: const Color(0xFF0F172A)),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Future<void> _pickSignOffDate(String role, String currentDate) async {
+    DateTime initialDate = DateTime.now();
+    try {
+      if (currentDate.contains('/')) {
+        final parts = currentDate.split('/');
+        if (parts.length == 3) {
+          initialDate = DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+        }
+      } else if (currentDate.contains('-')) {
+        initialDate = DateTime.parse(currentDate);
+      }
+    } catch (_) {}
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF0F172A),
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && widget.onProjectInfoChanged != null) {
+      final day = picked.day.toString().padLeft(2, '0');
+      final month = picked.month.toString().padLeft(2, '0');
+      final formatted = '$day/$month/${picked.year}';
+      final proj = widget.document.projectInfo;
+      switch (role) {
+        case 'DESIGNED':
+          widget.onProjectInfoChanged!(proj.copyWith(designedDate: formatted));
+          break;
+        case 'DRAWN':
+          widget.onProjectInfoChanged!(proj.copyWith(drawnDate: formatted));
+          break;
+        case 'CHECKED':
+          widget.onProjectInfoChanged!(proj.copyWith(checkedDate: formatted));
+          break;
+        case 'APPROVED':
+          widget.onProjectInfoChanged!(proj.copyWith(approvedDate: formatted));
+          break;
+      }
+    }
+  }
+
+  TableRow _buildSignOffRow(String role, String name, String date, [VoidCallback? onDateTap]) {
+    return TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+          child: Text(
+            role,
+            style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+          child: Text(
+            name.isNotEmpty ? name : '—',
+            style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        InkWell(
+          onTap: onDateTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Expanded(
+                  child: Text(
+                    date.isNotEmpty ? date : '—',
+                    style: const TextStyle(fontSize: 8.0, color: Color(0xFF0284C7), fontWeight: FontWeight.w500),
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (widget.onProjectInfoChanged != null)
+                  const Icon(Icons.edit_calendar, size: 9, color: Color(0xFF0284C7)),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1567,38 +2994,24 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 7.5, color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 7.5, color: Color(0xFF64748B), fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 1.0),
-        Text(value.isNotEmpty ? value : '—', style: const TextStyle(fontSize: 9.0, fontWeight: FontWeight.w600, color: Color(0xFF0F172A))),
+        Text(
+          value.isNotEmpty ? value : '—',
+          style: const TextStyle(fontSize: 9.0, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+        ),
       ],
     );
   }
 
-  Widget _buildMiniParam(String label, String value) {
-    return Row(
-      children: [
-        Text('$label: ', style: const TextStyle(color: Color(0xFF64748B), fontSize: 8.5, fontWeight: FontWeight.bold)),
-        Text(value, style: const TextStyle(color: Color(0xFF0F172A), fontSize: 8.5, fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
+  static const TextStyle _tocHeaderStyle = TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF475569));
 
-  static const TextStyle _tocHeaderStyle = TextStyle(
-    fontSize: 8.5,
-    fontWeight: FontWeight.bold,
-    color: Color(0xFF475569),
-  );
+  static const TextStyle _tocRowStyle = TextStyle(fontSize: 8.5, color: Color(0xFF334155));
 
-  static const TextStyle _tocRowStyle = TextStyle(
-    fontSize: 8.5,
-    color: Color(0xFF334155),
-  );
-
-  static const TextStyle _tocRowStyleBold = TextStyle(
-    fontSize: 8.5,
-    fontWeight: FontWeight.w600,
-    color: Color(0xFF0F172A),
-  );
+  static const TextStyle _tocRowStyleBold = TextStyle(fontSize: 8.5, fontWeight: FontWeight.w600, color: Color(0xFF0F172A));
 }
 
 // =============================================================================
@@ -1625,10 +3038,7 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
   });
 
   Offset _toPixel(CadPoint2D mm) {
-    return Offset(
-      (mm.x / 297.0) * paperSize.width,
-      (mm.y / 210.0) * paperSize.height,
-    );
+    return Offset((mm.x / 297.0) * paperSize.width, (mm.y / 210.0) * paperSize.height);
   }
 
   @override
@@ -1762,19 +3172,12 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: ann.text,
-        style: TextStyle(
-          color: color,
-          fontSize: 9.5,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-        ),
+        style: TextStyle(color: color, fontSize: 9.5, fontWeight: isSelected ? FontWeight.bold : FontWeight.w600),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
-    final textOffset = Offset(
-      textPos.dx >= target.dx ? textPos.dx + 2 : textPos.dx - tp.width - 2,
-      textPos.dy - tp.height - 2,
-    );
+    final textOffset = Offset(textPos.dx >= target.dx ? textPos.dx + 2 : textPos.dx - tp.width - 2, textPos.dy - tp.height - 2);
     tp.paint(canvas, textOffset);
   }
 
@@ -1858,8 +3261,19 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
       ..lineTo(pos.dx - 8, pos.dy + 6)
       ..close();
 
-    canvas.drawPath(path, Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 1.0);
-    canvas.drawPath(path, Paint()..color = Colors.white..style = PaintingStyle.fill);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0,
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill,
+    );
 
     final tp = TextPainter(
       text: TextSpan(
@@ -1893,9 +3307,18 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         children: [
-          const TextSpan(text: 'CLIENT REVIEW STATUS\n', style: TextStyle(color: Color(0xFF065F46), fontSize: 7.5, fontWeight: FontWeight.bold)),
-          TextSpan(text: '${ann.status.toUpperCase()}\n', style: const TextStyle(color: Color(0xFF047857), fontSize: 9.5, fontWeight: FontWeight.bold)),
-          TextSpan(text: 'By: ${ann.reviewedBy}  •  ${ann.reviewDate}', style: const TextStyle(color: Color(0xFF065F46), fontSize: 7.0)),
+          const TextSpan(
+            text: 'CLIENT REVIEW STATUS\n',
+            style: TextStyle(color: Color(0xFF065F46), fontSize: 7.5, fontWeight: FontWeight.bold),
+          ),
+          TextSpan(
+            text: '${ann.status.toUpperCase()}\n',
+            style: const TextStyle(color: Color(0xFF047857), fontSize: 9.5, fontWeight: FontWeight.bold),
+          ),
+          TextSpan(
+            text: 'By: ${ann.reviewedBy}  •  ${ann.reviewDate}',
+            style: const TextStyle(color: Color(0xFF065F46), fontSize: 7.0),
+          ),
         ],
       ),
       textDirection: TextDirection.ltr,
@@ -1925,7 +3348,12 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
       ..lineTo(p2.dx, p2.dy)
       ..close();
 
-    canvas.drawPath(path, Paint()..color = color..style = PaintingStyle.fill);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.fill,
+    );
   }
 
   // --- Text Badge Helper ---
@@ -1933,25 +3361,14 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
-        style: TextStyle(
-          color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF0F172A),
-          fontSize: 8.5,
-          fontWeight: FontWeight.bold,
-        ),
+        style: TextStyle(color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF0F172A), fontSize: 8.5, fontWeight: FontWeight.bold),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
-    final bgRect = Rect.fromCenter(
-      center: center,
-      width: tp.width + 6.0,
-      height: tp.height + 4.0,
-    );
+    final bgRect = Rect.fromCenter(center: center, width: tp.width + 6.0, height: tp.height + 4.0);
 
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(bgRect, const Radius.circular(2.0)),
-      Paint()..color = Colors.white,
-    );
+    canvas.drawRRect(RRect.fromRectAndRadius(bgRect, const Radius.circular(2.0)), Paint()..color = Colors.white);
     canvas.drawRRect(
       RRect.fromRectAndRadius(bgRect, const Radius.circular(2.0)),
       Paint()
@@ -1965,4 +3382,339 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DdsAnnotationOverlayPainter oldDelegate) => true;
+}
+
+class _ProjectionSymbolPainter extends CustomPainter {
+  final Color color;
+
+  const _ProjectionSymbolPainter({this.color = const Color(0xFF0F172A)});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    final centerLinePaint = Paint()
+      ..color = color.withValues(alpha: 0.5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.6;
+
+    final cy = size.height / 2;
+    // Centerline across entire width
+    canvas.drawLine(Offset(2, cy), Offset(size.width - 2, cy), centerLinePaint);
+
+    // Trapezoid (Frustum) on left
+    final leftX = 4.0;
+    final rightX = size.width * 0.44;
+    final rBig = size.height * 0.38;
+    final rSmall = size.height * 0.20;
+
+    final path = Path()
+      ..moveTo(leftX, cy - rBig)
+      ..lineTo(rightX, cy - rSmall)
+      ..lineTo(rightX, cy + rSmall)
+      ..lineTo(leftX, cy + rBig)
+      ..close();
+    canvas.drawPath(path, paint);
+
+    // Concentric circles on right
+    final circleCenter = Offset(size.width * 0.74, cy);
+    canvas.drawCircle(circleCenter, rSmall, paint);
+    canvas.drawCircle(circleCenter, rBig, paint);
+
+    // Vertical center line for circles
+    canvas.drawLine(Offset(circleCenter.dx, cy - rBig - 3), Offset(circleCenter.dx, cy + rBig + 3), centerLinePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _ViewportGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFCBD5E1).withValues(alpha: 0.5)
+      ..strokeWidth = 0.5;
+
+    const step = 20.0;
+    for (double x = 0; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _Dds3DLeaderLinesPainter extends CustomPainter {
+  final List<({Offset badgePos, Offset anchorPos, Color color})> lines;
+
+  _Dds3DLeaderLinesPainter({required this.lines});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final l in lines) {
+      final p1 = l.badgePos;
+      final p2 = l.anchorPos;
+      if ((p1 - p2).distance < 2.0) continue;
+
+      final linePaint = Paint()
+        ..color = l.color.withValues(alpha: 0.75)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+
+      // Draw thin leader line from badge to 3D anchor
+      canvas.drawLine(p1, p2, linePaint);
+
+      // Draw target anchor dot directly on the 3D model geometry
+      final dotPaint = Paint()
+        ..color = l.color
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(p2, 2.5, dotPaint);
+
+      final ringPaint = Paint()
+        ..color = const Color(0xFF334155).withValues(alpha: 0.35)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8;
+      canvas.drawCircle(p2, 4.0, ringPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _Dds3DLeaderLinesPainter oldDelegate) => true;
+}
+
+class DdsCadDimensionItem {
+  final String id;
+  final String label;
+  final String valueText;
+  final Offset p1;
+  final Offset p2;
+  final Offset offsetVector;
+  final Color color;
+
+  const DdsCadDimensionItem({
+    required this.id,
+    required this.label,
+    required this.valueText,
+    required this.p1,
+    required this.p2,
+    required this.offsetVector,
+    this.color = const Color(0xFF0284C7),
+  });
+}
+
+class _Dds3DCadDimensionLinesPainter extends CustomPainter {
+  final List<DdsCadDimensionItem> items;
+
+  _Dds3DCadDimensionLinesPainter({required this.items});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final witnessPaint = Paint()
+      ..color = const Color(0xFF64748B)
+          .withValues(alpha: 0.85) // Slate technical drafting line
+      ..strokeWidth = 0.9;
+
+    const extPast = 4.0; // Extension past dimension line
+
+    for (final item in items) {
+      final p1 = item.p1;
+      final p2 = item.p2;
+      if ((p2 - p1).distance < 3.0) continue;
+
+      final offset = item.offsetVector;
+      final q1 = p1 + offset;
+      final q2 = p2 + offset;
+
+      final offsetDist = offset.distance;
+      final offsetDir = offsetDist > 1e-4 ? offset / offsetDist : const Offset(0, -1);
+
+      // 1. Witness lines extending from physical geometry points to 4px past dimension line
+      final w1End = q1 + offsetDir * extPast;
+      final w2End = q2 + offsetDir * extPast;
+      canvas.drawLine(p1, w1End, witnessPaint);
+      canvas.drawLine(p2, w2End, witnessPaint);
+
+      // 2. High-precision Anchor Points firmly attached to the 3D model geometry
+      for (final pt in [p1, p2]) {
+        // Translucent aura halo ring
+        canvas.drawCircle(
+          pt,
+          5.0,
+          Paint()
+            ..color = item.color.withValues(alpha: 0.20)
+            ..style = PaintingStyle.fill,
+        );
+        // Precision dark boundary ring
+        canvas.drawCircle(
+          pt,
+          2.8,
+          Paint()
+            ..color = const Color(0xFF334155)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.8,
+        );
+        // Accent core dot
+        canvas.drawCircle(
+          pt,
+          2.0,
+          Paint()
+            ..color = item.color
+            ..style = PaintingStyle.fill,
+        );
+        // Micro white reflection dot
+        canvas.drawCircle(
+          pt,
+          0.8,
+          Paint()
+            ..color = Colors.white
+            ..style = PaintingStyle.fill,
+        );
+      }
+
+      // 3. Prepare Multi-Layered Dimension Typography
+      final labelSpan = TextSpan(
+        text: item.label,
+        style: TextStyle(color: item.color, fontSize: 8.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+      );
+      final labelTp = TextPainter(text: labelSpan, textDirection: TextDirection.ltr)..layout();
+
+      final valSpan = TextSpan(
+        text: item.valueText,
+        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 9.0, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+      );
+      final valTp = TextPainter(text: valSpan, textDirection: TextDirection.ltr)..layout();
+
+      final badgeWidth = labelTp.width + 8.0;
+      final pillWidth = badgeWidth + valTp.width + 16.0;
+      const pillHeight = 21.0;
+      final mid = Offset((q1.dx + q2.dx) / 2.0, (q1.dy + q2.dy) / 2.0);
+
+      final lineLen = (q2 - q1).distance;
+      final lineDir = lineLen > 1e-4 ? (q2 - q1) / lineLen : const Offset(1, 0);
+
+      // 4. Clean dimension drafting line with text clearance
+      final dimLinePaint = Paint()
+        ..color = const Color(0xFF334155)
+        ..strokeWidth = 1.1;
+
+      if (lineLen > pillWidth + 8.0) {
+        final gapStart = mid - lineDir * (pillWidth / 2.0 + 3.0);
+        final gapEnd = mid + lineDir * (pillWidth / 2.0 + 3.0);
+        canvas.drawLine(q1, gapStart, dimLinePaint);
+        canvas.drawLine(gapEnd, q2, dimLinePaint);
+      } else {
+        canvas.drawLine(q1, q2, dimLinePaint);
+      }
+
+      // 5. Arrowheads at q1 and q2 pointing towards each other (or outward if tight span)
+      final angleQ1ToQ2 = math.atan2(q2.dy - q1.dy, q2.dx - q1.dx);
+      if (lineLen > 24.0) {
+        _drawArrow(canvas, q1, angleQ1ToQ2, const Color(0xFF334155));
+        _drawArrow(canvas, q2, angleQ1ToQ2 + math.pi, const Color(0xFF334155));
+      } else {
+        _drawArrow(canvas, q1, angleQ1ToQ2 + math.pi, const Color(0xFF334155));
+        _drawArrow(canvas, q2, angleQ1ToQ2, const Color(0xFF334155));
+      }
+
+      // 6. Multi-Layer Smart Frosted Glassmorphism Dimension Text Pill
+      final pillRect = Rect.fromCenter(center: mid, width: pillWidth, height: pillHeight);
+      final rrect = RRect.fromRectAndRadius(pillRect, const Radius.circular(5.0));
+
+      // Layer 1: Ambient diffuse drop shadow
+      canvas.drawRRect(
+        rrect.shift(const Offset(0, 1.5)),
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.08)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5),
+      );
+
+      // Layer 2: Category soft glow diffusion
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = item.color.withValues(alpha: 0.08)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0),
+      );
+
+      // Layer 3: Semi-transparent frosted glass body (92% opaque white)
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = const Color(0xEBFFFFFF)
+          ..style = PaintingStyle.fill,
+      );
+
+      // Layer 4: Accent-tinted precision glass rim
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = item.color.withValues(alpha: 0.40)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0,
+      );
+
+      // Layer 5: Top edge glass reflection shimmer
+      canvas.drawLine(
+        Offset(pillRect.left + 5.0, pillRect.top + 0.8),
+        Offset(pillRect.right - 5.0, pillRect.top + 0.8),
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.85)
+          ..strokeWidth = 0.8,
+      );
+
+      // Layer 6: Inner Category Badge Capsule for Label (W1, H1, SLOTS, etc.)
+      final badgeRect = Rect.fromLTWH(pillRect.left + 4.5, mid.dy - 7.5, badgeWidth, 15.0);
+      final badgeRRect = RRect.fromRectAndRadius(badgeRect, const Radius.circular(3.0));
+      canvas.drawRRect(
+        badgeRRect,
+        Paint()
+          ..color = item.color.withValues(alpha: 0.12)
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawRRect(
+        badgeRRect,
+        Paint()
+          ..color = item.color.withValues(alpha: 0.25)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.7,
+      );
+      labelTp.paint(canvas, Offset(badgeRect.left + 4.0, badgeRect.top + (15.0 - labelTp.height) / 2.0));
+
+      // Layer 7: High-contrast Monospace Measurement Value
+      valTp.paint(canvas, Offset(badgeRect.right + 5.0, mid.dy - valTp.height / 2.0));
+    }
+  }
+
+  void _drawArrow(Canvas canvas, Offset tip, double angleRad, Color color) {
+    final arrowPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    const arrowLength = 6.5;
+    const arrowHalfWidth = 2.2;
+
+    final path = Path();
+    path.moveTo(tip.dx, tip.dy);
+    path.lineTo(
+      tip.dx - arrowLength * math.cos(angleRad) - arrowHalfWidth * math.sin(angleRad),
+      tip.dy - arrowLength * math.sin(angleRad) + arrowHalfWidth * math.cos(angleRad),
+    );
+    path.lineTo(
+      tip.dx - arrowLength * math.cos(angleRad) + arrowHalfWidth * math.sin(angleRad),
+      tip.dy - arrowLength * math.sin(angleRad) - arrowHalfWidth * math.cos(angleRad),
+    );
+    path.close();
+    canvas.drawPath(path, arrowPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _Dds3DCadDimensionLinesPainter oldDelegate) => true;
 }
