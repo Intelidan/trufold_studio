@@ -23,7 +23,6 @@ import 'line_property_sheet.dart';
 import 'arc_property_sheet.dart';
 import 'dimension_property_sheet.dart';
 import 'active_tool_property_sheet.dart';
-import 'template_parameter_sheet.dart';
 
 class CadPropertyInspector extends StatelessWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -45,19 +44,6 @@ class CadPropertyInspector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 0. Active Parametric Template Mode
-    if (viewModel.isTemplateActive && viewModel.activeTemplate != null) {
-      return TemplateParameterSheet(
-        viewModel: viewModel,
-        template: viewModel.activeTemplate!,
-        isCollapsed: isCollapsed,
-        onToggleCollapse: onToggleCollapse,
-        onClose: () => viewModel.closeTemplateMode(),
-        onDragStartHeader: onDragStartHeader,
-        onDragHeader: onDragHeader,
-      );
-    }
-
     // Multi-Selection of parts (homogeneous or heterogeneous)
     final selectedIds = viewModel.selectedEntityIds;
     if (selectedIds.length > 1) {

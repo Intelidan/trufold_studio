@@ -38,7 +38,6 @@ import 'widgets/guided_cms/cms_dxf_inspector_dialog.dart';
 import 'widgets/guided_cms/cms_guided_stage_card.dart';
 import 'widgets/guided_cms/cms_live_learned_card.dart';
 import 'widgets/guided_cms/cms_ambiguity_resolver_dialog.dart';
-import 'widgets/guided_cms/cms_teach_scaling_overlay.dart';
 import '../models/cms/cms_ux_state.dart';
 import '../models/cms/cms_product_contract.dart';
 import '../models/dds/dds_document.dart';
@@ -86,6 +85,8 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
   final GlobalKey _tdsWorkspaceKey = GlobalKey();
 
   bool _isCmsInspectorOpen = false;
+  bool _isCmsInspectorDetached = false;
+  bool _isCmsInspectorCollapsed = false;
   Offset _cmsInspectorPosition = const Offset(280, 50);
   Offset? _cmsInspectorDragStart;
 
@@ -259,7 +260,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
           id: 'TAB_${DateTime.now().microsecondsSinceEpoch}_${_tabs.length}',
           title: file.fileName,
           filePath: file.filePath,
-          viewModel: SheetMetalStudioViewModel(initialDocument: recognized.generatedDocument),
+          viewModel: SheetMetalStudioViewModel(initialDocument: recognized.generatedDocument)..currentFilePath = file.filePath,
         );
         setState(() {
           _tabs.add(tab);
@@ -277,7 +278,13 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
       } else {
         final items = StudioFileService.parseContent(file.content, fileName: file.fileName, filePath: file.filePath);
         for (final item in items) {
-          final vm = SheetMetalStudioViewModel(initialDocument: item.document);
+          final vm = SheetMetalStudioViewModel(initialDocument: item.document)..currentFilePath = item.filePath;
+          if (item.document.isCmsDrawing) {
+            vm.setPropertyInspectorOpen(false);
+            _isCmsInspectorOpen = true;
+            _isCmsInspectorCollapsed = false;
+            _isCmsInspectorDetached = false;
+          }
           final tab = StudioTab(
             id: 'TAB_${DateTime.now().microsecondsSinceEpoch}_${_tabs.length}',
             title: item.fileName,
@@ -290,7 +297,9 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
           if (item.document.isCmsDrawing &&
               item.document.bends.isNotEmpty &&
               (vm.persistentCmsPorts.isEmpty || item.document.metadata['cmsWorkflow']?['stageIndex'] == 1)) {
-            vm.continueCmsPortMapping();
+            vm.continueCmsPortMapping().then((_) {
+              vm.cmsGuidedController.dismiss();
+            });
           }
         }
         if (mounted && _tabs.isNotEmpty) {
@@ -626,6 +635,96 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
     );
   }
 
+  void _toggleCmsInspector() {
+    setState(() {
+      if (_isCmsInspectorDetached) {
+        _isCmsInspectorOpen = !_isCmsInspectorOpen;
+      } else {
+        if (_isCmsInspectorCollapsed) {
+          _isCmsInspectorCollapsed = false;
+          _isCmsInspectorOpen = true;
+        } else {
+          _isCmsInspectorCollapsed = true;
+        }
+      }
+    });
+  }
+
+  Widget _buildCollapsedCmsRightRail() {
+    return Container(
+      width: 36,
+      decoration: const BoxDecoration(
+        color: Color(0xFF0F172A),
+        border: Border(
+          left: BorderSide(color: Color(0xFF334155), width: 1.0),
+        ),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          Tooltip(
+            message: 'Expand CMS Parameter Inspector',
+            child: InkWell(
+              onTap: () => setState(() => _isCmsInspectorCollapsed = false),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Icon(Icons.chevron_left, size: 18, color: Color(0xFF38BDF8)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _isCmsInspectorCollapsed = false),
+              child: RotatedBox(
+                quarterTurns: 3,
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.tune, size: 13, color: Color(0xFF38BDF8)),
+                      SizedBox(width: 6),
+                      Text(
+                        'CMS PARAMETERS',
+                        style: TextStyle(
+                          color: Color(0xFFE2E8F0),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Tooltip(
+            message: 'Detach to Floating Window',
+            child: InkWell(
+              onTap: () => setState(() {
+                _isCmsInspectorDetached = true;
+                _isCmsInspectorOpen = true;
+              }),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                child: const Icon(Icons.open_in_new, size: 14, color: Color(0xFF94A3B8)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return CallbackShortcuts(
@@ -911,7 +1010,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                           _isTdsWindowOpen = true;
                           _isTdsWindowMinimized = false;
                         }),
-                        onOpenCmsInspector: () => setState(() => _isCmsInspectorOpen = !_isCmsInspectorOpen),
+                        onOpenCmsInspector: _toggleCmsInspector,
                         onFinishSketch: () {
                           _viewModel.setToolMode(StudioToolMode.select);
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -996,19 +1095,52 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                         ),
                                       ),
                                     ] else ...[
-                                      // Left Viewport: 2D Unfolded Flat Pattern (CAD Sketch View)
+                                      // Left Viewport: 2D Unfolded Flat Pattern (CAD Sketch View) + Docked CMS Inspector
                                       SizedBox(
                                         width: leftW,
                                         child: ClipRect(
-                                          child: Stack(
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.stretch,
                                             children: [
-                                              UnfoldedCanvasWidget(
-                                                key: const ValueKey('unfolded_canvas_viewport'),
-                                                viewModel: _viewModel,
-                                                renderFloatingInspectors: false,
-                                                showInCanvasToolRibbon: false,
+                                              Expanded(
+                                                child: Stack(
+                                                  children: [
+                                                    UnfoldedCanvasWidget(
+                                                      key: const ValueKey('unfolded_canvas_viewport'),
+                                                      viewModel: _viewModel,
+                                                      renderFloatingInspectors: false,
+                                                      showInCanvasToolRibbon: false,
+                                                    ),
+                                                    _buildCanvasTopTipBanner(_viewModel),
+                                                  ],
+                                                ),
                                               ),
-                                              _buildCanvasTopTipBanner(_viewModel),
+                                              if ((_viewModel.isCmsDrawing || _isCmsInspectorOpen) && !_isCmsInspectorDetached) ...[
+                                                if (_isCmsInspectorCollapsed)
+                                                  _buildCollapsedCmsRightRail()
+                                                else
+                                                  SizedBox(
+                                                    width: math.min(360.0, (leftW - 120.0).clamp(260.0, 360.0)),
+                                                    child: Container(
+                                                      decoration: const BoxDecoration(
+                                                        border: Border(
+                                                          left: BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
+                                                        ),
+                                                      ),
+                                                      child: DdsCmsParameterInspector(
+                                                        viewModel: _viewModel,
+                                                        isLightTheme: true,
+                                                        isDetached: false,
+                                                        onClose: () => setState(() => _isCmsInspectorCollapsed = true),
+                                                          onFoldSideways: () => setState(() => _isCmsInspectorCollapsed = true),
+                                                        onDetach: () => setState(() {
+                                                          _isCmsInspectorDetached = true;
+                                                          _isCmsInspectorOpen = true;
+                                                        }),
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
                                             ],
                                           ),
                                         ),
@@ -1121,7 +1253,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                   animation: _viewModel.cmsGuidedController,
                                   builder: (context, _) {
                                     final cmsCtrl = _viewModel.cmsGuidedController;
-                                    if (cmsCtrl.phase == CmsUxPhase.idle) return const SizedBox.shrink();
+                                    if (cmsCtrl.phase == CmsUxPhase.idle || cmsCtrl.state.isDismissed) return const SizedBox.shrink();
 
                                     return Positioned(
                                       top: 16.0,
@@ -1137,9 +1269,12 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                             onUseSuggestedBends: () => _viewModel.applyUserBends(),
                                             onEditBendsManually: () => _viewModel.setToolMode(StudioToolMode.addBend),
                                             onFinalizeTemplate: () => _viewModel.finalizeCmsTemplate(),
-                                            onStartTeachScaling: () => _viewModel.startTeachScaling(),
+                                            onStartTeachScaling: () {
+                                              _viewModel.startTeachScaling();
+                                              setState(() => _isCmsInspectorOpen = true);
+                                            },
                                             onIdentifyCouplers: () => _viewModel.autoIdentifyCouplerSlots(),
-                                            onDismiss: () => cmsCtrl.reset(),
+                                            onDismiss: () => cmsCtrl.dismiss(),
                                           ),
                                           const SizedBox(height: 10.0),
                                           CmsLiveLearnedCard(controller: cmsCtrl),
@@ -1149,25 +1284,8 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                   },
                                 ),
 
-                                // Clean CMS Architecture: Phase 2 Teach Scaling Overlay
-                                AnimatedBuilder(
-                                  animation: _viewModel,
-                                  builder: (context, _) {
-                                    if (!_viewModel.isTeachScalingActive || _viewModel.scalingController == null) {
-                                      return const SizedBox.shrink();
-                                    }
+                                // Clean CMS Architecture: Canonical DdsCmsParameterInspector replaces obsolete CmsTeachScalingOverlay
 
-                                    return Positioned(
-                                      top: 16.0,
-                                      left: 16.0,
-                                      child: CmsTeachScalingOverlay(
-                                        controller: _viewModel.scalingController!,
-                                        onAccept: () => _viewModel.acceptTeachScaling(),
-                                        onCancel: () => _viewModel.exitTeachScaling(),
-                                      ),
-                                    );
-                                  },
-                                ),
 
                                 // Clean CMS Architecture: Exception Ambiguity Resolver Dialog
                                 AnimatedBuilder(
@@ -1270,15 +1388,19 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                   ),
 
                                 // Floating Detachable Consolidated CMS Parameter Inspector (Available to Main Window)
-                                if (_isCmsInspectorOpen)
+                                if (_isCmsInspectorOpen && _isCmsInspectorDetached)
                                   Positioned(
-                                    left: _cmsInspectorPosition.dx.clamp(8.0, math.max(8.0, totalW - 350.0)),
+                                    left: _cmsInspectorPosition.dx.clamp(8.0, math.max(8.0, totalW - 390.0)),
                                     top: _cmsInspectorPosition.dy.clamp(8.0, math.max(8.0, totalH - 420.0)),
                                     child: DdsCmsParameterInspector(
                                       viewModel: _viewModel,
                                       isLightTheme: true,
                                       isDetached: true,
                                       onClose: () => setState(() => _isCmsInspectorOpen = false),
+                                      onDetach: () => setState(() {
+                                        _isCmsInspectorDetached = false;
+                                        _isCmsInspectorCollapsed = false;
+                                      }),
                                       onDragStart: (details) {
                                         _cmsInspectorDragStart = details.globalPosition - _cmsInspectorPosition;
                                       },

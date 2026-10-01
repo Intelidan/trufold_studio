@@ -58,7 +58,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
         return true;
       }
     } catch (_) {}
-    return false;
+    return widget.viewModel.isAltPressed;
   }
 
   bool _isShiftPressed() {
@@ -511,7 +511,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                   }
 
                                   // 3. Direct hit-test along ANY bend line body
-                                  if (!found) {
+                                  if (!found && !isDrawingTool) {
                                     for (final b in viewModel.document.bends) {
                                       if (!b.isVisible) continue;
                                       final d =
@@ -543,7 +543,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                   }
 
                                   // 4. Direct hit-test along ANY cut line body
-                                  if (!found) {
+                                  if (!found && !isDrawingTool) {
                                     for (final c
                                         in viewModel.document.cutLines) {
                                       if (!c.isVisible) continue;
@@ -576,7 +576,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                   }
 
                                   // 4b. Direct hit-test along ANY arc entity
-                                  if (!found) {
+                                  if (!found && !isDrawingTool) {
                                     for (final a in viewModel.document.arcs) {
                                       final d = a.distanceTo(cadPt) * scale;
                                       if (d <= 14.0) {
@@ -600,7 +600,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                   }
 
                                   // 5. Direct hit-test on ANY punch (with Selection Cycling for overlapping punches)
-                                  if (!found) {
+                                  if (!found && !isDrawingTool) {
                                     final hitPunches = <CncPunchPrimitive>[];
                                     for (final p
                                         in viewModel.document.punches) {
@@ -672,7 +672,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                   }
 
                                   // 5b. Direct hit-test on ANY perforation pattern
-                                  if (!found) {
+                                  if (!found && !isDrawingTool) {
                                     for (final pat
                                         in viewModel
                                             .document
@@ -707,6 +707,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                 }
 
                                 if (!found &&
+                                    !isDrawingTool &&
                                     viewModel.document.cover != null &&
                                     viewModel.document.cover!.isVisible2D) {
                                   final cover = viewModel.document.cover!;
@@ -843,8 +844,11 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                   CadPoint2D effectivePt = cadPt;
 
                                   if (isEndAlt) {
-                                    // Alt is pressed during drag: end point moves freely without snapping
-                                    effectivePt = cadPt;
+                                    // Alt is pressed during drag: end point moves with 0.1mm precision without snapping
+                                    effectivePt = CadPoint2D(
+                                      (cadPt.x * 10.0).roundToDouble() / 10.0,
+                                      (cadPt.y * 10.0).roundToDouble() / 10.0,
+                                    );
                                     viewModel.clearSnap();
                                     if (isLineTool &&
                                         _drawDragStartCad != null) {
@@ -874,7 +878,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                       _dragAngleInfo = (
                                         point: effectivePt,
                                         label:
-                                            '$toolLabel ${angle.round() % 360}° (Alt Free)',
+                                            '$toolLabel ${angle.round() % 360}° | L: ${_drawDragStartCad!.distanceTo(effectivePt).toStringAsFixed(1)} mm (Alt 0.1mm)',
                                       );
                                     } else {
                                       _dragAngleInfo = null;
@@ -939,6 +943,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                 // Determine fixed anchor for line endpoint dragging to anchor angle snapping
                                 CadPoint2D? anchor;
                                 bool isCutLineDrag = false;
+                                bool isFlangeLineDrag = false;
 
                                 if (_activeDrag == _DragTarget.bendP1) {
                                   final targetBendId =
@@ -949,7 +954,12 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                         (x) => x?.id == targetBendId,
                                         orElse: () => null,
                                       );
-                                  if (b != null) anchor = b.p2;
+                                  if (b != null) {
+                                    anchor = b.p2;
+                                    isFlangeLineDrag = b.isFlange ||
+                                        b.role == BendLineRole.flange ||
+                                        b.id.startsWith('FL');
+                                  }
                                 } else if (_activeDrag == _DragTarget.bendP2) {
                                   final targetBendId =
                                       _draggedBendId ?? selectedBend?.id;
@@ -959,7 +969,12 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                         (x) => x?.id == targetBendId,
                                         orElse: () => null,
                                       );
-                                  if (b != null) anchor = b.p1;
+                                  if (b != null) {
+                                    anchor = b.p1;
+                                    isFlangeLineDrag = b.isFlange ||
+                                        b.role == BendLineRole.flange ||
+                                        b.id.startsWith('FL');
+                                  }
                                 } else if (_activeDrag == _DragTarget.cutP1) {
                                   isCutLineDrag = true;
                                   final targetCutId =
@@ -984,27 +999,37 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                   if (c != null) anchor = c.p1;
                                 }
 
-                                CadPoint2D candidate = cadPt;
+                                final isAlt = _isAltPressed() || viewModel.isAltPressed;
+                                CadPoint2D candidate = isAlt
+                                    ? CadPoint2D(
+                                        (cadPt.x * 10.0).roundToDouble() / 10.0,
+                                        (cadPt.y * 10.0).roundToDouble() / 10.0,
+                                      )
+                                    : cadPt;
                                 int currentAngleDeg = 0;
-                                bool isAlt = false;
-                                try {
-                                  isAlt =
-                                      HardwareKeyboard.instance.isAltPressed;
-                                } catch (_) {}
 
                                 if (anchor != null) {
-                                  candidate =
-                                      SheetMetalStudioViewModel.snapEndpointAngle(
-                                        anchor: anchor,
-                                        target: cadPt,
-                                        isAlt: isAlt,
-                                      );
-                                  final dx = candidate.x - anchor.x;
-                                  final dy = candidate.y - anchor.y;
-                                  double angle =
-                                      math.atan2(dy, dx) * 180.0 / math.pi;
-                                  if (angle < 0) angle += 360.0;
-                                  currentAngleDeg = angle.round() % 360;
+                                  if (isAlt) {
+                                    final dx = candidate.x - anchor.x;
+                                    final dy = candidate.y - anchor.y;
+                                    double angle =
+                                        math.atan2(dy, dx) * 180.0 / math.pi;
+                                    if (angle < 0) angle += 360.0;
+                                    currentAngleDeg = angle.round() % 360;
+                                  } else {
+                                    candidate =
+                                        SheetMetalStudioViewModel.snapEndpointAngle(
+                                          anchor: anchor,
+                                          target: cadPt,
+                                          isAlt: false,
+                                        );
+                                    final dx = candidate.x - anchor.x;
+                                    final dy = candidate.y - anchor.y;
+                                    double angle =
+                                        math.atan2(dy, dx) * 180.0 / math.pi;
+                                    if (angle < 0) angle += 360.0;
+                                    currentAngleDeg = angle.round() % 360;
+                                  }
                                 }
 
                                 // Live magnetic snap update during dragging (lines snap, punches move smoothly)
@@ -1019,16 +1044,22 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                   viewModel.updateCursorMm(
                                     candidate,
                                     snapRadiusMm: screenSnapMm,
+                                    isAlt: isAlt,
                                   );
                                 }
-                                final effectivePt =
-                                    viewModel.activeSnap?.point ?? candidate;
+                                final effectivePt = isAlt
+                                    ? candidate
+                                    : (viewModel.activeSnap?.point ?? candidate);
 
                                 if (anchor != null) {
+                                  final distMm = anchor.distanceTo(effectivePt);
+                                  final lineTypeStr = isCutLineDrag
+                                      ? "CUT"
+                                      : (isFlangeLineDrag ? "FLANGE" : "BEND");
                                   _dragAngleInfo = (
                                     point: effectivePt,
                                     label:
-                                        '${isCutLineDrag ? "CUT" : "BEND"} $currentAngleDeg° ${isAlt ? "(Alt Free)" : ""}',
+                                        '$lineTypeStr $currentAngleDeg° | L: ${distMm.toStringAsFixed(1)} mm ${isAlt ? "(Alt 0.1mm)" : ""}',
                                   );
                                 } else {
                                   _dragAngleInfo = null;
@@ -1334,8 +1365,11 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
 
                                     CadPoint2D effectiveEnd = endCad;
                                     if (isEndAlt) {
-                                      // Free mode for end point (Alt held at release)
-                                      effectiveEnd = endCad;
+                                      // Free mode for end point (Alt held at release) with 0.1mm precision
+                                      effectiveEnd = CadPoint2D(
+                                        (endCad.x * 10.0).roundToDouble() / 10.0,
+                                        (endCad.y * 10.0).roundToDouble() / 10.0,
+                                      );
                                     } else {
                                       // Snapped mode for end point (Alt NOT held at release)
                                       if (_drawDragStartCad != null &&
@@ -1502,9 +1536,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                         );
                                       }
                                       viewModel.setPendingBendStart(null);
-                                      viewModel.setToolMode(
-                                        StudioToolMode.select,
-                                      );
+                                      // Keep dimension tool active unless user turns it off
                                     } else if (viewModel.toolMode ==
                                             StudioToolMode.addBend ||
                                         viewModel.toolMode ==
@@ -1688,7 +1720,16 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                         viewModel.toolMode ==
                                             StudioToolMode.dragDimension) {
                                       if (viewModel.pendingBendStart == null) {
-                                        viewModel.setPendingBendStart(clickCad);
+                                        final seg = viewModel.findSegmentAtPoint(clickCad);
+                                        if (seg != null) {
+                                          viewModel.handleCanvasClick(
+                                            clickCad,
+                                            snapRadiusMm: screenSnapMm,
+                                            autoPlace: false,
+                                          );
+                                        } else {
+                                          viewModel.setPendingBendStart(clickCad);
+                                        }
                                       } else {
                                         final pA = viewModel.pendingBendStart!;
                                         final pB = clickCad;
@@ -1699,9 +1740,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                           );
                                         }
                                         viewModel.setPendingBendStart(null);
-                                        viewModel.setToolMode(
-                                          StudioToolMode.select,
-                                        );
+                                        // Keep dimension tool active unless user turns it off
                                       }
                                       _drawDragCommitted = true;
                                     } else {
@@ -1758,7 +1797,9 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                                 null &&
                                             _drawDragStartCad != null) {
                                           if (viewModel.toolMode ==
-                                              StudioToolMode.addDimension) {
+                                              StudioToolMode.addDimension ||
+                                              viewModel.toolMode ==
+                                              StudioToolMode.dragDimension) {
                                             viewModel.handleCanvasClick(
                                               _drawDragStartCad!,
                                               snapRadiusMm: screenSnapMm,

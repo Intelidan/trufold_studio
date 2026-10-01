@@ -170,7 +170,14 @@ class MagneticSnapEngine {
       }
 
       if (settings.enableEndpoint && !isIntermediateOfAnyArc(pt)) {
-        targets.add(SnapTarget(point: pt, type: SnapType.cornerVertex, label: 'Corner (${pt.x.toStringAsFixed(1)}, ${pt.y.toStringAsFixed(1)})', entityId: 'CONTOUR_VERTEX_$i'));
+        targets.add(
+          SnapTarget(
+            point: pt,
+            type: SnapType.cornerVertex,
+            label: 'Corner (${pt.x.toStringAsFixed(1)}, ${pt.y.toStringAsFixed(1)})',
+            entityId: 'CONTOUR_VERTEX_$i',
+          ),
+        );
       }
 
       if (settings.enableMidpoint && !isChordSegment) {
@@ -212,12 +219,21 @@ class MagneticSnapEngine {
       }
 
       if (settings.enableMidpoint) {
-        targets.add(SnapTarget(point: bend.midpoint, type: SnapType.edgeMidpoint, label: '${bend.id} Midpoint', entityId: bend.id, segmentStart: bend.p1, segmentEnd: bend.p2));
+        targets.add(
+          SnapTarget(
+            point: bend.midpoint,
+            type: SnapType.edgeMidpoint,
+            label: '${bend.id} Midpoint',
+            entityId: bend.id,
+            segmentStart: bend.p1,
+            segmentEnd: bend.p2,
+          ),
+        );
       }
     }
 
     // 3. Punch centers & quadrants
-    for (final punch in doc.punches) {
+    for (final punch in doc.allPunches) {
       if (settings.enableCenter) {
         targets.add(SnapTarget(point: punch.center, type: SnapType.punchCenter, label: '${punch.id} Center', entityId: punch.id));
       }
@@ -225,10 +241,18 @@ class MagneticSnapEngine {
       if (settings.enableQuadrant) {
         final r = punch.widthMm / 2.0;
         if (punch.type == PunchType.roundHole) {
-          targets.add(SnapTarget(point: CadPoint2D(punch.center.x + r, punch.center.y), type: SnapType.quadrant, label: '${punch.id} 0° Quadrant', entityId: punch.id));
-          targets.add(SnapTarget(point: CadPoint2D(punch.center.x, punch.center.y + r), type: SnapType.quadrant, label: '${punch.id} 90° Quadrant', entityId: punch.id));
-          targets.add(SnapTarget(point: CadPoint2D(punch.center.x - r, punch.center.y), type: SnapType.quadrant, label: '${punch.id} 180° Quadrant', entityId: punch.id));
-          targets.add(SnapTarget(point: CadPoint2D(punch.center.x, punch.center.y - r), type: SnapType.quadrant, label: '${punch.id} 270° Quadrant', entityId: punch.id));
+          targets.add(
+            SnapTarget(point: CadPoint2D(punch.center.x + r, punch.center.y), type: SnapType.quadrant, label: '${punch.id} 0° Quadrant', entityId: punch.id),
+          );
+          targets.add(
+            SnapTarget(point: CadPoint2D(punch.center.x, punch.center.y + r), type: SnapType.quadrant, label: '${punch.id} 90° Quadrant', entityId: punch.id),
+          );
+          targets.add(
+            SnapTarget(point: CadPoint2D(punch.center.x - r, punch.center.y), type: SnapType.quadrant, label: '${punch.id} 180° Quadrant', entityId: punch.id),
+          );
+          targets.add(
+            SnapTarget(point: CadPoint2D(punch.center.x, punch.center.y - r), type: SnapType.quadrant, label: '${punch.id} 270° Quadrant', entityId: punch.id),
+          );
         }
       }
     }
@@ -243,7 +267,9 @@ class MagneticSnapEngine {
       }
 
       if (settings.enableMidpoint) {
-        targets.add(SnapTarget(point: cut.midpoint, type: SnapType.midpoint, label: '${cut.id} Cut Midpoint', entityId: cut.id, segmentStart: cut.p1, segmentEnd: cut.p2));
+        targets.add(
+          SnapTarget(point: cut.midpoint, type: SnapType.midpoint, label: '${cut.id} Cut Midpoint', entityId: cut.id, segmentStart: cut.p1, segmentEnd: cut.p2),
+        );
       }
     }
 
@@ -590,10 +616,7 @@ class MagneticSnapEngine {
       final pStart = Offset(arc.startPoint.x, arc.startPoint.y);
       final pEnd = Offset(arc.endPoint.x, arc.endPoint.y);
       final pMid = Offset(arc.midpoint.x, arc.midpoint.y);
-      if (cadBox.contains(pStart) ||
-          cadBox.contains(pEnd) ||
-          cadBox.contains(pMid) ||
-          isSegmentIntersectingRect(arc.startPoint, arc.endPoint, cadBox)) {
+      if (cadBox.contains(pStart) || cadBox.contains(pEnd) || cadBox.contains(pMid) || isSegmentIntersectingRect(arc.startPoint, arc.endPoint, cadBox)) {
         selectedIds.add(arc.id);
       }
     }
@@ -602,8 +625,7 @@ class MagneticSnapEngine {
       if (!punch.isVisible) continue;
       final poly = punch.toPolygon();
       if (poly.isNotEmpty) {
-        if (cadBox.contains(Offset(punch.center.x, punch.center.y)) ||
-            poly.any((pt) => cadBox.contains(Offset(pt.x, pt.y)))) {
+        if (cadBox.contains(Offset(punch.center.x, punch.center.y)) || poly.any((pt) => cadBox.contains(Offset(pt.x, pt.y)))) {
           selectedIds.add(punch.id);
         } else {
           bool intersects = false;

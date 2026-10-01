@@ -538,7 +538,7 @@ class _PartsTreePanelState extends State<PartsTreePanel> {
                     : const Color(0xFFD97706)),
             title: '${b.isFlange ? "Flange" : "Bend"} ${b.id}',
             subtitle:
-                '${b.targetAngleDeg.toStringAsFixed(0)}° ${b.direction == BendDirection.up ? "↑" : "↓"} | R${b.radiusMm.toStringAsFixed(1)}',
+                '${b.displayAngleDeg.toStringAsFixed(0)}° ${b.direction == BendDirection.up ? "↑" : "↓"} | R${b.radiusMm.toStringAsFixed(1)}',
             isVisible: b.isVisible,
             onVisibilityToggle: () =>
                 widget.viewModel.toggleBendVisibility(b.id),

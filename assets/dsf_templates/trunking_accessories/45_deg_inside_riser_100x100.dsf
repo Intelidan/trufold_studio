@@ -1,0 +1,5645 @@
+{
+  "format": "DANISH_SHEET_FOLD",
+  "version": "2.0",
+  "productType": "inside_riser",
+  "itemName": "45_deg_inside_riser_100x100.dxf",
+  "material": {
+    "thicknessMm": 3.5,
+    "materialGrade": "Pre-Galvanized Steel",
+    "materialType": "mildSteel",
+    "finish": "electroGalvanized",
+    "kFactor": 0.4,
+    "defaultBendRadius": 1.5,
+    "edgeChamferMm": 0.0
+  },
+  "outerContour": [
+    {
+      "x": 301.19381584318603,
+      "y": 88.6396103067872
+    },
+    {
+      "x": 315.335951466917,
+      "y": 102.78174593051813
+    },
+    {
+      "x": 315.335951466917,
+      "y": 116.92388155424896
+    },
+    {
+      "x": 261.5958360967388,
+      "y": 170.66399692442712
+    },
+    {
+      "x": 247.45370047300764,
+      "y": 170.66399692442707
+    },
+    {
+      "x": 205.4434515882905,
+      "y": 128.6537480397081
+    },
+    {
+      "x": 205.4434515882905,
+      "y": 167.6537480397082
+    },
+    {
+      "x": 109.89249987862621,
+      "y": 167.6537480397082
+    },
+    {
+      "x": 109.89249987862621,
+      "y": 128.6537480397081
+    },
+    {
+      "x": 67.88225099390826,
+      "y": 170.6639969244277
+    },
+    {
+      "x": 53.74011537017708,
+      "y": 170.6639969244278
+    },
+    {
+      "x": 4.547473508864641e-13,
+      "y": 116.92388155425039
+    },
+    {
+      "x": 0.0,
+      "y": 102.78174593052
+    },
+    {
+      "x": 14.142135623730042,
+      "y": 88.63961030678811
+    },
+    {
+      "x": 14.142135623730042,
+      "y": 85.63961030678811
+    },
+    {
+      "x": 4.1421356237300415,
+      "y": 85.63961030678811
+    },
+    {
+      "x": 4.1421356237300415,
+      "y": 30.0
+    },
+    {
+      "x": 13.193815843184211,
+      "y": 30.0
+    },
+    {
+      "x": 13.193815843184211,
+      "y": 10.0
+    },
+    {
+      "x": 23.19381584318421,
+      "y": 0.0
+    },
+    {
+      "x": 99.19381584318415,
+      "y": 0.0
+    },
+    {
+      "x": 109.19381584318415,
+      "y": 10.000000000000057
+    },
+    {
+      "x": 109.19381584318404,
+      "y": 30.0
+    },
+    {
+      "x": 205.19381584318398,
+      "y": 30.0
+    },
+    {
+      "x": 205.19381584318432,
+      "y": 9.999999999999915
+    },
+    {
+      "x": 215.1938158431842,
+      "y": 0.0
+    },
+    {
+      "x": 291.1938158431842,
+      "y": 0.0
+    },
+    {
+      "x": 301.1938158431842,
+      "y": 10.000000000000057
+    },
+    {
+      "x": 301.1938158431842,
+      "y": 30.0
+    },
+    {
+      "x": 311.1938158431841,
+      "y": 30.0
+    },
+    {
+      "x": 311.1938158431841,
+      "y": 85.63961030678811
+    },
+    {
+      "x": 301.1938158431842,
+      "y": 85.63961030678811
+    },
+    {
+      "x": 301.19381584318603,
+      "y": 88.6396103067872
+    }
+  ],
+  "outerContourLayer": "OUTLINE",
+  "bends": [
+    {
+      "id": "B1",
+      "p1": {
+        "x": 205.4434515882905,
+        "y": 128.6537480397081
+      },
+      "p2": {
+        "x": 205.19381584318398,
+        "y": 30.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_3",
+      "childFaceId": "F_5",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "B2",
+      "p1": {
+        "x": 109.89249987862621,
+        "y": 128.6537480397081
+      },
+      "p2": {
+        "x": 109.19381584318404,
+        "y": 30.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_3",
+      "childFaceId": "F_1",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "FL1",
+      "p1": {
+        "x": 14.142135623730042,
+        "y": 85.63961030678811
+      },
+      "p2": {
+        "x": 13.193815843184211,
+        "y": 30.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 0.5,
+      "role": "flange",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_1",
+      "childFaceId": "F_0",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "FL2",
+      "p1": {
+        "x": 301.1938158431842,
+        "y": 30.0
+      },
+      "p2": {
+        "x": 301.1938158431842,
+        "y": 85.63961030678811
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 0.5,
+      "role": "flange",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_5",
+      "childFaceId": "F_4",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "B3",
+      "p1": {
+        "x": 205.4434515882905,
+        "y": 128.6537480397081
+      },
+      "p2": {
+        "x": 109.89249987862621,
+        "y": 128.6537480397081
+      },
+      "direction": "UP",
+      "targetAngleDeg": 45.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_3",
+      "childFaceId": "F_2",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    }
+  ],
+  "faces": [
+    {
+      "id": "F_0",
+      "label": "Return Flange",
+      "vertices": [
+        {
+          "x": 14.142135623730042,
+          "y": 85.63961030678811
+        },
+        {
+          "x": 4.1421356237300415,
+          "y": 85.63961030678811
+        },
+        {
+          "x": 4.1421356237300415,
+          "y": 30.0
+        },
+        {
+          "x": 13.193815843184211,
+          "y": 30.0
+        }
+      ],
+      "role": "returnFlange",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_1",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 13.193815843184211,
+          "y": 30.0
+        },
+        {
+          "x": 13.193815843184211,
+          "y": 10.0
+        },
+        {
+          "x": 23.19381584318421,
+          "y": 0.0
+        },
+        {
+          "x": 99.19381584318415,
+          "y": 0.0
+        },
+        {
+          "x": 109.19381584318415,
+          "y": 10.000000000000057
+        },
+        {
+          "x": 109.19381584318404,
+          "y": 30.0
+        },
+        {
+          "x": 109.89249987862621,
+          "y": 128.6537480397081
+        },
+        {
+          "x": 67.88225099390826,
+          "y": 170.6639969244277
+        },
+        {
+          "x": 53.74011537017708,
+          "y": 170.6639969244278
+        },
+        {
+          "x": 4.547473508864641e-13,
+          "y": 116.92388155425039
+        },
+        {
+          "x": 0.0,
+          "y": 102.78174593052
+        },
+        {
+          "x": 14.142135623730042,
+          "y": 88.63961030678811
+        },
+        {
+          "x": 14.142135623730042,
+          "y": 85.63961030678811
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_2",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 205.4434515882905,
+          "y": 128.6537480397081
+        },
+        {
+          "x": 205.4434515882905,
+          "y": 167.6537480397082
+        },
+        {
+          "x": 109.89249987862621,
+          "y": 167.6537480397082
+        },
+        {
+          "x": 109.89249987862621,
+          "y": 128.6537480397081
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_3",
+      "label": "Bottom Base Floor",
+      "vertices": [
+        {
+          "x": 109.89249987862621,
+          "y": 128.6537480397081
+        },
+        {
+          "x": 109.19381584318404,
+          "y": 30.0
+        },
+        {
+          "x": 205.19381584318398,
+          "y": 30.0
+        },
+        {
+          "x": 205.4434515882905,
+          "y": 128.6537480397081
+        }
+      ],
+      "role": "baseFloor",
+      "isBaseAnchor": true,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_4",
+      "label": "Return Flange",
+      "vertices": [
+        {
+          "x": 301.1938158431842,
+          "y": 30.0
+        },
+        {
+          "x": 311.1938158431841,
+          "y": 30.0
+        },
+        {
+          "x": 311.1938158431841,
+          "y": 85.63961030678811
+        },
+        {
+          "x": 301.1938158431842,
+          "y": 85.63961030678811
+        }
+      ],
+      "role": "returnFlange",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_5",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 301.1938158431842,
+          "y": 85.63961030678811
+        },
+        {
+          "x": 301.19381584318603,
+          "y": 88.6396103067872
+        },
+        {
+          "x": 315.335951466917,
+          "y": 102.78174593051813
+        },
+        {
+          "x": 315.335951466917,
+          "y": 116.92388155424896
+        },
+        {
+          "x": 261.5958360967388,
+          "y": 170.66399692442712
+        },
+        {
+          "x": 247.45370047300764,
+          "y": 170.66399692442707
+        },
+        {
+          "x": 205.4434515882905,
+          "y": 128.6537480397081
+        },
+        {
+          "x": 205.19381584318398,
+          "y": 30.0
+        },
+        {
+          "x": 205.19381584318432,
+          "y": 9.999999999999915
+        },
+        {
+          "x": 215.1938158431842,
+          "y": 0.0
+        },
+        {
+          "x": 291.1938158431842,
+          "y": 0.0
+        },
+        {
+          "x": 301.1938158431842,
+          "y": 10.000000000000057
+        },
+        {
+          "x": 301.1938158431842,
+          "y": 30.0
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    }
+  ],
+  "punches": [
+    {
+      "id": "SLOT_1",
+      "type": "obroundSlot",
+      "center": {
+        "x": 263.01004965911136,
+        "y": 153.69343417594916
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.00000000000058,
+      "diameterMm": 8.0,
+      "rotationDeg": 135.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_2",
+      "type": "obroundSlot",
+      "center": {
+        "x": 298.3653887184388,
+        "y": 118.33809511662182
+      },
+      "widthMm": 8.0,
+      "lengthMm": 19.999999999999332,
+      "diameterMm": 8.0,
+      "rotationDeg": 135.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_3",
+      "type": "obroundSlot",
+      "center": {
+        "x": 52.325901807806645,
+        "y": 153.6934341759524
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.0000000000007,
+      "diameterMm": 8.0,
+      "rotationDeg": 45.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_4",
+      "type": "obroundSlot",
+      "center": {
+        "x": 16.97056274847921,
+        "y": 118.33809511662508
+      },
+      "widthMm": 8.0,
+      "lengthMm": 19.999999999999453,
+      "diameterMm": 8.0,
+      "rotationDeg": 45.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_5",
+      "type": "obroundSlot",
+      "center": {
+        "x": 228.1938158431841,
+        "y": 9.824674867294277
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.00000000000091,
+      "diameterMm": 8.0,
+      "rotationDeg": 0.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_6",
+      "type": "obroundSlot",
+      "center": {
+        "x": 278.1938158431841,
+        "y": 9.824674867294192
+      },
+      "widthMm": 8.0,
+      "lengthMm": 19.999999999999545,
+      "diameterMm": 8.0,
+      "rotationDeg": 0.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_7",
+      "type": "obroundSlot",
+      "center": {
+        "x": 86.1938158431841,
+        "y": 9.824674867294277
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.00000000000051,
+      "diameterMm": 8.0,
+      "rotationDeg": 0.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_8",
+      "type": "obroundSlot",
+      "center": {
+        "x": 36.1938158431841,
+        "y": 9.824674867294192
+      },
+      "widthMm": 8.0,
+      "lengthMm": 19.999999999999318,
+      "diameterMm": 8.0,
+      "rotationDeg": 0.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    }
+  ],
+  "perforationPatterns": [],
+  "corners": [],
+  "cutLines": [],
+  "arcs": [
+    {
+      "type": "arc",
+      "id": "ARC_BND_1",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 291.1938158431842,
+        "y": 10.0
+      },
+      "radius": 10.0,
+      "startAngleRad": 4.71238898038469,
+      "sweepAngleRad": 1.5707963267949003,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_2",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 215.1938158431842,
+        "y": 10.0
+      },
+      "radius": 10.0,
+      "startAngleRad": 3.141592653589802,
+      "sweepAngleRad": 1.5707963267948877,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_3",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 99.19381584318415,
+        "y": 10.0
+      },
+      "radius": 10.0,
+      "startAngleRad": 4.71238898038469,
+      "sweepAngleRad": 1.5707963267949003,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_4",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 23.19381584318421,
+        "y": 10.0
+      },
+      "radius": 10.0,
+      "startAngleRad": 3.141592653589793,
+      "sweepAngleRad": 1.5707963267948966,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_5",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 7.07106781186593,
+        "y": 109.85281374238502
+      },
+      "radius": 10.0,
+      "startAngleRad": 2.3561944901923515,
+      "sweepAngleRad": 1.5707963267948264,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_6",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 60.81118318204261,
+        "y": 163.5929291125624
+      },
+      "radius": 10.0,
+      "startAngleRad": 0.7853981633974298,
+      "sweepAngleRad": 1.5707963267949219,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_7",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 254.5247682848733,
+        "y": 163.5929291125617
+      },
+      "radius": 10.0,
+      "startAngleRad": 0.7853981633974491,
+      "sweepAngleRad": 1.570796326794915,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_8",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 308.26488365505156,
+        "y": 109.85281374238349
+      },
+      "radius": 10.0,
+      "startAngleRad": 5.497787143782138,
+      "sweepAngleRad": 1.5707963267948974,
+      "showLabel": true
+    }
+  ],
+  "dimensions": [
+    {
+      "id": "dim_1",
+      "type": "holeToHole",
+      "referenceAId": "SLOT_5",
+      "referenceBId": "SLOT_6",
+      "anchorTypeA": "center",
+      "anchorTypeB": "center",
+      "pointAX": 228.1938158431841,
+      "pointAY": 9.824674867294277,
+      "pointBX": 278.1938158431841,
+      "pointBY": 9.824674867294192,
+      "dimensionLineOffset": 25.0,
+      "extensionLineOvershoot": 4.0,
+      "measuredValue": 50.0,
+      "userOffsetX": 0.0,
+      "userOffsetY": 0.0,
+      "isDriven": false,
+      "isDriving": true,
+      "allowedMotion": "constraintVector",
+      "referenceEntityId": "SLOT_5",
+      "drivenEntityId": "SLOT_6",
+      "units": "mm",
+      "isVisible": true
+    },
+    {
+      "id": "dim_2",
+      "type": "holeToHole",
+      "referenceAId": "SLOT_1",
+      "referenceBId": "SLOT_2",
+      "anchorTypeA": "center",
+      "anchorTypeB": "center",
+      "pointAX": 263.01004965911136,
+      "pointAY": 153.69343417594916,
+      "pointBX": 298.3653887184388,
+      "pointBY": 118.33809511662182,
+      "dimensionLineOffset": 25.0,
+      "extensionLineOvershoot": 4.0,
+      "measuredValue": 50.0,
+      "userOffsetX": 0.0,
+      "userOffsetY": 0.0,
+      "isDriven": false,
+      "isDriving": true,
+      "allowedMotion": "constraintVector",
+      "referenceEntityId": "SLOT_1",
+      "drivenEntityId": "SLOT_2",
+      "units": "mm",
+      "isVisible": true
+    },
+    {
+      "id": "dim_3",
+      "type": "holeToHole",
+      "referenceAId": "SLOT_4",
+      "referenceBId": "SLOT_3",
+      "anchorTypeA": "center",
+      "anchorTypeB": "center",
+      "pointAX": 16.97056274847921,
+      "pointAY": 118.33809511662508,
+      "pointBX": 52.325901807806645,
+      "pointBY": 153.6934341759524,
+      "dimensionLineOffset": 25.0,
+      "extensionLineOvershoot": 4.0,
+      "measuredValue": 50.0,
+      "userOffsetX": 0.0,
+      "userOffsetY": 0.0,
+      "isDriven": false,
+      "isDriving": true,
+      "allowedMotion": "constraintVector",
+      "referenceEntityId": "SLOT_4",
+      "drivenEntityId": "SLOT_3",
+      "units": "mm",
+      "isVisible": true
+    },
+    {
+      "id": "dim_4",
+      "type": "holeToHole",
+      "referenceAId": "SLOT_8",
+      "referenceBId": "SLOT_7",
+      "anchorTypeA": "center",
+      "anchorTypeB": "center",
+      "pointAX": 36.1938158431841,
+      "pointAY": 9.824674867294192,
+      "pointBX": 86.1938158431841,
+      "pointBY": 9.824674867294277,
+      "dimensionLineOffset": 25.0,
+      "extensionLineOvershoot": 4.0,
+      "measuredValue": 50.0,
+      "userOffsetX": 0.0,
+      "userOffsetY": 0.0,
+      "isDriven": false,
+      "isDriving": true,
+      "allowedMotion": "constraintVector",
+      "referenceEntityId": "SLOT_8",
+      "drivenEntityId": "SLOT_7",
+      "units": "mm",
+      "isVisible": true
+    }
+  ],
+  "constraints": [],
+  "constraintDefinitions": [],
+  "referenceGeometries": [],
+  "templateParameters": [],
+  "layers": [
+    {
+      "name": "OUTLINE",
+      "colorHex": 4279179050,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 2.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "HOLES",
+      "colorHex": 4278556265,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "0",
+      "colorHex": 4284773515,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    }
+  ],
+  "baseFaceId": "F_3",
+  "edgeChamfers": {},
+  "parameters": {
+    "width": 100.0,
+    "height": 100.0,
+    "port1Width": 100.0,
+    "port1Height": 100.0,
+    "port2Width": 100.0,
+    "port2Height": 100.0,
+    "angle": 45.0,
+    "thickness": 1.5,
+    "flange": 10.0,
+    "port1_height": 100.0,
+    "port1_width": 100.0,
+    "port2_width": 100.0,
+    "port2_height": 100.0
+  },
+  "metadata": {
+    "featureHistory": [
+      {
+        "step": 1,
+        "action": "update_punch",
+        "description": "Auto-identified 8 coupler slot(s)",
+        "timestamp": "2026-09-22T10:06:15.740972",
+        "targetId": "SLOT_1",
+        "delta": {
+          "description": "Auto-identified 8 coupler slot(s)",
+          "actionType": "update_punch",
+          "timestamp": "2026-09-22T10:06:15.740972",
+          "targetId": "SLOT_1",
+          "oldPunches": [
+            {
+              "id": "SLOT_1",
+              "type": "obroundSlot",
+              "center": {
+                "x": 263.01004965911136,
+                "y": 153.69343417594916
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000000000058,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_2",
+              "type": "obroundSlot",
+              "center": {
+                "x": 298.36538871843857,
+                "y": 118.33809511662201
+              },
+              "widthMm": 8.0,
+              "lengthMm": 19.999999999999332,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_3",
+              "type": "obroundSlot",
+              "center": {
+                "x": 52.32590180780676,
+                "y": 153.69343417595252
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.0000000000007,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_4",
+              "type": "obroundSlot",
+              "center": {
+                "x": 16.97056274847921,
+                "y": 118.33809511662508
+              },
+              "widthMm": 8.0,
+              "lengthMm": 19.999999999999453,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_5",
+              "type": "obroundSlot",
+              "center": {
+                "x": 228.1938158431841,
+                "y": 9.824674867294277
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000000000091,
+              "diameterMm": 8.0,
+              "rotationDeg": 0.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_6",
+              "type": "obroundSlot",
+              "center": {
+                "x": 278.1938158431842,
+                "y": 9.824674867294192
+              },
+              "widthMm": 8.0,
+              "lengthMm": 19.999999999999545,
+              "diameterMm": 8.0,
+              "rotationDeg": 0.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_7",
+              "type": "obroundSlot",
+              "center": {
+                "x": 86.19381584318421,
+                "y": 9.824674867294277
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000000000051,
+              "diameterMm": 8.0,
+              "rotationDeg": 0.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_8",
+              "type": "obroundSlot",
+              "center": {
+                "x": 36.1938158431841,
+                "y": 9.824674867294192
+              },
+              "widthMm": 8.0,
+              "lengthMm": 19.999999999999318,
+              "diameterMm": 8.0,
+              "rotationDeg": 0.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            }
+          ],
+          "newPunches": [
+            {
+              "id": "SLOT_1",
+              "type": "obroundSlot",
+              "center": {
+                "x": 263.01004965911136,
+                "y": 153.69343417594916
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000000000058,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_2",
+              "type": "obroundSlot",
+              "center": {
+                "x": 298.36538871843857,
+                "y": 118.33809511662201
+              },
+              "widthMm": 8.0,
+              "lengthMm": 19.999999999999332,
+              "diameterMm": 8.0,
+              "rotationDeg": 135.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_3",
+              "type": "obroundSlot",
+              "center": {
+                "x": 52.32590180780676,
+                "y": 153.69343417595252
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.0000000000007,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_4",
+              "type": "obroundSlot",
+              "center": {
+                "x": 16.97056274847921,
+                "y": 118.33809511662508
+              },
+              "widthMm": 8.0,
+              "lengthMm": 19.999999999999453,
+              "diameterMm": 8.0,
+              "rotationDeg": 45.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_5",
+              "type": "obroundSlot",
+              "center": {
+                "x": 228.1938158431841,
+                "y": 9.824674867294277
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000000000091,
+              "diameterMm": 8.0,
+              "rotationDeg": 0.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_6",
+              "type": "obroundSlot",
+              "center": {
+                "x": 278.1938158431842,
+                "y": 9.824674867294192
+              },
+              "widthMm": 8.0,
+              "lengthMm": 19.999999999999545,
+              "diameterMm": 8.0,
+              "rotationDeg": 0.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_7",
+              "type": "obroundSlot",
+              "center": {
+                "x": 86.19381584318421,
+                "y": 9.824674867294277
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.00000000000051,
+              "diameterMm": 8.0,
+              "rotationDeg": 0.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_8",
+              "type": "obroundSlot",
+              "center": {
+                "x": 36.1938158431841,
+                "y": 9.824674867294192
+              },
+              "widthMm": 8.0,
+              "lengthMm": 19.999999999999318,
+              "diameterMm": 8.0,
+              "rotationDeg": 0.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            }
+          ]
+        }
+      },
+      {
+        "step": 2,
+        "action": "update_dimension",
+        "description": "Update CAD dimensions",
+        "timestamp": "2026-09-22T10:07:30.356186",
+        "delta": {
+          "description": "Update CAD dimensions",
+          "actionType": "update_dimension",
+          "timestamp": "2026-09-22T10:07:30.356186",
+          "oldDimensions": [],
+          "newDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431842,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.000000000000114,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            }
+          ]
+        }
+      },
+      {
+        "step": 3,
+        "action": "update_dimension",
+        "description": "Update CAD dimensions",
+        "timestamp": "2026-09-22T10:07:32.163478",
+        "delta": {
+          "description": "Update CAD dimensions",
+          "actionType": "update_dimension",
+          "timestamp": "2026-09-22T10:07:32.163478",
+          "oldDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431842,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.000000000000114,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            }
+          ],
+          "newDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            }
+          ]
+        }
+      },
+      {
+        "step": 4,
+        "action": "update_dimension",
+        "description": "Update CAD dimensions",
+        "timestamp": "2026-09-22T10:07:41.688069",
+        "delta": {
+          "description": "Update CAD dimensions",
+          "actionType": "update_dimension",
+          "timestamp": "2026-09-22T10:07:41.688069",
+          "oldDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            }
+          ],
+          "newDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_2",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_1",
+              "referenceBId": "SLOT_2",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 263.01004965911136,
+              "pointAY": 153.69343417594916,
+              "pointBX": 298.36538871843857,
+              "pointBY": 118.33809511662201,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 49.999999999999716,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_1",
+              "drivenEntityId": "SLOT_2",
+              "units": "mm",
+              "isVisible": true
+            }
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "action": "update_dimension",
+        "description": "Update CAD dimensions",
+        "timestamp": "2026-09-22T10:07:43.444119",
+        "delta": {
+          "description": "Update CAD dimensions",
+          "actionType": "update_dimension",
+          "timestamp": "2026-09-22T10:07:43.444119",
+          "oldDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_2",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_1",
+              "referenceBId": "SLOT_2",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 263.01004965911136,
+              "pointAY": 153.69343417594916,
+              "pointBX": 298.36538871843857,
+              "pointBY": 118.33809511662201,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 49.999999999999716,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_1",
+              "drivenEntityId": "SLOT_2",
+              "units": "mm",
+              "isVisible": true
+            }
+          ],
+          "newDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_2",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_1",
+              "referenceBId": "SLOT_2",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 263.01004965911136,
+              "pointAY": 153.69343417594916,
+              "pointBX": 298.3653887184388,
+              "pointBY": 118.33809511662182,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_1",
+              "drivenEntityId": "SLOT_2",
+              "units": "mm",
+              "isVisible": true
+            }
+          ]
+        }
+      },
+      {
+        "step": 6,
+        "action": "update_dimension",
+        "description": "Update CAD dimensions",
+        "timestamp": "2026-09-22T10:07:47.226190",
+        "delta": {
+          "description": "Update CAD dimensions",
+          "actionType": "update_dimension",
+          "timestamp": "2026-09-22T10:07:47.226190",
+          "oldDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_2",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_1",
+              "referenceBId": "SLOT_2",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 263.01004965911136,
+              "pointAY": 153.69343417594916,
+              "pointBX": 298.3653887184388,
+              "pointBY": 118.33809511662182,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_1",
+              "drivenEntityId": "SLOT_2",
+              "units": "mm",
+              "isVisible": true
+            }
+          ],
+          "newDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_2",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_1",
+              "referenceBId": "SLOT_2",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 263.01004965911136,
+              "pointAY": 153.69343417594916,
+              "pointBX": 298.3653887184388,
+              "pointBY": 118.33809511662182,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_1",
+              "drivenEntityId": "SLOT_2",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_3",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_4",
+              "referenceBId": "SLOT_3",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 16.97056274847921,
+              "pointAY": 118.33809511662508,
+              "pointBX": 52.32590180780676,
+              "pointBY": 153.69343417595252,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.00000000000016,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_4",
+              "drivenEntityId": "SLOT_3",
+              "units": "mm",
+              "isVisible": true
+            }
+          ]
+        }
+      },
+      {
+        "step": 7,
+        "action": "update_dimension",
+        "description": "Update CAD dimensions",
+        "timestamp": "2026-09-22T10:07:48.003657",
+        "delta": {
+          "description": "Update CAD dimensions",
+          "actionType": "update_dimension",
+          "timestamp": "2026-09-22T10:07:48.003657",
+          "oldDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_2",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_1",
+              "referenceBId": "SLOT_2",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 263.01004965911136,
+              "pointAY": 153.69343417594916,
+              "pointBX": 298.3653887184388,
+              "pointBY": 118.33809511662182,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_1",
+              "drivenEntityId": "SLOT_2",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_3",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_4",
+              "referenceBId": "SLOT_3",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 16.97056274847921,
+              "pointAY": 118.33809511662508,
+              "pointBX": 52.32590180780676,
+              "pointBY": 153.69343417595252,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.00000000000016,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_4",
+              "drivenEntityId": "SLOT_3",
+              "units": "mm",
+              "isVisible": true
+            }
+          ],
+          "newDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_2",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_1",
+              "referenceBId": "SLOT_2",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 263.01004965911136,
+              "pointAY": 153.69343417594916,
+              "pointBX": 298.3653887184388,
+              "pointBY": 118.33809511662182,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_1",
+              "drivenEntityId": "SLOT_2",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_3",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_4",
+              "referenceBId": "SLOT_3",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 16.97056274847921,
+              "pointAY": 118.33809511662508,
+              "pointBX": 52.325901807806645,
+              "pointBY": 153.6934341759524,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_4",
+              "drivenEntityId": "SLOT_3",
+              "units": "mm",
+              "isVisible": true
+            }
+          ]
+        }
+      },
+      {
+        "step": 8,
+        "action": "update_dimension",
+        "description": "Update CAD dimensions",
+        "timestamp": "2026-09-22T10:07:55.373590",
+        "delta": {
+          "description": "Update CAD dimensions",
+          "actionType": "update_dimension",
+          "timestamp": "2026-09-22T10:07:55.373590",
+          "oldDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_2",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_1",
+              "referenceBId": "SLOT_2",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 263.01004965911136,
+              "pointAY": 153.69343417594916,
+              "pointBX": 298.3653887184388,
+              "pointBY": 118.33809511662182,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_1",
+              "drivenEntityId": "SLOT_2",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_3",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_4",
+              "referenceBId": "SLOT_3",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 16.97056274847921,
+              "pointAY": 118.33809511662508,
+              "pointBX": 52.325901807806645,
+              "pointBY": 153.6934341759524,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_4",
+              "drivenEntityId": "SLOT_3",
+              "units": "mm",
+              "isVisible": true
+            }
+          ],
+          "newDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_2",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_1",
+              "referenceBId": "SLOT_2",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 263.01004965911136,
+              "pointAY": 153.69343417594916,
+              "pointBX": 298.3653887184388,
+              "pointBY": 118.33809511662182,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_1",
+              "drivenEntityId": "SLOT_2",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_3",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_4",
+              "referenceBId": "SLOT_3",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 16.97056274847921,
+              "pointAY": 118.33809511662508,
+              "pointBX": 52.325901807806645,
+              "pointBY": 153.6934341759524,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_4",
+              "drivenEntityId": "SLOT_3",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_4",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_8",
+              "referenceBId": "SLOT_7",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 36.1938158431841,
+              "pointAY": 9.824674867294192,
+              "pointBX": 86.19381584318421,
+              "pointBY": 9.824674867294277,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.000000000000114,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_8",
+              "drivenEntityId": "SLOT_7",
+              "units": "mm",
+              "isVisible": true
+            }
+          ]
+        }
+      },
+      {
+        "step": 9,
+        "action": "update_dimension",
+        "description": "Update CAD dimensions",
+        "timestamp": "2026-09-22T10:07:56.179825",
+        "delta": {
+          "description": "Update CAD dimensions",
+          "actionType": "update_dimension",
+          "timestamp": "2026-09-22T10:07:56.179825",
+          "oldDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_2",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_1",
+              "referenceBId": "SLOT_2",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 263.01004965911136,
+              "pointAY": 153.69343417594916,
+              "pointBX": 298.3653887184388,
+              "pointBY": 118.33809511662182,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_1",
+              "drivenEntityId": "SLOT_2",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_3",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_4",
+              "referenceBId": "SLOT_3",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 16.97056274847921,
+              "pointAY": 118.33809511662508,
+              "pointBX": 52.325901807806645,
+              "pointBY": 153.6934341759524,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_4",
+              "drivenEntityId": "SLOT_3",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_4",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_8",
+              "referenceBId": "SLOT_7",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 36.1938158431841,
+              "pointAY": 9.824674867294192,
+              "pointBX": 86.19381584318421,
+              "pointBY": 9.824674867294277,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.000000000000114,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_8",
+              "drivenEntityId": "SLOT_7",
+              "units": "mm",
+              "isVisible": true
+            }
+          ],
+          "newDimensions": [
+            {
+              "id": "dim_1",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_5",
+              "referenceBId": "SLOT_6",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 228.1938158431841,
+              "pointAY": 9.824674867294277,
+              "pointBX": 278.1938158431841,
+              "pointBY": 9.824674867294192,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_5",
+              "drivenEntityId": "SLOT_6",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_2",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_1",
+              "referenceBId": "SLOT_2",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 263.01004965911136,
+              "pointAY": 153.69343417594916,
+              "pointBX": 298.3653887184388,
+              "pointBY": 118.33809511662182,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_1",
+              "drivenEntityId": "SLOT_2",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_3",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_4",
+              "referenceBId": "SLOT_3",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 16.97056274847921,
+              "pointAY": 118.33809511662508,
+              "pointBX": 52.325901807806645,
+              "pointBY": 153.6934341759524,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_4",
+              "drivenEntityId": "SLOT_3",
+              "units": "mm",
+              "isVisible": true
+            },
+            {
+              "id": "dim_4",
+              "type": "holeToHole",
+              "referenceAId": "SLOT_8",
+              "referenceBId": "SLOT_7",
+              "anchorTypeA": "center",
+              "anchorTypeB": "center",
+              "pointAX": 36.1938158431841,
+              "pointAY": 9.824674867294192,
+              "pointBX": 86.1938158431841,
+              "pointBY": 9.824674867294277,
+              "dimensionLineOffset": 25.0,
+              "extensionLineOvershoot": 4.0,
+              "measuredValue": 50.0,
+              "userOffsetX": 0.0,
+              "userOffsetY": 0.0,
+              "isDriven": false,
+              "isDriving": true,
+              "allowedMotion": "constraintVector",
+              "referenceEntityId": "SLOT_8",
+              "drivenEntityId": "SLOT_7",
+              "units": "mm",
+              "isVisible": true
+            }
+          ]
+        }
+      },
+      {
+        "step": 10,
+        "action": "modify",
+        "description": "Model Modification",
+        "timestamp": "2026-10-01T13:41:43.291770",
+        "delta": {
+          "description": "Model Modification",
+          "actionType": "modify",
+          "timestamp": "2026-10-01T13:41:43.291770",
+          "oldMaterial": {
+            "thicknessMm": 1.5,
+            "materialGrade": "Pre-Galvanized Steel",
+            "materialType": "mildSteel",
+            "finish": "electroGalvanized",
+            "kFactor": 0.4,
+            "defaultBendRadius": 1.5,
+            "edgeChamferMm": 0.0
+          },
+          "newMaterial": {
+            "thicknessMm": 1.5,
+            "materialGrade": "Pre-Galvanized Steel",
+            "materialType": "mildSteel",
+            "finish": "electroGalvanized",
+            "kFactor": 0.4,
+            "defaultBendRadius": 1.5,
+            "edgeChamferMm": 0.0
+          }
+        }
+      },
+      {
+        "step": 11,
+        "action": "drive_dimension",
+        "description": "Update Fitting Metadata",
+        "timestamp": "2026-10-01T13:41:43.292770",
+        "delta": {
+          "description": "Update Fitting Metadata",
+          "actionType": "drive_dimension",
+          "timestamp": "2026-10-01T13:41:43.292770",
+          "oldParameters": {},
+          "newParameters": {
+            "width": 100.0,
+            "height": 100.0,
+            "port1Width": 100.0,
+            "port1Height": 100.0,
+            "port2Width": 100.0,
+            "port2Height": 100.0,
+            "angle": 45.0,
+            "thickness": 1.5,
+            "flange": 10.0
+          }
+        }
+      },
+      {
+        "step": 12,
+        "action": "modify",
+        "description": "Model Modification",
+        "timestamp": "2026-10-01T13:41:43.297876",
+        "delta": {
+          "description": "Model Modification",
+          "actionType": "modify",
+          "timestamp": "2026-10-01T13:41:43.297876",
+          "oldProductType": "45_deg_inside_riser_100x100",
+          "newProductType": "inside_riser"
+        }
+      }
+    ],
+    "undoDeltas": [
+      {
+        "description": "Model Modification",
+        "actionType": "modify",
+        "timestamp": "2026-10-01T13:41:43.291770",
+        "oldMaterial": {
+          "thicknessMm": 1.5,
+          "materialGrade": "Pre-Galvanized Steel",
+          "materialType": "mildSteel",
+          "finish": "electroGalvanized",
+          "kFactor": 0.4,
+          "defaultBendRadius": 1.5,
+          "edgeChamferMm": 0.0
+        },
+        "newMaterial": {
+          "thicknessMm": 1.5,
+          "materialGrade": "Pre-Galvanized Steel",
+          "materialType": "mildSteel",
+          "finish": "electroGalvanized",
+          "kFactor": 0.4,
+          "defaultBendRadius": 1.5,
+          "edgeChamferMm": 0.0
+        }
+      },
+      {
+        "description": "Update Fitting Metadata",
+        "actionType": "drive_dimension",
+        "timestamp": "2026-10-01T13:41:43.292770",
+        "oldParameters": {},
+        "newParameters": {
+          "width": 100.0,
+          "height": 100.0,
+          "port1Width": 100.0,
+          "port1Height": 100.0,
+          "port2Width": 100.0,
+          "port2Height": 100.0,
+          "angle": 45.0,
+          "thickness": 1.5,
+          "flange": 10.0
+        }
+      },
+      {
+        "description": "Model Modification",
+        "actionType": "modify",
+        "timestamp": "2026-10-01T13:41:43.297876",
+        "oldProductType": "45_deg_inside_riser_100x100",
+        "newProductType": "inside_riser"
+      }
+    ],
+    "cmsTemplate": {
+      "category": "Trunking Accessories",
+      "productType": "Inside Riser",
+      "variation": "45 Deg Inside Riser",
+      "templateId": "inside_riser_45_deg_inside_riser",
+      "version": 1,
+      "ports": [
+        {
+          "id": "PORT_1",
+          "index": 1,
+          "width": 100.0,
+          "height": 100.0,
+          "flange": 15.0,
+          "center": [
+            156.99743464457742,
+            9.719424967447154,
+            49.45330958716707
+          ],
+          "flatCenter": [
+            157.1938158431841,
+            9.824674867294235
+          ],
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "widthDirection": [
+            0.9999808380986168,
+            0.005965305877588684,
+            0.001654859926082816
+          ],
+          "heightDirection": [
+            -0.0016548893708598147,
+            0.0,
+            0.9999986306696476
+          ],
+          "hostFaceIds": [
+            "F_3",
+            "F_5",
+            "F_1"
+          ],
+          "boundaryLoopId": "raw_opening_1",
+          "boundaryEdgeIds": [],
+          "floorP1": [
+            107.54856782185404,
+            9.496381965930293,
+            -0.5470944622744062
+          ],
+          "floorP2": [
+            206.64306659857118,
+            9.942467968964017,
+            -0.5467027428800189
+          ],
+          "flatP1": [
+            61.2,
+            9.8
+          ],
+          "flatP2": [
+            253.2,
+            9.8
+          ],
+          "derivedMouthCorners": [
+            [
+              107.54856782185404,
+              9.496381965930293,
+              -0.5470944622744062
+            ],
+            [
+              107.38307888476805,
+              9.496381965930293,
+              99.45276860469036
+            ],
+            [
+              206.4775776614852,
+              9.942467968964017,
+              99.45316032408473
+            ],
+            [
+              206.64306659857118,
+              9.942467968964017,
+              -0.5467027428800189
+            ]
+          ],
+          "calloutAnchor": [
+            156.93032827312663,
+            9.719424967447154,
+            99.45296446438755
+          ],
+          "confidence": 1.0,
+          "detectionSource": "foldedTopology"
+        },
+        {
+          "id": "PORT_2",
+          "index": 2,
+          "width": 100.0,
+          "height": 100.0,
+          "flange": 15.0,
+          "center": [
+            157.98102045335793,
+            135.84828751451226,
+            76.7594065473117
+          ],
+          "flatCenter": [
+            157.667975733459,
+            136.01576464628712
+          ],
+          "normal": [
+            0.0,
+            0.7071067811865475,
+            0.7071067811865475
+          ],
+          "widthDirection": [
+            0.9999819956728022,
+            0.005485674820581718,
+            -0.0024322216187601625
+          ],
+          "heightDirection": [
+            0.005598811315243012,
+            -0.7070956983718173,
+            0.7070956983718173
+          ],
+          "hostFaceIds": [
+            "F_2",
+            "F_5",
+            "F_1"
+          ],
+          "boundaryLoopId": "raw_opening_2",
+          "boundaryEdgeIds": [],
+          "floorP1": [
+            108.44090017663544,
+            170.8484904241358,
+            41.43917943777502
+          ],
+          "floorP2": [
+            206.96255747442422,
+            171.5576595744305,
+            41.3700586873066
+          ],
+          "flatP1": [
+            34.65,
+            136.0
+          ],
+          "flatP2": [
+            280.7,
+            136.0
+          ],
+          "derivedMouthCorners": [
+            [
+              108.44090017663544,
+              170.8484904241358,
+              41.43917943777502
+            ],
+            [
+              108.99948343229165,
+              100.13891545459401,
+              112.1487544073168
+            ],
+            [
+              207.52114073008045,
+              100.8480846048887,
+              112.07963365684839
+            ],
+            [
+              206.96255747442422,
+              171.5576595744305,
+              41.3700586873066
+            ]
+          ],
+          "calloutAnchor": [
+            158.26031208118604,
+            100.49350002974136,
+            112.1141940320826
+          ],
+          "confidence": 1.0,
+          "detectionSource": "foldedTopology"
+        }
+      ],
+      "verifiedBendIds": [
+        "B1",
+        "B2",
+        "B3"
+      ],
+      "verifiedFlangeIds": [
+        "FL1",
+        "FL2"
+      ],
+      "couplerSlotPunchIds": [
+        "SLOT_1",
+        "SLOT_2",
+        "SLOT_3",
+        "SLOT_4",
+        "SLOT_5",
+        "SLOT_6",
+        "SLOT_7",
+        "SLOT_8"
+      ],
+      "scalingModel": {
+        "templateId": "inside_riser_45_deg_inside_riser",
+        "category": "Trunking Accessories",
+        "productType": "inside_riser",
+        "variation": "45_deg_inside_riser",
+        "parameters": {
+          "port1_width": {
+            "id": "port1_width",
+            "displayName": "Port 1 Width",
+            "currentValue": 100.0,
+            "baselineValue": 98.9,
+            "minValidMm": 48.900000000000006,
+            "maxValidMm": 1200.0,
+            "unit": "mm",
+            "teachingState": "learned",
+            "stretchZoneIds": [],
+            "translationZoneIds": [],
+            "rigidGroupIds": [],
+            "derivedPortIds": []
+          },
+          "port1_height": {
+            "id": "port1_height",
+            "displayName": "Port 1 Height",
+            "currentValue": 200.0,
+            "baselineValue": 100.0,
+            "minValidMm": 50.0,
+            "maxValidMm": 250.0,
+            "unit": "mm",
+            "teachingState": "learned",
+            "stretchZoneIds": [],
+            "translationZoneIds": [],
+            "rigidGroupIds": [],
+            "derivedPortIds": []
+          },
+          "port2_width": {
+            "id": "port2_width",
+            "displayName": "Port 2 Width",
+            "currentValue": 98.4,
+            "baselineValue": 98.4,
+            "minValidMm": 48.400000000000006,
+            "maxValidMm": 1200.0,
+            "unit": "mm",
+            "teachingState": "learned",
+            "stretchZoneIds": [],
+            "translationZoneIds": [],
+            "rigidGroupIds": [],
+            "derivedPortIds": []
+          },
+          "port2_height": {
+            "id": "port2_height",
+            "displayName": "Port 2 Height",
+            "currentValue": 100.0,
+            "baselineValue": 100.0,
+            "minValidMm": 50.0,
+            "maxValidMm": 250.0,
+            "unit": "mm",
+            "teachingState": "learned",
+            "stretchZoneIds": [],
+            "translationZoneIds": [],
+            "rigidGroupIds": [],
+            "derivedPortIds": []
+          }
+        },
+        "stretchZones": [
+          {
+            "id": "ZONE_FLOOR_WEB",
+            "description": "Floor web expands along transverse bend axis.",
+            "faceIds": [
+              "F_3"
+            ],
+            "axis": [
+              1.0,
+              0.0
+            ]
+          }
+        ],
+        "translationZones": [
+          {
+            "id": "ZONE_SIDEWALLS_AND_FLANGES",
+            "description": "Standing sidewalls and locked flanges translate rigidly.",
+            "faceIds": [
+              "F_1",
+              "F_2",
+              "F_5",
+              "F_0",
+              "F_4"
+            ],
+            "bendIds": [
+              "B1",
+              "B2",
+              "FL1",
+              "FL2",
+              "B3"
+            ],
+            "flangeIds": [],
+            "direction": [
+              1.0,
+              0.0
+            ]
+          }
+        ],
+        "rigidFeatureGroups": [
+          {
+            "id": "GRP_COUPLER_SLOTS",
+            "name": "Coupler Slots (8)",
+            "punchIds": [
+              "SLOT_1",
+              "SLOT_2",
+              "SLOT_3",
+              "SLOT_4",
+              "SLOT_5",
+              "SLOT_6",
+              "SLOT_7",
+              "SLOT_8"
+            ],
+            "hostFaceId": "F_1",
+            "description": "Maintains exact slot geometry and reference edge mounting distance."
+          }
+        ],
+        "derivedPorts": [
+          {
+            "portId": "PORT_1",
+            "description": "Derived 3D opening mouth for 100 \u00c3\u2014 100 mm channel."
+          },
+          {
+            "portId": "PORT_2",
+            "description": "Derived 3D opening mouth for 100 \u00c3\u2014 100 mm channel."
+          }
+        ],
+        "isLinkedPorts": false,
+        "activePortIndex": 0
+      },
+      "canonicalDocument": {
+        "format": "DANISH_SHEET_FOLD",
+        "version": "2.0",
+        "productType": "inside_riser",
+        "itemName": "45_deg_inside_riser_100x100.dxf",
+        "material": {
+          "thicknessMm": 3.5,
+          "materialGrade": "Pre-Galvanized Steel",
+          "materialType": "mildSteel",
+          "finish": "electroGalvanized",
+          "kFactor": 0.4,
+          "defaultBendRadius": 1.5,
+          "edgeChamferMm": 0.0
+        },
+        "outerContour": [
+          {
+            "x": 301.19381584318603,
+            "y": 88.6396103067872
+          },
+          {
+            "x": 315.335951466917,
+            "y": 102.78174593051813
+          },
+          {
+            "x": 315.335951466917,
+            "y": 116.92388155424896
+          },
+          {
+            "x": 261.5958360967388,
+            "y": 170.66399692442712
+          },
+          {
+            "x": 247.45370047300764,
+            "y": 170.66399692442707
+          },
+          {
+            "x": 205.4434515882905,
+            "y": 128.6537480397081
+          },
+          {
+            "x": 205.4434515882905,
+            "y": 167.6537480397082
+          },
+          {
+            "x": 109.89249987862621,
+            "y": 167.6537480397082
+          },
+          {
+            "x": 109.89249987862621,
+            "y": 128.6537480397081
+          },
+          {
+            "x": 67.88225099390826,
+            "y": 170.6639969244277
+          },
+          {
+            "x": 53.74011537017708,
+            "y": 170.6639969244278
+          },
+          {
+            "x": 4.547473508864641e-13,
+            "y": 116.92388155425039
+          },
+          {
+            "x": 0.0,
+            "y": 102.78174593052
+          },
+          {
+            "x": 14.142135623730042,
+            "y": 88.63961030678811
+          },
+          {
+            "x": 14.142135623730042,
+            "y": 85.63961030678811
+          },
+          {
+            "x": 4.1421356237300415,
+            "y": 85.63961030678811
+          },
+          {
+            "x": 4.1421356237300415,
+            "y": 30.0
+          },
+          {
+            "x": 13.193815843184211,
+            "y": 30.0
+          },
+          {
+            "x": 13.193815843184211,
+            "y": 10.0
+          },
+          {
+            "x": 23.19381584318421,
+            "y": 0.0
+          },
+          {
+            "x": 99.19381584318415,
+            "y": 0.0
+          },
+          {
+            "x": 109.19381584318415,
+            "y": 10.000000000000057
+          },
+          {
+            "x": 109.19381584318404,
+            "y": 30.0
+          },
+          {
+            "x": 205.19381584318398,
+            "y": 30.0
+          },
+          {
+            "x": 205.19381584318432,
+            "y": 9.999999999999915
+          },
+          {
+            "x": 215.1938158431842,
+            "y": 0.0
+          },
+          {
+            "x": 291.1938158431842,
+            "y": 0.0
+          },
+          {
+            "x": 301.1938158431842,
+            "y": 10.000000000000057
+          },
+          {
+            "x": 301.1938158431842,
+            "y": 30.0
+          },
+          {
+            "x": 311.1938158431841,
+            "y": 30.0
+          },
+          {
+            "x": 311.1938158431841,
+            "y": 85.63961030678811
+          },
+          {
+            "x": 301.1938158431842,
+            "y": 85.63961030678811
+          },
+          {
+            "x": 301.19381584318603,
+            "y": 88.6396103067872
+          }
+        ],
+        "outerContourLayer": "OUTLINE",
+        "bends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 205.4434515882905,
+              "y": 128.6537480397081
+            },
+            "p2": {
+              "x": 205.19381584318398,
+              "y": 30.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_5",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 109.89249987862621,
+              "y": 128.6537480397081
+            },
+            "p2": {
+              "x": 109.19381584318404,
+              "y": 30.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_1",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 14.142135623730042,
+              "y": 85.63961030678811
+            },
+            "p2": {
+              "x": 13.193815843184211,
+              "y": 30.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL2",
+            "p1": {
+              "x": 301.1938158431842,
+              "y": 30.0
+            },
+            "p2": {
+              "x": 301.1938158431842,
+              "y": 85.63961030678811
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_5",
+            "childFaceId": "F_4",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B3",
+            "p1": {
+              "x": 205.4434515882905,
+              "y": 128.6537480397081
+            },
+            "p2": {
+              "x": 109.89249987862621,
+              "y": 128.6537480397081
+            },
+            "direction": "UP",
+            "targetAngleDeg": 45.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "faces": [
+          {
+            "id": "F_0",
+            "label": "Return Flange",
+            "vertices": [
+              {
+                "x": 14.142135623730042,
+                "y": 85.63961030678811
+              },
+              {
+                "x": 4.1421356237300415,
+                "y": 85.63961030678811
+              },
+              {
+                "x": 4.1421356237300415,
+                "y": 30.0
+              },
+              {
+                "x": 13.193815843184211,
+                "y": 30.0
+              }
+            ],
+            "role": "returnFlange",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_1",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 13.193815843184211,
+                "y": 30.0
+              },
+              {
+                "x": 13.193815843184211,
+                "y": 10.0
+              },
+              {
+                "x": 23.19381584318421,
+                "y": 0.0
+              },
+              {
+                "x": 99.19381584318415,
+                "y": 0.0
+              },
+              {
+                "x": 109.19381584318415,
+                "y": 10.000000000000057
+              },
+              {
+                "x": 109.19381584318404,
+                "y": 30.0
+              },
+              {
+                "x": 109.89249987862621,
+                "y": 128.6537480397081
+              },
+              {
+                "x": 67.88225099390826,
+                "y": 170.6639969244277
+              },
+              {
+                "x": 53.74011537017708,
+                "y": 170.6639969244278
+              },
+              {
+                "x": 4.547473508864641e-13,
+                "y": 116.92388155425039
+              },
+              {
+                "x": 0.0,
+                "y": 102.78174593052
+              },
+              {
+                "x": 14.142135623730042,
+                "y": 88.63961030678811
+              },
+              {
+                "x": 14.142135623730042,
+                "y": 85.63961030678811
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_2",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 205.4434515882905,
+                "y": 128.6537480397081
+              },
+              {
+                "x": 205.4434515882905,
+                "y": 167.6537480397082
+              },
+              {
+                "x": 109.89249987862621,
+                "y": 167.6537480397082
+              },
+              {
+                "x": 109.89249987862621,
+                "y": 128.6537480397081
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_3",
+            "label": "Bottom Base Floor",
+            "vertices": [
+              {
+                "x": 109.89249987862621,
+                "y": 128.6537480397081
+              },
+              {
+                "x": 109.19381584318404,
+                "y": 30.0
+              },
+              {
+                "x": 205.19381584318398,
+                "y": 30.0
+              },
+              {
+                "x": 205.4434515882905,
+                "y": 128.6537480397081
+              }
+            ],
+            "role": "baseFloor",
+            "isBaseAnchor": true,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_4",
+            "label": "Return Flange",
+            "vertices": [
+              {
+                "x": 301.1938158431842,
+                "y": 30.0
+              },
+              {
+                "x": 311.1938158431841,
+                "y": 30.0
+              },
+              {
+                "x": 311.1938158431841,
+                "y": 85.63961030678811
+              },
+              {
+                "x": 301.1938158431842,
+                "y": 85.63961030678811
+              }
+            ],
+            "role": "returnFlange",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_5",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 301.1938158431842,
+                "y": 85.63961030678811
+              },
+              {
+                "x": 301.19381584318603,
+                "y": 88.6396103067872
+              },
+              {
+                "x": 315.335951466917,
+                "y": 102.78174593051813
+              },
+              {
+                "x": 315.335951466917,
+                "y": 116.92388155424896
+              },
+              {
+                "x": 261.5958360967388,
+                "y": 170.66399692442712
+              },
+              {
+                "x": 247.45370047300764,
+                "y": 170.66399692442707
+              },
+              {
+                "x": 205.4434515882905,
+                "y": 128.6537480397081
+              },
+              {
+                "x": 205.19381584318398,
+                "y": 30.0
+              },
+              {
+                "x": 205.19381584318432,
+                "y": 9.999999999999915
+              },
+              {
+                "x": 215.1938158431842,
+                "y": 0.0
+              },
+              {
+                "x": 291.1938158431842,
+                "y": 0.0
+              },
+              {
+                "x": 301.1938158431842,
+                "y": 10.000000000000057
+              },
+              {
+                "x": 301.1938158431842,
+                "y": 30.0
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          }
+        ],
+        "punches": [
+          {
+            "id": "SLOT_1",
+            "type": "obroundSlot",
+            "center": {
+              "x": 263.01004965911136,
+              "y": 153.69343417594916
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.00000000000058,
+            "diameterMm": 8.0,
+            "rotationDeg": 135.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_2",
+            "type": "obroundSlot",
+            "center": {
+              "x": 298.3653887184388,
+              "y": 118.33809511662182
+            },
+            "widthMm": 8.0,
+            "lengthMm": 19.999999999999332,
+            "diameterMm": 8.0,
+            "rotationDeg": 135.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_3",
+            "type": "obroundSlot",
+            "center": {
+              "x": 52.325901807806645,
+              "y": 153.6934341759524
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.0000000000007,
+            "diameterMm": 8.0,
+            "rotationDeg": 45.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_4",
+            "type": "obroundSlot",
+            "center": {
+              "x": 16.97056274847921,
+              "y": 118.33809511662508
+            },
+            "widthMm": 8.0,
+            "lengthMm": 19.999999999999453,
+            "diameterMm": 8.0,
+            "rotationDeg": 45.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_5",
+            "type": "obroundSlot",
+            "center": {
+              "x": 228.1938158431841,
+              "y": 9.824674867294277
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.00000000000091,
+            "diameterMm": 8.0,
+            "rotationDeg": 0.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_6",
+            "type": "obroundSlot",
+            "center": {
+              "x": 278.1938158431841,
+              "y": 9.824674867294192
+            },
+            "widthMm": 8.0,
+            "lengthMm": 19.999999999999545,
+            "diameterMm": 8.0,
+            "rotationDeg": 0.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_7",
+            "type": "obroundSlot",
+            "center": {
+              "x": 86.1938158431841,
+              "y": 9.824674867294277
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.00000000000051,
+            "diameterMm": 8.0,
+            "rotationDeg": 0.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_8",
+            "type": "obroundSlot",
+            "center": {
+              "x": 36.1938158431841,
+              "y": 9.824674867294192
+            },
+            "widthMm": 8.0,
+            "lengthMm": 19.999999999999318,
+            "diameterMm": 8.0,
+            "rotationDeg": 0.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          }
+        ],
+        "perforationPatterns": [],
+        "corners": [],
+        "cutLines": [],
+        "arcs": [
+          {
+            "type": "arc",
+            "id": "ARC_BND_1",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 291.1938158431842,
+              "y": 10.0
+            },
+            "radius": 10.0,
+            "startAngleRad": 4.71238898038469,
+            "sweepAngleRad": 1.5707963267949003,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_2",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 215.1938158431842,
+              "y": 10.0
+            },
+            "radius": 10.0,
+            "startAngleRad": 3.141592653589802,
+            "sweepAngleRad": 1.5707963267948877,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_3",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 99.19381584318415,
+              "y": 10.0
+            },
+            "radius": 10.0,
+            "startAngleRad": 4.71238898038469,
+            "sweepAngleRad": 1.5707963267949003,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_4",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 23.19381584318421,
+              "y": 10.0
+            },
+            "radius": 10.0,
+            "startAngleRad": 3.141592653589793,
+            "sweepAngleRad": 1.5707963267948966,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_5",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 7.07106781186593,
+              "y": 109.85281374238502
+            },
+            "radius": 10.0,
+            "startAngleRad": 2.3561944901923515,
+            "sweepAngleRad": 1.5707963267948264,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_6",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 60.81118318204261,
+              "y": 163.5929291125624
+            },
+            "radius": 10.0,
+            "startAngleRad": 0.7853981633974298,
+            "sweepAngleRad": 1.5707963267949219,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_7",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 254.5247682848733,
+              "y": 163.5929291125617
+            },
+            "radius": 10.0,
+            "startAngleRad": 0.7853981633974491,
+            "sweepAngleRad": 1.570796326794915,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_8",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 308.26488365505156,
+              "y": 109.85281374238349
+            },
+            "radius": 10.0,
+            "startAngleRad": 5.497787143782138,
+            "sweepAngleRad": 1.5707963267948974,
+            "showLabel": true
+          }
+        ],
+        "dimensions": [
+          {
+            "id": "dim_1",
+            "type": "holeToHole",
+            "referenceAId": "SLOT_5",
+            "referenceBId": "SLOT_6",
+            "anchorTypeA": "center",
+            "anchorTypeB": "center",
+            "pointAX": 228.1938158431841,
+            "pointAY": 9.824674867294277,
+            "pointBX": 278.1938158431841,
+            "pointBY": 9.824674867294192,
+            "dimensionLineOffset": 25.0,
+            "extensionLineOvershoot": 4.0,
+            "measuredValue": 50.0,
+            "userOffsetX": 0.0,
+            "userOffsetY": 0.0,
+            "isDriven": false,
+            "isDriving": true,
+            "allowedMotion": "constraintVector",
+            "referenceEntityId": "SLOT_5",
+            "drivenEntityId": "SLOT_6",
+            "units": "mm",
+            "isVisible": true
+          },
+          {
+            "id": "dim_2",
+            "type": "holeToHole",
+            "referenceAId": "SLOT_1",
+            "referenceBId": "SLOT_2",
+            "anchorTypeA": "center",
+            "anchorTypeB": "center",
+            "pointAX": 263.01004965911136,
+            "pointAY": 153.69343417594916,
+            "pointBX": 298.3653887184388,
+            "pointBY": 118.33809511662182,
+            "dimensionLineOffset": 25.0,
+            "extensionLineOvershoot": 4.0,
+            "measuredValue": 50.0,
+            "userOffsetX": 0.0,
+            "userOffsetY": 0.0,
+            "isDriven": false,
+            "isDriving": true,
+            "allowedMotion": "constraintVector",
+            "referenceEntityId": "SLOT_1",
+            "drivenEntityId": "SLOT_2",
+            "units": "mm",
+            "isVisible": true
+          },
+          {
+            "id": "dim_3",
+            "type": "holeToHole",
+            "referenceAId": "SLOT_4",
+            "referenceBId": "SLOT_3",
+            "anchorTypeA": "center",
+            "anchorTypeB": "center",
+            "pointAX": 16.97056274847921,
+            "pointAY": 118.33809511662508,
+            "pointBX": 52.325901807806645,
+            "pointBY": 153.6934341759524,
+            "dimensionLineOffset": 25.0,
+            "extensionLineOvershoot": 4.0,
+            "measuredValue": 50.0,
+            "userOffsetX": 0.0,
+            "userOffsetY": 0.0,
+            "isDriven": false,
+            "isDriving": true,
+            "allowedMotion": "constraintVector",
+            "referenceEntityId": "SLOT_4",
+            "drivenEntityId": "SLOT_3",
+            "units": "mm",
+            "isVisible": true
+          },
+          {
+            "id": "dim_4",
+            "type": "holeToHole",
+            "referenceAId": "SLOT_8",
+            "referenceBId": "SLOT_7",
+            "anchorTypeA": "center",
+            "anchorTypeB": "center",
+            "pointAX": 36.1938158431841,
+            "pointAY": 9.824674867294192,
+            "pointBX": 86.1938158431841,
+            "pointBY": 9.824674867294277,
+            "dimensionLineOffset": 25.0,
+            "extensionLineOvershoot": 4.0,
+            "measuredValue": 50.0,
+            "userOffsetX": 0.0,
+            "userOffsetY": 0.0,
+            "isDriven": false,
+            "isDriving": true,
+            "allowedMotion": "constraintVector",
+            "referenceEntityId": "SLOT_8",
+            "drivenEntityId": "SLOT_7",
+            "units": "mm",
+            "isVisible": true
+          }
+        ],
+        "constraints": [],
+        "constraintDefinitions": [],
+        "referenceGeometries": [],
+        "templateParameters": [],
+        "layers": [
+          {
+            "name": "OUTLINE",
+            "colorHex": 4279179050,
+            "lineType": "CONTINUOUS",
+            "strokeWidth": 2.0,
+            "isVisible": true,
+            "isLocked": false
+          },
+          {
+            "name": "HOLES",
+            "colorHex": 4278556265,
+            "lineType": "CONTINUOUS",
+            "strokeWidth": 1.0,
+            "isVisible": true,
+            "isLocked": false
+          },
+          {
+            "name": "0",
+            "colorHex": 4284773515,
+            "lineType": "CONTINUOUS",
+            "strokeWidth": 1.0,
+            "isVisible": true,
+            "isLocked": false
+          }
+        ],
+        "baseFaceId": "F_3",
+        "edgeChamfers": {},
+        "parameters": {
+          "width": 100.0,
+          "height": 100.0,
+          "port1Width": 100.0,
+          "port1Height": 100.0,
+          "port2Width": 100.0,
+          "port2Height": 100.0,
+          "angle": 45.0,
+          "thickness": 1.5,
+          "flange": 10.0
+        },
+        "metadata": {
+          "featureHistory": [
+            {
+              "step": 1,
+              "action": "update_punch",
+              "description": "Auto-identified 8 coupler slot(s)",
+              "timestamp": "2026-09-22T10:06:15.740972",
+              "targetId": "SLOT_1",
+              "delta": {
+                "description": "Auto-identified 8 coupler slot(s)",
+                "actionType": "update_punch",
+                "timestamp": "2026-09-22T10:06:15.740972",
+                "targetId": "SLOT_1",
+                "oldPunches": [
+                  {
+                    "id": "SLOT_1",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 263.01004965911136,
+                      "y": 153.69343417594916
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 20.00000000000058,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 135.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "general"
+                  },
+                  {
+                    "id": "SLOT_2",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 298.36538871843857,
+                      "y": 118.33809511662201
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 19.999999999999332,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 135.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "general"
+                  },
+                  {
+                    "id": "SLOT_3",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 52.32590180780676,
+                      "y": 153.69343417595252
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 20.0000000000007,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 45.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "general"
+                  },
+                  {
+                    "id": "SLOT_4",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 16.97056274847921,
+                      "y": 118.33809511662508
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 19.999999999999453,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 45.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "general"
+                  },
+                  {
+                    "id": "SLOT_5",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 228.1938158431841,
+                      "y": 9.824674867294277
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 20.00000000000091,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 0.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "general"
+                  },
+                  {
+                    "id": "SLOT_6",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 278.1938158431842,
+                      "y": 9.824674867294192
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 19.999999999999545,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 0.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "general"
+                  },
+                  {
+                    "id": "SLOT_7",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 86.19381584318421,
+                      "y": 9.824674867294277
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 20.00000000000051,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 0.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "general"
+                  },
+                  {
+                    "id": "SLOT_8",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 36.1938158431841,
+                      "y": 9.824674867294192
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 19.999999999999318,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 0.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "general"
+                  }
+                ],
+                "newPunches": [
+                  {
+                    "id": "SLOT_1",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 263.01004965911136,
+                      "y": 153.69343417594916
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 20.00000000000058,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 135.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "coupler"
+                  },
+                  {
+                    "id": "SLOT_2",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 298.36538871843857,
+                      "y": 118.33809511662201
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 19.999999999999332,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 135.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "coupler"
+                  },
+                  {
+                    "id": "SLOT_3",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 52.32590180780676,
+                      "y": 153.69343417595252
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 20.0000000000007,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 45.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "coupler"
+                  },
+                  {
+                    "id": "SLOT_4",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 16.97056274847921,
+                      "y": 118.33809511662508
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 19.999999999999453,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 45.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "coupler"
+                  },
+                  {
+                    "id": "SLOT_5",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 228.1938158431841,
+                      "y": 9.824674867294277
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 20.00000000000091,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 0.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "coupler"
+                  },
+                  {
+                    "id": "SLOT_6",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 278.1938158431842,
+                      "y": 9.824674867294192
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 19.999999999999545,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 0.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "coupler"
+                  },
+                  {
+                    "id": "SLOT_7",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 86.19381584318421,
+                      "y": 9.824674867294277
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 20.00000000000051,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 0.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "coupler"
+                  },
+                  {
+                    "id": "SLOT_8",
+                    "type": "obroundSlot",
+                    "center": {
+                      "x": 36.1938158431841,
+                      "y": 9.824674867294192
+                    },
+                    "widthMm": 8.0,
+                    "lengthMm": 19.999999999999318,
+                    "diameterMm": 8.0,
+                    "rotationDeg": 0.0,
+                    "spacingX": 0.0,
+                    "spacingY": 0.0,
+                    "countX": 1,
+                    "countY": 1,
+                    "layer": "HOLES",
+                    "showLabel": true,
+                    "isVisible": true,
+                    "role": "coupler"
+                  }
+                ]
+              }
+            },
+            {
+              "step": 2,
+              "action": "update_dimension",
+              "description": "Update CAD dimensions",
+              "timestamp": "2026-09-22T10:07:30.356186",
+              "delta": {
+                "description": "Update CAD dimensions",
+                "actionType": "update_dimension",
+                "timestamp": "2026-09-22T10:07:30.356186",
+                "oldDimensions": [],
+                "newDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431842,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.000000000000114,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ]
+              }
+            },
+            {
+              "step": 3,
+              "action": "update_dimension",
+              "description": "Update CAD dimensions",
+              "timestamp": "2026-09-22T10:07:32.163478",
+              "delta": {
+                "description": "Update CAD dimensions",
+                "actionType": "update_dimension",
+                "timestamp": "2026-09-22T10:07:32.163478",
+                "oldDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431842,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.000000000000114,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ],
+                "newDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ]
+              }
+            },
+            {
+              "step": 4,
+              "action": "update_dimension",
+              "description": "Update CAD dimensions",
+              "timestamp": "2026-09-22T10:07:41.688069",
+              "delta": {
+                "description": "Update CAD dimensions",
+                "actionType": "update_dimension",
+                "timestamp": "2026-09-22T10:07:41.688069",
+                "oldDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ],
+                "newDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_2",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_1",
+                    "referenceBId": "SLOT_2",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 263.01004965911136,
+                    "pointAY": 153.69343417594916,
+                    "pointBX": 298.36538871843857,
+                    "pointBY": 118.33809511662201,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 49.999999999999716,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_1",
+                    "drivenEntityId": "SLOT_2",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ]
+              }
+            },
+            {
+              "step": 5,
+              "action": "update_dimension",
+              "description": "Update CAD dimensions",
+              "timestamp": "2026-09-22T10:07:43.444119",
+              "delta": {
+                "description": "Update CAD dimensions",
+                "actionType": "update_dimension",
+                "timestamp": "2026-09-22T10:07:43.444119",
+                "oldDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_2",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_1",
+                    "referenceBId": "SLOT_2",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 263.01004965911136,
+                    "pointAY": 153.69343417594916,
+                    "pointBX": 298.36538871843857,
+                    "pointBY": 118.33809511662201,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 49.999999999999716,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_1",
+                    "drivenEntityId": "SLOT_2",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ],
+                "newDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_2",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_1",
+                    "referenceBId": "SLOT_2",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 263.01004965911136,
+                    "pointAY": 153.69343417594916,
+                    "pointBX": 298.3653887184388,
+                    "pointBY": 118.33809511662182,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_1",
+                    "drivenEntityId": "SLOT_2",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ]
+              }
+            },
+            {
+              "step": 6,
+              "action": "update_dimension",
+              "description": "Update CAD dimensions",
+              "timestamp": "2026-09-22T10:07:47.226190",
+              "delta": {
+                "description": "Update CAD dimensions",
+                "actionType": "update_dimension",
+                "timestamp": "2026-09-22T10:07:47.226190",
+                "oldDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_2",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_1",
+                    "referenceBId": "SLOT_2",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 263.01004965911136,
+                    "pointAY": 153.69343417594916,
+                    "pointBX": 298.3653887184388,
+                    "pointBY": 118.33809511662182,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_1",
+                    "drivenEntityId": "SLOT_2",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ],
+                "newDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_2",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_1",
+                    "referenceBId": "SLOT_2",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 263.01004965911136,
+                    "pointAY": 153.69343417594916,
+                    "pointBX": 298.3653887184388,
+                    "pointBY": 118.33809511662182,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_1",
+                    "drivenEntityId": "SLOT_2",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_3",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_4",
+                    "referenceBId": "SLOT_3",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 16.97056274847921,
+                    "pointAY": 118.33809511662508,
+                    "pointBX": 52.32590180780676,
+                    "pointBY": 153.69343417595252,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.00000000000016,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_4",
+                    "drivenEntityId": "SLOT_3",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ]
+              }
+            },
+            {
+              "step": 7,
+              "action": "update_dimension",
+              "description": "Update CAD dimensions",
+              "timestamp": "2026-09-22T10:07:48.003657",
+              "delta": {
+                "description": "Update CAD dimensions",
+                "actionType": "update_dimension",
+                "timestamp": "2026-09-22T10:07:48.003657",
+                "oldDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_2",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_1",
+                    "referenceBId": "SLOT_2",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 263.01004965911136,
+                    "pointAY": 153.69343417594916,
+                    "pointBX": 298.3653887184388,
+                    "pointBY": 118.33809511662182,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_1",
+                    "drivenEntityId": "SLOT_2",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_3",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_4",
+                    "referenceBId": "SLOT_3",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 16.97056274847921,
+                    "pointAY": 118.33809511662508,
+                    "pointBX": 52.32590180780676,
+                    "pointBY": 153.69343417595252,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.00000000000016,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_4",
+                    "drivenEntityId": "SLOT_3",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ],
+                "newDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_2",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_1",
+                    "referenceBId": "SLOT_2",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 263.01004965911136,
+                    "pointAY": 153.69343417594916,
+                    "pointBX": 298.3653887184388,
+                    "pointBY": 118.33809511662182,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_1",
+                    "drivenEntityId": "SLOT_2",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_3",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_4",
+                    "referenceBId": "SLOT_3",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 16.97056274847921,
+                    "pointAY": 118.33809511662508,
+                    "pointBX": 52.325901807806645,
+                    "pointBY": 153.6934341759524,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_4",
+                    "drivenEntityId": "SLOT_3",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ]
+              }
+            },
+            {
+              "step": 8,
+              "action": "update_dimension",
+              "description": "Update CAD dimensions",
+              "timestamp": "2026-09-22T10:07:55.373590",
+              "delta": {
+                "description": "Update CAD dimensions",
+                "actionType": "update_dimension",
+                "timestamp": "2026-09-22T10:07:55.373590",
+                "oldDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_2",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_1",
+                    "referenceBId": "SLOT_2",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 263.01004965911136,
+                    "pointAY": 153.69343417594916,
+                    "pointBX": 298.3653887184388,
+                    "pointBY": 118.33809511662182,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_1",
+                    "drivenEntityId": "SLOT_2",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_3",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_4",
+                    "referenceBId": "SLOT_3",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 16.97056274847921,
+                    "pointAY": 118.33809511662508,
+                    "pointBX": 52.325901807806645,
+                    "pointBY": 153.6934341759524,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_4",
+                    "drivenEntityId": "SLOT_3",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ],
+                "newDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_2",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_1",
+                    "referenceBId": "SLOT_2",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 263.01004965911136,
+                    "pointAY": 153.69343417594916,
+                    "pointBX": 298.3653887184388,
+                    "pointBY": 118.33809511662182,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_1",
+                    "drivenEntityId": "SLOT_2",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_3",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_4",
+                    "referenceBId": "SLOT_3",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 16.97056274847921,
+                    "pointAY": 118.33809511662508,
+                    "pointBX": 52.325901807806645,
+                    "pointBY": 153.6934341759524,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_4",
+                    "drivenEntityId": "SLOT_3",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_4",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_8",
+                    "referenceBId": "SLOT_7",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 36.1938158431841,
+                    "pointAY": 9.824674867294192,
+                    "pointBX": 86.19381584318421,
+                    "pointBY": 9.824674867294277,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.000000000000114,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_8",
+                    "drivenEntityId": "SLOT_7",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ]
+              }
+            },
+            {
+              "step": 9,
+              "action": "update_dimension",
+              "description": "Update CAD dimensions",
+              "timestamp": "2026-09-22T10:07:56.179825",
+              "delta": {
+                "description": "Update CAD dimensions",
+                "actionType": "update_dimension",
+                "timestamp": "2026-09-22T10:07:56.179825",
+                "oldDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_2",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_1",
+                    "referenceBId": "SLOT_2",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 263.01004965911136,
+                    "pointAY": 153.69343417594916,
+                    "pointBX": 298.3653887184388,
+                    "pointBY": 118.33809511662182,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_1",
+                    "drivenEntityId": "SLOT_2",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_3",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_4",
+                    "referenceBId": "SLOT_3",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 16.97056274847921,
+                    "pointAY": 118.33809511662508,
+                    "pointBX": 52.325901807806645,
+                    "pointBY": 153.6934341759524,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_4",
+                    "drivenEntityId": "SLOT_3",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_4",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_8",
+                    "referenceBId": "SLOT_7",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 36.1938158431841,
+                    "pointAY": 9.824674867294192,
+                    "pointBX": 86.19381584318421,
+                    "pointBY": 9.824674867294277,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.000000000000114,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_8",
+                    "drivenEntityId": "SLOT_7",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ],
+                "newDimensions": [
+                  {
+                    "id": "dim_1",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_5",
+                    "referenceBId": "SLOT_6",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 228.1938158431841,
+                    "pointAY": 9.824674867294277,
+                    "pointBX": 278.1938158431841,
+                    "pointBY": 9.824674867294192,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_5",
+                    "drivenEntityId": "SLOT_6",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_2",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_1",
+                    "referenceBId": "SLOT_2",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 263.01004965911136,
+                    "pointAY": 153.69343417594916,
+                    "pointBX": 298.3653887184388,
+                    "pointBY": 118.33809511662182,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_1",
+                    "drivenEntityId": "SLOT_2",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_3",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_4",
+                    "referenceBId": "SLOT_3",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 16.97056274847921,
+                    "pointAY": 118.33809511662508,
+                    "pointBX": 52.325901807806645,
+                    "pointBY": 153.6934341759524,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_4",
+                    "drivenEntityId": "SLOT_3",
+                    "units": "mm",
+                    "isVisible": true
+                  },
+                  {
+                    "id": "dim_4",
+                    "type": "holeToHole",
+                    "referenceAId": "SLOT_8",
+                    "referenceBId": "SLOT_7",
+                    "anchorTypeA": "center",
+                    "anchorTypeB": "center",
+                    "pointAX": 36.1938158431841,
+                    "pointAY": 9.824674867294192,
+                    "pointBX": 86.1938158431841,
+                    "pointBY": 9.824674867294277,
+                    "dimensionLineOffset": 25.0,
+                    "extensionLineOvershoot": 4.0,
+                    "measuredValue": 50.0,
+                    "userOffsetX": 0.0,
+                    "userOffsetY": 0.0,
+                    "isDriven": false,
+                    "isDriving": true,
+                    "allowedMotion": "constraintVector",
+                    "referenceEntityId": "SLOT_8",
+                    "drivenEntityId": "SLOT_7",
+                    "units": "mm",
+                    "isVisible": true
+                  }
+                ]
+              }
+            },
+            {
+              "step": 10,
+              "action": "modify",
+              "description": "Model Modification",
+              "timestamp": "2026-10-01T13:41:43.291770",
+              "delta": {
+                "description": "Model Modification",
+                "actionType": "modify",
+                "timestamp": "2026-10-01T13:41:43.291770",
+                "oldMaterial": {
+                  "thicknessMm": 1.5,
+                  "materialGrade": "Pre-Galvanized Steel",
+                  "materialType": "mildSteel",
+                  "finish": "electroGalvanized",
+                  "kFactor": 0.4,
+                  "defaultBendRadius": 1.5,
+                  "edgeChamferMm": 0.0
+                },
+                "newMaterial": {
+                  "thicknessMm": 1.5,
+                  "materialGrade": "Pre-Galvanized Steel",
+                  "materialType": "mildSteel",
+                  "finish": "electroGalvanized",
+                  "kFactor": 0.4,
+                  "defaultBendRadius": 1.5,
+                  "edgeChamferMm": 0.0
+                }
+              }
+            },
+            {
+              "step": 11,
+              "action": "drive_dimension",
+              "description": "Update Fitting Metadata",
+              "timestamp": "2026-10-01T13:41:43.292770",
+              "delta": {
+                "description": "Update Fitting Metadata",
+                "actionType": "drive_dimension",
+                "timestamp": "2026-10-01T13:41:43.292770",
+                "oldParameters": {},
+                "newParameters": {
+                  "width": 100.0,
+                  "height": 100.0,
+                  "port1Width": 100.0,
+                  "port1Height": 100.0,
+                  "port2Width": 100.0,
+                  "port2Height": 100.0,
+                  "angle": 45.0,
+                  "thickness": 1.5,
+                  "flange": 10.0
+                }
+              }
+            },
+            {
+              "step": 12,
+              "action": "modify",
+              "description": "Model Modification",
+              "timestamp": "2026-10-01T13:41:43.297876",
+              "delta": {
+                "description": "Model Modification",
+                "actionType": "modify",
+                "timestamp": "2026-10-01T13:41:43.297876",
+                "oldProductType": "45_deg_inside_riser_100x100",
+                "newProductType": "inside_riser"
+              }
+            }
+          ],
+          "undoDeltas": [
+            {
+              "description": "Model Modification",
+              "actionType": "modify",
+              "timestamp": "2026-10-01T13:41:43.291770",
+              "oldMaterial": {
+                "thicknessMm": 1.5,
+                "materialGrade": "Pre-Galvanized Steel",
+                "materialType": "mildSteel",
+                "finish": "electroGalvanized",
+                "kFactor": 0.4,
+                "defaultBendRadius": 1.5,
+                "edgeChamferMm": 0.0
+              },
+              "newMaterial": {
+                "thicknessMm": 1.5,
+                "materialGrade": "Pre-Galvanized Steel",
+                "materialType": "mildSteel",
+                "finish": "electroGalvanized",
+                "kFactor": 0.4,
+                "defaultBendRadius": 1.5,
+                "edgeChamferMm": 0.0
+              }
+            },
+            {
+              "description": "Update Fitting Metadata",
+              "actionType": "drive_dimension",
+              "timestamp": "2026-10-01T13:41:43.292770",
+              "oldParameters": {},
+              "newParameters": {
+                "width": 100.0,
+                "height": 100.0,
+                "port1Width": 100.0,
+                "port1Height": 100.0,
+                "port2Width": 100.0,
+                "port2Height": 100.0,
+                "angle": 45.0,
+                "thickness": 1.5,
+                "flange": 10.0
+              }
+            },
+            {
+              "description": "Model Modification",
+              "actionType": "modify",
+              "timestamp": "2026-10-01T13:41:43.297876",
+              "oldProductType": "45_deg_inside_riser_100x100",
+              "newProductType": "inside_riser"
+            }
+          ],
+          "cmsTemplate": {
+            "category": "Trunking Accessories",
+            "productType": "Inside Riser",
+            "variation": "45 Deg Inside Riser",
+            "templateId": "inside_riser_45_deg_inside_riser",
+            "version": 1,
+            "ports": [
+              {
+                "id": "PORT_1",
+                "index": 1,
+                "width": 98.9,
+                "height": 100.0,
+                "flange": 15.0,
+                "center": [
+                  157.18659405223215,
+                  45.85639566092647,
+                  64.4345847626059
+                ],
+                "flatCenter": [
+                  157.193815843184,
+                  30.0
+                ],
+                "normal": [
+                  0.0,
+                  -1.0,
+                  0.0
+                ],
+                "widthDirection": [
+                  0.9999808380986168,
+                  0.005965305877588684,
+                  0.001654859926082816
+                ],
+                "heightDirection": [
+                  -0.0016548893708598147,
+                  0.0,
+                  0.9999986306696476
+                ],
+                "hostFaceIds": [
+                  "F_3",
+                  "F_5",
+                  "F_1"
+                ],
+                "boundaryLoopId": "raw_opening_1",
+                "boundaryEdgeIds": [],
+                "floorP1": [
+                  107.80398632127662,
+                  45.561314050389086,
+                  14.352793431449626
+                ],
+                "floorP2": [
+                  206.73469072027365,
+                  46.151477271463854,
+                  14.516513026797412
+                ],
+                "flatP1": [
+                  46.452731478282466,
+                  45.995814950404515
+                ],
+                "flatP2": [
+                  268.25100680160233,
+                  45.99581495040343
+                ],
+                "derivedMouthCorners": [
+                  [
+                    107.80398632127662,
+                    45.561314050389086,
+                    14.352793431449626
+                  ],
+                  [
+                    107.63849738419064,
+                    45.561314050389086,
+                    114.35265649841438
+                  ],
+                  [
+                    206.56920178318768,
+                    46.151477271463854,
+                    114.51637609376216
+                  ],
+                  [
+                    206.73469072027365,
+                    46.151477271463854,
+                    14.516513026797412
+                  ]
+                ],
+                "calloutAnchor": [
+                  157.10384958368917,
+                  45.85639566092647,
+                  114.43451629608828
+                ],
+                "confidence": 1.0,
+                "detectionSource": "foldedTopology"
+              },
+              {
+                "id": "PORT_2",
+                "index": 2,
+                "width": 98.4,
+                "height": 100.0,
+                "flange": 15.0,
+                "center": [
+                  158.06701707492158,
+                  153.56568897276293,
+                  59.122215172735224
+                ],
+                "flatCenter": [
+                  157.66797573345835,
+                  167.6537480397082
+                ],
+                "normal": [
+                  0.0,
+                  0.7071067811865475,
+                  0.7071067811865475
+                ],
+                "widthDirection": [
+                  0.9999819956728022,
+                  0.005485674820581718,
+                  -0.0024322216187601625
+                ],
+                "heightDirection": [
+                  0.005598811315243012,
+                  -0.7070956983718173,
+                  0.7070956983718173
+                ],
+                "hostFaceIds": [
+                  "F_2",
+                  "F_5",
+                  "F_1"
+                ],
+                "boundaryLoopId": "raw_opening_2",
+                "boundaryEdgeIds": [],
+                "floorP1": [
+                  108.56697703314906,
+                  188.65046356963754,
+                  23.887146599579694
+                ],
+                "floorP2": [
+                  207.00717598516977,
+                  189.19048421307005,
+                  23.64771390870903
+                ],
+                "flatP1": [
+                  52.325901807806645,
+                  153.6934341759524
+                ],
+                "flatP2": [
+                  263.01004965911136,
+                  153.69343417594916
+                ],
+                "derivedMouthCorners": [
+                  [
+                    108.56697703314906,
+                    188.65046356963754,
+                    23.887146599579694
+                  ],
+                  [
+                    109.12685816467337,
+                    117.9408937324558,
+                    94.59671643676143
+                  ],
+                  [
+                    207.56705711669406,
+                    118.48091437588832,
+                    94.35728374589075
+                  ],
+                  [
+                    207.00717598516977,
+                    189.19048421307005,
+                    23.64771390870903
+                  ]
+                ],
+                "calloutAnchor": [
+                  158.3469576406837,
+                  118.21090405417206,
+                  94.47700009132609
+                ],
+                "confidence": 1.0,
+                "detectionSource": "foldedTopology"
+              }
+            ],
+            "verifiedBendIds": [
+              "B1",
+              "B2",
+              "B3"
+            ],
+            "verifiedFlangeIds": [
+              "FL1",
+              "FL2"
+            ],
+            "couplerSlotPunchIds": [
+              "SLOT_1",
+              "SLOT_2",
+              "SLOT_3",
+              "SLOT_4",
+              "SLOT_5",
+              "SLOT_6",
+              "SLOT_7",
+              "SLOT_8"
+            ],
+            "scalingModel": {}
+          },
+          "cmsWorkflow": {
+            "stage": "ports_mapped",
+            "stageIndex": 2
+          },
+          "fittingMetadata": {
+            "category": "Trunking Accessories",
+            "product": "Inside Riser",
+            "variantName": "45 Deg Inside Riser",
+            "flangeMm": 10.0,
+            "parameters": {
+              "width": 100.0,
+              "height": 100.0,
+              "port1Width": 100.0,
+              "port1Height": 100.0,
+              "port2Width": 100.0,
+              "port2Height": 100.0,
+              "angle": 45.0,
+              "thickness": 1.5
+            },
+            "analyzedDimensions": {
+              "overallWidth": 315.335951466917,
+              "overallHeight": 170.6639969244278,
+              "detectedFlangeMm": 19.99999999999998,
+              "bedWidth": 95.99999999999994,
+              "port1Width": 95.99999999999994,
+              "port2Width": 76.00000000000077,
+              "port3Width": 20.0,
+              "branchWidth": 20.0,
+              "detectedPortWidthMm": 95.99999999999994,
+              "detectedBranchWidthMm": 20.0
+            },
+            "portAssignments": {
+              "port1": "east",
+              "port2": "north"
+            }
+          },
+          "fittingCategory": "Trunking Accessories",
+          "category": "Trunking Accessories",
+          "fittingProduct": "Inside Riser",
+          "product": "Inside Riser",
+          "fittingVariant": "45 Deg Inside Riser",
+          "variantName": "45 Deg Inside Riser",
+          "fittingFlangeMm": 10.0,
+          "ports": [
+            {
+              "id": "port1",
+              "label": "PORT 1",
+              "side": "east",
+              "width": 100.0,
+              "height": 100.0,
+              "measuredLength": 76.00000000000077,
+              "edgeP1": [
+                315.335951466917,
+                116.92388155424896
+              ],
+              "edgeP2": [
+                261.5958360967388,
+                170.66399692442712
+              ],
+              "center": [
+                288.4658937818279,
+                143.79393923933804
+              ],
+              "normal": [
+                0.7071067811865476,
+                0.7071067811865476
+              ]
+            },
+            {
+              "id": "port2",
+              "label": "PORT 2",
+              "side": "north",
+              "width": 100.0,
+              "height": 100.0,
+              "measuredLength": 95.55095170966428,
+              "edgeP1": [
+                205.4434515882905,
+                167.6537480397082
+              ],
+              "edgeP2": [
+                109.89249987862621,
+                167.6537480397082
+              ],
+              "center": [
+                157.66797573345835,
+                167.6537480397082
+              ],
+              "normal": [
+                0.0,
+                1.0
+              ]
+            }
+          ],
+          "isCmsProduct": true,
+          "cms_product_contract": {
+            "productType": "inside_riser",
+            "variationName": "45_deg_inside_riser",
+            "displayName": "45\u00c2\u00b0 Inside Riser"
+          },
+          "cmsParameters": {
+            "has_perforations": 0.0
+          },
+          "cms_param_has_perforations": 0.0
+        }
+      },
+      "baselinePorts": [
+        {
+          "id": "PORT_1",
+          "index": 1,
+          "width": 100.0,
+          "height": 100.0,
+          "flange": 15.0,
+          "center": [
+            156.99743464457742,
+            9.719424967447154,
+            49.45330958716707
+          ],
+          "flatCenter": [
+            157.1938158431841,
+            9.824674867294235
+          ],
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "widthDirection": [
+            0.9999808380986168,
+            0.005965305877588684,
+            0.001654859926082816
+          ],
+          "heightDirection": [
+            -0.0016548893708598147,
+            0.0,
+            0.9999986306696476
+          ],
+          "hostFaceIds": [
+            "F_3",
+            "F_5",
+            "F_1"
+          ],
+          "boundaryLoopId": "raw_opening_1",
+          "boundaryEdgeIds": [],
+          "floorP1": [
+            107.54856782185404,
+            9.496381965930293,
+            -0.5470944622744062
+          ],
+          "floorP2": [
+            206.64306659857118,
+            9.942467968964017,
+            -0.5467027428800189
+          ],
+          "flatP1": [
+            61.2,
+            9.8
+          ],
+          "flatP2": [
+            253.2,
+            9.8
+          ],
+          "derivedMouthCorners": [
+            [
+              107.54856782185404,
+              9.496381965930293,
+              -0.5470944622744062
+            ],
+            [
+              107.38307888476805,
+              9.496381965930293,
+              99.45276860469036
+            ],
+            [
+              206.4775776614852,
+              9.942467968964017,
+              99.45316032408473
+            ],
+            [
+              206.64306659857118,
+              9.942467968964017,
+              -0.5467027428800189
+            ]
+          ],
+          "calloutAnchor": [
+            156.93032827312663,
+            9.719424967447154,
+            99.45296446438755
+          ],
+          "confidence": 1.0,
+          "detectionSource": "foldedTopology"
+        },
+        {
+          "id": "PORT_2",
+          "index": 2,
+          "width": 100.0,
+          "height": 100.0,
+          "flange": 15.0,
+          "center": [
+            157.98102045335793,
+            135.84828751451226,
+            76.7594065473117
+          ],
+          "flatCenter": [
+            157.667975733459,
+            136.01576464628712
+          ],
+          "normal": [
+            0.0,
+            0.7071067811865475,
+            0.7071067811865475
+          ],
+          "widthDirection": [
+            0.9999819956728022,
+            0.005485674820581718,
+            -0.0024322216187601625
+          ],
+          "heightDirection": [
+            0.005598811315243012,
+            -0.7070956983718173,
+            0.7070956983718173
+          ],
+          "hostFaceIds": [
+            "F_2",
+            "F_5",
+            "F_1"
+          ],
+          "boundaryLoopId": "raw_opening_2",
+          "boundaryEdgeIds": [],
+          "floorP1": [
+            108.44090017663544,
+            170.8484904241358,
+            41.43917943777502
+          ],
+          "floorP2": [
+            206.96255747442422,
+            171.5576595744305,
+            41.3700586873066
+          ],
+          "flatP1": [
+            34.65,
+            136.0
+          ],
+          "flatP2": [
+            280.7,
+            136.0
+          ],
+          "derivedMouthCorners": [
+            [
+              108.44090017663544,
+              170.8484904241358,
+              41.43917943777502
+            ],
+            [
+              108.99948343229165,
+              100.13891545459401,
+              112.1487544073168
+            ],
+            [
+              207.52114073008045,
+              100.8480846048887,
+              112.07963365684839
+            ],
+            [
+              206.96255747442422,
+              171.5576595744305,
+              41.3700586873066
+            ]
+          ],
+          "calloutAnchor": [
+            158.26031208118604,
+            100.49350002974136,
+            112.1141940320826
+          ],
+          "confidence": 1.0,
+          "detectionSource": "foldedTopology"
+        }
+      ]
+    },
+    "cmsWorkflow": {
+      "stage": "template_complete",
+      "stageIndex": 3
+    },
+    "fittingMetadata": {
+      "category": "Trunking Accessories",
+      "product": "Inside Riser",
+      "variantName": "45 Deg Inside Riser",
+      "flangeMm": 10.0,
+      "parameters": {
+        "width": 100.0,
+        "height": 100.0,
+        "port1Width": 100.0,
+        "port1Height": 100.0,
+        "port2Width": 100.0,
+        "port2Height": 100.0,
+        "angle": 45.0,
+        "thickness": 1.5,
+        "port1_width": 100.0,
+        "port1_height": 100.0,
+        "port2_width": 100.0,
+        "port2_height": 100.0
+      },
+      "analyzedDimensions": {
+        "overallWidth": 315.335951466917,
+        "overallHeight": 170.6639969244278,
+        "detectedFlangeMm": 19.99999999999998,
+        "bedWidth": 95.99999999999994,
+        "port1Width": 95.99999999999994,
+        "port2Width": 76.00000000000077,
+        "port3Width": 20.0,
+        "branchWidth": 20.0,
+        "detectedPortWidthMm": 95.99999999999994,
+        "detectedBranchWidthMm": 20.0
+      },
+      "portAssignments": {
+        "port1": "east",
+        "port2": "north"
+      }
+    },
+    "fittingCategory": "Trunking Accessories",
+    "category": "Trunking Accessories",
+    "fittingProduct": "Inside Riser",
+    "product": "Inside Riser",
+    "fittingVariant": "45 Deg Inside Riser",
+    "variantName": "45 Deg Inside Riser",
+    "fittingFlangeMm": 10.0,
+    "ports": [
+      {
+        "id": "port1",
+        "label": "PORT 1",
+        "side": "east",
+        "width": 100.0,
+        "height": 100.0,
+        "measuredLength": 76.00000000000077,
+        "edgeP1": [
+          315.335951466917,
+          116.92388155424896
+        ],
+        "edgeP2": [
+          261.5958360967388,
+          170.66399692442712
+        ],
+        "center": [
+          288.4658937818279,
+          143.79393923933804
+        ],
+        "normal": [
+          0.7071067811865476,
+          0.7071067811865476
+        ]
+      },
+      {
+        "id": "port2",
+        "label": "PORT 2",
+        "side": "north",
+        "width": 100.0,
+        "height": 100.0,
+        "measuredLength": 95.55095170966428,
+        "edgeP1": [
+          205.4434515882905,
+          167.6537480397082
+        ],
+        "edgeP2": [
+          109.89249987862621,
+          167.6537480397082
+        ],
+        "center": [
+          157.66797573345835,
+          167.6537480397082
+        ],
+        "normal": [
+          0.0,
+          1.0
+        ]
+      }
+    ],
+    "isCmsProduct": true,
+    "cms_product_contract": {
+      "productType": "inside_riser",
+      "variationName": "45_deg_inside_riser"
+    },
+    "cmsParameters": {
+      "has_perforations": 0.0
+    },
+    "cms_param_has_perforations": 0.0,
+    "appliedTemplate": "inside_riser"
+  }
+}

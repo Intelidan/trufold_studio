@@ -147,6 +147,8 @@ class CmsPortMatcher {
         boundaryLoopId: opening.openingId,
         floorP1: opening.floorP1,
         floorP2: opening.floorP2,
+        flatP1: opening.flatP1,
+        flatP2: opening.flatP2,
         derivedMouthCorners: opening.derivedMouthCorners,
         calloutAnchor: opening.calloutAnchor,
         confidence: portConfidence,

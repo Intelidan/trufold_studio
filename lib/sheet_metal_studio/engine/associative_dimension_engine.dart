@@ -128,12 +128,244 @@ class AssociativeDimensionEngine {
       }
     }
     // Fallback: check faces
+    if (edgeId.startsWith('FACE_') && edgeId.contains('_EDGE_')) {
+      final parts = edgeId.split('_EDGE_');
+      final faceId = parts[0].replaceFirst('FACE_', '');
+      final edgeIdx = int.tryParse(parts[1]);
+      final f = doc.faces.where((face) => face.id == faceId).firstOrNull;
+      if (f != null && edgeIdx != null && edgeIdx >= 0 && edgeIdx < f.vertices.length) {
+        final p1 = f.vertices[edgeIdx];
+        final p2 = f.vertices[(edgeIdx + 1) % f.vertices.length];
+        return (p1, p2);
+      }
+    }
     for (final f in doc.faces) {
       if (f.id == edgeId && f.vertices.length >= 2) {
         return (f.vertices[0], f.vertices[1]);
       }
     }
     return null;
+  }
+
+  /// Resolves the actual 2D attachment point of an anchor from the live DsfDocument.
+  static CadPoint2D? resolveAnchorPoint({
+    required DsfDocument doc,
+    required String? entityId,
+    required CadAnchorType? anchorType,
+    CadPoint2D? fallbackPoint,
+  }) {
+    return CadDimension.resolveAnchorPoint(
+      doc: doc,
+      entityId: entityId,
+      anchorType: anchorType,
+      fallbackPoint: fallbackPoint,
+    );
+  }
+
+  /// Searches for the closest entity anchor point (punch center/quadrant, bend endpoint/midpoint,
+  /// cut line endpoint/midpoint, arc center/start/end/midpoint, contour corner vertex, contour edge)
+  /// within [toleranceMm] of [pt].
+  static ({String? entityId, CadAnchorType? anchorType, CadPoint2D point})? findAnchorAt(
+    CadPoint2D pt,
+    DsfDocument doc, {
+    double toleranceMm = 8.0,
+  }) {
+    String? bestEntityId;
+    CadAnchorType? bestAnchorType;
+    CadPoint2D? bestPoint;
+    double bestDist = toleranceMm;
+
+    // 1. Punches: center and quadrants
+    for (final p in doc.allPunchesRaw) {
+      final dCenter = pt.distanceTo(p.center);
+      final effRad = p.isRound ? p.widthMm / 2.0 : math.max(p.widthMm, p.lengthMm) / 2.0;
+      if (dCenter <= math.max(toleranceMm, effRad + 2.0) && dCenter < bestDist) {
+        bestDist = dCenter;
+        bestEntityId = p.id;
+        bestAnchorType = CadAnchorType.center;
+        bestPoint = p.center;
+      }
+    }
+
+    // 2. Contour corner vertices
+    for (int i = 0; i < doc.outerContour.length; i++) {
+      final v = doc.outerContour[i];
+      final d = pt.distanceTo(v);
+      if (d <= toleranceMm && d < bestDist) {
+        bestDist = d;
+        bestEntityId = 'CONTOUR_VERTEX_$i';
+        bestAnchorType = CadAnchorType.endpoint;
+        bestPoint = v;
+      }
+    }
+
+    // 3. Bends: endpoints and midpoints
+    for (final b in doc.bends) {
+      final d1 = pt.distanceTo(b.p1);
+      if (d1 <= toleranceMm && d1 < bestDist) {
+        bestDist = d1;
+        bestEntityId = b.id;
+        bestAnchorType = CadAnchorType.startPoint;
+        bestPoint = b.p1;
+      }
+      final d2 = pt.distanceTo(b.p2);
+      if (d2 <= toleranceMm && d2 < bestDist) {
+        bestDist = d2;
+        bestEntityId = b.id;
+        bestAnchorType = CadAnchorType.endPoint;
+        bestPoint = b.p2;
+      }
+      final dMid = pt.distanceTo(b.midpoint);
+      if (dMid <= toleranceMm && dMid < bestDist) {
+        bestDist = dMid;
+        bestEntityId = b.id;
+        bestAnchorType = CadAnchorType.midpoint;
+        bestPoint = b.midpoint;
+      }
+    }
+
+    // 4. Cut lines: endpoints and midpoints
+    for (final c in doc.cutLines) {
+      final d1 = pt.distanceTo(c.p1);
+      if (d1 <= toleranceMm && d1 < bestDist) {
+        bestDist = d1;
+        bestEntityId = c.id;
+        bestAnchorType = CadAnchorType.startPoint;
+        bestPoint = c.p1;
+      }
+      final d2 = pt.distanceTo(c.p2);
+      if (d2 <= toleranceMm && d2 < bestDist) {
+        bestDist = d2;
+        bestEntityId = c.id;
+        bestAnchorType = CadAnchorType.endPoint;
+        bestPoint = c.p2;
+      }
+      final dMid = pt.distanceTo(c.midpoint);
+      if (dMid <= toleranceMm && dMid < bestDist) {
+        bestDist = dMid;
+        bestEntityId = c.id;
+        bestAnchorType = CadAnchorType.midpoint;
+        bestPoint = c.midpoint;
+      }
+    }
+
+    // 5. Arcs: center, endpoints, midpoint
+    for (final a in doc.arcs) {
+      final dCenter = pt.distanceTo(a.center);
+      if (dCenter <= toleranceMm && dCenter < bestDist) {
+        bestDist = dCenter;
+        bestEntityId = a.id;
+        bestAnchorType = CadAnchorType.center;
+        bestPoint = a.center;
+      }
+      final dStart = pt.distanceTo(a.startPoint);
+      if (dStart <= toleranceMm && dStart < bestDist) {
+        bestDist = dStart;
+        bestEntityId = a.id;
+        bestAnchorType = CadAnchorType.startPoint;
+        bestPoint = a.startPoint;
+      }
+      final dEnd = pt.distanceTo(a.endPoint);
+      if (dEnd <= toleranceMm && dEnd < bestDist) {
+        bestDist = dEnd;
+        bestEntityId = a.id;
+        bestAnchorType = CadAnchorType.endPoint;
+        bestPoint = a.endPoint;
+      }
+    }
+
+    // If a discrete point was found, return it
+    if (bestEntityId != null && bestPoint != null) {
+      return (entityId: bestEntityId, anchorType: bestAnchorType, point: bestPoint);
+    }
+
+    // 6. Linear segments (edges): check outer contour edges
+    if (doc.outerContour.length >= 2) {
+      for (int i = 0; i < doc.outerContour.length; i++) {
+        final c1 = doc.outerContour[i];
+        final c2 = doc.outerContour[(i + 1) % doc.outerContour.length];
+        final d = _distToSegment(pt, c1, c2);
+        if (d <= toleranceMm && d < bestDist) {
+          bestDist = d;
+          bestEntityId = 'CONTOUR_EDGE_$i';
+          bestAnchorType = CadAnchorType.perpendicular;
+          bestPoint = projectPointToSegmentLine(pt, c1, c2);
+        }
+      }
+    }
+
+    // 7. Linear segments: bends
+    for (final b in doc.bends) {
+      final d = _distToSegment(pt, b.p1, b.p2);
+      if (d <= toleranceMm && d < bestDist) {
+        bestDist = d;
+        bestEntityId = b.id;
+        bestAnchorType = CadAnchorType.perpendicular;
+        bestPoint = projectPointToSegmentLine(pt, b.p1, b.p2);
+      }
+    }
+
+    // 8. Linear segments: cut lines
+    for (final c in doc.cutLines) {
+      final d = _distToSegment(pt, c.p1, c.p2);
+      if (d <= toleranceMm && d < bestDist) {
+        bestDist = d;
+        bestEntityId = c.id;
+        bestAnchorType = CadAnchorType.perpendicular;
+        bestPoint = projectPointToSegmentLine(pt, c.p1, c.p2);
+      }
+    }
+
+    if (bestEntityId != null && bestPoint != null) {
+      return (entityId: bestEntityId, anchorType: bestAnchorType, point: bestPoint);
+    }
+
+    return null;
+  }
+
+  static double _distToSegment(CadPoint2D p, CadPoint2D a, CadPoint2D b) {
+    final dx = b.x - a.x;
+    final dy = b.y - a.y;
+    final lenSq = dx * dx + dy * dy;
+    if (lenSq < 1e-9) return p.distanceTo(a);
+    final t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq).clamp(0.0, 1.0);
+    final proj = CadPoint2D(a.x + t * dx, a.y + t * dy);
+    return p.distanceTo(proj);
+  }
+
+  /// Ensures that unreferenced or legacy dimensions have their entity and anchor
+  /// references bound to the actual geometry beneath [dim.pointA] and [dim.pointB].
+  static CadDimension ensureDimensionBound(CadDimension dim, DsfDocument doc) {
+    String? refA = dim.referenceAId;
+    String? refB = dim.referenceBId;
+    CadAnchorType? anchorA = dim.anchorTypeA;
+    CadAnchorType? anchorB = dim.anchorTypeB;
+
+    if (refA == null && dim.pointA != null) {
+      final foundA = findAnchorAt(dim.pointA!, doc, toleranceMm: 6.0);
+      if (foundA != null) {
+        refA = foundA.entityId;
+        anchorA = foundA.anchorType;
+      }
+    }
+
+    if (refB == null && dim.pointB != null) {
+      final foundB = findAnchorAt(dim.pointB!, doc, toleranceMm: 6.0);
+      if (foundB != null) {
+        refB = foundB.entityId;
+        anchorB = foundB.anchorType;
+      }
+    }
+
+    if (refA != dim.referenceAId || refB != dim.referenceBId || anchorA != dim.anchorTypeA || anchorB != dim.anchorTypeB) {
+      return dim.copyWith(
+        referenceAId: refA,
+        referenceBId: refB,
+        anchorTypeA: anchorA,
+        anchorTypeB: anchorB,
+      );
+    }
+    return dim;
   }
 
   /// Extracts geometric points A and B associated with the dimension references,
@@ -143,18 +375,40 @@ class AssociativeDimensionEngine {
     CadPoint2D? ptB = dim.pointB;
     double measured = dim.measuredValue;
 
-    // Special handling for punch-to-edge dimensions:
-    // Project the punch center perpendicularly onto the edge segment so the setback
-    // is strictly perpendicular to the edge rather than snapping to the edge midpoint.
+    // 1. Single edge / segment (e.g. 1-click segment dimension where referenceAId == referenceBId)
+    final singleRefId = (dim.referenceAId != null && dim.referenceAId == dim.referenceBId)
+        ? dim.referenceAId
+        : dim.referenceEntityId;
+    if (singleRefId != null && (dim.referenceAId == null || dim.referenceBId == null || dim.referenceAId == dim.referenceBId)) {
+      final edgeSeg = resolveEdgeSegment(singleRefId, doc);
+      if (edgeSeg != null) {
+        ptA = edgeSeg.$1;
+        ptB = edgeSeg.$2;
+        measured = ptA.distanceTo(ptB);
+        return (pA: ptA, pB: ptB, value: measured);
+      } else if (dim.pointA != null && dim.pointB != null) {
+        ptA = dim.pointA;
+        ptB = dim.pointB;
+        measured = ptA!.distanceTo(ptB!);
+        return (pA: ptA, pB: ptB, value: measured);
+      }
+    }
+
+    // 2. Point-to-Edge dimension:
+    // If dim.type == CadDimensionType.holeToEdge OR one reference is a punch and the other is an edge:
     final punchId = dim.referenceAId != null && doc.punches.any((p) => p.id == dim.referenceAId)
         ? dim.referenceAId
         : (dim.referenceBId != null && doc.punches.any((p) => p.id == dim.referenceBId) ? dim.referenceBId : null);
-    final edgeId = punchId == dim.referenceAId ? dim.referenceBId : dim.referenceAId;
+    final edgeCandidateId = punchId == dim.referenceAId ? dim.referenceBId : dim.referenceAId;
 
-    if (punchId != null && edgeId != null) {
+    if (punchId != null && edgeCandidateId != null) {
       final punch = doc.punches.where((p) => p.id == punchId).firstOrNull;
-      final edgeSeg = resolveEdgeSegment(edgeId, doc);
-      if (punch != null && edgeSeg != null) {
+      final edgeSeg = resolveEdgeSegment(edgeCandidateId, doc);
+      final edgeAnchor = punchId == dim.referenceAId ? dim.anchorTypeB : dim.anchorTypeA;
+      final isPointAnchorOnEdge = edgeAnchor == CadAnchorType.startPoint ||
+          edgeAnchor == CadAnchorType.endPoint ||
+          edgeAnchor == CadAnchorType.midpoint;
+      if (punch != null && edgeSeg != null && (dim.type == CadDimensionType.holeToEdge || !isPointAnchorOnEdge)) {
         final punchCenter = punch.center;
         final proj = projectPointToSegmentLine(punchCenter, edgeSeg.$1, edgeSeg.$2);
         if (dim.referenceAId == punchId) {
@@ -175,21 +429,73 @@ class AssociativeDimensionEngine {
       }
     }
 
-    // Resolve reference A
-    if (dim.referenceAId != null) {
-      final refA = _findEntityCenterOrPoint(dim.referenceAId!, doc);
-      if (refA != null) ptA = refA;
+    // Also support general point-to-edge where reference is CONTOUR_EDGE_ or anchor is perpendicular:
+    final isEdgeA = dim.referenceAId != null &&
+        (dim.referenceAId!.toUpperCase().startsWith('CONTOUR_EDGE_') ||
+            dim.referenceAId!.startsWith('FACE_') ||
+            dim.anchorTypeA == CadAnchorType.perpendicular);
+    final isEdgeB = dim.referenceBId != null &&
+        (dim.referenceBId!.toUpperCase().startsWith('CONTOUR_EDGE_') ||
+            dim.referenceBId!.startsWith('FACE_') ||
+            dim.anchorTypeB == CadAnchorType.perpendicular);
+
+    if (isEdgeA != isEdgeB) {
+      final edgeRefId = isEdgeA ? dim.referenceAId : dim.referenceBId;
+      final pointRefId = isEdgeA ? dim.referenceBId : dim.referenceAId;
+      final pointAnchor = isEdgeA ? dim.anchorTypeB : dim.anchorTypeA;
+      final pointFallback = isEdgeA ? dim.pointB : dim.pointA;
+
+      final pointPt = resolveAnchorPoint(
+        doc: doc,
+        entityId: pointRefId,
+        anchorType: pointAnchor,
+        fallbackPoint: pointFallback,
+      );
+      final edgeSeg = resolveEdgeSegment(edgeRefId, doc);
+
+      if (pointPt != null && edgeSeg != null) {
+        final proj = projectPointToSegmentLine(pointPt, edgeSeg.$1, edgeSeg.$2);
+        if (isEdgeA) {
+          ptA = proj;
+          ptB = pointPt;
+        } else {
+          ptA = pointPt;
+          ptB = proj;
+        }
+        if (dim.type == CadDimensionType.horizontal) {
+          measured = (ptB.x - ptA.x).abs();
+        } else if (dim.type == CadDimensionType.vertical) {
+          measured = (ptB.y - ptA.y).abs();
+        } else {
+          measured = pointPt.distanceTo(proj);
+        }
+        return (pA: ptA, pB: ptB, value: measured);
+      }
     }
 
-    // Resolve reference B
+    // 3. General two-anchor resolution:
+    if (dim.referenceAId != null) {
+      final refA = resolveAnchorPoint(
+        doc: doc,
+        entityId: dim.referenceAId,
+        anchorType: dim.anchorTypeA,
+        fallbackPoint: dim.pointA,
+      );
+      if (refA != null) ptA = refA;
+    }
     if (dim.referenceBId != null) {
-      final refB = _findEntityCenterOrPoint(dim.referenceBId!, doc);
+      final refB = resolveAnchorPoint(
+        doc: doc,
+        entityId: dim.referenceBId,
+        anchorType: dim.anchorTypeB,
+        fallbackPoint: dim.pointB,
+      );
       if (refB != null) ptB = refB;
     }
 
     // Handle overall blank width / length dimensions
     if (dim.type == CadDimensionType.overall) {
-      ptA = CadPoint2D(0, 0);
+      ptA = const CadPoint2D(0, 0);
       ptB = CadPoint2D(doc.blankWidthMm, 0);
       measured = doc.blankWidthMm;
     }
@@ -234,45 +540,6 @@ class AssociativeDimensionEngine {
     }
 
     return (pA: ptA, pB: ptB, value: measured);
-  }
-
-  static CadPoint2D? _findEntityCenterOrPoint(String id, DsfDocument doc) {
-    // Check punches
-    for (final p in doc.allPunchesRaw) {
-      if (p.id == id) {
-        return p.center;
-      }
-    }
-    // Check bends
-    for (final b in doc.bends) {
-      if (b.id == id) {
-        return b.midpoint;
-      }
-    }
-    // Check cut lines
-    for (final c in doc.cutLines) {
-      if (c.id == id) {
-        return c.midpoint;
-      }
-    }
-    // Check contour points (format contour_i)
-    if (id.startsWith('contour_')) {
-      final index = int.tryParse(id.replaceFirst('contour_', ''));
-      if (index != null && index >= 0 && index < doc.outerContour.length) {
-        return doc.outerContour[index];
-      }
-    }
-    // Check outer contour edges (format CONTOUR_EDGE_i)
-    if (id.startsWith('CONTOUR_EDGE_')) {
-      final edgeSeg = resolveEdgeSegment(id, doc);
-      if (edgeSeg != null) {
-        return CadPoint2D(
-          (edgeSeg.$1.x + edgeSeg.$2.x) / 2.0,
-          (edgeSeg.$1.y + edgeSeg.$2.y) / 2.0,
-        );
-      }
-    }
-    return null;
   }
 
   /// Solves complete 2D layout geometry for rendering and hit-testing
@@ -352,12 +619,13 @@ class AssociativeDimensionEngine {
         ny = dx / len;
       }
 
+      final s = offsetDist >= 0 ? 1.0 : -1.0;
       final offX = nx * offsetDist;
       final offY = ny * offsetDist;
-      final overX = nx * overshoot;
-      final overY = ny * overshoot;
-      final gapX = nx * witnessGap;
-      final gapY = ny * witnessGap;
+      final overX = nx * overshoot * s;
+      final overY = ny * overshoot * s;
+      final gapX = nx * witnessGap * s;
+      final gapY = ny * witnessGap * s;
 
       wAStart = Offset(pA.x + gapX, pA.y + gapY);
       wAEnd = Offset(pA.x + offX + overX, pA.y + offY + overY);

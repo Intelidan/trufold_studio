@@ -15,7 +15,7 @@ import 'package:trufold_studio/sheet_metal_studio/models/template_parameter_defi
 void main() {
   group('Bend-Driven Parametric Scaling & Rigid Coupler Preservation Tests', () {
     test('1. Baseline inspection of 45_deg_bend_100x100.dsf', () async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       expect(file.existsSync(), isTrue);
 
       final content = await file.readAsString();
@@ -38,7 +38,7 @@ void main() {
     });
 
     test('3. Width invariants: port mouths widen by dW, outer B1 spine length fixed, apex on bisector', () async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       final content = await file.readAsString();
       final doc = DsfDocument.fromJson(jsonDecode(content) as Map<String, dynamic>);
 
@@ -120,7 +120,7 @@ void main() {
     });
 
     test('3b. Height invariants: all 3 walls grow in height by dH, apex stationary, slit angle preserved', () async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       final content = await file.readAsString();
       final doc = DsfDocument.fromJson(jsonDecode(content) as Map<String, dynamic>);
 
@@ -203,7 +203,7 @@ void main() {
     });
 
     test('3c. Flange invariants: flange root attached, only tip extends with dFL', () async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       final content = await file.readAsString();
       final doc = DsfDocument.fromJson(jsonDecode(content) as Map<String, dynamic>);
 
@@ -254,7 +254,7 @@ void main() {
     });
 
     test('4. End-to-End: TopologicalZoneMorpher & GeometricConstraintSolver on 45_deg_bend', () async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       final content = await file.readAsString();
       final doc = DsfDocument.fromJson(jsonDecode(content) as Map<String, dynamic>);
 

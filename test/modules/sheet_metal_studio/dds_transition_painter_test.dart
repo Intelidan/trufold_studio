@@ -9,7 +9,7 @@ void main() {
 
   group('2D to 3D Transition Wipe & Kinematic Fold Tests', () {
     final templates = DsfLibraryService.loadAllTemplatesSync(
-      baseDirectory: 'assets/dxf_templates/trunking_accessories',
+      baseDirectory: 'assets/dsf_templates/trunking_accessories',
     );
     final bend90 = templates.firstWhere((t) => t.templateId == 'trunking_bend_90');
 

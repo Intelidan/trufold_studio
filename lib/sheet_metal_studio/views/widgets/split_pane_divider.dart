@@ -13,12 +13,7 @@ class SplitPaneDivider extends StatefulWidget {
   final ValueChanged<double> onRatioChanged;
   final VoidCallback? onDoubleTapReset;
 
-  const SplitPaneDivider({
-    super.key,
-    required this.splitRatio,
-    required this.onRatioChanged,
-    this.onDoubleTapReset,
-  });
+  const SplitPaneDivider({super.key, required this.splitRatio, required this.onRatioChanged, this.onDoubleTapReset});
 
   @override
   State<SplitPaneDivider> createState() => _SplitPaneDividerState();
@@ -66,23 +61,9 @@ class _SplitPaneDividerState extends State<SplitPaneDivider> {
                   decoration: BoxDecoration(
                     color: active ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
                     borderRadius: BorderRadius.circular(4.0),
-                    boxShadow: active
-                        ? [
-                            BoxShadow(
-                              color: const Color(0xFF0284C7).withValues(alpha: 0.4),
-                              blurRadius: 8.0,
-                              spreadRadius: 1.0,
-                            )
-                          ]
-                        : null,
+                    boxShadow: active ? [BoxShadow(color: const Color(0xFF0284C7).withValues(alpha: 0.4), blurRadius: 8.0, spreadRadius: 1.0)] : null,
                   ),
-                  child: Center(
-                    child: Icon(
-                      Icons.drag_indicator,
-                      size: 14.0,
-                      color: active ? Colors.white : const Color(0xFF475569),
-                    ),
-                  ),
+                  child: Center(child: Icon(Icons.drag_indicator, size: 14.0, color: active ? Colors.white : const Color(0xFF475569))),
                 ),
               ),
             ),

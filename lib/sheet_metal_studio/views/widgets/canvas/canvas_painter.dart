@@ -420,6 +420,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         drawVertex(b.p2, isConstrained: true);
       }
       for (final p in doc.punches) {
+        if (!p.isVisible) continue;
         drawVertex(p.center, isConstrained: isPartConstrained);
       }
     }
@@ -621,7 +622,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
           if (isIncomplete) {
             labelText = '⚠️ ${bend.id} OPEN$lenStr';
           } else {
-            labelText = '${bend.id} ${bend.targetAngleDeg.toStringAsFixed(0)}° $arrowStr$lenStr';
+            labelText = '${bend.id} ${bend.displayAngleDeg.toStringAsFixed(0)}° $arrowStr$lenStr';
           }
 
           final bendLabelStyle = canvasSettings.bendLabel;
@@ -1271,6 +1272,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
           ..strokeWidth = 1.4;
 
         for (final punch in previewCouplerPunches!) {
+          if (!punch.isVisible) continue;
           final poly = punch.toPolygon();
           if (poly.isNotEmpty) {
             final path = Path();
@@ -1405,7 +1407,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
           isAlt = HardwareKeyboard.instance.isAltPressed;
         } catch (_) {}
         final dimSpan = TextSpan(
-          text: ' DIM: ${distMm.toStringAsFixed(1)} mm ${isAlt ? "(Alt Free)" : ""}',
+          text: ' DIM: ${distMm.toStringAsFixed(1)} mm ${isAlt ? "(Alt 0.1mm)" : ""}',
           style: const TextStyle(color: Color(0xFF0284C7), fontSize: 10, fontWeight: FontWeight.bold),
         );
         final tpDim = TextPainter(text: dimSpan, textDirection: TextDirection.ltr)..layout();
@@ -1445,7 +1447,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         } catch (_) {}
         final angleDeg = (math.atan2(dy, dx) * 180.0 / math.pi).round();
         final prefix = isCut ? "CUT" : (isFlange ? "FLANGE" : "BEND");
-        final angleText = '$prefix ${angleDeg.abs()}° ${isAlt ? "(Alt Free)" : ""}';
+        final angleText = '$prefix ${angleDeg.abs()}° ${isAlt ? "(Alt 0.1mm)" : ""}';
 
         final angleSpan = TextSpan(
           text: ' $angleText ',
@@ -1722,7 +1724,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
           // "Alt Free" mini tag
           final tagSpan = TextSpan(
-            text: ' Alt Free ',
+            text: ' Alt 0.1mm ',
             style: const TextStyle(color: Color(0xFFF97316), fontSize: 9.0, fontWeight: FontWeight.bold),
           );
           final tpTag = TextPainter(text: tagSpan, textDirection: TextDirection.ltr)..layout();
@@ -3568,6 +3570,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
         ..strokeWidth = 2.0;
 
       for (final punch in doc.punches) {
+        if (!punch.isVisible) continue;
         if (res.associatedFeatureIds.contains(punch.id)) {
           final poly = punch.toPolygon();
           if (poly.isNotEmpty) {

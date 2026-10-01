@@ -16,6 +16,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/dsf_document.dart';
+import '../../models/dxf_fitting_metadata.dart';
 import '../kinematic_fold_engine.dart';
 import 'dds_template_resolver.dart';
 
@@ -56,7 +57,7 @@ class DsfLibraryItem {
 }
 
 class DsfLibraryService {
-  static const String defaultTemplatesDir = 'assets/dxf_templates/trunking_accessories';
+  static const String defaultTemplatesDir = 'assets/dsf_templates/trunking_accessories';
 
   static final Map<String, DsfLibraryItem> _cache = {};
 
@@ -87,32 +88,46 @@ class DsfLibraryService {
     }
 
     // 2. Discover any additional .dsf files on desktop filesystem
+    final directoriesToScan = <Directory>[];
     try {
-      final dir = Directory(dirPath);
-      if (dir.existsSync()) {
-        final files = dir.listSync(recursive: true).whereType<File>().where((f) => f.path.toLowerCase().endsWith('.dsf'));
-        for (final file in files) {
-          final fileName = file.uri.pathSegments.last;
-          // Check if already loaded
-          if (_cache.values.any((i) => i.fileName.toLowerCase() == fileName.toLowerCase())) {
-            continue;
-          }
+      directoriesToScan.add(Directory(dirPath));
+      directoriesToScan.add(Directory('assets/dsf_templates'));
+      if (!kIsWeb) {
+        final exeDir = File(Platform.resolvedExecutable).parent.path;
+        directoriesToScan.add(Directory('$exeDir/$dirPath'));
+        directoriesToScan.add(Directory('$exeDir/assets/dsf_templates'));
+      }
+    } catch (_) {}
 
-          try {
-            final content = file.readAsStringSync();
-            final jsonMap = jsonDecode(content) as Map<String, dynamic>;
-            final doc = DsfDocument.fromJson(jsonMap);
-            final templateId = 'custom_${fileName.replaceAll('.dsf', '').replaceAll(' ', '_').toLowerCase()}';
-            final item = _createLibraryItem(templateId, fileName, doc);
-            _cache[templateId] = item;
-            results.add(item);
-          } catch (e) {
-            debugPrint('DsfLibraryService: Error reading custom file $fileName: $e');
+    final scannedPaths = <String>{};
+    for (final dir in directoriesToScan) {
+      try {
+        if (dir.existsSync()) {
+          final files = dir.listSync(recursive: true).whereType<File>().where((f) => f.path.toLowerCase().endsWith('.dsf'));
+          for (final file in files) {
+            if (!scannedPaths.add(file.path.toLowerCase())) continue;
+            final fileName = file.uri.pathSegments.last;
+            // Check if already loaded
+            if (_cache.values.any((i) => i.fileName.toLowerCase() == fileName.toLowerCase())) {
+              continue;
+            }
+
+            try {
+              final content = file.readAsStringSync();
+              final jsonMap = jsonDecode(content) as Map<String, dynamic>;
+              final doc = DsfDocument.fromJson(jsonMap);
+              final templateId = 'custom_${fileName.replaceAll('.dsf', '').replaceAll(' ', '_').toLowerCase()}';
+              final item = _createLibraryItem(templateId, fileName, doc);
+              _cache[templateId] = item;
+              results.add(item);
+            } catch (e) {
+              debugPrint('DsfLibraryService: Error reading custom file $fileName: $e');
+            }
           }
         }
+      } catch (_) {
+        // In web or restricted environments, directory list may be unavailable
       }
-    } catch (_) {
-      // In web or restricted environments, directory list may be unavailable
     }
 
     return results;
@@ -131,17 +146,32 @@ class DsfLibraryService {
       final templateId = entry.key;
       final fileName = entry.value;
 
-      final file = File('$dirPath/$fileName');
-      if (file.existsSync()) {
-        try {
-          final content = file.readAsStringSync();
-          final jsonMap = jsonDecode(content) as Map<String, dynamic>;
-          final doc = DsfDocument.fromJson(jsonMap);
-          final item = _createLibraryItem(templateId, fileName, doc);
-          _cache[templateId] = item;
-          results.add(item);
-        } catch (e) {
-          debugPrint('DsfLibraryService: Sync load error for $fileName: $e');
+      final candidatePaths = [
+        '$dirPath/$fileName',
+        'assets/dsf_templates/trunking_accessories/$fileName',
+        'assets/dsf_templates/$fileName',
+        if (!kIsWeb) ...[
+          '${File(Platform.resolvedExecutable).parent.path}/$dirPath/$fileName',
+          '${File(Platform.resolvedExecutable).parent.path}/assets/dsf_templates/trunking_accessories/$fileName',
+          '${File(Platform.resolvedExecutable).parent.path}/assets/dsf_templates/$fileName',
+        ],
+        'assets/dxf_templates/trunking_accessories/$fileName',
+      ];
+
+      for (final p in candidatePaths) {
+        final file = File(p);
+        if (file.existsSync()) {
+          try {
+            final content = file.readAsStringSync();
+            final jsonMap = jsonDecode(content) as Map<String, dynamic>;
+            final doc = DsfDocument.fromJson(jsonMap);
+            final item = _createLibraryItem(templateId, fileName, doc);
+            _cache[templateId] = item;
+            results.add(item);
+            break;
+          } catch (e) {
+            debugPrint('DsfLibraryService: Sync load error for $fileName: $e');
+          }
         }
       }
     }
@@ -156,24 +186,56 @@ class DsfLibraryService {
 
   static Future<DsfDocument?> _loadDsfDocument(String dirPath, String fileName) async {
     // Try Flutter asset bundle first
-    try {
-      final assetPath = '$dirPath/$fileName';
-      final jsonStr = await rootBundle.loadString(assetPath);
-      return DsfDocument.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);
-    } catch (_) {
-      // Fallback to direct File read on Desktop
-      final file = File('$dirPath/$fileName');
-      if (file.existsSync()) {
-        final content = await file.readAsString();
-        return DsfDocument.fromJson(jsonDecode(content) as Map<String, dynamic>);
-      }
-      return null;
+    final candidateAssetPaths = [
+      '$dirPath/$fileName',
+      'assets/dsf_templates/trunking_accessories/$fileName',
+      'assets/dsf_templates/$fileName',
+      'assets/dxf_templates/trunking_accessories/$fileName',
+    ];
+
+    for (final assetPath in candidateAssetPaths) {
+      try {
+        final jsonStr = await rootBundle.loadString(assetPath);
+        return DsfDocument.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);
+      } catch (_) {}
     }
+
+    // Fallback to direct File read on Desktop
+    final candidateFilePaths = [
+      '$dirPath/$fileName',
+      'assets/dsf_templates/trunking_accessories/$fileName',
+      'assets/dsf_templates/$fileName',
+      if (!kIsWeb) ...[
+        '${File(Platform.resolvedExecutable).parent.path}/$dirPath/$fileName',
+        '${File(Platform.resolvedExecutable).parent.path}/assets/dsf_templates/trunking_accessories/$fileName',
+        '${File(Platform.resolvedExecutable).parent.path}/assets/dsf_templates/$fileName',
+      ],
+      'assets/dxf_templates/trunking_accessories/$fileName',
+    ];
+
+    for (final p in candidateFilePaths) {
+      final file = File(p);
+      if (file.existsSync()) {
+        try {
+          final content = await file.readAsString();
+          return DsfDocument.fromJson(jsonDecode(content) as Map<String, dynamic>);
+        } catch (_) {}
+      }
+    }
+    return null;
   }
 
   static DsfLibraryItem _createLibraryItem(String templateId, String fileName, DsfDocument doc) {
-    final displayName = DdsTemplateResolver.templateDisplayNames[templateId] ??
-        _formatDisplayNameFromFileName(fileName);
+    final fittingMeta = DxfFittingMetadata.fromDocument(doc);
+    final variantMeta = doc.metadata['fittingVariant'] as String? ??
+        doc.metadata['variantName'] as String?;
+    final metaVariant = fittingMeta?.variantName;
+    final displayName = (variantMeta != null && variantMeta.trim().isNotEmpty)
+        ? variantMeta.trim()
+        : (DdsTemplateResolver.templateDisplayNames[templateId] ??
+            (metaVariant != null && metaVariant.isNotEmpty && metaVariant != 'Standard'
+                ? metaVariant
+                : _formatDisplayNameFromFileName(fileName)));
 
     // Bounding box & area
     double minX = double.infinity, minY = double.infinity;

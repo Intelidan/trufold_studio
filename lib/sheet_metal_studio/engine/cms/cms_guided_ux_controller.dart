@@ -77,6 +77,14 @@ class CmsGuidedUxController extends ChangeNotifier {
 
       // 1. Check for companion template DSF if available
       final dsfCandidates = [
+        'assets/dsf_templates/trunking_accessories/${document.itemName}.dsf',
+        'assets/dsf_templates/trunking_accessories/${document.itemName.replaceAll('.dxf', '.dsf')}',
+        'assets/dsf_templates/${document.itemName}.dsf',
+        'assets/dsf_templates/${document.itemName.replaceAll('.dxf', '.dsf')}',
+        if (!kIsWeb) ...[
+          '${File(Platform.resolvedExecutable).parent.path}/assets/dsf_templates/trunking_accessories/${document.itemName}.dsf',
+          '${File(Platform.resolvedExecutable).parent.path}/assets/dsf_templates/trunking_accessories/${document.itemName.replaceAll('.dxf', '.dsf')}',
+        ],
         'assets/dxf_templates/trunking_accessories/${document.itemName}.dsf',
         'assets/dxf_templates/trunking_accessories/${document.itemName.replaceAll('.dxf', '.dsf')}',
         document.itemName.replaceAll('.dxf', '.dsf'),
@@ -171,6 +179,7 @@ class CmsGuidedUxController extends ChangeNotifier {
       stageTitle: 'Stage 1: Bends Defined',
       stageSubtitle: '${structuralBends.length} bends, ${flanges.length} flanges. Ready for automatic port mapping.',
       progress: 0.33,
+      isDismissed: true,
       learnedMilestones: [
         CmsLearnedMilestone(
           title: 'Stage 1 Loaded',
@@ -190,6 +199,7 @@ class CmsGuidedUxController extends ChangeNotifier {
       stageTitle: 'Stage 2: Ports Mapped',
       stageSubtitle: '${ports.length} physical channel ports verified. Ready for Teach Scaling.',
       progress: 0.66,
+      isDismissed: true,
       learnedMilestones: [
         CmsLearnedMilestone(
           title: 'Stage 2 Loaded',
@@ -408,6 +418,12 @@ class CmsGuidedUxController extends ChangeNotifier {
   /// Resets controller state.
   void reset() {
     _state = const CmsUxState();
+    notifyListeners();
+  }
+
+  /// Dismisses the floating guided stage overlay card.
+  void dismiss() {
+    _state = _state.copyWith(isDismissed: true);
     notifyListeners();
   }
 

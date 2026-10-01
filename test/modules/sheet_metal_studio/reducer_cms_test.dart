@@ -19,7 +19,7 @@ void main() {
   late DsfDocument baselineDoc;
 
   setUpAll(() {
-    final file = File('assets/dxf_templates/trunking_accessories/reducer_100x100x50x50.dsf');
+    final file = File('assets/dsf_templates/trunking_accessories/reducer_100x100x50x50.dsf');
     expect(file.existsSync(), isTrue, reason: 'Reducer template file must exist');
     final jsonStr = file.readAsStringSync();
     baselineDoc = DsfDocument.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);

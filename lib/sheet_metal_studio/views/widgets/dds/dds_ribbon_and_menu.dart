@@ -215,6 +215,8 @@ class DdsMenuBarWidget extends StatelessWidget {
   final VoidCallback? onSyncFromCad;
   final VoidCallback? onToggleProperties;
   final VoidCallback? onToggleCmsInspector;
+  final VoidCallback? onUndo;
+  final VoidCallback? onRedo;
   final VoidCallback? onClose;
 
   const DdsMenuBarWidget({
@@ -236,6 +238,8 @@ class DdsMenuBarWidget extends StatelessWidget {
     this.onSyncFromCad,
     this.onToggleProperties,
     this.onToggleCmsInspector,
+    this.onUndo,
+    this.onRedo,
     this.onClose,
   });
 
@@ -277,8 +281,8 @@ class DdsMenuBarWidget extends StatelessWidget {
             context,
             title: 'Edit',
             items: [
-              _MenuItem('Undo', Icons.undo, 'Ctrl+Z', () {}),
-              _MenuItem('Redo', Icons.redo, 'Ctrl+Y', () {}),
+              _MenuItem('Undo', Icons.undo, 'Ctrl+Z', onUndo ?? () {}),
+              _MenuItem('Redo', Icons.redo, 'Ctrl+Y', onRedo ?? () {}),
               const _MenuDivider(),
               _MenuItem('Clear All Sheet Markup', Icons.clear_all, '', () {}),
               _MenuItem('Reset 3D Dimension Callouts', Icons.refresh, '', () {}),
@@ -404,7 +408,7 @@ class DdsMenuBarWidget extends StatelessWidget {
           title,
           style: const TextStyle(
             color: Color(0xFFCBD5E1),
-            fontSize: 11.0,
+            fontSize: 12.0,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -423,7 +427,7 @@ class DdsRibbonToolbarWidget extends StatelessWidget {
   final VoidCallback onExportPdf;
   final VoidCallback onOpenLibrary;
   final VoidCallback onImportExcel;
-  final VoidCallback onAddSheet;
+  final VoidCallback? onAddSheet;
   final VoidCallback onEditInMainCad;
   final VoidCallback onSyncFromCad;
   final VoidCallback? onToggleProperties;
@@ -452,7 +456,7 @@ class DdsRibbonToolbarWidget extends StatelessWidget {
     required this.onExportPdf,
     required this.onOpenLibrary,
     required this.onImportExcel,
-    required this.onAddSheet,
+    this.onAddSheet,
     required this.onEditInMainCad,
     required this.onSyncFromCad,
     required this.onToggleProperties,
@@ -478,8 +482,9 @@ class DdsRibbonToolbarWidget extends StatelessWidget {
     final area = takeoff != null ? '${takeoff.blankSurfaceAreaM2.toStringAsFixed(3)} m²' : '0.185 m²';
 
     return Container(
-      height: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      width: double.infinity,
+      height: 66,
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 3.0),
       decoration: const BoxDecoration(
         color: Color(0xFF0F172A),
         border: Border(
@@ -526,27 +531,20 @@ class DdsRibbonToolbarWidget extends StatelessWidget {
             // Group 2: Library & Part Insertion
             // =================================================================
             _buildRibbonGroup(
-              title: 'ADD FROM LIBRARY',
+              title: 'SHEETS & IMPORT',
               children: [
-                _buildLargeActionCard(
-                  icon: Icons.collections_bookmark,
-                  title: 'CMS Library',
-                  subtitle: 'Reducers, Tees, Trays',
-                  gradient: const [Color(0xFF0284C7), Color(0xFF0369A1)],
-                  onTap: onOpenLibrary,
-                ),
-                const SizedBox(width: 6),
                 _buildRibbonButton(
                   icon: Icons.table_chart,
                   label: 'Excel Import',
                   accentColor: const Color(0xFF10B981),
                   onTap: onImportExcel,
                 ),
-                _buildRibbonButton(
-                  icon: Icons.add_to_photos_outlined,
-                  label: 'Add Sheet',
-                  onTap: onAddSheet,
-                ),
+                if (onAddSheet != null)
+                  _buildRibbonButton(
+                    icon: Icons.add_to_photos_outlined,
+                    label: 'Add Sheet',
+                    onTap: onAddSheet,
+                  ),
               ],
             ),
             const VerticalDivider(width: 14, thickness: 1.0, color: Color(0xFF1E293B)),
@@ -571,18 +569,18 @@ class DdsRibbonToolbarWidget extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.receipt_long, size: 10, color: Color(0xFF38BDF8)),
+                          const Icon(Icons.receipt_long, size: 12, color: Color(0xFF38BDF8)),
                           const SizedBox(width: 4),
                           Text(
                             'PO: ${orderLine?.orderNumber.isNotEmpty == true ? orderLine!.orderNumber : "PO-88210"} (Line ${orderLine?.lineNumber ?? "001"})',
-                            style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Colors.white),
+                            style: const TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ],
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Qty: $qty pcs  |  Net: $mass  |  Area: $area',
-                        style: const TextStyle(fontSize: 8.0, color: Color(0xFF94A3B8)),
+                        style: const TextStyle(fontSize: 9.0, color: Color(0xFF94A3B8)),
                       ),
                     ],
                   ),
@@ -649,22 +647,21 @@ class DdsRibbonToolbarWidget extends StatelessWidget {
     required List<Widget> children,
   }) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Expanded(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: children,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: children,
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 3),
         Text(
           title,
           style: const TextStyle(
-            fontSize: 7.5,
-            fontWeight: FontWeight.bold,
+            fontSize: 9.0,
+            fontWeight: FontWeight.w600,
             color: Color(0xFF64748B),
             letterSpacing: 0.6,
           ),
@@ -686,7 +683,7 @@ class DdsRibbonToolbarWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(5),
         hoverColor: Colors.white12,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 4.0),
+          padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -694,7 +691,7 @@ class DdsRibbonToolbarWidget extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 label,
-                style: const TextStyle(fontSize: 8.5, color: Color(0xFFCBD5E1), fontWeight: FontWeight.w500),
+                style: const TextStyle(fontSize: 10.5, color: Color(0xFFCBD5E1), fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -712,32 +709,32 @@ class DdsRibbonToolbarWidget extends StatelessWidget {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(5),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: gradient),
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(5),
           boxShadow: [
-            BoxShadow(color: gradient.first.withValues(alpha: 0.35), blurRadius: 6, offset: const Offset(0, 2)),
+            BoxShadow(color: gradient.first.withValues(alpha: 0.35), blurRadius: 4, offset: const Offset(0, 1)),
           ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 18, color: Colors.white),
-            const SizedBox(width: 7),
+            const SizedBox(width: 6),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: const TextStyle(fontSize: 11.0, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
                 Text(
                   subtitle,
-                  style: const TextStyle(fontSize: 7.5, color: Colors.white70),
+                  style: const TextStyle(fontSize: 8.5, color: Colors.white70),
                 ),
               ],
             ),

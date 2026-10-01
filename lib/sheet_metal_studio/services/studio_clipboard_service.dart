@@ -145,7 +145,7 @@ class StudioClipboardService {
         final item = StudioClipboardItem(
           type: ClipboardContentType.bend,
           data: bend.toJson(),
-          label: 'Bend Line (${bend.id} ${bend.direction.name.toUpperCase()} ${bend.targetAngleDeg.toStringAsFixed(0)}°)',
+          label: 'Bend Line (${bend.id} ${bend.direction.name.toUpperCase()} ${bend.displayAngleDeg.toStringAsFixed(0)}°)',
         );
         return _storeClipboard(item);
       }

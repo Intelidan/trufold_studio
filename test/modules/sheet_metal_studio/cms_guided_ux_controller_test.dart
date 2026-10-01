@@ -19,7 +19,7 @@ import 'package:trufold_studio/sheet_metal_studio/viewmodels/sheet_metal_studio_
 void main() {
   group('CmsGuidedUxController 7-Stage Autonomous State Machine', () {
     test('1. Runs full end-to-end automatic discovery on pre-bent 45_deg_bend_100x100.dsf', () async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       expect(file.existsSync(), isTrue);
 
       final content = await file.readAsString();
@@ -60,7 +60,7 @@ void main() {
     });
 
     test('2. SheetMetalStudioViewModel runs startCleanCmsDiscovery end-to-end on DSF', () async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       final content = await file.readAsString();
       final json = jsonDecode(content) as Map<String, dynamic>;
       final doc = DsfDocument.fromJson(json);

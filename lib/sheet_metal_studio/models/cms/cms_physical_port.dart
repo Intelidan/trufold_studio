@@ -148,6 +148,12 @@ class CmsPhysicalPort {
   /// Floor edge endpoint 2 in 3D world space.
   final CadPoint3D? floorP2;
 
+  /// Floor edge / aperture endpoint 1 in 2D flat blank space (e.g. through coupler hole centers).
+  final CadPoint2D? flatP1;
+
+  /// Floor edge / aperture endpoint 2 in 2D flat blank space (e.g. through coupler hole centers).
+  final CadPoint2D? flatP2;
+
   /// Derived 4 corners of the channel mouth [P1 (floor), P3 (lip), P4 (lip), P2 (floor)].
   /// Note: This is derived 3D geometry folded from the canonical 2D sheet, not the permanent semantic identity.
   final List<CadPoint3D> derivedMouthCorners;
@@ -189,6 +195,8 @@ class CmsPhysicalPort {
     this.boundaryEdgeIds = const [],
     this.floorP1,
     this.floorP2,
+    this.flatP1,
+    this.flatP2,
     this.derivedMouthCorners = const [],
     this.calloutAnchor,
     this.confidence = 1.0,
@@ -218,6 +226,8 @@ class CmsPhysicalPort {
     List<String>? boundaryEdgeIds,
     CadPoint3D? floorP1,
     CadPoint3D? floorP2,
+    CadPoint2D? flatP1,
+    CadPoint2D? flatP2,
     List<CadPoint3D>? derivedMouthCorners,
     CadPoint3D? calloutAnchor,
     double? confidence,
@@ -243,6 +253,8 @@ class CmsPhysicalPort {
       boundaryEdgeIds: boundaryEdgeIds ?? this.boundaryEdgeIds,
       floorP1: floorP1 ?? this.floorP1,
       floorP2: floorP2 ?? this.floorP2,
+      flatP1: flatP1 ?? this.flatP1,
+      flatP2: flatP2 ?? this.flatP2,
       derivedMouthCorners: derivedMouthCorners ?? this.derivedMouthCorners,
       calloutAnchor: calloutAnchor ?? this.calloutAnchor,
       confidence: confidence ?? this.confidence,
@@ -270,6 +282,8 @@ class CmsPhysicalPort {
         'boundaryEdgeIds': boundaryEdgeIds,
         if (floorP1 != null) 'floorP1': [floorP1!.x, floorP1!.y, floorP1!.z],
         if (floorP2 != null) 'floorP2': [floorP2!.x, floorP2!.y, floorP2!.z],
+        if (flatP1 != null) 'flatP1': [flatP1!.x, flatP1!.y],
+        if (flatP2 != null) 'flatP2': [flatP2!.x, flatP2!.y],
         if (derivedMouthCorners.isNotEmpty)
           'derivedMouthCorners': derivedMouthCorners.map((p) => [p.x, p.y, p.z]).toList(),
         if (calloutAnchor != null) 'calloutAnchor': [calloutAnchor!.x, calloutAnchor!.y, calloutAnchor!.z],
@@ -341,6 +355,8 @@ class CmsPhysicalPort {
       boundaryEdgeIds: (json['boundaryEdgeIds'] as List<dynamic>?)?.cast<String>() ?? const [],
       floorP1: json['floorP1'] != null ? parseVec(json['floorP1'], const CadPoint3D(0, 0, 0)) : null,
       floorP2: json['floorP2'] != null ? parseVec(json['floorP2'], const CadPoint3D(0, 0, 0)) : null,
+      flatP1: json['flatP1'] != null ? parseVec2(json['flatP1'], const CadPoint2D(0, 0)) : null,
+      flatP2: json['flatP2'] != null ? parseVec2(json['flatP2'], const CadPoint2D(0, 0)) : null,
       derivedMouthCorners: parseVecList(json['derivedMouthCorners']),
       calloutAnchor: json['calloutAnchor'] != null ? parseVec(json['calloutAnchor'], const CadPoint3D(0, 0, 0)) : null,
       confidence: (json['confidence'] as num?)?.toDouble() ?? 1.0,

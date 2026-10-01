@@ -121,6 +121,8 @@ class Cms3DOpeningDetector {
         final isOutsideRiser = !isReducer && docType.contains('outside') && (docType.contains('riser') || docType.contains('rise'));
         final isInsideRiser = !isReducer && ((docType.contains('inside') && (docType.contains('riser') || docType.contains('rise'))) ||
             CmsScalingController.isInsideRiserGeometry(document));
+        final isTee = docType.contains('tee');
+        final isCross = docType.contains('cross');
 
         if (isOutsideRiser) {
           final cheekBends = document.bends
@@ -267,9 +269,9 @@ class Cms3DOpeningDetector {
             ..sort((a, b) => ((a.p1.y + a.p2.y) / 2.0).compareTo((b.p1.y + b.p2.y) / 2.0));
           final is90InsideRiser = bends45.length >= 2;
 
-          final yMid = bends45.isNotEmpty
+          final yMid = is90InsideRiser
               ? (bends45.first.p1.y + bends45.last.p1.y) / 2.0
-              : floorCenter.y;
+              : (bends45.isNotEmpty ? bends45.first.p1.y - 15.0 : floorCenter.y);
 
           final nominalH = (document.parameters['height'] as num?)?.toDouble() ?? 100.0;
           final halfH = nominalH / 2.0;
@@ -325,8 +327,8 @@ class Cms3DOpeningDetector {
               } else {
                 // 45° Inside Riser: bottom port is straight (horizontal floor)
                 finalNormal = const CadPoint3D(0.0, -1.0, 0.0);
-                finalP1_3d = CadPoint3D(m1_3d.x, m1_3d.y, m1_3d.z - halfH);
-                finalP2_3d = CadPoint3D(m2_3d.x, m2_3d.y, m2_3d.z - halfH);
+                finalP1_3d = CadPoint3D(m1_3d.x, p1_3d.y, p1_3d.z);
+                finalP2_3d = CadPoint3D(m2_3d.x, p2_3d.y, p2_3d.z);
               }
             }
 
@@ -405,6 +407,91 @@ class Cms3DOpeningDetector {
             final c2FlatY = cheek2Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek2Punches.length;
             p1Flat = CadPoint2D(c1FlatX, c1FlatY);
             p2Flat = CadPoint2D(c2FlatX, c2FlatY);
+          }
+        } else if ((isTee || isCross) && docType.contains('trunking')) {
+          // For Trunking Tee and Cross fittings, the physical channel mouth is strictly the planar floor edge
+          // (terminal boundary of the channel bed), spanning perpendicularly between sidewalls.
+          // Never deflect the port angle using cheek punches from non-collinear walls.
+        } else {
+          // General / Bend / Tray accessory opening:
+          // If there are explicit coupler holes marked on the sidewalls of this opening,
+          // the opening mouth plane and border MUST pass directly through the center
+          // of the coupler holes, provided the cheek vector is aligned with the opening!
+          final couplerPunches = document.punches.where((p) => p.role == CncPunchRole.coupler).toList();
+          if (couplerPunches.isNotEmpty) {
+            final portCouplers = couplerPunches.where((p) {
+              final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+              final distAlongNormal = (mid3D.x - pt3d.x) * finalNormal.x +
+                                      (mid3D.y - pt3d.y) * finalNormal.y +
+                                      (mid3D.z - pt3d.z) * finalNormal.z;
+              if (distAlongNormal < -15.0 || distAlongNormal > 80.0) return false;
+              final distAcross = ((pt3d.x - mid3D.x) * uW.x + (pt3d.y - mid3D.y) * uW.y + (pt3d.z - mid3D.z) * uW.z).abs();
+              return distAcross <= edgeLen / 2.0 + 35.0;
+            }).toList();
+
+            final cheek1Punches = portCouplers.where((p) {
+              final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+              return pt3d.distanceTo(p1_3d) < pt3d.distanceTo(p2_3d);
+            }).toList();
+
+            final cheek2Punches = portCouplers.where((p) {
+              final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+              return pt3d.distanceTo(p2_3d) <= pt3d.distanceTo(p1_3d);
+            }).toList();
+
+            if (cheek1Punches.isNotEmpty && cheek2Punches.isNotEmpty) {
+              // Item 5: The port aperture/border must pass strictly through the column of coupler holes
+              // AT THE END EDGE (the outermost column closest to the port opening mouth plane).
+              final cheek1WithDist = cheek1Punches.map((p) {
+                final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+                return (punch: p, pt3d: pt3d, dist: pt3d.distanceTo(p1_3d));
+              }).toList();
+              final minD1 = cheek1WithDist.map((e) => e.dist).reduce(math.min);
+              final endEdgeCheek1 = cheek1WithDist.where((e) => e.dist <= minD1 + 12.0).toList();
+
+              final cheek2WithDist = cheek2Punches.map((p) {
+                final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+                return (punch: p, pt3d: pt3d, dist: pt3d.distanceTo(p2_3d));
+              }).toList();
+              final minD2 = cheek2WithDist.map((e) => e.dist).reduce(math.min);
+              final endEdgeCheek2 = cheek2WithDist.where((e) => e.dist <= minD2 + 12.0).toList();
+
+              double s1x = 0, s1y = 0, s1z = 0;
+              for (final e in endEdgeCheek1) {
+                s1x += e.pt3d.x; s1y += e.pt3d.y; s1z += e.pt3d.z;
+              }
+              final m1_3d = CadPoint3D(s1x / endEdgeCheek1.length, s1y / endEdgeCheek1.length, s1z / endEdgeCheek1.length);
+
+              double s2x = 0, s2y = 0, s2z = 0;
+              for (final e in endEdgeCheek2) {
+                s2x += e.pt3d.x; s2y += e.pt3d.y; s2z += e.pt3d.z;
+              }
+              final m2_3d = CadPoint3D(s2x / endEdgeCheek2.length, s2y / endEdgeCheek2.length, s2z / endEdgeCheek2.length);
+
+              final cheekDx = m2_3d.x - m1_3d.x;
+              final cheekDy = m2_3d.y - m1_3d.y;
+              final cheekDz = m2_3d.z - m1_3d.z;
+              final cheekLen = math.sqrt(cheekDx * cheekDx + cheekDy * cheekDy + cheekDz * cheekDz);
+              final isAligned = cheekLen > 1e-3 &&
+                  ((cheekDx / cheekLen) * uW.x + (cheekDy / cheekLen) * uW.y + (cheekDz / cheekLen) * uW.z).abs() > 0.985;
+
+              if (isAligned) {
+                final avgPt = CadPoint3D((m1_3d.x + m2_3d.x) / 2.0, (m1_3d.y + m2_3d.y) / 2.0, (m1_3d.z + m2_3d.z) / 2.0);
+                final distAlongNormal = (mid3D.x - avgPt.x) * finalNormal.x +
+                                        (mid3D.y - avgPt.y) * finalNormal.y +
+                                        (mid3D.z - avgPt.z) * finalNormal.z;
+
+                final shiftX = -distAlongNormal * finalNormal.x;
+                final shiftY = -distAlongNormal * finalNormal.y;
+                final shiftZ = -distAlongNormal * finalNormal.z;
+
+                finalP1_3d = CadPoint3D(p1_3d.x + shiftX, p1_3d.y + shiftY, p1_3d.z + shiftZ);
+                finalP2_3d = CadPoint3D(p2_3d.x + shiftX, p2_3d.y + shiftY, p2_3d.z + shiftZ);
+
+                p1Flat = CadPoint2D(p1Flat.x + shiftX, p1Flat.y + shiftY);
+                p2Flat = CadPoint2D(p2Flat.x + shiftX, p2Flat.y + shiftY);
+              }
+            }
           }
         }
 

@@ -14,7 +14,7 @@ void main() {
   group('DSF Template Library Service Tests', () {
     test('1. Loads all standard DSF templates synchronously from assets directory', () {
       final items = DsfLibraryService.loadAllTemplatesSync(
-        baseDirectory: 'assets/dxf_templates/trunking_accessories',
+        baseDirectory: 'assets/dsf_templates/trunking_accessories',
       );
 
       expect(items, isNotEmpty);
@@ -46,7 +46,7 @@ void main() {
 
     test('2. Adding DSF library item to DdsDocument creates populated sheet and updates TOC', () {
       final items = DsfLibraryService.loadAllTemplatesSync(
-        baseDirectory: 'assets/dxf_templates/trunking_accessories',
+        baseDirectory: 'assets/dsf_templates/trunking_accessories',
       );
       final reducerItem = items.firstWhere((i) => i.templateId == 'trunking_reducer');
 

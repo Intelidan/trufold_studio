@@ -12,12 +12,13 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../models/dsf_document.dart';
 import '../../models/dds/dds_product_instance.dart';
 
 class DdsTemplateResolver {
-  static const String defaultTemplatesDir = 'assets/dxf_templates/trunking_accessories';
+  static const String defaultTemplatesDir = 'assets/dsf_templates/trunking_accessories';
 
   /// Standard template registry mapping logical templateIds to baseline DSF filenames.
   static const Map<String, String> standardTemplates = {
@@ -36,17 +37,17 @@ class DdsTemplateResolver {
 
   /// Template display names for user-friendly UI listings.
   static const Map<String, String> templateDisplayNames = {
-    'trunking_reducer': 'Straight Reducer (Concentric / Eccentric)',
-    'trunking_equal_tee': 'Equal Gusset Tee',
-    'trunking_unequal_tee': 'Unequal Gusset Tee',
-    'trunking_equal_cross': 'Equal Gusset Cross',
-    'trunking_unequal_cross': 'Unequal Gusset Cross',
-    'trunking_bend_90': '90° Flat Gusset Bend',
-    'trunking_bend_45': '45° Flat Gusset Bend',
-    'trunking_inside_riser_90': '90° Inside Vertical Riser',
-    'trunking_outside_riser_90': '90° Outside Vertical Riser',
-    'trunking_inside_riser_45': '45° Inside Vertical Riser',
-    'trunking_outside_riser_45': '45° Outside Vertical Riser',
+    'trunking_reducer': 'Straight Reducer',
+    'trunking_equal_tee': 'Equal Tee',
+    'trunking_unequal_tee': 'Unequal Tee',
+    'trunking_equal_cross': 'Equal Cross',
+    'trunking_unequal_cross': 'Unequal Cross',
+    'trunking_bend_90': '90° Flat Bend',
+    'trunking_bend_45': '45° Flat Bend',
+    'trunking_inside_riser_90': '90° Inside Riser',
+    'trunking_outside_riser_90': '90° Outside Riser',
+    'trunking_inside_riser_45': '45° Inside Riser',
+    'trunking_outside_riser_45': '45° Outside Riser',
   };
 
   /// Resolves a template synchronously from disk (used by desktop / test runner).
@@ -55,19 +56,30 @@ class DdsTemplateResolver {
     if (fileName == null) return null;
 
     final dir = baseDirectory ?? defaultTemplatesDir;
-    final file = File('$dir/$fileName');
-    if (!file.existsSync()) {
-      // Fallback: search in parent assets
-      final altFile = File(fileName);
-      if (altFile.existsSync()) {
-        final content = altFile.readAsStringSync();
-        return DsfDocument.fromJson(jsonDecode(content) as Map<String, dynamic>);
-      }
-      return null;
-    }
+    final candidatePaths = [
+      '$dir/$fileName',
+      'assets/dsf_templates/trunking_accessories/$fileName',
+      'assets/dsf_templates/$fileName',
+      if (!kIsWeb) ...[
+        '${File(Platform.resolvedExecutable).parent.path}/$dir/$fileName',
+        '${File(Platform.resolvedExecutable).parent.path}/assets/dsf_templates/trunking_accessories/$fileName',
+        '${File(Platform.resolvedExecutable).parent.path}/assets/dsf_templates/$fileName',
+      ],
+      // Fallback: search in legacy path if exists
+      'assets/dxf_templates/trunking_accessories/$fileName',
+      fileName,
+    ];
 
-    final content = file.readAsStringSync();
-    return DsfDocument.fromJson(jsonDecode(content) as Map<String, dynamic>);
+    for (final p in candidatePaths) {
+      final file = File(p);
+      if (file.existsSync()) {
+        try {
+          final content = file.readAsStringSync();
+          return DsfDocument.fromJson(jsonDecode(content) as Map<String, dynamic>);
+        } catch (_) {}
+      }
+    }
+    return null;
   }
 
   /// Resolves a template asynchronously via Flutter AssetBundle (for live UI).
@@ -76,15 +88,22 @@ class DdsTemplateResolver {
     if (fileName == null) return null;
 
     final dir = baseDirectory ?? defaultTemplatesDir;
-    final path = '$dir/$fileName';
+    final candidateAssetPaths = [
+      '$dir/$fileName',
+      'assets/dsf_templates/trunking_accessories/$fileName',
+      'assets/dsf_templates/$fileName',
+      'assets/dxf_templates/trunking_accessories/$fileName',
+    ];
 
-    try {
-      final jsonStr = await rootBundle.loadString(path);
-      return DsfDocument.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);
-    } catch (_) {
-      // Fallback to sync File check on desktop
-      return resolveTemplateSync(ref, baseDirectory: baseDirectory);
+    for (final assetPath in candidateAssetPaths) {
+      try {
+        final jsonStr = await rootBundle.loadString(assetPath);
+        return DsfDocument.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);
+      } catch (_) {}
     }
+
+    // Fallback to sync File check on desktop
+    return resolveTemplateSync(ref, baseDirectory: baseDirectory);
   }
 
   /// Helper finding the baseline filename from ID or direct filename.

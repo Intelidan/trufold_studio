@@ -20,7 +20,7 @@ import 'package:trufold_studio/sheet_metal_studio/engine/cms/cms_opening_plane_a
 void main() {
   group('3D Physical Opening Discovery (Sprint 2)', () {
     test('1. Discovers and accurately measures 2 physical openings from 45_deg_bend_100x100.dsf 3D mesh', () async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       expect(file.existsSync(), isTrue);
 
       final content = await file.readAsString();
@@ -72,7 +72,7 @@ void main() {
     });
 
     test('2. Discovers both physical openings on 45_deg_inside_riser_100x100 with 3 bends', () async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
       expect(file.existsSync(), isTrue);
 
       final content = await file.readAsString();

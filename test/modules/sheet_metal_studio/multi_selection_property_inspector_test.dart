@@ -20,7 +20,7 @@ void main() {
     late SheetMetalStudioViewModel vm;
 
     setUp(() async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       final doc = DsfDocument.fromJson(jsonDecode(await file.readAsString()) as Map<String, dynamic>);
       vm = SheetMetalStudioViewModel();
       vm.loadDocument(doc);
@@ -119,7 +119,7 @@ void main() {
               onNewTab: () {},
               onOpenFile: () {},
               onSaveFile: () {},
-              onConfirmClearAll: (_, __) async {},
+              onConfirmClearAll: (_, _) async {},
             ),
           ),
         ),
@@ -152,7 +152,7 @@ void main() {
               onNewTab: () {},
               onOpenFile: () {},
               onSaveFile: () {},
-              onConfirmClearAll: (_, __) async {},
+              onConfirmClearAll: (_, _) async {},
             ),
           ),
         ),
@@ -174,5 +174,49 @@ void main() {
       // Must be toggled to false
       expect(vm.isPropertyInspectorOpen, isFalse);
     });
+
+    testWidgets('Opening CadPropertyInspector while CMS scaling is active renders DocumentPropertySheet and EntityPropertySheet without infinite width error',
+        (tester) async {
+      vm.startTeachScaling();
+      expect(vm.scalingController, isNotNull);
+
+      // Render inside a Stack + Positioned just like sheet_metal_studio_screen.dart:1317
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Stack(
+              children: [
+                Positioned(
+                  left: 20,
+                  top: 20,
+                  child: GestureDetector(
+                    child: ListenableBuilder(
+                      listenable: vm,
+                      builder: (context, _) => CadPropertyInspector(
+                        viewModel: vm,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Must render DocumentPropertySheet and NOT crash with infinite width
+      expect(find.text('DOCUMENT PROPERTIES'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // Select an individual punch entity
+      final punchId = vm.document.allPunchesRaw.first.id;
+      vm.selectPunch(punchId);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PunchPropertySheet), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 }
+

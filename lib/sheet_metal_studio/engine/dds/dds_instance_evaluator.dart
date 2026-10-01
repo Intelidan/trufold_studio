@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/cad_primitives.dart';
 import '../../models/dsf_document.dart';
+import '../../models/fold_bend_line.dart';
 import '../../models/cms/cms_product_contract.dart';
 import '../../models/cms/cms_physical_port.dart';
 import '../../models/dds/dds_product_instance.dart';
@@ -80,7 +81,26 @@ class DdsInstanceEvaluator {
       }
     }
 
-    final scaledBaseDoc = controller.currentPreview?.scaledDocument ?? baselineDoc;
+    var scaledBaseDoc = controller.currentPreview?.scaledDocument ?? baselineDoc;
+
+    // Apply flange direction override (0.0 = Inside Flange (BEND_UP), 1.0 = Outside Return (BEND_DOWN))
+    if (instance.instanceParameters.containsKey('flange_direction')) {
+      final isInside = (instance.instanceParameters['flange_direction'] ?? 0.0) == 0.0;
+      final targetDir = isInside ? BendDirection.up : BendDirection.down;
+      final targetLayer = isInside ? 'BEND_UP' : 'BEND_DOWN';
+      final updatedBends = scaledBaseDoc.bends.map((b) {
+        final isFlange = b.role == BendLineRole.flange ||
+            b.layer.toUpperCase().contains('FLANGE') ||
+            b.id.toUpperCase().startsWith('FL') ||
+            b.parentFaceId.toUpperCase().contains('FLANGE') ||
+            b.childFaceId.toUpperCase().contains('FLANGE');
+        if (isFlange) {
+          return b.copyWith(direction: targetDir, layer: targetLayer);
+        }
+        return b;
+      }).toList();
+      scaledBaseDoc = scaledBaseDoc.copyWith(bends: updatedBends);
+    }
 
     // 3. Generate Live Parametric Cover
     TrunkingCoverData? coverData;

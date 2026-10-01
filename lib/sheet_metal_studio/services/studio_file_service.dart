@@ -43,14 +43,65 @@ class RawPickedFile {
 }
 
 class StudioFileService {
-  /// Picks raw files without parsing immediately, allowing UI to run diagnostics.
-  static Future<List<RawPickedFile>> pickRawFiles() async {
+  /// Ensures initialDirectory passed to FilePicker is an absolute, existing
+  /// filesystem path with native separators on desktop. Returns null if invalid
+  /// or non-existent, preventing Windows Shell32 (SHCreateItemFromParsingName)
+  /// from throwing HRESULT 0x80070057: "The parameter is incorrect".
+  static String? _sanitizeInitialDirectory(String? path) {
+    if (path == null || path.trim().isEmpty || kIsWeb) return null;
     try {
+      final dir = io.Directory(path).absolute;
+      if (dir.existsSync()) {
+        return io.Platform.isWindows ? dir.path.replaceAll('/', '\\') : dir.path;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Returns the canonical directory for DSF templates, resolving properly on
+  /// both local development environments and standalone Windows release builds.
+  /// Always returns a fully-qualified, verified absolute path or null.
+  static String? getDsfTemplatesDirectoryPath({String subDirectory = 'trunking_accessories'}) {
+    if (!kIsWeb) {
+      try {
+        // 1. Check relative to current working directory
+        final cwdSub = io.Directory('assets/dsf_templates/$subDirectory').absolute;
+        if (cwdSub.existsSync()) {
+          return io.Platform.isWindows ? cwdSub.path.replaceAll('/', '\\') : cwdSub.path;
+        }
+        final cwdRoot = io.Directory('assets/dsf_templates').absolute;
+        if (cwdRoot.existsSync()) {
+          return io.Platform.isWindows ? cwdRoot.path.replaceAll('/', '\\') : cwdRoot.path;
+        }
+
+        // 2. Check relative to running executable (release desktop builds)
+        final exeDir = io.File(io.Platform.resolvedExecutable).parent.absolute.path;
+        final exeSub = io.Directory('$exeDir\\assets\\dsf_templates\\$subDirectory');
+        if (exeSub.existsSync()) {
+          return io.Platform.isWindows ? exeSub.path.replaceAll('/', '\\') : exeSub.path;
+        }
+        final exeRoot = io.Directory('$exeDir\\assets\\dsf_templates');
+        if (exeRoot.existsSync()) {
+          return io.Platform.isWindows ? exeRoot.path.replaceAll('/', '\\') : exeRoot.path;
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  /// Picks raw files without parsing immediately, allowing UI to run diagnostics.
+  static Future<List<RawPickedFile>> pickRawFiles({
+    String? initialDirectory,
+    List<String>? allowedExtensions,
+  }) async {
+    try {
+      final sanitizedDir = _sanitizeInitialDirectory(initialDirectory ?? getDsfTemplatesDirectoryPath());
       final List<PlatformFile> files = await FilePicker.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['dsf', 'dxf', 'dds'],
+        allowedExtensions: allowedExtensions ?? ['dsf', 'dxf', 'dds'],
         // ignore: deprecated_member_use
         allowMultiple: true,
+        initialDirectory: sanitizedDir,
       );
 
       if (files.isEmpty) {
@@ -86,13 +137,18 @@ class StudioFileService {
 
   /// Picks one or more .dsf, .dxf, or .dds files from disk or browser.
   /// Works seamlessly on Windows, macOS, Linux, and Flutter Web.
-  static Future<List<ImportedFileItem>> pickFiles() async {
+  static Future<List<ImportedFileItem>> pickFiles({
+    String? initialDirectory,
+    List<String>? allowedExtensions,
+  }) async {
     try {
+      final sanitizedDir = _sanitizeInitialDirectory(initialDirectory ?? getDsfTemplatesDirectoryPath());
       final List<PlatformFile> files = await FilePicker.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['dsf', 'dxf', 'dds'],
+        allowedExtensions: allowedExtensions ?? ['dsf', 'dxf', 'dds'],
         // ignore: deprecated_member_use
         allowMultiple: true,
+        initialDirectory: sanitizedDir,
       );
 
       if (files.isEmpty) {
@@ -150,18 +206,23 @@ class StudioFileService {
     required String fileName,
     required String content,
     String? dialogTitle,
+    String? initialDirectory,
   }) async {
     try {
       final bytes = Uint8List.fromList(utf8.encode(content));
       final ext = fileName.contains('.')
           ? fileName.split('.').last.toLowerCase()
           : 'dsf';
+      final defaultDir = _sanitizeInitialDirectory(
+        initialDirectory ?? (ext == 'dsf' ? getDsfTemplatesDirectoryPath() : null),
+      );
       final uri = await FilePicker.saveFile(
         fileName: fileName,
         bytes: bytes,
         dialogTitle: dialogTitle ?? 'Save CAD File ($fileName)',
         type: FileType.custom,
         allowedExtensions: [ext],
+        initialDirectory: defaultDir,
       );
       if (uri == null) return null;
       String filePath;
@@ -188,8 +249,14 @@ class StudioFileService {
     required String fileName,
     required String content,
     String? dialogTitle,
+    String? initialDirectory,
   }) async {
-    final res = await saveFileAs(fileName: fileName, content: content, dialogTitle: dialogTitle);
+    final res = await saveFileAs(
+      fileName: fileName,
+      content: content,
+      dialogTitle: dialogTitle,
+      initialDirectory: initialDirectory,
+    );
     return res != null;
   }
 

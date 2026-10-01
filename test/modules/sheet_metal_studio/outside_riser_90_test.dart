@@ -14,7 +14,7 @@ import 'package:trufold_studio/sheet_metal_studio/engine/covers/trunking_cover_g
 
 void main() {
   test('Verify 90 deg outside riser baseline folding and openings structure', () {
-    final file = File('assets/dxf_templates/trunking_accessories/90_deg_outside_riser_100x100.dsf');
+    final file = File('assets/dsf_templates/trunking_accessories/90_deg_outside_riser_100x100.dsf');
     expect(file.existsSync(), isTrue);
 
     final dsf = DsfDocument.fromJson(jsonDecode(file.readAsStringSync()) as Map<String, dynamic>);
@@ -36,7 +36,7 @@ void main() {
     late DsfDocument dsf;
 
     setUp(() {
-      final file = File('assets/dxf_templates/trunking_accessories/90_deg_outside_riser_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/90_deg_outside_riser_100x100.dsf');
       expect(file.existsSync(), isTrue);
       dsf = DsfDocument.fromJson(jsonDecode(file.readAsStringSync()) as Map<String, dynamic>);
       dsf = dsf.copyWith(parameters: {'width': 100.0, 'height': 100.0});

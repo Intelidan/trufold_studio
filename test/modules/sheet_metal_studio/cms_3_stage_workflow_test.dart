@@ -14,7 +14,7 @@ void main() {
     late DsfDocument sampleBendDoc;
 
     setUp(() {
-      final dsfFile = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final dsfFile = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       final json = jsonDecode(dsfFile.readAsStringSync()) as Map<String, dynamic>;
       sampleBendDoc = DsfDocument.fromJson(json);
     });
@@ -142,7 +142,7 @@ void main() {
       });
 
       test('45 deg inside riser discovers 2 ports without ambiguity even if baseFaceId was previously cheek', () async {
-        final riserFile = File('assets/dxf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
+        final riserFile = File('assets/dsf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
         final json = jsonDecode(riserFile.readAsStringSync()) as Map<String, dynamic>;
         var riserDoc = DsfDocument.fromJson(json);
         // Simulate previous stale/bad base face assignment to left cheek

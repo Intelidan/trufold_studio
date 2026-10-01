@@ -14,7 +14,7 @@ void main() {
     late DsfDocument canonicalDoc;
 
     setUp(() {
-      final file = File('assets/dxf_templates/trunking_accessories/unequal_tee_100x100x50x100x100x50x50.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/unequal_tee_100x100x50x100x100x50x50.dsf');
       final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
       canonicalDoc = DsfDocument.fromJson(json);
     });

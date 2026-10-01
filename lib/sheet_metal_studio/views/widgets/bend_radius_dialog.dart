@@ -77,7 +77,7 @@ class _BendRadiusDialogState extends State<BendRadiusDialog> {
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  '${bend.direction == BendDirection.up ? "UP" : "DOWN"} ${bend.targetAngleDeg.toStringAsFixed(1)}° | Sheet Thk: ${thk.toStringAsFixed(1)}mm',
+                  '${bend.direction == BendDirection.up ? "UP" : "DOWN"} ${bend.displayAngleDeg.toStringAsFixed(1)}° | Sheet Thk: ${thk.toStringAsFixed(1)}mm',
                   style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                 ),
               ],

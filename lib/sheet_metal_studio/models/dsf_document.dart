@@ -527,4 +527,26 @@ class DsfDocument {
 
     return false;
   }
+
+  /// Resolves the product category stored in this document (e.g. 'Trunking Accessories', 'Tray Accessories').
+  String get category {
+    if (metadata['category'] != null && metadata['category'].toString().isNotEmpty) {
+      return metadata['category'].toString();
+    }
+    if (metadata['fittingCategory'] != null && metadata['fittingCategory'].toString().isNotEmpty) {
+      return metadata['fittingCategory'].toString();
+    }
+    final fittingMeta = metadata['fittingMetadata'];
+    if (fittingMeta is Map && fittingMeta['category'] != null && fittingMeta['category'].toString().isNotEmpty && fittingMeta['category'] != 'None') {
+      return fittingMeta['category'].toString();
+    }
+    final cms = metadata['cmsTemplate'];
+    if (cms is Map && cms['category'] != null && cms['category'].toString().isNotEmpty) {
+      return cms['category'].toString();
+    }
+    if (templateParameters.isNotEmpty && templateParameters.first.category.isNotEmpty) {
+      return templateParameters.first.category;
+    }
+    return '';
+  }
 }

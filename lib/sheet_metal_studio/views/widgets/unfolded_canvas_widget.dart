@@ -94,12 +94,7 @@ class UnfoldedCanvasWidget extends StatefulWidget {
   final bool renderFloatingInspectors;
   final bool showInCanvasToolRibbon;
 
-  const UnfoldedCanvasWidget({
-    super.key,
-    required this.viewModel,
-    this.renderFloatingInspectors = true,
-    this.showInCanvasToolRibbon = true,
-  });
+  const UnfoldedCanvasWidget({super.key, required this.viewModel, this.renderFloatingInspectors = true, this.showInCanvasToolRibbon = true});
 
   @override
   State<UnfoldedCanvasWidget> createState() => _UnfoldedCanvasWidgetState();
@@ -146,8 +141,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
 
   void _onViewModelChanged() {
     if (_lastDoc != null && !identical(_lastDoc, widget.viewModel.document)) {
-      if (_activeDrag == _DragTarget.none &&
-          !widget.viewModel.isDraggingObject) {
+      if (_activeDrag == _DragTarget.none && !widget.viewModel.isDraggingObject) {
         _boxSelectStart = null;
         _boxSelectCurrent = null;
       }
@@ -158,21 +152,10 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
       widget.viewModel.clearPendingInPlaceEdit();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        final rect =
-            _dimensionBadgeRects[pendingDimId] ??
-            const Rect.fromLTWH(100, 100, 60, 22);
+        final rect = _dimensionBadgeRects[pendingDimId] ?? const Rect.fromLTWH(100, 100, 60, 22);
         final currentValue =
-            _dimensionBadgeValues[pendingDimId] ??
-            widget.viewModel.document.dimensions
-                .where((d) => d.id == pendingDimId)
-                .firstOrNull
-                ?.measuredValue ??
-            0.0;
-        _startInPlaceDimensionEdit(
-          dimId: pendingDimId,
-          badgeRect: rect,
-          initialValue: currentValue,
-        );
+            _dimensionBadgeValues[pendingDimId] ?? widget.viewModel.document.dimensions.where((d) => d.id == pendingDimId).firstOrNull?.measuredValue ?? 0.0;
+        _startInPlaceDimensionEdit(dimId: pendingDimId, badgeRect: rect, initialValue: currentValue);
       });
     }
   }
@@ -199,11 +182,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
   Widget build(BuildContext context) {
     final viewModel = widget.viewModel;
 
-    final currentEntity =
-        viewModel.selectedBendId ??
-        viewModel.selectedPunchId ??
-        viewModel.selectedArcId ??
-        viewModel.selectedCutId;
+    final currentEntity = viewModel.selectedBendId ?? viewModel.selectedPunchId ?? viewModel.selectedArcId ?? viewModel.selectedCutId;
     if (currentEntity != null && currentEntity != _lastSelectedEntity) {
       _lastSelectedEntity = currentEntity;
     } else if (currentEntity == null) {
@@ -218,32 +197,20 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
             final size = Size(constraints.maxWidth, constraints.maxHeight);
 
             // Calculate coordinate transform parameters
-            final bw = viewModel.document.blankWidthMm > 0
-                ? viewModel.document.blankWidthMm
-                : 200.0;
-            final bl = viewModel.document.blankLengthMm > 0
-                ? viewModel.document.blankLengthMm
-                : 300.0;
+            final bw = viewModel.document.blankWidthMm > 0 ? viewModel.document.blankWidthMm : 200.0;
+            final bl = viewModel.document.blankLengthMm > 0 ? viewModel.document.blankLengthMm : 300.0;
 
             var effectiveW = bw;
             var effectiveL = bl;
-            if (viewModel.document.cover != null &&
-                viewModel.document.cover!.isVisible2D) {
-              final coverBbox = TrunkingCoverGenerator.calculateDocumentBbox(
-                viewModel.document.cover!.document,
-              );
-              final coverMaxX =
-                  viewModel.document.cover!.offset2D.x + coverBbox.maxX;
-              final coverMaxY =
-                  viewModel.document.cover!.offset2D.y + coverBbox.maxY;
+            if (viewModel.document.cover != null && viewModel.document.cover!.isVisible2D) {
+              final coverBbox = TrunkingCoverGenerator.calculateDocumentBbox(viewModel.document.cover!.document);
+              final coverMaxX = viewModel.document.cover!.offset2D.x + coverBbox.maxX;
+              final coverMaxY = viewModel.document.cover!.offset2D.y + coverBbox.maxY;
               if (coverMaxX > effectiveW) effectiveW = coverMaxX + 40.0;
               if (coverMaxY > effectiveL) effectiveL = coverMaxY + 40.0;
             }
 
-            final fitScale = math.min(
-              (size.width * 0.75) / effectiveW,
-              (size.height * 0.75) / effectiveL,
-            );
+            final fitScale = math.min((size.width * 0.75) / effectiveW, (size.height * 0.75) / effectiveL);
             final scale = fitScale * viewModel.zoom2D;
 
             final cx = size.width / 2.0 + viewModel.pan2D.dx;
@@ -266,51 +233,41 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
             FoldBendLine? selectedBend;
             if (viewModel.selectedBendId != null) {
               try {
-                selectedBend = viewModel.document.bends.firstWhere(
-                  (b) => b.id == viewModel.selectedBendId,
-                );
+                selectedBend = viewModel.document.bends.firstWhere((b) => b.id == viewModel.selectedBendId);
               } catch (_) {}
             }
 
             CadLineSegment? selectedCut;
             if (viewModel.selectedCutId != null) {
               try {
-                selectedCut = viewModel.document.cutLines.firstWhere(
-                  (c) => c.id == viewModel.selectedCutId,
-                );
+                selectedCut = viewModel.document.cutLines.firstWhere((c) => c.id == viewModel.selectedCutId);
               } catch (_) {}
             }
 
             CncPunchPrimitive? selectedPunch;
             if (viewModel.selectedPunchId != null) {
               try {
-                selectedPunch = viewModel.document.punches.firstWhere(
-                  (p) => p.id == viewModel.selectedPunchId,
-                );
+                selectedPunch = viewModel.document.punches.firstWhere((p) => p.id == viewModel.selectedPunchId);
               } catch (_) {}
             }
 
             PerforationPattern? selectedPattern;
             if (viewModel.selectedPatternId != null) {
               try {
-                selectedPattern = viewModel.document.perforationPatterns
-                    .firstWhere((p) => p.id == viewModel.selectedPatternId);
+                selectedPattern = viewModel.document.perforationPatterns.firstWhere((p) => p.id == viewModel.selectedPatternId);
               } catch (_) {}
             }
 
             PlanarSheetFace? selectedFace;
             if (viewModel.selectedFaceId != null) {
               try {
-                selectedFace = viewModel.document.faces.firstWhere(
-                  (f) => f.id == viewModel.selectedFaceId,
-                );
+                selectedFace = viewModel.document.faces.firstWhere((f) => f.id == viewModel.selectedFaceId);
               } catch (_) {}
             }
 
             // Default position for inspector panel (top left corner, below 2D toolbar)
             const defaultInspectorOffset = Offset(16.0, 95.0);
-            final effectiveInspectorPos =
-                _inspectorOffset ?? defaultInspectorOffset;
+            final effectiveInspectorPos = _inspectorOffset ?? defaultInspectorOffset;
 
             return ClipRect(
               child: Container(
@@ -322,11 +279,16 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                       focusNode: _canvasFocusNode,
                       autofocus: true,
                       onKeyEvent: (node, event) {
+                        if (event.logicalKey == LogicalKeyboardKey.altLeft || event.logicalKey == LogicalKeyboardKey.altRight) {
+                          final isPressed = event is! KeyUpEvent;
+                          if (viewModel.isAltPressed != isPressed) {
+                            viewModel.isAltPressed = isPressed;
+                            setState(() {});
+                          }
+                        }
                         if (event is KeyDownEvent) {
                           if (_activeEditingPortId != null) {
-                            if (event.logicalKey == LogicalKeyboardKey.enter ||
-                                event.logicalKey ==
-                                    LogicalKeyboardKey.numpadEnter) {
+                            if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
                               _applyPortDimensionEditor();
                               return KeyEventResult.handled;
                             }
@@ -360,25 +322,16 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                               return KeyEventResult.handled;
                             }
                           }
-                          final isShift =
-                              HardwareKeyboard.instance.isShiftPressed;
-                          final isCtrl =
-                              HardwareKeyboard.instance.isControlPressed ||
-                              HardwareKeyboard.instance.isMetaPressed;
+                          final isShift = HardwareKeyboard.instance.isShiftPressed;
+                          final isCtrl = HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed;
                           final step = isShift ? 0.1 : 1.0;
-                          if (event.logicalKey == LogicalKeyboardKey.delete ||
-                              event.logicalKey ==
-                                  LogicalKeyboardKey.backspace) {
+                          if (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace) {
                             if (viewModel.selectedConstraintId != null) {
-                              viewModel.removeConstraint(
-                                viewModel.selectedConstraintId!,
-                              );
+                              viewModel.removeConstraint(viewModel.selectedConstraintId!);
                               return KeyEventResult.handled;
                             }
                             if (viewModel.selectedDimensionId != null) {
-                              viewModel.removeDimension(
-                                viewModel.selectedDimensionId!,
-                              );
+                              viewModel.removeDimension(viewModel.selectedDimensionId!);
                               return KeyEventResult.handled;
                             }
                             viewModel.deleteSelectedEntities();
@@ -387,98 +340,60 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                           if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
                             viewModel.nudgeSelectedBend(0, step);
                             return KeyEventResult.handled;
-                          } else if (event.logicalKey ==
-                              LogicalKeyboardKey.arrowDown) {
+                          } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
                             viewModel.nudgeSelectedBend(0, -step);
                             return KeyEventResult.handled;
-                          } else if (event.logicalKey ==
-                              LogicalKeyboardKey.arrowLeft) {
+                          } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
                             viewModel.nudgeSelectedBend(-step, 0);
                             return KeyEventResult.handled;
-                          } else if (event.logicalKey ==
-                              LogicalKeyboardKey.arrowRight) {
+                          } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
                             viewModel.nudgeSelectedBend(step, 0);
                             return KeyEventResult.handled;
                           }
 
                           // Toggle CAD Properties Inspector (Ctrl+1 / Ctrl+I / F4)
-                          if ((isCtrl &&
-                                  (event.logicalKey ==
-                                          LogicalKeyboardKey.digit1 ||
-                                      event.logicalKey ==
-                                          LogicalKeyboardKey.keyI)) ||
+                          if ((isCtrl && (event.logicalKey == LogicalKeyboardKey.digit1 || event.logicalKey == LogicalKeyboardKey.keyI)) ||
                               event.logicalKey == LogicalKeyboardKey.f4) {
                             viewModel.togglePropertyInspector();
                             return KeyEventResult.handled;
                           }
 
                           // Direct CAD tool shortcuts when canvas is focused (KeyDown only, no Ctrl/Meta)
-                          if (!isCtrl &&
-                              _activeEditingPortId == null &&
-                              !_isEditingText()) {
+                          if (!isCtrl && _activeEditingPortId == null && !_isEditingText()) {
                             if (event.logicalKey == LogicalKeyboardKey.keyB) {
                               viewModel.setToolMode(StudioToolMode.addBend);
                               return KeyEventResult.handled;
-                            } else if (event.logicalKey ==
-                                LogicalKeyboardKey.keyF) {
-                              viewModel.setToolMode(
-                                isShift
-                                    ? StudioToolMode.cornerFillet
-                                    : StudioToolMode.addFlange,
-                              );
+                            } else if (event.logicalKey == LogicalKeyboardKey.keyF) {
+                              viewModel.setToolMode(isShift ? StudioToolMode.cornerFillet : StudioToolMode.addFlange);
                               return KeyEventResult.handled;
-                            } else if (event.logicalKey ==
-                                LogicalKeyboardKey.keyM) {
+                            } else if (event.logicalKey == LogicalKeyboardKey.keyM) {
                               viewModel.setToolMode(StudioToolMode.addCut);
                               return KeyEventResult.handled;
-                            } else if (event.logicalKey ==
-                                LogicalKeyboardKey.keyL) {
-                              viewModel.setToolMode(
-                                StudioToolMode.drawPolyline,
-                              );
+                            } else if (event.logicalKey == LogicalKeyboardKey.keyL) {
+                              viewModel.setToolMode(StudioToolMode.drawPolyline);
                               return KeyEventResult.handled;
-                            } else if (event.logicalKey ==
-                                LogicalKeyboardKey.keyG) {
-                              viewModel.setToolMode(
-                                StudioToolMode.drawRectangle,
-                              );
+                            } else if (event.logicalKey == LogicalKeyboardKey.keyG) {
+                              viewModel.setToolMode(StudioToolMode.drawRectangle);
                               return KeyEventResult.handled;
-                            } else if (event.logicalKey ==
-                                LogicalKeyboardKey.keyC) {
-                              viewModel.setToolMode(
-                                isShift
-                                    ? StudioToolMode.cornerChamfer
-                                    : StudioToolMode.drawCircle,
-                              );
+                            } else if (event.logicalKey == LogicalKeyboardKey.keyC) {
+                              viewModel.setToolMode(isShift ? StudioToolMode.cornerChamfer : StudioToolMode.drawCircle);
                               return KeyEventResult.handled;
-                            } else if (event.logicalKey ==
-                                    LogicalKeyboardKey.keyA &&
-                                !isShift) {
+                            } else if (event.logicalKey == LogicalKeyboardKey.keyA && !isShift) {
                               viewModel.setToolMode(StudioToolMode.drawArc);
                               return KeyEventResult.handled;
-                            } else if (event.logicalKey ==
-                                LogicalKeyboardKey.keyQ) {
+                            } else if (event.logicalKey == LogicalKeyboardKey.keyQ) {
                               viewModel.toggleSelectedConstruction();
                               return KeyEventResult.handled;
-                            } else if (event.logicalKey ==
-                                LogicalKeyboardKey.keyD) {
-                              viewModel.setToolMode(
-                                StudioToolMode.addDimension,
-                              );
+                            } else if (event.logicalKey == LogicalKeyboardKey.keyD) {
+                              viewModel.setToolMode(StudioToolMode.addDimension);
                               return KeyEventResult.handled;
-                            } else if (event.logicalKey ==
-                                LogicalKeyboardKey.keyP) {
-                              viewModel.setToolMode(
-                                StudioToolMode.perforationPattern,
-                              );
+                            } else if (event.logicalKey == LogicalKeyboardKey.keyP) {
+                              viewModel.setToolMode(StudioToolMode.perforationPattern);
                               return KeyEventResult.handled;
-                            } else if (event.logicalKey ==
-                                    LogicalKeyboardKey.keyV ||
-                                event.logicalKey == LogicalKeyboardKey.space) {
+                            } else if (event.logicalKey == LogicalKeyboardKey.keyV || event.logicalKey == LogicalKeyboardKey.space) {
                               viewModel.setToolMode(StudioToolMode.select);
                               return KeyEventResult.handled;
-                            } else if (event.logicalKey ==
-                                LogicalKeyboardKey.keyH) {
+                            } else if (event.logicalKey == LogicalKeyboardKey.keyH) {
                               viewModel.setToolMode(StudioToolMode.pan);
                               return KeyEventResult.handled;
                             }
@@ -488,21 +403,14 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                       },
                       child: Listener(
                         onPointerDown: (event) {
-                          if (!_canvasFocusNode.hasFocus &&
-                              !_inPlaceDimFocusNode.hasFocus) {
+                          if (!_canvasFocusNode.hasFocus && !_inPlaceDimFocusNode.hasFocus) {
                             _canvasFocusNode.requestFocus();
                           }
                         },
                         onPointerSignal: (pointerSignal) {
                           if (pointerSignal is PointerScrollEvent) {
-                            final zoomFactor = pointerSignal.scrollDelta.dy < 0
-                                ? 1.12
-                                : 0.89;
-                            viewModel.zoom2DCanvas(
-                              zoomFactor,
-                              focalPoint: pointerSignal.localPosition,
-                              viewportSize: size,
-                            );
+                            final zoomFactor = pointerSignal.scrollDelta.dy < 0 ? 1.12 : 0.89;
+                            viewModel.zoom2DCanvas(zoomFactor, focalPoint: pointerSignal.localPosition, viewportSize: size);
                           }
                         },
                         onPointerPanZoomUpdate: (event) {
@@ -510,35 +418,24 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                             viewModel.pan2DCanvas(event.pan);
                           }
                           if (event.scale != 1.0) {
-                            viewModel.zoom2DCanvas(
-                              event.scale,
-                              focalPoint: event.localPosition,
-                              viewportSize: size,
-                            );
+                            viewModel.zoom2DCanvas(event.scale, focalPoint: event.localPosition, viewportSize: size);
                           }
                         },
                         onPointerMove: (event) {
-                          if ((event.buttons & kPrimaryMouseButton) == 0 &&
-                              _boxSelectStart != null) {
+                          if ((event.buttons & kPrimaryMouseButton) == 0 && _boxSelectStart != null) {
                             _boxSelectStart = null;
                             _boxSelectCurrent = null;
                             _activeDrag = _DragTarget.none;
                             setState(() {});
                           }
-                          final isMiddleMouse =
-                              (event.buttons & kTertiaryButton) != 0;
-                          final isSecondaryMouse =
-                              (event.buttons & kSecondaryMouseButton) != 0;
+                          final isMiddleMouse = (event.buttons & kTertiaryButton) != 0;
+                          final isSecondaryMouse = (event.buttons & kSecondaryMouseButton) != 0;
                           bool isSpaceHeld = false;
                           try {
-                            isSpaceHeld = HardwareKeyboard.instance
-                                .isLogicalKeyPressed(LogicalKeyboardKey.space);
+                            isSpaceHeld = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.space);
                           } catch (_) {}
 
-                          if (isMiddleMouse ||
-                              isSecondaryMouse ||
-                              (isSpaceHeld &&
-                                  (event.buttons & kPrimaryMouseButton) != 0)) {
+                          if (isMiddleMouse || isSecondaryMouse || (isSpaceHeld && (event.buttons & kPrimaryMouseButton) != 0)) {
                             viewModel.pan2DCanvas(event.delta);
                           }
                         },
@@ -561,68 +458,39 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                         child: MouseRegion(
                           cursor: _activeDrag == _DragTarget.canvasPan
                               ? SystemMouseCursors.grabbing
-                              : (_activeDrag == _DragTarget.boxSelect ||
-                                        _activeDrag == _DragTarget.drawEntity
+                              : (_activeDrag == _DragTarget.boxSelect || _activeDrag == _DragTarget.drawEntity
                                     ? SystemMouseCursors.precise
-                                    : (_activeDrag ==
-                                              _DragTarget.dimensionBadge ||
+                                    : (_activeDrag == _DragTarget.dimensionBadge ||
                                           _hoveredDimId != null ||
-                                          _activeDrag ==
-                                              _DragTarget.dimensionLine ||
+                                          _activeDrag == _DragTarget.dimensionLine ||
                                           _hoveredDimLineId != null ||
-                                          _activeDrag ==
-                                              _DragTarget.portBadge ||
+                                          _activeDrag == _DragTarget.portBadge ||
                                           _hoveredPortBadgeId != null ||
                                           _activeDrag == _DragTarget.cover)
                                     ? SystemMouseCursors.move
-                                    : ((viewModel.toolMode ==
-                                                  StudioToolMode.pickPortEdge ||
-                                              viewModel.activePortPickTarget !=
-                                                  null)
+                                    : ((viewModel.toolMode == StudioToolMode.pickPortEdge || viewModel.activePortPickTarget != null)
                                           ? SystemMouseCursors.precise
-                                          : (viewModel.toolMode ==
-                                                    StudioToolMode.pan
+                                          : (viewModel.toolMode == StudioToolMode.pan
                                                 ? SystemMouseCursors.grab
-                                                : ((viewModel.toolMode !=
-                                                              StudioToolMode
-                                                                  .select &&
-                                                          viewModel.toolMode !=
-                                                              StudioToolMode
-                                                                  .pan &&
-                                                          viewModel.toolMode !=
-                                                              StudioToolMode
-                                                                  .setBaseAnchor)
-                                                      ? SystemMouseCursors
-                                                            .precise
-                                                      : (_hoveredEndpoint !=
-                                                                null
-                                                            ? SystemMouseCursors
-                                                                  .precise
-                                                            : SystemMouseCursors
-                                                                  .basic))))),
+                                                : ((viewModel.toolMode != StudioToolMode.select &&
+                                                          viewModel.toolMode != StudioToolMode.pan &&
+                                                          viewModel.toolMode != StudioToolMode.setBaseAnchor)
+                                                      ? SystemMouseCursors.precise
+                                                      : (_hoveredEndpoint != null ? SystemMouseCursors.precise : SystemMouseCursors.basic))))),
                           onHover: (event) {
                             if (_activeDrag != _DragTarget.none) return;
                             final cadPt = screenToCad(event.localPosition);
                             _hoverCursorScreen = event.localPosition;
-                            _hoverCursorCad = cadPt;
                             final screenSnapMm = (8.0 / scale).clamp(1.5, 8.0);
                             final isAlt = _isAltPressed();
-                            viewModel.updateCursorMm(
-                              cadPt,
-                              snapRadiusMm: screenSnapMm,
-                              isAlt: isAlt,
-                            );
+                            final effectiveCadPt = isAlt ? CadPoint2D((cadPt.x * 10.0).roundToDouble() / 10.0, (cadPt.y * 10.0).roundToDouble() / 10.0) : cadPt;
+                            _hoverCursorCad = effectiveCadPt;
+                            viewModel.updateCursorMm(effectiveCadPt, snapRadiusMm: screenSnapMm, isAlt: isAlt);
 
                             // Check hover on movable dimension line segments
                             String? hoveredDimLine;
-                            for (final entry
-                                in _dimensionLineSegments.entries) {
-                              if (_distToScreenSegment(
-                                    event.localPosition,
-                                    entry.value.pA,
-                                    entry.value.pB,
-                                  ) <=
-                                  8.0) {
+                            for (final entry in _dimensionLineSegments.entries) {
+                              if (_distToScreenSegment(event.localPosition, entry.value.pA, entry.value.pB) <= 8.0) {
                                 hoveredDimLine = entry.key;
                                 break;
                               }
@@ -636,9 +504,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                             // Check hover on movable dimension badges
                             String? hoveredDim;
                             for (final entry in _dimensionBadgeRects.entries) {
-                              if (entry.value
-                                  .inflate(4.0)
-                                  .contains(event.localPosition)) {
+                              if (entry.value.inflate(4.0).contains(event.localPosition)) {
                                 hoveredDim = entry.key;
                                 break;
                               }
@@ -652,9 +518,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                             // Check hover on interactive constraint badges
                             String? hoveredConstraint;
                             for (final entry in _constraintBadgeRects.entries) {
-                              if (entry.value
-                                  .inflate(4.0)
-                                  .contains(event.localPosition)) {
+                              if (entry.value.inflate(4.0).contains(event.localPosition)) {
                                 hoveredConstraint = entry.key;
                                 break;
                               }
@@ -662,9 +526,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                             if (hoveredConstraint != _hoveredConstraintId) {
                               final highlightedRefs = <String>{};
                               if (hoveredConstraint != null) {
-                                final c = viewModel.activeConstraintDefinitions
-                                    .where((def) => def.id == hoveredConstraint)
-                                    .firstOrNull;
+                                final c = viewModel.activeConstraintDefinitions.where((def) => def.id == hoveredConstraint).firstOrNull;
                                 if (c != null) {
                                   for (final ref in c.references) {
                                     highlightedRefs.add(ref.canonicalPath);
@@ -675,18 +537,14 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                               setState(() {
                                 _hoveredConstraintId = hoveredConstraint;
                                 _constraintHoverHighlightedEntityIds.clear();
-                                _constraintHoverHighlightedEntityIds.addAll(
-                                  highlightedRefs,
-                                );
+                                _constraintHoverHighlightedEntityIds.addAll(highlightedRefs);
                               });
                             }
 
                             // Check hover on movable port badges
                             String? hoveredPort;
                             for (final entry in _portBadgeRects.entries) {
-                              if (entry.value
-                                  .inflate(4.0)
-                                  .contains(event.localPosition)) {
+                              if (entry.value.inflate(4.0).contains(event.localPosition)) {
                                 hoveredPort = entry.key;
                                 break;
                               }
@@ -699,30 +557,20 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
 
                             // Dynamic contour edge hover for selection, dimensioning, and port edge picking
                             if (viewModel.toolMode == StudioToolMode.select ||
-                                viewModel.toolMode ==
-                                    StudioToolMode.addDimension ||
-                                viewModel.toolMode ==
-                                    StudioToolMode.pickPortEdge ||
+                                viewModel.toolMode == StudioToolMode.addDimension ||
+                                viewModel.toolMode == StudioToolMode.pickPortEdge ||
                                 viewModel.activePortPickTarget != null) {
                               final contour = viewModel.document.outerContour;
-                              final candidateEdges =
-                                  <(CadPoint2D, CadPoint2D)>[];
-                              if (contour.length >= 2) {
-                                for (int i = 0; i < contour.length; i++) {
-                                  candidateEdges.add((
-                                    contour[i],
-                                    contour[(i + 1) % contour.length],
-                                  ));
+                              final candidateEdges = <(CadPoint2D, CadPoint2D)>[];
+                              for (final f in viewModel.document.faces) {
+                                if (!f.isVisible) continue;
+                                for (int i = 0; i < f.vertices.length; i++) {
+                                  candidateEdges.add((f.vertices[i], f.vertices[(i + 1) % f.vertices.length]));
                                 }
-                              } else {
-                                for (final f in viewModel.document.faces) {
-                                  if (!f.isVisible) continue;
-                                  for (int i = 0; i < f.vertices.length; i++) {
-                                    candidateEdges.add((
-                                      f.vertices[i],
-                                      f.vertices[(i + 1) % f.vertices.length],
-                                    ));
-                                  }
+                              }
+                              if (candidateEdges.isEmpty && contour.length >= 2) {
+                                for (int i = 0; i < contour.length; i++) {
+                                  candidateEdges.add((contour[i], contour[(i + 1) % contour.length]));
                                 }
                               }
 
@@ -733,18 +581,16 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                                 // Check if edge is part of a CAD arc chord
                                 bool isPartOfArc = false;
                                 for (final a in viewModel.document.arcs) {
-                                  if (a.distanceTo(edge.$1) <= 1.2 &&
-                                      a.distanceTo(edge.$2) <= 1.2) {
+                                  if (a.distanceTo(edge.$1) <= 1.2 && a.distanceTo(edge.$2) <= 1.2) {
                                     isPartOfArc = true;
                                     break;
                                   }
                                 }
                                 if (isPartOfArc) continue;
 
-                                final d =
-                                    _distToSegment(cadPt, edge.$1, edge.$2) *
-                                    scale;
-                                if (d < minD && d <= 28.0) {
+                                final d = _distToSegment(cadPt, edge.$1, edge.$2) * scale;
+                                final edgeLen = edge.$1.distanceTo(edge.$2);
+                                if ((d < minD - 0.5 || ((d - minD).abs() <= 0.5 && edgeLen < (bestP1?.distanceTo(bestP2!) ?? double.infinity))) && d <= 28.0) {
                                   minD = d;
                                   bestP1 = edge.$1;
                                   bestP2 = edge.$2;
@@ -752,37 +598,19 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                               }
                               if (bestP1 != null && bestP2 != null) {
                                 final len = bestP1.distanceTo(bestP2);
-                                viewModel.updateHoveredContourEdge(
-                                  bestP1,
-                                  bestP2,
-                                  len,
-                                );
+                                viewModel.updateHoveredContourEdge(bestP1, bestP2, len);
                               } else {
-                                viewModel.updateHoveredContourEdge(
-                                  null,
-                                  null,
-                                  null,
-                                );
+                                viewModel.updateHoveredContourEdge(null, null, null);
                               }
                             } else {
-                              viewModel.updateHoveredContourEdge(
-                                null,
-                                null,
-                                null,
-                              );
+                              viewModel.updateHoveredContourEdge(null, null, null);
                             }
 
                             // Check hover on punches
                             String? hoveredPunch;
                             for (final p in viewModel.document.punches) {
-                              final rad =
-                                  math.max(
-                                    p.diameterMm,
-                                    math.max(p.widthMm, p.lengthMm),
-                                  ) /
-                                  2.0;
-                              if (p.center.distanceTo(cadPt) <=
-                                  rad + 6.0 / scale) {
+                              final rad = math.max(p.diameterMm, math.max(p.widthMm, p.lengthMm)) / 2.0;
+                              if (p.center.distanceTo(cadPt) <= rad + 6.0 / scale) {
                                 hoveredPunch = p.id;
                                 break;
                               }
@@ -792,8 +620,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                             // Check hover on bends
                             String? hoveredBend;
                             for (final b in viewModel.document.bends) {
-                              if (_distToSegment(cadPt, b.p1, b.p2) * scale <=
-                                  14.0) {
+                              if (_distToSegment(cadPt, b.p1, b.p2) * scale <= 14.0) {
                                 hoveredBend = b.id;
                                 break;
                               }
@@ -803,8 +630,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                             // Check hover on cuts
                             String? hoveredCut;
                             for (final c in viewModel.document.cutLines) {
-                              if (_distToSegment(cadPt, c.p1, c.p2) * scale <=
-                                  14.0) {
+                              if (_distToSegment(cadPt, c.p1, c.p2) * scale <= 14.0) {
                                 hoveredCut = c.id;
                                 break;
                               }
@@ -821,11 +647,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                             }
                             viewModel.setHoveredArc(hoveredArc);
                             if (hoveredArc != null) {
-                              viewModel.updateHoveredContourEdge(
-                                null,
-                                null,
-                                null,
-                              );
+                              viewModel.updateHoveredContourEdge(null, null, null);
                             }
 
                             // Check proximity to any bend or cut line endpoint
@@ -865,11 +687,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                             viewModel.setHoveredCut(null);
                             viewModel.setHoveredArc(null);
                             viewModel.setHoveredFace(null);
-                            viewModel.updateHoveredContourEdge(
-                              null,
-                              null,
-                              null,
-                            );
+                            viewModel.updateHoveredContourEdge(null, null, null);
                             if (_hoveredDimId != null ||
                                 _hoveredDimLineId != null ||
                                 _hoveredEndpoint != null ||
@@ -888,13 +706,9 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                           },
                           child: MenuAnchor(
                             controller: _contextMenuController,
-                            menuChildren: _buildEdgeContextMenuChildren(
-                              viewModel,
-                            ),
+                            menuChildren: _buildEdgeContextMenuChildren(viewModel),
                             builder: (context, controller, child) => GestureDetector(
-                              key: const ValueKey(
-                                'unfolded_canvas_gesture_detector',
-                              ),
+                              key: const ValueKey('unfolded_canvas_gesture_detector'),
                               behavior: HitTestBehavior.opaque,
                               onPanStart: (details) => _handleCanvasPanStart(
                                 details,
@@ -918,23 +732,10 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                                 selectedCut: selectedCut,
                                 selectedPunch: selectedPunch,
                               ),
-                              onPanEnd: (details) => _handleCanvasPanEnd(
-                                details,
-                                viewModel: viewModel,
-                                screenToCad: screenToCad,
-                                cadToScreen: cadToScreen,
-                                scale: scale,
-                              ),
-                              onPanCancel: () => _handleCanvasPanCancel(
-                                viewModel: viewModel,
-                              ),
-                              onSecondaryTapUp: (details) =>
-                                  _handleCanvasSecondaryTapUp(
-                                details,
-                                viewModel: viewModel,
-                                screenToCad: screenToCad,
-                                scale: scale,
-                              ),
+                              onPanEnd: (details) =>
+                                  _handleCanvasPanEnd(details, viewModel: viewModel, screenToCad: screenToCad, cadToScreen: cadToScreen, scale: scale),
+                              onPanCancel: () => _handleCanvasPanCancel(viewModel: viewModel),
+                              onSecondaryTapUp: (details) => _handleCanvasSecondaryTapUp(details, viewModel: viewModel, screenToCad: screenToCad, scale: scale),
                               onTapUp: (details) => _handleCanvasTapUp(
                                 details,
                                 context: context,
@@ -948,18 +749,12 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                                 builder: (context) {
                                   CadLineSegment? autoCandidateLine;
                                   if (viewModel.pendingBendStart == null &&
-                                      (viewModel.toolMode ==
-                                              StudioToolMode.addBend ||
-                                          viewModel.toolMode ==
-                                              StudioToolMode.addFlange) &&
+                                      (viewModel.toolMode == StudioToolMode.addBend || viewModel.toolMode == StudioToolMode.addFlange) &&
                                       viewModel.rubberBandEndpoint != null) {
-                                    autoCandidateLine = viewModel
-                                        .computeAutoBendOrFlangeLine(
-                                          viewModel.rubberBandEndpoint!,
-                                          isFlange:
-                                              viewModel.toolMode ==
-                                              StudioToolMode.addFlange,
-                                        );
+                                    autoCandidateLine = viewModel.computeAutoBendOrFlangeLine(
+                                      viewModel.rubberBandEndpoint!,
+                                      isFlange: viewModel.toolMode == StudioToolMode.addFlange,
+                                    );
                                   }
 
                                   return ExcludeSemantics(
@@ -969,160 +764,89 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                                           size: Size.infinite,
                                           painter: _UnfoldedBoardPainter(
                                             doc: viewModel.document,
-                                            foldProgress:
-                                                viewModel.foldProgress,
+                                            foldProgress: viewModel.foldProgress,
                                             foldedMesh: viewModel.currentMesh,
                                             pan: viewModel.pan2D,
                                             zoom: viewModel.zoom2D,
                                             toolMode: viewModel.toolMode,
                                             activeSnap: viewModel.activeSnap,
-                                            pendingBendStart:
-                                                viewModel.pendingBendStart,
-                                            rubberBandEndpoint:
-                                                viewModel.rubberBandEndpoint,
-                                            pendingMultiPoints:
-                                                viewModel.pendingMultiPoints,
-                                            selectedBendId:
-                                                viewModel.selectedBendId,
-                                            selectedCutId:
-                                                viewModel.selectedCutId,
-                                            selectedFaceId:
-                                                viewModel.selectedFaceId,
-                                            selectedPunchId:
-                                                viewModel.selectedPunchId,
-                                            selectedPatternId:
-                                                viewModel.selectedPatternId,
-                                            selectedPatternHoleIndex: viewModel
-                                                .selectedPatternHoleIndex,
-                                            showDimensions:
-                                                viewModel.canvasDisplaySettings.showDimensions,
-                                            bendViolations:
-                                                viewModel.bendViolations,
-                                            hoveredPunchId:
-                                                viewModel.hoveredPunchId,
-                                            hoveredBendId:
-                                                viewModel.hoveredBendId,
+                                            pendingBendStart: viewModel.pendingBendStart,
+                                            rubberBandEndpoint: viewModel.rubberBandEndpoint,
+                                            pendingMultiPoints: viewModel.pendingMultiPoints,
+                                            selectedBendId: viewModel.selectedBendId,
+                                            selectedCutId: viewModel.selectedCutId,
+                                            selectedFaceId: viewModel.selectedFaceId,
+                                            selectedPunchId: viewModel.selectedPunchId,
+                                            selectedPatternId: viewModel.selectedPatternId,
+                                            selectedPatternHoleIndex: viewModel.selectedPatternHoleIndex,
+                                            showDimensions: viewModel.canvasDisplaySettings.showDimensions,
+                                            bendViolations: viewModel.bendViolations,
+                                            hoveredPunchId: viewModel.hoveredPunchId,
+                                            hoveredBendId: viewModel.hoveredBendId,
                                             toolConfig: viewModel.toolConfig,
-                                            isBendIncompleteFn:
-                                                viewModel.isBendIncomplete,
+                                            isBendIncompleteFn: viewModel.isBendIncomplete,
                                             hoveredEndpoint: _hoveredEndpoint,
                                             dragAngleInfo: _dragAngleInfo,
-                                            previewPerforationPattern: viewModel
-                                                .previewPerforationPattern,
-                                            previewCouplerPunches:
-                                                viewModel.previewCouplerPunches,
-                                            dimensionOffsets:
-                                                viewModel.dimensionOffsets,
-                                            dimensionLineOffsets:
-                                                viewModel.dimensionLineOffsets,
-                                            renderedDimensionBadges:
-                                                _dimensionBadgeRects,
-                                            renderedDimensionLines:
-                                                _dimensionLineSegments,
+                                            previewPerforationPattern: viewModel.previewPerforationPattern,
+                                            previewCouplerPunches: viewModel.previewCouplerPunches,
+                                            dimensionOffsets: viewModel.dimensionOffsets,
+                                            dimensionLineOffsets: viewModel.dimensionLineOffsets,
+                                            renderedDimensionBadges: _dimensionBadgeRects,
+                                            renderedDimensionLines: _dimensionLineSegments,
                                             editingDimId: _editingDimId,
-                                            selectedDimensionId:
-                                                viewModel.selectedDimensionId,
+                                            selectedDimensionId: viewModel.selectedDimensionId,
                                             hoveredDimensionId: _hoveredDimId,
-                                            renderedDimensionValues:
-                                                _dimensionBadgeValues,
+                                            renderedDimensionValues: _dimensionBadgeValues,
                                             hoveredDimLineId: _hoveredDimLineId,
-                                            portBadgeOffsets:
-                                                viewModel.portBadgeOffsets,
+                                            portBadgeOffsets: viewModel.portBadgeOffsets,
                                             renderedPortBadges: _portBadgeRects,
-                                            hoveredContourEdgeP1:
-                                                viewModel.hoveredContourEdgeP1,
-                                            hoveredContourEdgeP2:
-                                                viewModel.hoveredContourEdgeP2,
-                                            hoveredContourEdgeLengthMm:
-                                                viewModel
-                                                    .hoveredContourEdgeLengthMm,
-                                            selectedEntityIds:
-                                                viewModel.selectedEntityIds,
+                                            hoveredContourEdgeP1: viewModel.hoveredContourEdgeP1,
+                                            hoveredContourEdgeP2: viewModel.hoveredContourEdgeP2,
+                                            hoveredContourEdgeLengthMm: viewModel.hoveredContourEdgeLengthMm,
+                                            selectedEntityIds: viewModel.selectedEntityIds,
                                             boxSelectStart: _boxSelectStart,
                                             boxSelectCurrent: _boxSelectCurrent,
-                                            autoCandidateLine:
-                                                autoCandidateLine,
-                                            showOpeningTags:
-                                                viewModel.canvasDisplaySettings.showOpeningTags,
-                                            fittingMetadata:
-                                                viewModel
-                                                    .detectedFittingMetadata ??
-                                                DxfFittingMetadata.fromDocument(
-                                                  viewModel.document,
-                                                ),
-                                            referenceGeometries: viewModel
-                                                .activeReferenceGeometries,
-                                            constraintDefinitions: viewModel
-                                                .activeConstraintDefinitions,
-                                            selectedConstraintId:
-                                                viewModel.selectedConstraintId,
-                                            hoveredConstraintId:
-                                                _hoveredConstraintId,
-                                            renderedConstraintBadges:
-                                                _constraintBadgeRects,
-                                            constraintHoverHighlightedEntityIds:
-                                                _constraintHoverHighlightedEntityIds,
-                                            showDofDiagnostics:
-                                                viewModel.canvasDisplaySettings.showDofDiagnostics,
-                                            dofStateProvider: viewModel
-                                                .getEntityConstraintState,
-                                            showConstructionGeometry:
-                                                viewModel.canvasDisplaySettings.showConstructionGeometry,
-                                            showConstraints:
-                                                viewModel.canvasDisplaySettings.showConstraints,
-                                            showProfileFill:
-                                                viewModel.canvasDisplaySettings.showProfileFill,
-                                            showPoints:
-                                                viewModel.canvasDisplaySettings.showSnapPoints,
-                                            showGrid:
-                                                viewModel.canvasDisplaySettings.showGrid,
-                                            selectedArcId:
-                                                viewModel.selectedArcId,
-                                            hoveredArcId:
-                                                viewModel.hoveredArcId,
-                                            activePortInferenceResult: viewModel
-                                                .activePortInferenceResult,
+                                            autoCandidateLine: autoCandidateLine,
+                                            showOpeningTags: viewModel.canvasDisplaySettings.showOpeningTags,
+                                            fittingMetadata: viewModel.detectedFittingMetadata ?? DxfFittingMetadata.fromDocument(viewModel.document),
+                                            referenceGeometries: viewModel.activeReferenceGeometries,
+                                            constraintDefinitions: viewModel.activeConstraintDefinitions,
+                                            selectedConstraintId: viewModel.selectedConstraintId,
+                                            hoveredConstraintId: _hoveredConstraintId,
+                                            renderedConstraintBadges: _constraintBadgeRects,
+                                            constraintHoverHighlightedEntityIds: _constraintHoverHighlightedEntityIds,
+                                            showDofDiagnostics: viewModel.canvasDisplaySettings.showDofDiagnostics,
+                                            dofStateProvider: viewModel.getEntityConstraintState,
+                                            showConstructionGeometry: viewModel.canvasDisplaySettings.showConstructionGeometry,
+                                            showConstraints: viewModel.canvasDisplaySettings.showConstraints,
+                                            showProfileFill: viewModel.canvasDisplaySettings.showProfileFill,
+                                            showPoints: viewModel.canvasDisplaySettings.showSnapPoints,
+                                            showGrid: viewModel.canvasDisplaySettings.showGrid,
+                                            selectedArcId: viewModel.selectedArcId,
+                                            hoveredArcId: viewModel.hoveredArcId,
+                                            activePortInferenceResult: viewModel.activePortInferenceResult,
                                             hoverCursorCad: _hoverCursorCad,
                                             isAltPressed: _isAltPressed(),
-                                            canvasSettings:
-                                                viewModel.canvasDisplaySettings,
+                                            canvasSettings: viewModel.canvasDisplaySettings,
                                           ),
                                         ),
                                         AnimatedBuilder(
-                                          animation: Listenable.merge([
-                                            viewModel,
-                                            viewModel.cmsGuidedController,
-                                          ]),
+                                          animation: Listenable.merge([viewModel, viewModel.cmsGuidedController]),
                                           builder: (context, _) {
-                                            final ctrl =
-                                                viewModel.cmsGuidedController;
-                                            final ports =
-                                                viewModel.activeCmsPorts;
-                                            final suggestedBends =
-                                                ctrl.state.suggestedBends;
-                                            final showBends =
-                                                ctrl.phase ==
-                                                    CmsUxPhase
-                                                        .suggestingBends ||
-                                                ctrl.phase ==
-                                                    CmsUxPhase.confirmingBends;
-                                            if (ports.isEmpty &&
-                                                (!showBends ||
-                                                    suggestedBends.isEmpty)) {
+                                            final ctrl = viewModel.cmsGuidedController;
+                                            final ports = viewModel.activeCmsPorts;
+                                            final suggestedBends = ctrl.state.suggestedBends;
+                                            final showBends = ctrl.phase == CmsUxPhase.suggestingBends || ctrl.phase == CmsUxPhase.confirmingBends;
+                                            if (ports.isEmpty && (!showBends || suggestedBends.isEmpty)) {
                                               return const SizedBox.shrink();
                                             }
                                             return CustomPaint(
                                               size: Size.infinite,
                                               painter: Cms2DOverlayPainter(
                                                 ports: ports,
-                                                suggestedBends: showBends
-                                                    ? suggestedBends
-                                                    : const [],
+                                                suggestedBends: showBends ? suggestedBends : const [],
                                                 focus: ctrl.state.focus,
-                                                worldToScreen: (x, y) =>
-                                                    cadToScreen(
-                                                      CadPoint2D(x, y),
-                                                    ),
+                                                worldToScreen: (x, y) => cadToScreen(CadPoint2D(x, y)),
                                               ),
                                             );
                                           },
@@ -1155,9 +879,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                               viewModel.applyConstraint(type);
                             },
                             onStartDimension: () {
-                              viewModel.setToolMode(
-                                StudioToolMode.addDimension,
-                              );
+                              viewModel.setToolMode(StudioToolMode.addDimension);
                             },
                             onDismiss: () {
                               viewModel.clearSelection();

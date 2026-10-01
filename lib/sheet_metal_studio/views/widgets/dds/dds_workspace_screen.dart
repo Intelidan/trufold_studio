@@ -12,6 +12,7 @@
 
 import 'dart:convert';
 import 'dart:math' as math;
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -76,11 +77,80 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
   late DdsDocument _document;
   int _activeSheetIndex = 0;
   bool _isRightPanelOpen = true;
+  bool _isLeftPanelOpen = true;
   int _inspectorTabIndex = 0; // 0: Document Control, 1: Entities, 2: Order Traceability, 3: Parameters
 
   // Active markup authoring tool
   DdsMarkupTool _activeMarkupTool = DdsMarkupTool.select;
   String? _selectedAnnotationId;
+
+  // History Stacks for Undo / Redo
+  final List<Map<String, dynamic>> _undoStack = [];
+  final List<Map<String, dynamic>> _redoStack = [];
+
+  void _recordUndoSnapshot() {
+    _undoStack.add(_document.toJson());
+    if (_undoStack.length > 50) _undoStack.removeAt(0);
+    _redoStack.clear();
+  }
+
+  void _handleUndo() {
+    if (_undoStack.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nothing to undo.'), duration: Duration(milliseconds: 700)));
+      return;
+    }
+    _redoStack.add(_document.toJson());
+    final prevJson = _undoStack.removeLast();
+    setState(() {
+      _document = DdsDocument.fromJson(prevJson);
+      if (_activeSheetIndex >= _document.sheets.length) {
+        _activeSheetIndex = _document.sheets.length - 1;
+      }
+      _selectedAnnotationId = null;
+    });
+    _evaluateActiveSheet();
+    widget.onDocumentChanged?.call(_document);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Undo performed.'), duration: Duration(milliseconds: 700)));
+  }
+
+  void _handleRedo() {
+    if (_redoStack.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nothing to redo.'), duration: Duration(milliseconds: 700)));
+      return;
+    }
+    _undoStack.add(_document.toJson());
+    final nextJson = _redoStack.removeLast();
+    setState(() {
+      _document = DdsDocument.fromJson(nextJson);
+      if (_activeSheetIndex >= _document.sheets.length) {
+        _activeSheetIndex = _document.sheets.length - 1;
+      }
+      _selectedAnnotationId = null;
+    });
+    _evaluateActiveSheet();
+    widget.onDocumentChanged?.call(_document);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Redo performed.'), duration: Duration(milliseconds: 700)));
+  }
+
+  void _handleAddBlankSheet() {
+    _recordUndoSnapshot();
+    final newSheet = DdsSheet(
+      sheetId: 'sheet_${DateTime.now().millisecondsSinceEpoch}',
+      sheetNumber: _document.sheets.length + 1,
+      sheetType: DdsSheetType.blankSheet,
+      title: 'Blank Sheet ${_document.sheets.length + 1}',
+      annotations: [],
+    );
+    final updatedSheets = List<DdsSheet>.from(_document.sheets)..add(newSheet);
+    final updatedDoc = _document.copyWith(sheets: updatedSheets);
+    setState(() {
+      _document = updatedDoc;
+      _activeSheetIndex = updatedSheets.length - 1;
+      _selectedAnnotationId = null;
+    });
+    _evaluateActiveSheet();
+    widget.onDocumentChanged?.call(updatedDoc);
+  }
 
   // Cache of evaluated instances: instanceId -> EvaluatedDdsInstance
   final Map<String, EvaluatedDdsInstance> _evaluatedCache = {};
@@ -102,12 +172,24 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
   void _handleToggleDimension(String dim) {
     setState(() {
       switch (dim) {
-        case 'W': _showDimWidth = !_showDimWidth; break;
-        case 'H': _showDimHeight = !_showDimHeight; break;
-        case 'Ports': _showDimPorts = !_showDimPorts; break;
-        case 'Slots': _showDimSlots = !_showDimSlots; break;
-        case 'Flange': _showDimFlange = !_showDimFlange; break;
-        case 'Gauge': _showDimGauge = !_showDimGauge; break;
+        case 'W':
+          _showDimWidth = !_showDimWidth;
+          break;
+        case 'H':
+          _showDimHeight = !_showDimHeight;
+          break;
+        case 'Ports':
+          _showDimPorts = !_showDimPorts;
+          break;
+        case 'Slots':
+          _showDimSlots = !_showDimSlots;
+          break;
+        case 'Flange':
+          _showDimFlange = !_showDimFlange;
+          break;
+        case 'Gauge':
+          _showDimGauge = !_showDimGauge;
+          break;
       }
     });
   }
@@ -136,11 +218,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
 
     if (path != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✓ Client Submittal package saved: $path'),
-          backgroundColor: const Color(0xFF10B981),
-          duration: const Duration(seconds: 4),
-        ),
+        SnackBar(content: Text('✓ Client Submittal package saved: $path'), backgroundColor: const Color(0xFF10B981), duration: const Duration(seconds: 4)),
       );
     }
   }
@@ -201,8 +279,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
     final cadDoc = widget.linkedViewModel?.document;
     if (cadDoc == null) return;
 
-    final ref = DdsTemplateResolver.matchByDescription('${cadDoc.productType} ${cadDoc.itemName}') ??
-        DdsTemplateResolver.createReference('trunking_reducer');
+    final ref = DdsTemplateResolver.matchByDescription('${cadDoc.productType} ${cadDoc.itemName}') ?? DdsTemplateResolver.createReference('trunking_reducer');
 
     final orderNum = _document.projectInfo.orderInfo?.orderNumber;
     final poNumber = (orderNum != null && orderNum.isNotEmpty) ? orderNum : 'PO-CAD-SYNC';
@@ -219,10 +296,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
         customerDescription: 'Synchronized live from TruFold CAD Workspace',
       ),
       templateReference: ref,
-      instanceParameters: {
-        'port1_width': 100.0,
-        'port1_height': 100.0,
-      },
+      instanceParameters: {'port1_width': 100.0, 'port1_height': 100.0},
       coverConfiguration: const DdsCoverConfig(included: true),
     );
 
@@ -235,10 +309,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
     _evaluateActiveSheet();
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Imported "${instance.productName}" from CAD into TDS sheet ${_activeSheetIndex + 1}.'),
-        backgroundColor: const Color(0xFF10B981),
-      ),
+      SnackBar(content: Text('Imported "${instance.productName}" from CAD into TDS sheet ${_activeSheetIndex + 1}.'), backgroundColor: const Color(0xFF10B981)),
     );
   }
 
@@ -268,16 +339,8 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
         remarks: 'Transition at riser shaft B',
       ),
       templateReference: ref,
-      instanceParameters: {
-        'port1_width': 150.0,
-        'port1_height': 100.0,
-        'port2_width': 75.0,
-        'port2_height': 50.0,
-      },
-      coverConfiguration: const DdsCoverConfig(
-        included: true,
-        placementMode3D: 'exploded',
-      ),
+      instanceParameters: {'port1_width': 150.0, 'port1_height': 100.0, 'port2_width': 75.0, 'port2_height': 50.0},
+      coverConfiguration: const DdsCoverConfig(included: true, placementMode3D: 'exploded'),
       material: 'Pre-Galvanized Mild Steel DX51D',
       finish: 'Z275 Mill Galvanized Coating',
     );
@@ -319,16 +382,11 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
     try {
       final baselineDoc = await DdsTemplateResolver.resolveTemplateAsync(instance.templateReference);
       if (baselineDoc != null) {
-        final evaluated = DdsInstanceEvaluator.evaluate(
-          instance: instance,
-          baselineDoc: baselineDoc,
-        );
+        final evaluated = DdsInstanceEvaluator.evaluate(instance: instance, baselineDoc: baselineDoc);
         _evaluatedCache[instance.instanceId] = evaluated;
 
         // Sync calculated takeoff back to instance
-        final updatedInstance = instance.copyWith(
-          calculatedTakeoff: evaluated.calculatedTakeoff,
-        );
+        final updatedInstance = instance.copyWith(calculatedTakeoff: evaluated.calculatedTakeoff);
         _updateInstanceInDocument(updatedInstance, triggerEvaluation: false);
       }
     } catch (e) {
@@ -361,6 +419,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
 
   void _handleDeleteSheetAt(int index) {
     if (_document.sheets.length <= 1) return;
+    _recordUndoSnapshot();
     final targetSheet = _document.sheets[index];
     final updatedSheets = List<DdsSheet>.from(_document.sheets)..removeAt(index);
 
@@ -376,10 +435,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
       renumberedSheets.add(updatedSheets[i].copyWith(sheetNumber: i + 1));
     }
 
-    var updatedDoc = _document.copyWith(
-      sheets: renumberedSheets,
-      productInstances: updatedInstances,
-    );
+    var updatedDoc = _document.copyWith(sheets: renumberedSheets, productInstances: updatedInstances);
     updatedDoc = updatedDoc.updateToc();
 
     setState(() {
@@ -393,11 +449,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
     widget.onDocumentChanged?.call(updatedDoc);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✓ Deleted sheet "${targetSheet.title}".'),
-        backgroundColor: const Color(0xFFEF4444),
-        duration: const Duration(seconds: 2),
-      ),
+      SnackBar(content: Text('✓ Deleted sheet "${targetSheet.title}".'), backgroundColor: const Color(0xFFEF4444), duration: const Duration(seconds: 2)),
     );
   }
 
@@ -433,14 +485,9 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
           textPosition: CadPoint2D(ann.textPosition.x + dx, ann.textPosition.y + dy),
         );
       } else if (ann is DdsLinearDimensionAnnotation) {
-        return ann.copyWith(
-          p1: CadPoint2D(ann.p1.x + dx, ann.p1.y + dy),
-          p2: CadPoint2D(ann.p2.x + dx, ann.p2.y + dy),
-        );
+        return ann.copyWith(p1: CadPoint2D(ann.p1.x + dx, ann.p1.y + dy), p2: CadPoint2D(ann.p2.x + dx, ann.p2.y + dy));
       } else if (ann is DdsRevisionCloudAnnotation) {
-        return ann.copyWith(
-          points: ann.points.map((p) => CadPoint2D(p.x + dx, p.y + dy)).toList(),
-        );
+        return ann.copyWith(points: ann.points.map((p) => CadPoint2D(p.x + dx, p.y + dy)).toList());
       }
       return ann;
     });
@@ -469,10 +516,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
     }
 
     if (_selectedAnnotationId != null) {
-      final ann = _currentSheet.annotations.cast<DdsAnnotation?>().firstWhere(
-        (a) => a?.id == _selectedAnnotationId,
-        orElse: () => null,
-      );
+      final ann = _currentSheet.annotations.cast<DdsAnnotation?>().firstWhere((a) => a?.id == _selectedAnnotationId, orElse: () => null);
       if (ann != null) {
         StudioClipboardService.copyAnnotation(ann);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -487,11 +531,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('No drawing component or annotation selected to copy.'),
-        backgroundColor: Color(0xFF64748B),
-        duration: Duration(seconds: 2),
-      ),
+      const SnackBar(content: Text('No drawing component or annotation selected to copy.'), backgroundColor: Color(0xFF64748B), duration: Duration(seconds: 2)),
     );
   }
 
@@ -534,13 +574,9 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Drawing component clipboard is empty.'),
-        backgroundColor: Color(0xFF64748B),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Drawing component clipboard is empty.'), backgroundColor: Color(0xFF64748B), duration: Duration(seconds: 2)));
   }
 
   void _handleSelectAll() {
@@ -558,13 +594,9 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
     }
     if (_selectedAnnotationId != null) {
       _deleteSelectedAnnotation(id: _selectedAnnotationId);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Deleted selected drawing component.'),
-          backgroundColor: Color(0xFFDC2626),
-          duration: Duration(seconds: 1),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Deleted selected drawing component.'), backgroundColor: Color(0xFFDC2626), duration: Duration(seconds: 1)));
     }
   }
 
@@ -574,10 +606,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
 
   Future<void> _handleImportExcel() async {
     try {
-      final List<PlatformFile> files = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['xlsx', 'xls'],
-      );
+      final List<PlatformFile> files = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['xlsx', 'xls']);
 
       if (files.isEmpty) return;
 
@@ -628,10 +657,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
 
       if (confirmed != true) return;
 
-      final importResult = ExcelOrderImporter.importWorkbook(
-        bytes: bytes,
-        fileName: file.name,
-      );
+      final importResult = ExcelOrderImporter.importWorkbook(bytes: bytes, fileName: file.name);
 
       setState(() {
         _document = importResult.document;
@@ -645,9 +671,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Imported ${importResult.summary.templatesMatched} products successfully from ${file.name}!',
-          ),
+          content: Text('Imported ${importResult.summary.templatesMatched} products successfully from ${file.name}!'),
           backgroundColor: const Color(0xFF10B981),
         ),
       );
@@ -660,49 +684,77 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
     final jsonStr = const JsonEncoder.withIndent('  ').convert(_document.toJson());
     final defaultFileName = '${_document.projectInfo.documentNumber}.dds';
 
-    final path = await StudioFileService.saveFileAs(
-      fileName: defaultFileName,
-      content: jsonStr,
-      dialogTitle: 'Save Technical Data Sheet (.dds)',
-    );
+    final path = await StudioFileService.saveFileAs(fileName: defaultFileName, content: jsonStr, dialogTitle: 'Save Technical Data Sheet (.dds)');
 
     if (path != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Technical Data Sheet saved: $path'),
-          backgroundColor: const Color(0xFF10B981),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Technical Data Sheet saved: $path'), backgroundColor: const Color(0xFF10B981)));
     }
   }
 
   Future<void> _handleOpenDds() async {
     try {
-      final rawFiles = await StudioFileService.pickRawFiles();
+      final rawFiles = await StudioFileService.pickRawFiles(allowedExtensions: ['dds', 'json', 'dsf']);
       if (rawFiles.isEmpty) return;
 
       final file = rawFiles.first;
       final jsonMap = jsonDecode(file.content) as Map<String, dynamic>;
-      final openedDoc = DdsDocument.fromJson(jsonMap);
 
-      setState(() {
-        _document = openedDoc;
-        _activeSheetIndex = 0;
-        _evaluatedCache.clear();
-      });
-      widget.onDocumentChanged?.call(openedDoc);
+      if (jsonMap.containsKey('sheets') || jsonMap.containsKey('projectInfo')) {
+        final openedDoc = DdsDocument.fromJson(jsonMap);
 
-      _evaluateActiveSheet();
+        setState(() {
+          _document = openedDoc;
+          _activeSheetIndex = 0;
+          _evaluatedCache.clear();
+        });
+        widget.onDocumentChanged?.call(openedDoc);
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Opened TDS Document: ${_document.projectInfo.documentNumber} (${_document.totalSheets} sheets)'),
-          backgroundColor: const Color(0xFF0284C7),
-        ),
-      );
+        _evaluateActiveSheet();
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Opened TDS Document: ${_document.projectInfo.documentNumber} (${_document.totalSheets} sheets)'),
+            backgroundColor: const Color(0xFF0284C7),
+          ),
+        );
+      } else if (jsonMap.containsKey('productType') || jsonMap.containsKey('outerContour')) {
+        // User opened a single DSF template in TDS screen! Add it as a product sheet
+        final dsf = DsfDocument.fromJson(jsonMap);
+        final baseName = dsf.itemName.replaceAll('.dxf', '').replaceAll('.dsf', '');
+        final instance = DdsProductInstance(
+          instanceId: 'inst_${DateTime.now().millisecondsSinceEpoch}_$baseName',
+          productName: dsf.productType,
+          productCode: baseName.toUpperCase(),
+          orderLine: DdsOrderLine(
+            lineNumber: (_document.productInstances.length + 1).toString().padLeft(3, '0'),
+            customerItemReference: baseName.toUpperCase(),
+            quantity: 1,
+            customerDescription: dsf.productType,
+          ),
+          templateReference: DdsTemplateResolver.createReference(dsf.itemName),
+          instanceParameters: Map<String, double>.from(dsf.parameters),
+        );
+        final updated = _document.addProductInstance(instance, sheetTitle: dsf.productType);
+        setState(() {
+          _document = updated;
+          _activeSheetIndex = updated.sheets.length - 1;
+          _evaluatedCache.clear();
+        });
+        widget.onDocumentChanged?.call(updated);
+        _evaluateActiveSheet();
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Added Product Sheet: ${dsf.productType}'), backgroundColor: const Color(0xFF0284C7)));
+      } else {
+        throw const FormatException('File does not appear to be a valid TDS (.dds) or DSF project');
+      }
     } catch (e) {
       debugPrint('Error opening DDS file: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error opening file: $e'), backgroundColor: const Color(0xFFE11D48)));
+      }
     }
   }
 
@@ -711,6 +763,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
       context,
       activeDocument: _document,
       onAddToDds: (newInstance, {bool switchToEditor = false}) {
+        _recordUndoSnapshot();
         final updatedDoc = _document.addProductInstance(newInstance, sheetTitle: newInstance.productName);
         setState(() {
           _document = updatedDoc;
@@ -733,6 +786,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
   }
 
   void _handleAnnotationsChanged(List<DdsAnnotation> updatedAnnotations) {
+    _recordUndoSnapshot();
     final current = _currentSheet;
     final updatedSheet = current.copyWith(annotations: updatedAnnotations);
     final updatedSheets = _document.sheets.map((s) {
@@ -753,48 +807,22 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
         color: const Color(0xFF1E293B).withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(8.0),
         border: Border.all(color: const Color(0xFF334155), width: 1.0),
-        boxShadow: const [
-          BoxShadow(color: Colors.black45, blurRadius: 10.0, offset: Offset(0, 4)),
-        ],
+        boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10.0, offset: Offset(0, 4))],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildMarkupToolButton(
-            tool: DdsMarkupTool.select,
-            icon: Icons.near_me,
-            tooltip: 'Select & Move Markup',
-          ),
+          _buildMarkupToolButton(tool: DdsMarkupTool.select, icon: Icons.near_me, tooltip: 'Select & Move Markup'),
           const SizedBox(width: 4.0),
-          _buildMarkupToolButton(
-            tool: DdsMarkupTool.linearDimension,
-            icon: Icons.straighten,
-            tooltip: 'Linear Dimension (Click 2 points on canvas)',
-          ),
+          _buildMarkupToolButton(tool: DdsMarkupTool.linearDimension, icon: Icons.straighten, tooltip: 'Linear Dimension (Click 2 points on canvas)'),
           const SizedBox(width: 4.0),
-          _buildMarkupToolButton(
-            tool: DdsMarkupTool.leaderNote,
-            icon: Icons.call_made,
-            tooltip: 'Leader Callout Note (Click target then text position)',
-          ),
+          _buildMarkupToolButton(tool: DdsMarkupTool.leaderNote, icon: Icons.call_made, tooltip: 'Leader Callout Note (Click target then text position)'),
           const SizedBox(width: 4.0),
-          _buildMarkupToolButton(
-            tool: DdsMarkupTool.noteBox,
-            icon: Icons.note_alt_outlined,
-            tooltip: 'Sheet Specification Note Box',
-          ),
+          _buildMarkupToolButton(tool: DdsMarkupTool.noteBox, icon: Icons.note_alt_outlined, tooltip: 'Sheet Specification Note Box'),
           const SizedBox(width: 4.0),
-          _buildMarkupToolButton(
-            tool: DdsMarkupTool.revisionCloud,
-            icon: Icons.cloud_outlined,
-            tooltip: 'Revision Cloud (Click points around area)',
-          ),
+          _buildMarkupToolButton(tool: DdsMarkupTool.revisionCloud, icon: Icons.cloud_outlined, tooltip: 'Revision Cloud (Click points around area)'),
           const SizedBox(width: 4.0),
-          _buildMarkupToolButton(
-            tool: DdsMarkupTool.approvalStamp,
-            icon: Icons.verified_outlined,
-            tooltip: 'Client Approval Review Stamp',
-          ),
+          _buildMarkupToolButton(tool: DdsMarkupTool.approvalStamp, icon: Icons.verified_outlined, tooltip: 'Client Approval Review Stamp'),
           if (_selectedAnnotationId != null) ...[
             const SizedBox(width: 6.0),
             Container(height: 20, width: 1, color: const Color(0xFF475569)),
@@ -815,11 +843,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
     );
   }
 
-  Widget _buildMarkupToolButton({
-    required DdsMarkupTool tool,
-    required IconData icon,
-    required String tooltip,
-  }) {
+  Widget _buildMarkupToolButton({required DdsMarkupTool tool, required IconData icon, required String tooltip}) {
     final isSelected = _activeMarkupTool == tool;
     return Tooltip(
       message: tooltip,
@@ -835,15 +859,8 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
         },
         child: Container(
           padding: const EdgeInsets.all(7.0),
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF0284C7) : Colors.transparent,
-            borderRadius: BorderRadius.circular(6.0),
-          ),
-          child: Icon(
-            icon,
-            size: 17,
-            color: isSelected ? Colors.white : const Color(0xFF94A3B8),
-          ),
+          decoration: BoxDecoration(color: isSelected ? const Color(0xFF0284C7) : Colors.transparent, borderRadius: BorderRadius.circular(6.0)),
+          child: Icon(icon, size: 17, color: isSelected ? Colors.white : const Color(0xFF94A3B8)),
         ),
       ),
     );
@@ -859,11 +876,19 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
     final scaffoldBg = isLight ? const Color(0xFFF1F5F9) : const Color(0xFF0B132B);
     final deskBg = isLight ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
     final dividerCol = isLight ? const Color(0xFFCBD5E1) : const Color(0xFF1E293B);
+    final navBg = isLight ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
+    final panelBg = isLight ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
 
     return Scaffold(
       backgroundColor: scaffoldBg,
       body: CallbackShortcuts(
         bindings: {
+          const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _handleUndo,
+          const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _handleUndo,
+          const SingleActivator(LogicalKeyboardKey.keyY, control: true): _handleRedo,
+          const SingleActivator(LogicalKeyboardKey.keyY, meta: true): _handleRedo,
+          const SingleActivator(LogicalKeyboardKey.keyZ, control: true, shift: true): _handleRedo,
+          const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true): _handleRedo,
           const SingleActivator(LogicalKeyboardKey.keyC, control: true): _handleCopy,
           const SingleActivator(LogicalKeyboardKey.keyC, meta: true): _handleCopy,
           const SingleActivator(LogicalKeyboardKey.keyV, control: true): _handlePaste,
@@ -874,393 +899,381 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
           const SingleActivator(LogicalKeyboardKey.backspace): _handleDelete,
         },
         child: SafeArea(
-        child: Column(
-          children: [
-            // 1. Dedicated Window Title Bar (with Minimize, Maximize/Restore, Close, and drag handling)
-            DdsWindowTitleBar(
-              document: _document,
-              isMaximized: widget.isMaximized,
-              isWindowMode: widget.isWindowMode,
-              onMinimize: widget.onMinimize,
-              onToggleMaximize: widget.onToggleMaximize,
-              onDockSplit: widget.onDockSplit,
-              onClose: widget.onExit,
-              onDragStart: widget.onWindowDragStart,
-              onDragUpdate: widget.onWindowDragUpdate,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. Dedicated Window Title Bar (with Minimize, Maximize/Restore, Close, and drag handling)
+              DdsWindowTitleBar(
+                document: _document,
+                isMaximized: widget.isMaximized,
+                isWindowMode: widget.isWindowMode,
+                onMinimize: widget.onMinimize,
+                onToggleMaximize: widget.onToggleMaximize,
+                onDockSplit: widget.onDockSplit,
+                onClose: widget.onExit,
+                onDragStart: widget.onWindowDragStart,
+                onDragUpdate: widget.onWindowDragUpdate,
+              ),
 
-            // 2. Dedicated TDS Menu Bar (File, Edit, Library, Document, Order, View, CAD Link)
-            DdsMenuBarWidget(
-              document: _document,
-              onNewDocument: () {
-                final def = _createDefaultDocument();
-                setState(() {
-                  _document = def;
-                  _activeSheetIndex = 0;
-                });
-                widget.onDocumentChanged?.call(def);
-                _evaluateActiveSheet();
-              },
-              onOpenDocument: _handleOpenDds,
-              onSaveDocument: _handleSaveDds,
-              onSaveAsDocument: _handleSaveDds,
-              onExportPdf: _handleExportPdf,
-              onImportExcel: _handleImportExcel,
-              onAddProductSheet: () {
-                final newInstance = DdsProductInstance(
-                  instanceId: 'inst_${DateTime.now().millisecondsSinceEpoch}',
-                  productName: 'Parametric Cable Trunking Fitting',
-                  productCode: 'CMS-TRK-FITTING',
-                  orderLine: DdsOrderLine(
-                    orderNumber: _document.projectInfo.orderInfo?.orderNumber ?? 'PO-88210',
-                    lineNumber: (_document.productInstances.length + 1).toString().padLeft(3, '0'),
-                    customerItemReference: 'ITEM-${_document.productInstances.length + 1}',
-                    quantity: 1,
-                    customerDescription: 'HVAC Sheet Metal CMS Fitting',
-                  ),
-                  templateReference: DdsTemplateResolver.createReference('trunking_reducer'),
-                  instanceParameters: {
-                    'port1_width': 150.0,
-                    'port1_height': 100.0,
-                    'port2_width': 75.0,
-                    'port2_height': 50.0,
-                    'coupler_slot_length': 20.0,
-                    'coupler_slot_width': 9.0,
-                    'coupler_slot_pitch': 25.0,
-                    'flange_direction': 0.0,
-                    'base_flange_size': 20.0,
-                    'cover_flange_size': 15.0,
-                    'thickness': 1.5,
-                  },
-                );
-                final updated = _document.addProductInstance(newInstance, sheetTitle: newInstance.productName);
-                setState(() {
-                  _document = updated;
-                  _activeSheetIndex = updated.sheets.length - 1;
-                });
-                widget.onDocumentChanged?.call(updated);
-                _evaluateActiveSheet();
-              },
-              onAddCoverSheet: () {
-                final newSheet = DdsSheet(
-                  sheetId: 'sheet_cover_${DateTime.now().millisecondsSinceEpoch}',
-                  sheetNumber: _document.sheets.length + 1,
-                  title: 'PROJECT COVER & SCHEDULE OF FITTINGS',
-                  sheetType: DdsSheetType.coverSchedule,
-                );
-                final updated = _document.copyWith(sheets: [..._document.sheets, newSheet]);
-                setState(() {
-                  _document = updated;
-                  _activeSheetIndex = updated.sheets.length - 1;
-                });
-                widget.onDocumentChanged?.call(updated);
-              },
-              onDuplicateSheet: () {
-                final current = _currentSheet;
-                final duplicated = current.copyWith(
-                  sheetId: 'sheet_dup_${DateTime.now().millisecondsSinceEpoch}',
-                  sheetNumber: _document.sheets.length + 1,
-                  title: '${current.title} (Copy)',
-                );
-                final updated = _document.copyWith(sheets: [..._document.sheets, duplicated]);
-                setState(() {
-                  _document = updated;
-                  _activeSheetIndex = updated.sheets.length - 1;
-                });
-                widget.onDocumentChanged?.call(updated);
-              },
-              onDeleteSheet: _document.sheets.length > 1 ? () => _handleDeleteSheetAt(_activeSheetIndex) : null,
-              onOpenLibrary: _handleOpenTemplateLibrary,
-              onEditInMainCad: _handleEditInMainCad,
-              onSyncFromCad: _handleSyncFromCad,
-              onToggleProperties: () => setState(() => _isRightPanelOpen = !_isRightPanelOpen),
-              onToggleCmsInspector: () => setState(() {
-                _isRightPanelOpen = true;
-                _inspectorTabIndex = 3;
-              }),
-              onClose: widget.onExit,
-            ),
+              // 2. Dedicated TDS Menu Bar (File, Edit, Library, Document, Order, View, CAD Link)
+              DdsMenuBarWidget(
+                document: _document,
+                onUndo: _handleUndo,
+                onRedo: _handleRedo,
+                onNewDocument: () {
+                  final def = _createDefaultDocument();
+                  setState(() {
+                    _document = def;
+                    _activeSheetIndex = 0;
+                  });
+                  widget.onDocumentChanged?.call(def);
+                  _evaluateActiveSheet();
+                },
+                onOpenDocument: _handleOpenDds,
+                onSaveDocument: _handleSaveDds,
+                onSaveAsDocument: _handleSaveDds,
+                onExportPdf: _handleExportPdf,
+                onImportExcel: _handleImportExcel,
+                onAddProductSheet: () {
+                  final newInstance = DdsProductInstance(
+                    instanceId: 'inst_${DateTime.now().millisecondsSinceEpoch}',
+                    productName: 'Parametric Cable Trunking Fitting',
+                    productCode: 'CMS-TRK-FITTING',
+                    orderLine: DdsOrderLine(
+                      orderNumber: _document.projectInfo.orderInfo?.orderNumber ?? 'PO-88210',
+                      lineNumber: (_document.productInstances.length + 1).toString().padLeft(3, '0'),
+                      customerItemReference: 'ITEM-${_document.productInstances.length + 1}',
+                      quantity: 1,
+                      customerDescription: 'HVAC Sheet Metal CMS Fitting',
+                    ),
+                    templateReference: DdsTemplateResolver.createReference('trunking_reducer'),
+                    instanceParameters: {
+                      'port1_width': 150.0,
+                      'port1_height': 100.0,
+                      'port2_width': 75.0,
+                      'port2_height': 50.0,
+                      'coupler_slot_length': 20.0,
+                      'coupler_slot_width': 9.0,
+                      'coupler_slot_pitch': 25.0,
+                      'flange_direction': 0.0,
+                      'base_flange_size': 20.0,
+                      'cover_flange_size': 15.0,
+                      'thickness': 1.5,
+                    },
+                  );
+                  final updated = _document.addProductInstance(newInstance, sheetTitle: newInstance.productName);
+                  setState(() {
+                    _document = updated;
+                    _activeSheetIndex = updated.sheets.length - 1;
+                  });
+                  widget.onDocumentChanged?.call(updated);
+                  _evaluateActiveSheet();
+                },
+                onAddCoverSheet: () {
+                  final newSheet = DdsSheet(
+                    sheetId: 'sheet_cover_${DateTime.now().millisecondsSinceEpoch}',
+                    sheetNumber: _document.sheets.length + 1,
+                    title: 'PROJECT COVER & SCHEDULE OF FITTINGS',
+                    sheetType: DdsSheetType.coverSchedule,
+                  );
+                  final updated = _document.copyWith(sheets: [..._document.sheets, newSheet]);
+                  setState(() {
+                    _document = updated;
+                    _activeSheetIndex = updated.sheets.length - 1;
+                  });
+                  widget.onDocumentChanged?.call(updated);
+                },
+                onDuplicateSheet: () {
+                  final current = _currentSheet;
+                  final duplicated = current.copyWith(
+                    sheetId: 'sheet_dup_${DateTime.now().millisecondsSinceEpoch}',
+                    sheetNumber: _document.sheets.length + 1,
+                    title: '${current.title} (Copy)',
+                  );
+                  final updated = _document.copyWith(sheets: [..._document.sheets, duplicated]);
+                  setState(() {
+                    _document = updated;
+                    _activeSheetIndex = updated.sheets.length - 1;
+                  });
+                  widget.onDocumentChanged?.call(updated);
+                },
+                onDeleteSheet: _document.sheets.length > 1 ? () => _handleDeleteSheetAt(_activeSheetIndex) : null,
+                onOpenLibrary: _handleOpenTemplateLibrary,
+                onEditInMainCad: _handleEditInMainCad,
+                onSyncFromCad: _handleSyncFromCad,
+                onToggleProperties: () => setState(() => _isRightPanelOpen = !_isRightPanelOpen),
+                onToggleCmsInspector: () => setState(() {
+                  _isRightPanelOpen = true;
+                  _inspectorTabIndex = 3;
+                }),
+                onClose: widget.onExit,
+              ),
 
-            // 3. Dedicated TDS Ribbon Toolbar (Grouped controls)
-            DdsRibbonToolbarWidget(
-              document: _document,
-              activeInstance: _currentProductInstance,
-              evaluatedInstance: _currentProductInstance != null ? _evaluatedCache[_currentProductInstance!.instanceId] : null,
-              onNewDoc: () {
-                final def = _createDefaultDocument();
-                setState(() {
-                  _document = def;
-                  _activeSheetIndex = 0;
-                });
-                widget.onDocumentChanged?.call(def);
-                _evaluateActiveSheet();
-              },
-              onOpenDoc: _handleOpenDds,
-              onSaveDoc: _handleSaveDds,
-              onExportPdf: _handleExportPdf,
-              onOpenLibrary: _handleOpenTemplateLibrary,
-              onImportExcel: _handleImportExcel,
-              onAddSheet: () {
-                final newInstance = DdsProductInstance(
-                  instanceId: 'inst_${DateTime.now().millisecondsSinceEpoch}',
-                  productName: 'Parametric Cable Trunking Fitting',
-                  productCode: 'CMS-TRK-FITTING',
-                  orderLine: DdsOrderLine(
-                    orderNumber: _document.projectInfo.orderInfo?.orderNumber ?? 'PO-88210',
-                    lineNumber: (_document.productInstances.length + 1).toString().padLeft(3, '0'),
-                    customerItemReference: 'ITEM-${_document.productInstances.length + 1}',
-                    quantity: 1,
-                    customerDescription: 'HVAC Sheet Metal CMS Fitting',
-                  ),
-                  templateReference: DdsTemplateResolver.createReference('trunking_reducer'),
-                  instanceParameters: {
-                    'port1_width': 150.0,
-                    'port1_height': 100.0,
-                    'port2_width': 75.0,
-                    'port2_height': 50.0,
-                    'coupler_slot_length': 20.0,
-                    'coupler_slot_width': 9.0,
-                    'coupler_slot_pitch': 25.0,
-                    'flange_direction': 0.0,
-                    'base_flange_size': 20.0,
-                    'cover_flange_size': 15.0,
-                    'thickness': 1.5,
-                  },
-                );
-                final updated = _document.addProductInstance(newInstance, sheetTitle: newInstance.productName);
-                setState(() {
-                  _document = updated;
-                  _activeSheetIndex = updated.sheets.length - 1;
-                });
-                widget.onDocumentChanged?.call(updated);
-                _evaluateActiveSheet();
-              },
-              onEditInMainCad: _handleEditInMainCad,
-              onSyncFromCad: _handleSyncFromCad,
-              onToggleProperties: () => setState(() => _isRightPanelOpen = !_isRightPanelOpen),
-              onToggleCmsInspector: () => setState(() {
-                _isRightPanelOpen = true;
-                _inspectorTabIndex = 3;
-              }),
-              isPropertiesOpen: _isRightPanelOpen,
-              isCmsInspectorOpen: _isRightPanelOpen && _inspectorTabIndex == 3,
-              showDimWidth: _showDimWidth,
-              showDimHeight: _showDimHeight,
-              showDimPorts: _showDimPorts,
-              showDimSlots: _showDimSlots,
-              showDimFlange: _showDimFlange,
-              showDimGauge: _showDimGauge,
-              onToggleDimension: _handleToggleDimension,
-              onToggleAllDimensions: _handleToggleAllDimensions,
-            ),
+              // 3. Dedicated TDS Ribbon Toolbar (Grouped controls)
+              DdsRibbonToolbarWidget(
+                document: _document,
+                activeInstance: _currentProductInstance,
+                evaluatedInstance: _currentProductInstance != null ? _evaluatedCache[_currentProductInstance!.instanceId] : null,
+                onNewDoc: () {
+                  final def = _createDefaultDocument();
+                  setState(() {
+                    _document = def;
+                    _activeSheetIndex = 0;
+                  });
+                  widget.onDocumentChanged?.call(def);
+                  _evaluateActiveSheet();
+                },
+                onOpenDoc: _handleOpenDds,
+                onSaveDoc: _handleSaveDds,
+                onExportPdf: _handleExportPdf,
+                onOpenLibrary: _handleOpenTemplateLibrary,
+                onImportExcel: _handleImportExcel,
+                onAddSheet: () {
+                  final newInstance = DdsProductInstance(
+                    instanceId: 'inst_${DateTime.now().millisecondsSinceEpoch}',
+                    productName: 'Parametric Cable Trunking Fitting',
+                    productCode: 'CMS-TRK-FITTING',
+                    orderLine: DdsOrderLine(
+                      orderNumber: _document.projectInfo.orderInfo?.orderNumber ?? 'PO-88210',
+                      lineNumber: (_document.productInstances.length + 1).toString().padLeft(3, '0'),
+                      customerItemReference: 'ITEM-${_document.productInstances.length + 1}',
+                      quantity: 1,
+                      customerDescription: 'HVAC Sheet Metal CMS Fitting',
+                    ),
+                    templateReference: DdsTemplateResolver.createReference('trunking_reducer'),
+                    instanceParameters: {
+                      'port1_width': 150.0,
+                      'port1_height': 100.0,
+                      'port2_width': 75.0,
+                      'port2_height': 50.0,
+                      'coupler_slot_length': 20.0,
+                      'coupler_slot_width': 9.0,
+                      'coupler_slot_pitch': 25.0,
+                      'flange_direction': 0.0,
+                      'base_flange_size': 20.0,
+                      'cover_flange_size': 15.0,
+                      'thickness': 1.5,
+                    },
+                  );
+                  final updated = _document.addProductInstance(newInstance, sheetTitle: newInstance.productName);
+                  setState(() {
+                    _document = updated;
+                    _activeSheetIndex = updated.sheets.length - 1;
+                  });
+                  widget.onDocumentChanged?.call(updated);
+                  _evaluateActiveSheet();
+                },
+                onEditInMainCad: _handleEditInMainCad,
+                onSyncFromCad: _handleSyncFromCad,
+                onToggleProperties: () => setState(() => _isRightPanelOpen = !_isRightPanelOpen),
+                onToggleCmsInspector: () => setState(() {
+                  _isRightPanelOpen = true;
+                  _inspectorTabIndex = 3;
+                }),
+                isPropertiesOpen: _isRightPanelOpen,
+                isCmsInspectorOpen: _isRightPanelOpen && _inspectorTabIndex == 3,
+                showDimWidth: _showDimWidth,
+                showDimHeight: _showDimHeight,
+                showDimPorts: _showDimPorts,
+                showDimSlots: _showDimSlots,
+                showDimFlange: _showDimFlange,
+                showDimGauge: _showDimGauge,
+                onToggleDimension: _handleToggleDimension,
+                onToggleAllDimensions: _handleToggleAllDimensions,
+              ),
 
-            // Main Workspace Layout: Navigator | Paper Canvas | Inspector
-            Expanded(
-              child: Row(
-                children: [
-                  // Left: Sheet & Product Index Navigator (280px)
-                  _buildLeftSheetNavigator(),
-                  VerticalDivider(width: 1, color: dividerCol),
+              // Main Workspace Layout: Navigator | Paper Canvas | Inspector
+              Expanded(
+                child: Row(
+                  children: [
+                    // Left: Sheet & Product Index Navigator (280px or 40px collapsed rail)
+                    if (_isLeftPanelOpen) _buildLeftSheetNavigator() else _buildCollapsedLeftRail(isLight, navBg, dividerCol),
+                    VerticalDivider(width: 1, color: dividerCol),
 
-                  // Center: Paper Layout Canvas
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: Container(
-                            color: deskBg,
-                            padding: const EdgeInsets.all(24.0),
-                            child: DdsPaperCanvas(
-                              document: _document,
-                              sheet: _currentSheet,
-                              evaluatedInstance: _currentProductInstance != null
-                                  ? _evaluatedCache[_currentProductInstance!.instanceId]
-                                  : null,
-                              viewModel: widget.linkedViewModel,
-                              activeMarkupTool: _activeMarkupTool,
-                              selectedAnnotationId: _selectedAnnotationId,
-                              showDimWidth: _showDimWidth,
-                              showDimHeight: _showDimHeight,
-                              showDimPorts: _showDimPorts,
-                              showDimSlots: _showDimSlots,
-                              showDimFlange: _showDimFlange,
-                              showDimThickness: _showDimGauge,
-                              onDimensionToggled: (dim, visible) {
-                                setState(() {
-                                  switch (dim) {
-                                    case 'W': _showDimWidth = visible; break;
-                                    case 'H': _showDimHeight = visible; break;
-                                    case 'Ports': _showDimPorts = visible; break;
-                                    case 'Slots': _showDimSlots = visible; break;
-                                    case 'Flange': _showDimFlange = visible; break;
-                                    case 'Gauge': _showDimGauge = visible; break;
+                    // Center: Paper Layout Canvas
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: Container(
+                              color: deskBg,
+                              padding: const EdgeInsets.all(24.0),
+                              child: DdsPaperCanvas(
+                                document: _document,
+                                sheet: _currentSheet,
+                                evaluatedInstance: _currentProductInstance != null ? _evaluatedCache[_currentProductInstance!.instanceId] : null,
+                                viewModel: widget.linkedViewModel,
+                                activeMarkupTool: _activeMarkupTool,
+                                selectedAnnotationId: _selectedAnnotationId,
+                                showDimWidth: _showDimWidth,
+                                showDimHeight: _showDimHeight,
+                                showDimPorts: _showDimPorts,
+                                showDimSlots: _showDimSlots,
+                                showDimFlange: _showDimFlange,
+                                showDimThickness: _showDimGauge,
+                                onDimensionToggled: (dim, visible) {
+                                  setState(() {
+                                    switch (dim) {
+                                      case 'W':
+                                        _showDimWidth = visible;
+                                        break;
+                                      case 'H':
+                                        _showDimHeight = visible;
+                                        break;
+                                      case 'Ports':
+                                        _showDimPorts = visible;
+                                        break;
+                                      case 'Slots':
+                                        _showDimSlots = visible;
+                                        break;
+                                      case 'Flange':
+                                        _showDimFlange = visible;
+                                        break;
+                                      case 'Gauge':
+                                        _showDimGauge = visible;
+                                        break;
+                                    }
+                                  });
+                                },
+                                onAnnotationsChanged: _handleAnnotationsChanged,
+                                onAnnotationSelected: (id) => setState(() {
+                                  _selectedAnnotationId = id;
+                                  if (id != null) {
+                                    _inspectorTabIndex = 1;
+                                    _isRightPanelOpen = true;
                                   }
-                                });
-                              },
-                              onAnnotationsChanged: _handleAnnotationsChanged,
-                              onAnnotationSelected: (id) => setState(() {
-                                _selectedAnnotationId = id;
-                                if (id != null) {
-                                  _inspectorTabIndex = 1;
-                                  _isRightPanelOpen = true;
-                                }
-                              }),
-                              onNextSheet: _activeSheetIndex < _document.sheets.length - 1
-                                  ? () => setState(() {
+                                }),
+                                onNextSheet: _activeSheetIndex < _document.sheets.length - 1
+                                    ? () => setState(() {
                                         _activeSheetIndex++;
                                         _evaluateActiveSheet();
                                       })
-                                  : null,
-                              onPrevSheet: _activeSheetIndex > 0
-                                  ? () => setState(() {
+                                    : null,
+                                onPrevSheet: _activeSheetIndex > 0
+                                    ? () => setState(() {
                                         _activeSheetIndex--;
                                         _evaluateActiveSheet();
                                       })
-                                  : null,
-                              onDeleteSheet: _document.sheets.length > 1
-                                  ? () => _handleDeleteSheetAt(_activeSheetIndex)
-                                  : null,
-                              onViewSettingsChanged: (updatedSettings) {
-                                final current = _currentSheet;
-                                if (current.viewSettings == updatedSettings) return;
-                                final updated = current.copyWith(viewSettings: updatedSettings);
-                                final updatedSheets = _document.sheets.map((s) => s.sheetId == updated.sheetId ? updated : s).toList();
-                                final updatedDoc = _document.copyWith(sheets: updatedSheets);
-                                void apply() {
-                                  if (!mounted) return;
-                                  setState(() {
-                                    _document = updatedDoc;
-                                  });
-                                  widget.onDocumentChanged?.call(updatedDoc);
-                                }
+                                    : null,
+                                onDeleteSheet: _document.sheets.length > 1 ? () => _handleDeleteSheetAt(_activeSheetIndex) : null,
+                                onViewSettingsChanged: (updatedSettings) {
+                                  final current = _currentSheet;
+                                  if (current.viewSettings == updatedSettings) return;
+                                  final updated = current.copyWith(viewSettings: updatedSettings);
+                                  final updatedSheets = _document.sheets.map((s) => s.sheetId == updated.sheetId ? updated : s).toList();
+                                  final updatedDoc = _document.copyWith(sheets: updatedSheets);
+                                  void apply() {
+                                    if (!mounted) return;
+                                    setState(() {
+                                      _document = updatedDoc;
+                                    });
+                                    widget.onDocumentChanged?.call(updatedDoc);
+                                  }
 
-                                if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
-                                  WidgetsBinding.instance.addPostFrameCallback((_) => apply());
-                                } else {
-                                  apply();
-                                }
-                              },
-                              onProjectInfoChanged: (newProj) {
-                                final updatedDoc = _document.copyWith(projectInfo: newProj);
-                                void apply() {
-                                  if (!mounted) return;
-                                  setState(() {
-                                    _document = updatedDoc;
-                                  });
-                                  widget.onDocumentChanged?.call(updatedDoc);
-                                }
+                                  if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+                                    WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+                                  } else {
+                                    apply();
+                                  }
+                                },
+                                onProjectInfoChanged: (newProj) {
+                                  final updatedDoc = _document.copyWith(projectInfo: newProj);
+                                  void apply() {
+                                    if (!mounted) return;
+                                    setState(() {
+                                      _document = updatedDoc;
+                                    });
+                                    widget.onDocumentChanged?.call(updatedDoc);
+                                  }
 
-                                if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
-                                  WidgetsBinding.instance.addPostFrameCallback((_) => apply());
-                                } else {
-                                  apply();
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-
-                        // Floating Interactive Markup Authoring Palette
-                        Positioned(
-                          top: 24,
-                          left: 0,
-                          right: 0,
-                          child: Center(child: _buildFloatingMarkupPalette()),
-                        ),
-
-                        // Floating Sheet Navigation HUD
-                        Positioned(
-                          bottom: 24,
-                          left: 24,
-                          child: _buildFloatingNavigationHud(),
-                        ),
-
-                        // Loading Indicator
-                        if (_isEvaluating)
-                          Positioned(
-                            top: 24,
-                            left: 24,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
-                              decoration: BoxDecoration(
-                                color: isLight ? Colors.white : const Color(0xFF1E293B),
-                                borderRadius: BorderRadius.circular(6.0),
-                                border: Border.all(color: const Color(0xFF38BDF8)),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.1),
-                                    blurRadius: 8,
-                                  ),
-                                ],
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SizedBox(
-                                    width: 12,
-                                    height: 12,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8)),
-                                  ),
-                                  SizedBox(width: 8.0),
-                                  Text(
-                                    'Evaluating CMS Kinematics & Cover...',
-                                    style: TextStyle(color: Color(0xFF0284C7), fontSize: 11.0, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
+                                  if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+                                    WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+                                  } else {
+                                    apply();
+                                  }
+                                },
                               ),
                             ),
                           ),
 
-                        // Floating Consolidated CMS Parameter Inspector (F6)
-                        if (_isCmsFloatingInspectorOpen && _currentProductInstance != null)
-                          Positioned(
-                            left: _cmsFloatingInspectorPos.dx,
-                            top: _cmsFloatingInspectorPos.dy,
-                            child: DdsCmsParameterInspector(
-                              instance: _currentProductInstance,
-                              onInstanceChanged: (updatedInst) {
-                                _updateInstanceInDocument(updatedInst);
-                              },
-                              isLightTheme: widget.isLightTheme,
-                              isDetached: true,
-                              onClose: () => setState(() => _isCmsFloatingInspectorOpen = false),
-                              onDetach: () {
-                                setState(() {
-                                  _isCmsFloatingInspectorOpen = false;
-                                  _isRightPanelOpen = true;
-                                  _inspectorTabIndex = 3;
-                                });
-                              },
-                              onDragStart: (details) {
-                                _cmsInspectorDragOffset = details.globalPosition - _cmsFloatingInspectorPos;
-                              },
-                              onDragUpdate: (details) {
-                                if (_cmsInspectorDragOffset != null) {
-                                  setState(() {
-                                    _cmsFloatingInspectorPos = details.globalPosition - _cmsInspectorDragOffset!;
-                                  });
-                                }
-                              },
+                          // Floating Interactive Markup Authoring Palette
+                          Positioned(top: 24, left: 0, right: 0, child: Center(child: _buildFloatingMarkupPalette())),
+
+                          // Floating Sheet Navigation HUD
+                          Positioned(bottom: 24, left: 24, child: _buildFloatingNavigationHud()),
+
+                          // Loading Indicator
+                          if (_isEvaluating)
+                            Positioned(
+                              top: 24,
+                              left: 24,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
+                                decoration: BoxDecoration(
+                                  color: isLight ? Colors.white : const Color(0xFF1E293B),
+                                  borderRadius: BorderRadius.circular(6.0),
+                                  border: Border.all(color: const Color(0xFF38BDF8)),
+                                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8))),
+                                    SizedBox(width: 8.0),
+                                    Text(
+                                      'Evaluating CMS Kinematics & Cover...',
+                                      style: TextStyle(color: Color(0xFF0284C7), fontSize: 11.0, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
-                      ],
+
+                          // Floating Consolidated CMS Parameter Inspector (F6)
+                          if (_isCmsFloatingInspectorOpen && _currentProductInstance != null)
+                            Positioned(
+                              left: _cmsFloatingInspectorPos.dx,
+                              top: _cmsFloatingInspectorPos.dy,
+                              child: DdsCmsParameterInspector(
+                                instance: _currentProductInstance,
+                                onInstanceChanged: (updatedInst) {
+                                  _updateInstanceInDocument(updatedInst);
+                                },
+                                isLightTheme: widget.isLightTheme,
+                                isDetached: true,
+                                onClose: () => setState(() => _isCmsFloatingInspectorOpen = false),
+                                onDetach: () {
+                                  setState(() {
+                                    _isCmsFloatingInspectorOpen = false;
+                                    _isRightPanelOpen = true;
+                                    _inspectorTabIndex = 3;
+                                  });
+                                },
+                                onDragStart: (details) {
+                                  _cmsInspectorDragOffset = details.globalPosition - _cmsFloatingInspectorPos;
+                                },
+                                onDragUpdate: (details) {
+                                  if (_cmsInspectorDragOffset != null) {
+                                    setState(() {
+                                      _cmsFloatingInspectorPos = details.globalPosition - _cmsInspectorDragOffset!;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
 
-                  // Right: Inspector / Parameter Editor (340px)
-                  if (_isRightPanelOpen) ...[
+                    // Right: Inspector / Parameter Editor (340px or 40px collapsed rail)
                     VerticalDivider(width: 1, color: dividerCol),
-                    SizedBox(
-                      width: 340,
-                      child: _buildRightInspectorPanel(),
-                    ),
+                    if (_isRightPanelOpen) SizedBox(width: 365, child: _buildRightInspectorPanel()) else _buildCollapsedRightRail(isLight, panelBg, dividerCol),
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -1280,49 +1293,88 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
       color: navBg,
       child: Column(
         children: [
-          // Header
+          // Header with Title, Count, and Collapse Chevron
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 10.0),
+            padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 8.0),
             color: headerBg,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'SHEET NAVIGATOR',
-                  style: TextStyle(
-                    color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
-                    fontSize: 11.0,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.6,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      'SHEET NAVIGATOR',
+                      style: TextStyle(
+                        color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                        fontSize: 11.0,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(color: const Color(0xFF0284C7).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                      child: Text(
+                        '${_document.totalSheets}',
+                        style: const TextStyle(color: Color(0xFF0284C7), fontSize: 10.0, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  '${_document.totalSheets} Sheets',
-                  style: const TextStyle(color: Color(0xFF0284C7), fontSize: 11.0, fontWeight: FontWeight.bold),
+                InkWell(
+                  onTap: () => setState(() => _isLeftPanelOpen = false),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: Icon(Icons.chevron_left, size: 18, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                  ),
                 ),
               ],
             ),
           ),
           Divider(height: 1, color: divCol),
 
-          // Add Fitting from Library Action Button
+          // Action Buttons: Add from Library & Add Blank Sheet
           Padding(
-            padding: const EdgeInsets.fromLTRB(12.0, 10.0, 12.0, 6.0),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0284C7),
-                  padding: const EdgeInsets.symmetric(vertical: 9.0),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.0)),
+            padding: const EdgeInsets.fromLTRB(12.0, 10.0, 12.0, 8.0),
+            child: Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.0)),
+                    ),
+                    icon: const Icon(Icons.add_circle_outline, size: 15, color: Colors.white),
+                    label: const Text(
+                      'Add from Library',
+                      style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: _handleOpenTemplateLibrary,
+                  ),
                 ),
-                icon: const Icon(Icons.add_circle_outline, size: 15, color: Colors.white),
-                label: const Text(
-                  'Add from Library',
-                  style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF334155)),
+                      backgroundColor: isLight ? Colors.white : const Color(0xFF1E293B),
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6.0)),
+                    ),
+                    icon: const Icon(Icons.note_add_outlined, size: 15, color: Color(0xFF0284C7)),
+                    label: Text(
+                      'Add Blank Sheet',
+                      style: TextStyle(color: isLight ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0), fontSize: 11.5, fontWeight: FontWeight.w600),
+                    ),
+                    onPressed: _handleAddBlankSheet,
+                  ),
                 ),
-                onPressed: _handleOpenTemplateLibrary,
-              ),
+              ],
             ),
           ),
           Divider(height: 1, color: divCol),
@@ -1337,68 +1389,173 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
                 final isSelected = idx == _activeSheetIndex;
                 final inst = _document.findInstance(sheet.productInstanceId);
 
-                return ListTile(
-                  dense: true,
-                  selected: isSelected,
-                  selectedTileColor: isLight
-                      ? const Color(0xFFE0F2FE)
-                      : const Color(0xFF0284C7).withValues(alpha: 0.2),
-                  leading: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFF0284C7)
-                          : (isLight ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B)),
-                      borderRadius: BorderRadius.circular(4.0),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      sheet.sheetNumber.toString().padLeft(2, '0'),
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : (isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
-                        fontSize: 11.0,
-                        fontWeight: FontWeight.bold,
+                return Material(
+                  color: isSelected ? (isLight ? const Color(0xFFE0F2FE) : const Color(0xFF0284C7).withValues(alpha: 0.2)) : Colors.transparent,
+                  child: ListTile(
+                    dense: true,
+                    selected: isSelected,
+                    leading: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFF0284C7) : (isLight ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B)),
+                        borderRadius: BorderRadius.circular(4.0),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        sheet.sheetNumber.toString().padLeft(2, '0'),
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : (isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                          fontSize: 11.0,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
-                  title: Text(
-                    sheet.isCoverPage ? 'Transmittal & Schedule' : (inst?.productName ?? sheet.title),
-                    style: TextStyle(
-                      color: isSelected
-                          ? (isLight ? const Color(0xFF0369A1) : Colors.white)
-                          : (isLight ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1)),
-                      fontSize: 12.0,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    title: Text(
+                      sheet.isCoverPage
+                          ? 'Transmittal & Schedule'
+                          : (sheet.isBlankSheet
+                                ? (sheet.title.isNotEmpty ? sheet.title : 'Blank Sheet ${idx + 1}')
+                                : _cleanTitle(inst?.productName ?? sheet.title)),
+                      style: TextStyle(
+                        color: isSelected ? (isLight ? const Color(0xFF0369A1) : Colors.white) : (isLight ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1)),
+                        fontSize: 12.0,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    sheet.isCoverPage
-                        ? '${_document.productInstances.length} Products'
-                        : 'Ref: ${inst?.productCode ?? "—"} • Qty: ${inst?.orderLine?.quantity ?? 1}',
-                    style: TextStyle(
-                      color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF64748B),
-                      fontSize: 10.0,
+                    subtitle: Text(
+                      sheet.isCoverPage
+                          ? '${_document.productInstances.length} Products'
+                          : (sheet.isBlankSheet ? 'Blank Drafting Sheet' : 'Ref: ${inst?.productCode ?? "—"} • Qty: ${inst?.orderLine?.quantity ?? 1}'),
+                      style: TextStyle(color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF64748B), fontSize: 10.0),
                     ),
+                    trailing: _document.sheets.length > 1
+                        ? IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 16),
+                            color: const Color(0xFFEF4444),
+                            tooltip: 'Delete Sheet',
+                            onPressed: () => _handleDeleteSheetAt(idx),
+                          )
+                        : null,
+                    onTap: () {
+                      setState(() => _activeSheetIndex = idx);
+                      _evaluateActiveSheet();
+                    },
                   ),
-                  trailing: _document.sheets.length > 1
-                      ? IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 16),
-                          color: const Color(0xFFEF4444),
-                          tooltip: 'Delete Sheet',
-                          onPressed: () => _handleDeleteSheetAt(idx),
-                        )
-                      : null,
-                  onTap: () {
-                    setState(() => _activeSheetIndex = idx);
-                    _evaluateActiveSheet();
-                  },
                 );
               },
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  String _cleanTitle(String title) {
+    return title.replaceAll('Unequal Gusset Cross', 'Unequal Cross').replaceAll('Equal Gusset Cross', 'Equal Cross').replaceAll('Gusset Cross', 'Cross');
+  }
+
+  Widget _buildCollapsedLeftRail(bool isLight, Color navBg, Color dividerCol) {
+    return Container(
+      width: 40,
+      color: navBg,
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          Tooltip(
+            message: 'Expand Sheet Navigator',
+            child: InkWell(
+              onTap: () => setState(() => _isLeftPanelOpen = true),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B), borderRadius: BorderRadius.circular(4)),
+                child: Icon(Icons.chevron_right, size: 18, color: isLight ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _isLeftPanelOpen = true),
+              child: RotatedBox(
+                quarterTurns: 3,
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.layers_outlined, size: 14, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'SHEET NAVIGATOR (${_document.totalSheets})',
+                        style: TextStyle(
+                          color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCollapsedRightRail(bool isLight, Color panelBg, Color dividerCol) {
+    return Container(
+      width: 40,
+      color: panelBg,
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          Tooltip(
+            message: 'Expand Inspector & Parameters',
+            child: InkWell(
+              onTap: () => setState(() => _isRightPanelOpen = true),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B), borderRadius: BorderRadius.circular(4)),
+                child: Icon(Icons.chevron_left, size: 18, color: isLight ? const Color(0xFF0F172A) : const Color(0xFFCBD5E1)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _isRightPanelOpen = true),
+              child: RotatedBox(
+                quarterTurns: 3,
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.tune_outlined, size: 14, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'INSPECTOR & PARAMETERS',
+                        style: TextStyle(
+                          color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -1419,24 +1576,36 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
       color: panelBg,
       child: Column(
         children: [
-          // Inspector Tab Bar (4 Tabs: Doc Control, Entities, Traceability, Parameters)
+          // Inspector Tab Bar (4 Tabs: Doc Control, Entities, Traceability, Parameters) + Collapse Button
           Container(
             color: headerBg,
             child: Row(
               children: [
-                _buildInspectorTab(0, 'Doc Control', Icons.badge_outlined),
-                _buildInspectorTab(1, 'Entities', Icons.layers_outlined),
-                _buildInspectorTab(2, 'Traceability', Icons.hub_outlined),
-                _buildInspectorTab(3, 'Parameters', Icons.tune_outlined),
+                Expanded(
+                  child: Row(
+                    children: [
+                      _buildInspectorTab(0, 'Doc Control', Icons.badge_outlined),
+                      _buildInspectorTab(1, 'Entities', Icons.layers_outlined),
+                      _buildInspectorTab(2, 'Traceability', Icons.hub_outlined),
+                      _buildInspectorTab(3, 'Parameters', Icons.tune_outlined),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  onTap: () => setState(() => _isRightPanelOpen = false),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 10.0),
+                    child: Icon(Icons.chevron_right, size: 18, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                  ),
+                ),
               ],
             ),
           ),
           Divider(height: 1, color: divCol),
 
           // Tab Content
-          Expanded(
-            child: _buildInspectorTabContent(instance),
-          ),
+          Expanded(child: _buildInspectorTabContent(instance)),
         ],
       ),
     );
@@ -1450,34 +1619,26 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
       child: InkWell(
         onTap: () => setState(() => _inspectorTabIndex = index),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10.0),
+          padding: const EdgeInsets.symmetric(vertical: 9.0, horizontal: 2.0),
           decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: isSelected ? const Color(0xFF0284C7) : Colors.transparent,
-                width: 2.0,
-              ),
-            ),
+            border: Border(bottom: BorderSide(color: isSelected ? const Color(0xFF0284C7) : Colors.transparent, width: 2.0)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                size: 14,
-                color: isSelected
-                    ? const Color(0xFF0284C7)
-                    : (isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
-              ),
-              const SizedBox(width: 4.0),
-              Text(
-                title,
-                style: TextStyle(
-                  color: isSelected
-                    ? (isLight ? const Color(0xFF0284C7) : Colors.white)
-                    : (isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
-                  fontSize: 10.5,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              Icon(icon, size: 13, color: isSelected ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
+              const SizedBox(width: 3.0),
+              Flexible(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: isSelected ? (isLight ? const Color(0xFF0284C7) : Colors.white) : (isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                    fontSize: 10.0,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
             ],
@@ -1515,20 +1676,13 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
               const SizedBox(height: 12),
               Text(
                 'No Product Selected',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isLight ? Colors.grey[700] : Colors.grey[300],
-                  fontSize: 13,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, color: isLight ? Colors.grey[700] : Colors.grey[300], fontSize: 13),
               ),
               const SizedBox(height: 6),
               Text(
                 'Select an item from the Bill of Materials or BOM Schedule to inspect and modify live CMS parameters.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isLight ? Colors.grey[600] : Colors.grey[400],
-                ),
+                style: TextStyle(fontSize: 11, color: isLight ? Colors.grey[600] : Colors.grey[400]),
               ),
             ],
           ),
@@ -1605,11 +1759,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
                 const SizedBox(height: 8.0),
                 Text(
                   'No drawn entities on Sheet ${_activeSheetIndex + 1}',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: isLight ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
-                  ),
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: isLight ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
                 ),
                 const SizedBox(height: 4.0),
                 Text(
@@ -1702,9 +1852,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
                     padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 7.0),
                     decoration: BoxDecoration(
                       color: isSel ? const Color(0xFF0284C7).withValues(alpha: isLight ? 0.12 : 0.25) : Colors.transparent,
-                      border: isSel
-                          ? const Border(left: BorderSide(color: Color(0xFF0284C7), width: 3.0))
-                          : null,
+                      border: isSel ? const Border(left: BorderSide(color: Color(0xFF0284C7), width: 3.0)) : null,
                     ),
                     child: Row(
                       children: [
@@ -1720,17 +1868,12 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
                                 style: TextStyle(
                                   fontSize: 11.0,
                                   fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
-                                  color: isSel
-                                      ? const Color(0xFF0284C7)
-                                      : (isLight ? const Color(0xFF1E293B) : Colors.white),
+                                  color: isSel ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF1E293B) : Colors.white),
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              Text(
-                                subtitle,
-                                style: TextStyle(fontSize: 9.0, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
-                              ),
+                              Text(subtitle, style: TextStyle(fontSize: 9.0, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
                             ],
                           ),
                         ),
@@ -1759,13 +1902,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
               color: isLight ? Colors.white : const Color(0xFF1E293B),
               borderRadius: BorderRadius.circular(6.0),
               border: Border.all(color: const Color(0xFF0284C7), width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF0284C7).withValues(alpha: 0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              boxShadow: [BoxShadow(color: const Color(0xFF0284C7).withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 2))],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1779,12 +1916,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
                         const SizedBox(width: 6),
                         Text(
                           'PROPERTY INSPECTOR',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF0284C7),
-                            letterSpacing: 0.5,
-                          ),
+                          style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: const Color(0xFF0284C7), letterSpacing: 0.5),
                         ),
                       ],
                     ),
@@ -1804,11 +1936,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
                     key: ValueKey('text_${selectedAnn.id}'),
                     maxLines: 2,
                     style: const TextStyle(fontSize: 11),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      contentPadding: EdgeInsets.all(8),
-                      border: OutlineInputBorder(),
-                    ),
+                    decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.all(8), border: OutlineInputBorder()),
                     onChanged: (val) => _updateSelectedAnnotation((c) => (c as DdsNoteBoxAnnotation).copyWith(text: val)),
                   ),
                   const SizedBox(height: 10),
@@ -1824,12 +1952,14 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
                               children: [
                                 IconButton(
                                   icon: const Icon(Icons.remove, size: 14),
-                                  onPressed: () => _updateSelectedAnnotation((c) => (c as DdsNoteBoxAnnotation).copyWith(fontSize: (c.fontSize - 1).clamp(8.0, 28.0))),
+                                  onPressed: () =>
+                                      _updateSelectedAnnotation((c) => (c as DdsNoteBoxAnnotation).copyWith(fontSize: (c.fontSize - 1).clamp(8.0, 28.0))),
                                 ),
                                 Text('${selectedAnn.fontSize.toInt()} pt', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                 IconButton(
                                   icon: const Icon(Icons.add, size: 14),
-                                  onPressed: () => _updateSelectedAnnotation((c) => (c as DdsNoteBoxAnnotation).copyWith(fontSize: (c.fontSize + 1).clamp(8.0, 28.0))),
+                                  onPressed: () =>
+                                      _updateSelectedAnnotation((c) => (c as DdsNoteBoxAnnotation).copyWith(fontSize: (c.fontSize + 1).clamp(8.0, 28.0))),
                                 ),
                               ],
                             ),
@@ -1895,10 +2025,62 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
                     initialValue: selectedAnn.textOverride ?? '',
                     key: ValueKey('dimOver_${selectedAnn.id}'),
                     style: const TextStyle(fontSize: 11),
-                    decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.all(8), border: OutlineInputBorder(), hintText: 'Auto measured length'),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.all(8),
+                      border: OutlineInputBorder(),
+                      hintText: 'Auto measured length',
+                    ),
                     onChanged: (val) => _updateSelectedAnnotation((c) => (c as DdsLinearDimensionAnnotation).copyWith(textOverride: val)),
                   ),
                 ],
+
+                const SizedBox(height: 12),
+                _buildColorSwatchSection(
+                  label: 'BACKGROUND COLOR',
+                  currentColor: selectedAnn.backgroundColor,
+                  palette: const [
+                    'transparent', // None / Transparent
+                    '#FFFBEB', // Light Amber
+                    '#FFFFFF', // White
+                    '#E0F2FE', // Light Sky Blue
+                    '#ECFDF5', // Light Emerald
+                    '#FEF2F2', // Light Rose
+                    '#F1F5F9', // Light Slate
+                    '#1E293B', // Dark Navy
+                  ],
+                  onColorSelected: (c) => _updateSelectedAnnotation((ann) => ann.withColors(backgroundColor: c)),
+                ),
+                const SizedBox(height: 10),
+                _buildColorSwatchSection(
+                  label: 'FONT / TEXT COLOR',
+                  currentColor: selectedAnn.textColor,
+                  palette: const [
+                    '#0F172A', // Slate 900
+                    '#78350F', // Amber 900
+                    '#0284C7', // Sky 600
+                    '#065F46', // Emerald 800
+                    '#DC2626', // Red 600
+                    '#475569', // Slate 600
+                    '#FFFFFF', // White
+                  ],
+                  onColorSelected: (c) => _updateSelectedAnnotation((ann) => ann.withColors(textColor: c)),
+                ),
+                const SizedBox(height: 10),
+                _buildColorSwatchSection(
+                  label: 'BORDER / LINE COLOR',
+                  currentColor: selectedAnn.lineColor,
+                  palette: const [
+                    '#0284C7', // Sky 600
+                    '#D97706', // Amber 600
+                    '#0F172A', // Slate 900
+                    '#059669', // Emerald 600
+                    '#DC2626', // Red 600
+                    '#7C3AED', // Violet 600
+                    '#94A3B8', // Slate 400
+                  ],
+                  onColorSelected: (c) => _updateSelectedAnnotation((ann) => ann.withColors(lineColor: c)),
+                ),
 
                 const SizedBox(height: 12),
 
@@ -1907,26 +2089,14 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_left, size: 20),
-                      tooltip: 'Nudge Left 5mm',
-                      onPressed: () => _nudgeSelectedAnnotation(-5.0, 0.0),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.arrow_drop_up, size: 20),
-                      tooltip: 'Nudge Up 5mm',
-                      onPressed: () => _nudgeSelectedAnnotation(0.0, -5.0),
-                    ),
+                    IconButton(icon: const Icon(Icons.arrow_left, size: 20), tooltip: 'Nudge Left 5mm', onPressed: () => _nudgeSelectedAnnotation(-5.0, 0.0)),
+                    IconButton(icon: const Icon(Icons.arrow_drop_up, size: 20), tooltip: 'Nudge Up 5mm', onPressed: () => _nudgeSelectedAnnotation(0.0, -5.0)),
                     IconButton(
                       icon: const Icon(Icons.arrow_drop_down, size: 20),
                       tooltip: 'Nudge Down 5mm',
                       onPressed: () => _nudgeSelectedAnnotation(0.0, 5.0),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.arrow_right, size: 20),
-                      tooltip: 'Nudge Right 5mm',
-                      onPressed: () => _nudgeSelectedAnnotation(5.0, 0.0),
-                    ),
+                    IconButton(icon: const Icon(Icons.arrow_right, size: 20), tooltip: 'Nudge Right 5mm', onPressed: () => _nudgeSelectedAnnotation(5.0, 0.0)),
                   ],
                 ),
 
@@ -1951,6 +2121,58 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
             ),
           ),
         ],
+      ],
+    );
+  }
+
+  Widget _buildColorSwatchSection({
+    required String label,
+    required String? currentColor,
+    required List<String?> palette,
+    required ValueChanged<String?> onColorSelected,
+  }) {
+    Color parseHex(String? hex) {
+      if (hex == null || hex.isEmpty || hex == 'transparent') return Colors.transparent;
+      try {
+        String clean = hex.replaceAll('#', '').trim().toLowerCase();
+        if (clean.length == 6) clean = 'ff$clean';
+        if (clean.length == 8) return Color(int.parse(clean, radix: 16));
+      } catch (_) {}
+      return Colors.transparent;
+    }
+
+    bool isTransparent(String? v) => v == null || v.isEmpty || v.toLowerCase() == 'transparent';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildPropertyLabel(label),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: palette.map((hex) {
+            final hexIsTransparent = isTransparent(hex);
+            final currentIsTransparent = isTransparent(currentColor);
+            final isSelected = hexIsTransparent ? currentIsTransparent : (!currentIsTransparent && currentColor?.toUpperCase() == hex?.toUpperCase());
+            final col = parseHex(hex);
+            return InkWell(
+              onTap: () => onColorSelected(hexIsTransparent ? 'transparent' : hex),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: hexIsTransparent ? Colors.transparent : col,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF94A3B8), width: isSelected ? 2.0 : 1.0),
+                ),
+                child: hexIsTransparent
+                    ? const Icon(Icons.block, size: 13, color: Color(0xFF94A3B8))
+                    : (isSelected ? Icon(Icons.check, size: 13, color: col.computeLuminance() > 0.5 ? Colors.black : Colors.white) : null),
+              ),
+            );
+          }).toList(),
+        ),
       ],
     );
   }
@@ -1980,12 +2202,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
       children: [
         Text(
           'PROJECT METADATA',
-          style: TextStyle(
-            color: isLight ? const Color(0xFF0F172A) : Colors.white,
-            fontSize: 11.0,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.5,
-          ),
+          style: TextStyle(color: isLight ? const Color(0xFF0F172A) : Colors.white, fontSize: 11.0, fontWeight: FontWeight.bold, letterSpacing: 0.5),
         ),
         const SizedBox(height: 8.0),
         _buildTextField('Document Title', proj.documentTitle, (v) {
@@ -2016,12 +2233,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
 
         Text(
           'QUALITY SIGN-OFF (ISO 7200 / DIN 6771)',
-          style: TextStyle(
-            color: isLight ? const Color(0xFF0F172A) : Colors.white,
-            fontSize: 11.0,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.5,
-          ),
+          style: TextStyle(color: isLight ? const Color(0xFF0F172A) : Colors.white, fontSize: 11.0, fontWeight: FontWeight.bold, letterSpacing: 0.5),
         ),
         const SizedBox(height: 8.0),
 
@@ -2103,11 +2315,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
         children: [
           Text(
             label,
-            style: TextStyle(
-              color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
-              fontSize: 10.5,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4.0),
           InkWell(
@@ -2175,11 +2383,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
                   Expanded(
                     child: Text(
                       displayDate,
-                      style: TextStyle(
-                        color: isLight ? const Color(0xFF0F172A) : Colors.white,
-                        fontSize: 12.0,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: TextStyle(color: isLight ? const Color(0xFF0F172A) : Colors.white, fontSize: 12.0, fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
@@ -2201,11 +2405,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
         children: [
           Text(
             label,
-            style: TextStyle(
-              color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
-              fontSize: 10.5,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4.0),
           TextFormField(
@@ -2275,20 +2475,12 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
         children: [
           Text(
             label,
-            style: TextStyle(
-              color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-              fontSize: 10.0,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8), fontSize: 10.0, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 2.0),
           Text(
             value,
-            style: TextStyle(
-              color: isLight ? const Color(0xFF0F172A) : Colors.white,
-              fontSize: 12.0,
-              fontWeight: FontWeight.w500,
-            ),
+            style: TextStyle(color: isLight ? const Color(0xFF0F172A) : Colors.white, fontSize: 12.0, fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -2326,11 +2518,7 @@ class _DdsWorkspaceScreenState extends State<DdsWorkspaceScreen> with SingleTick
           ),
           Text(
             'Sheet ${_activeSheetIndex + 1} of ${_document.totalSheets}',
-            style: TextStyle(
-              color: isLight ? const Color(0xFF0F172A) : Colors.white,
-              fontSize: 12.0,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: isLight ? const Color(0xFF0F172A) : Colors.white, fontSize: 12.0, fontWeight: FontWeight.bold),
           ),
           IconButton(
             icon: Icon(Icons.arrow_forward_ios, size: 14, color: isLight ? const Color(0xFF334155) : Colors.white),

@@ -14,13 +14,13 @@ void main() {
     late DsfDocument bendDoc;
 
     setUp(() {
-      final zToolFile = File('assets/dxf_templates/trunking_accessories/Z tool.dsf');
+      final zToolFile = File('assets/dsf_templates/trunking_accessories/Z tool.dsf');
       zToolDoc = DsfDocument.fromJson(jsonDecode(zToolFile.readAsStringSync()) as Map<String, dynamic>);
 
-      final riserFile = File('assets/dxf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
+      final riserFile = File('assets/dsf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
       riserDoc = DsfDocument.fromJson(jsonDecode(riserFile.readAsStringSync()) as Map<String, dynamic>);
 
-      final bendFile = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final bendFile = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       bendDoc = DsfDocument.fromJson(jsonDecode(bendFile.readAsStringSync()) as Map<String, dynamic>);
     });
 

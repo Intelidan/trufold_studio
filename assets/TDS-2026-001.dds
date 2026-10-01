@@ -1,0 +1,289 @@
+{
+  "ddsHeader": {
+    "format": "TruFold_DDS",
+    "version": 1,
+    "generator": "TruFold Studio 2.0",
+    "createdAt": "2026-09-28T10:59:50.062527",
+    "modifiedAt": "2026-09-28T11:12:25.354513"
+  },
+  "projectInfo": {
+    "documentTitle": "Target Engineering",
+    "documentNumber": "TDS-2026-001",
+    "revision": "00",
+    "status": "For Approval",
+    "projectName": "Target Engineering",
+    "client": "Target Engineering",
+    "consultant": "Arup Engineering Consultants",
+    "contractor": "Drake & Scull Engineering",
+    "preparedBy": "Amir Khan",
+    "designedBy": "Amir Khan",
+    "drawnBy": "Sandeep",
+    "checkedBy": "Nasser Anani",
+    "approvedBy": "Consultant QA/QC",
+    "issueDate": "28/09/2026",
+    "designedDate": "28/09/2026",
+    "drawnDate": "28/09/2026",
+    "checkedDate": "28/09/2026",
+    "approvedDate": "28/09/2026",
+    "generalNotes": [
+      "All trunking and fittings manufactured in strict accordance with BS EN 50085-1.",
+      "Material: Pre-galvanized mild steel sheet to BS EN 10346 Grade DX51D + Z275.",
+      "All dimensions are nominal internal duct dimensions in millimeters unless noted otherwise.",
+      "Integral coupler flaps feature pre-punched holes/slots to accept standard M6 fasteners."
+    ]
+  },
+  "productInstances": [
+    {
+      "instanceId": "inst_001",
+      "productName": "Straight Reducer 150×100 to 75×50",
+      "productCode": "RED-150-75",
+      "orderLine": {
+        "orderNumber": "PO-88210",
+        "lineNumber": "001",
+        "customerItemReference": "RED-150-75",
+        "quantity": 12,
+        "customerDescription": "Straight Reducer 150x100 to 75x50 mm",
+        "remarks": "Transition at riser shaft B"
+      },
+      "templateReference": {
+        "templateId": "trunking_reducer",
+        "templateCategory": "trunking_accessories",
+        "baselineFileName": "reducer_100x100x50x50.dsf"
+      },
+      "instanceParameters": {
+        "port1_width": 150.0,
+        "port1_height": 100.0,
+        "port2_width": 75.0,
+        "port2_height": 50.0
+      },
+      "coverConfiguration": {
+        "included": true,
+        "flangeDepthMm": 12.0,
+        "placementMode3D": "exploded",
+        "clearanceOffsetMm": 2.0,
+        "snappedElevationZ": 5.0,
+        "customOffset3D": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        }
+      },
+      "calculatedTakeoff": {
+        "blankSurfaceAreaM2": 0.071,
+        "estimatedNetWeightKg": 0.84
+      },
+      "material": "Pre-Galvanized Mild Steel DX51D",
+      "finish": "Z275 Mill Galvanized Coating",
+      "notes": ""
+    },
+    {
+      "instanceId": "inst_1790578871846_trunking_unequal_cross",
+      "productName": "Unequal Cross",
+      "productCode": "UNEQUAL_CROSS-002",
+      "orderLine": {
+        "orderNumber": "",
+        "lineNumber": "002",
+        "customerItemReference": "UNEQUAL_CROSS-002",
+        "quantity": 1,
+        "customerDescription": "Standard cable management Unequal Cross with integrated coupler holes and parametric bends. Baseline: Run: 100×50 mm, Cross: 100×50 mm.",
+        "remarks": ""
+      },
+      "templateReference": {
+        "templateId": "trunking_unequal_cross",
+        "templateCategory": "trunking_accessories",
+        "baselineFileName": "unequal_cross_100x50x100x50.dsf"
+      },
+      "instanceParameters": {
+        "thickness": 1.5,
+        "base_flange_size": 20.0,
+        "cover_flange_size": 12.0,
+        "coupler_slot_length": 20.0,
+        "coupler_slot_width": 9.0,
+        "coupler_slot_pitch": 25.0,
+        "port1_width": 100.0
+      },
+      "coverConfiguration": {
+        "included": true,
+        "flangeDepthMm": 12.0,
+        "placementMode3D": "exploded",
+        "clearanceOffsetMm": 2.0,
+        "snappedElevationZ": 5.0,
+        "customOffset3D": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        }
+      },
+      "calculatedTakeoff": {
+        "blankSurfaceAreaM2": 0.093,
+        "estimatedNetWeightKg": 1.09
+      },
+      "material": "Pre-Galvanized Steel",
+      "finish": "electroGalvanized",
+      "notes": ""
+    }
+  ],
+  "sheets": [
+    {
+      "sheetId": "sheet_cover",
+      "sheetType": "coverSchedule",
+      "sheetNumber": 1,
+      "title": "Submittal Transmittal & Product Schedule",
+      "tableOfContents": [
+        {
+          "sheetNumber": 2,
+          "orderLine": "001",
+          "customerRef": "RED-150-75",
+          "productName": "Straight Reducer 150×100 to 75×50",
+          "configuration": "W1=150 H1=100 / W2=75 H2=50",
+          "quantity": 12,
+          "status": "Resolved"
+        },
+        {
+          "sheetNumber": 3,
+          "orderLine": "002",
+          "customerRef": "UNEQUAL_CROSS-002",
+          "productName": "Unequal Cross",
+          "configuration": "100 × 100 mm",
+          "quantity": 1,
+          "status": "Resolved"
+        }
+      ],
+      "annotations": [],
+      "viewSettings": {
+        "paperSize": "A4_Landscape",
+        "splitRatio2D3D": 0.5,
+        "camera3D": {
+          "elevationDeg": 30.0,
+          "azimuthDeg": 45.0,
+          "zoom": 1.0,
+          "panOffset": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        "drawing2D": {
+          "viewMode": "dimensionedOutline",
+          "showBendLines": true,
+          "showPunches": true,
+          "zoom": 1.0,
+          "panOffset": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        "showCover3D": true,
+        "showFasteners3D": false,
+        "showDimWidth": true,
+        "showDimHeight": true,
+        "showDimPorts": true,
+        "showDimSlots": true,
+        "showDimFlange": true,
+        "showDimThickness": true,
+        "showCadDimensionLines": true,
+        "showDimensionTags": false,
+        "combinePortDimensions": true
+      }
+    },
+    {
+      "sheetId": "sheet_inst_001",
+      "sheetType": "productSheet",
+      "sheetNumber": 2,
+      "title": "RED-150-75 — Straight Reducer",
+      "productInstanceId": "inst_001",
+      "annotations": [],
+      "viewSettings": {
+        "paperSize": "A4_Landscape",
+        "splitRatio2D3D": 0.5,
+        "camera3D": {
+          "elevationDeg": 306.5,
+          "azimuthDeg": 30.0,
+          "zoom": 1.5634649489342471,
+          "panOffset": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        "drawing2D": {
+          "viewMode": "dimensionedOutline",
+          "showBendLines": true,
+          "showPunches": true,
+          "zoom": 1.0,
+          "panOffset": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        "showCover3D": false,
+        "showFasteners3D": false,
+        "showDimWidth": true,
+        "showDimHeight": true,
+        "showDimPorts": false,
+        "showDimSlots": true,
+        "showDimFlange": true,
+        "showDimThickness": true,
+        "showCadDimensionLines": true,
+        "showDimensionTags": false,
+        "combinePortDimensions": true
+      }
+    },
+    {
+      "sheetId": "sheet_inst_1790578871846_trunking_unequal_cross",
+      "sheetType": "productSheet",
+      "sheetNumber": 3,
+      "title": "Unequal Cross",
+      "productInstanceId": "inst_1790578871846_trunking_unequal_cross",
+      "annotations": [
+        {
+          "id": "leader_1790579220317",
+          "type": "leaderNote",
+          "space": "model",
+          "isVisible": true,
+          "targetPoint": {
+            "x": 197.5286209887251,
+            "y": 65.65047701647873
+          },
+          "textPosition": {
+            "x": 204.8139635732871,
+            "y": 63.829141370338256
+          },
+          "text": "Danish"
+        }
+      ],
+      "viewSettings": {
+        "paperSize": "A4_Landscape",
+        "splitRatio2D3D": 0.5,
+        "camera3D": {
+          "elevationDeg": 290.5,
+          "azimuthDeg": 36.5,
+          "zoom": 1.39148380455148,
+          "panOffset": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        "drawing2D": {
+          "viewMode": "dimensionedOutline",
+          "showBendLines": true,
+          "showPunches": true,
+          "zoom": 1.0,
+          "panOffset": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        "showCover3D": false,
+        "showFasteners3D": false,
+        "showDimWidth": true,
+        "showDimHeight": true,
+        "showDimPorts": false,
+        "showDimSlots": true,
+        "showDimFlange": true,
+        "showDimThickness": true,
+        "showCadDimensionLines": true,
+        "showDimensionTags": false,
+        "combinePortDimensions": true
+      }
+    }
+  ]
+}

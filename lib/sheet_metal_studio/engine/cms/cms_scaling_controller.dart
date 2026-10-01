@@ -34,6 +34,10 @@ import 'cms_punch_constraint_engine.dart';
 import 'unequal_tee_scaler.dart';
 import 'unequal_cross_scaler.dart';
 import 'reducer_scaler.dart';
+import 'tray_bend_45_scaler.dart';
+import 'tray_bend_90_scaler.dart';
+import 'tray_equal_tee_scaler.dart';
+import 'tray_unequal_tee_scaler.dart';
 
 /// Result of evaluating a parametric dimension on the 2D blank and folding to 3D.
 class CmsScalingPreviewResult {
@@ -109,6 +113,38 @@ class CmsScalingController extends ChangeNotifier {
   bool get isLinkedPorts => _model.isLinkedPorts;
   int get activePortIndex => _model.activePortIndex;
 
+  bool _includeCouplerFlaps = false;
+  bool get includeCouplerFlaps => _includeCouplerFlaps;
+
+  double _couplerFlapLength = 30.0;
+  double get couplerFlapLength => _couplerFlapLength;
+
+  double _perforationPitch = 100.0;
+  double get perforationPitch => _perforationPitch;
+
+  void setIncludeCouplerFlaps(bool include) {
+    if (_includeCouplerFlaps == include) return;
+    _includeCouplerFlaps = include;
+    evaluateMorph(previewMorphValue);
+    notifyListeners();
+  }
+
+  void setCouplerFlapLength(double length) {
+    final clamped = length.clamp(20.0, 50.0);
+    if ((_couplerFlapLength - clamped).abs() < 1e-3) return;
+    _couplerFlapLength = clamped;
+    evaluateMorph(previewMorphValue);
+    notifyListeners();
+  }
+
+  void setPerforationPitch(double pitch) {
+    final clamped = pitch.clamp(75.0, 200.0);
+    if ((_perforationPitch - clamped).abs() < 1e-3) return;
+    _perforationPitch = clamped;
+    evaluateMorph(previewMorphValue);
+    notifyListeners();
+  }
+
   void setActivePortIndex(int index) {
     if (index < 0 || index >= baselinePorts.length) return;
     _model = _model.copyWith(activePortIndex: index);
@@ -149,7 +185,7 @@ class CmsScalingController extends ChangeNotifier {
           currentValue: curW,
           baselineValue: curW,
           minValidMm: math.min(50.0, curW - 50.0),
-          maxValidMm: math.max(750.0, curW + 200.0),
+          maxValidMm: 1200.0,
           unit: 'mm',
           teachingState: CmsParameterTeachingState.learning,
         ),
@@ -159,7 +195,7 @@ class CmsScalingController extends ChangeNotifier {
           currentValue: curH,
           baselineValue: curH,
           minValidMm: math.min(50.0, curH - 50.0),
-          maxValidMm: math.max(300.0, curH + 150.0),
+          maxValidMm: 250.0,
           unit: 'mm',
           teachingState: CmsParameterTeachingState.learning,
         ),
@@ -180,7 +216,7 @@ class CmsScalingController extends ChangeNotifier {
           currentValue: port.width,
           baselineValue: port.width,
           minValidMm: math.min(50.0, port.width - 50.0),
-          maxValidMm: math.max(750.0, port.width + 200.0),
+          maxValidMm: 1200.0,
           unit: 'mm',
           teachingState: CmsParameterTeachingState.learning,
         );
@@ -190,7 +226,7 @@ class CmsScalingController extends ChangeNotifier {
           currentValue: port.height,
           baselineValue: port.height,
           minValidMm: math.min(50.0, port.height - 50.0),
-          maxValidMm: math.max(300.0, port.height + 150.0),
+          maxValidMm: 250.0,
           unit: 'mm',
           teachingState: CmsParameterTeachingState.learning,
         );
@@ -452,6 +488,10 @@ class CmsScalingController extends ChangeNotifier {
     final activeBase = _model.parameters[_activeParameterId]?.baselineValue ?? 100.0;
     _previewMorphValue = activeBase;
 
+    _includeCouplerFlaps = false;
+    _couplerFlapLength = 30.0;
+    _perforationPitch = 100.0;
+
     evaluateMorph(activeBase);
   }
 
@@ -674,6 +714,7 @@ class CmsScalingController extends ChangeNotifier {
 
   /// Checks whether [doc] is an Unequal Tee fitting based on contract, metadata, or port dimensions.
   bool isUnequalTee(DsfDocument doc) {
+    if (TrayUnequalTeeScaler.isTrayUnequalTee(doc)) return true;
     if (contract == CmsProductContract.unequalTee) return true;
     if (contract == CmsProductContract.equalTee) return false;
     final docType = '${doc.productType} ${doc.itemName} ${doc.metadata['appliedTemplate']} ${doc.metadata['cmsTemplate']?['variation']}'.toLowerCase();
@@ -691,6 +732,19 @@ class CmsScalingController extends ChangeNotifier {
     }
     return false;
   }
+
+  /// Checks whether [doc] is any Cable Tray accessory.
+  static bool isTrayAccessory(DsfDocument doc) {
+    return TrayUnequalTeeScaler.isTrayUnequalTee(doc) ||
+        TrayEqualTeeScaler.isTrayEqualTee(doc) ||
+        TrayBend90Scaler.isTrayBend90(doc) ||
+        TrayBend45Scaler.isTrayBend45(doc) ||
+        doc.productType.toLowerCase().contains('tray') ||
+        doc.itemName.toLowerCase().contains('tray') ||
+        (doc.metadata['appliedTemplate'] ?? '').toString().toLowerCase().contains('tray');
+  }
+
+  bool get isCurrentTrayAccessory => isTrayAccessory(baselineDocument);
 
   /// Helper struct defining the 8 symmetric coupler flaps of Equal Cross fittings.
   static const List<_EqualCrossFlapConfig> _equalCrossFlapConfigs = [
@@ -1064,6 +1118,35 @@ class CmsScalingController extends ChangeNotifier {
   ///     * Height < 95mm: exactly 1 slot centered on each flap/sidewall region with respect to height.
   ///     * Height >= 95mm: exactly 2 slots per region at 50mm pitch, centered with respect to height.
   DsfDocument _scaleEqualTee2D(DsfDocument baseline, {required Map<String, CmsScalingParameter> parameters}) {
+    if (TrayEqualTeeScaler.isTrayEqualTee(baseline)) {
+      final w = parameters['width'];
+      final h = parameters['height'];
+      final r = parameters['radius'];
+      final metaPort1 = (baseline.metadata['ports'] is List && (baseline.metadata['ports'] as List).isNotEmpty)
+          ? (baseline.metadata['ports'] as List).first as Map<String, dynamic>
+          : null;
+      final fallbackW = metaPort1?['width'] is num
+          ? (metaPort1!['width'] as num).toDouble()
+          : (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
+      final fallbackH = metaPort1?['height'] is num
+          ? (metaPort1!['height'] as num).toDouble()
+          : (baselinePorts.isNotEmpty ? baselinePorts.first.height : 50.0);
+
+      final targetW = w?.currentValue ?? fallbackW;
+      final targetH = h?.currentValue ?? fallbackH;
+      final targetR = r?.currentValue ?? (baseline.parameters['radius'] as num?)?.toDouble() ?? 180.0;
+
+      return TrayEqualTeeScaler.scale(
+        baseline: baseline,
+        targetWidth: targetW,
+        targetHeight: targetH,
+        targetRadius: targetR,
+        includeCouplerFlaps: _includeCouplerFlaps,
+        couplerFlapLength: _couplerFlapLength,
+        perforationPitch: _perforationPitch,
+      );
+    }
+
     final baseFloor = baseline.faces.firstWhere((f) => f.isBaseAnchor || f.role == FaceRole.baseFloor, orElse: () => baseline.faces.first);
     final verts = baseFloor.vertices;
     final minX = verts.map((v) => v.x).reduce(math.min);
@@ -1290,8 +1373,19 @@ class CmsScalingController extends ChangeNotifier {
   }
 
   /// Dedicated 2D Sheet Scaling for Unequal Tee Fittings:
-  /// Dispatches to the standalone analytical [UnequalTeeScaler].
+  /// Dispatches to [TrayUnequalTeeScaler] for Cable Tray or standalone analytical [UnequalTeeScaler] for Trunking.
   DsfDocument _scaleUnequalTee2D(DsfDocument baseline, {required bool isLinked, required Map<String, CmsScalingParameter> parameters}) {
+    if (TrayUnequalTeeScaler.isTrayUnequalTee(baseline)) {
+      final unequalParams = TrayUnequalTeeScaleParameters.fromCmsParameters(
+        parameters,
+        isLinked: isLinked,
+        includeCouplerFlaps: _includeCouplerFlaps,
+        couplerFlapLength: _couplerFlapLength,
+        perforationPitch: _perforationPitch,
+      );
+      return TrayUnequalTeeScaler.scaleWithParameters(baseline, unequalParams);
+    }
+
     final scaleParams = isLinked
         ? UnequalTeeScaleParameters(
             port1Width: parameters['width']?.currentValue ?? 100.0,
@@ -1311,6 +1405,9 @@ class CmsScalingController extends ChangeNotifier {
 
   /// Tee scaling dispatcher: routes to equal or unequal subroutine based on [isLinked].
   DsfDocument _scaleTee2D(DsfDocument baseline, {required bool isLinked, required Map<String, CmsScalingParameter> parameters}) {
+    if (TrayUnequalTeeScaler.isTrayUnequalTee(baseline)) {
+      return _scaleUnequalTee2D(baseline, isLinked: isLinked, parameters: parameters);
+    }
     if (isLinked) {
       return _scaleEqualTee2D(baseline, parameters: parameters);
     } else {
@@ -1339,8 +1436,23 @@ class CmsScalingController extends ChangeNotifier {
     final baselineW = w?.baselineValue ?? fallbackW;
     final baselineH = h?.baselineValue ?? fallbackH;
 
-    final hasChange = (targetW - baselineW).abs() > 1e-4 || (targetH - baselineH).abs() > 1e-4;
+    final r = parameters['radius'];
+    final targetR = r?.currentValue ?? (baseline.parameters['radius'] as num?)?.toDouble() ?? 180.0;
+    final baselineR = r?.baselineValue ?? (baseline.parameters['radius'] as num?)?.toDouble() ?? 180.0;
+
+    final hasChange = (targetW - baselineW).abs() > 1e-4 || (targetH - baselineH).abs() > 1e-4 || (targetR - baselineR).abs() > 1e-4 || _includeCouplerFlaps;
     if (!hasChange) return baseline;
+
+    if (TrayBend45Scaler.isTrayBend45(baseline)) {
+      return TrayBend45Scaler.scale(
+        baseline: baseline,
+        targetWidth: targetW,
+        targetHeight: targetH,
+        targetRadius: targetR,
+        includeCouplerFlaps: _includeCouplerFlaps,
+        couplerFlapLength: _couplerFlapLength,
+      );
+    }
 
     final templateDef = TemplateParameterDefinition(
       templateId: '45_deg_bend',
@@ -1396,8 +1508,23 @@ class CmsScalingController extends ChangeNotifier {
     final baselineW = w?.baselineValue ?? fallbackW;
     final baselineH = h?.baselineValue ?? fallbackH;
 
-    final hasChange = (targetW - baselineW).abs() > 1e-4 || (targetH - baselineH).abs() > 1e-4;
+    final r = parameters['radius'];
+    final targetR = r?.currentValue ?? (baseline.parameters['radius'] as num?)?.toDouble() ?? 180.0;
+    final baselineR = r?.baselineValue ?? (baseline.parameters['radius'] as num?)?.toDouble() ?? 180.0;
+
+    final hasChange = (targetW - baselineW).abs() > 1e-4 || (targetH - baselineH).abs() > 1e-4 || (targetR - baselineR).abs() > 1e-4 || _includeCouplerFlaps;
     if (!hasChange) return baseline;
+
+    if (TrayBend90Scaler.isTrayBend90(baseline)) {
+      return TrayBend90Scaler.scale(
+        baseline: baseline,
+        targetWidth: targetW,
+        targetHeight: targetH,
+        targetRadius: targetR,
+        includeCouplerFlaps: _includeCouplerFlaps,
+        couplerFlapLength: _couplerFlapLength,
+      );
+    }
 
     final templateDef = TemplateParameterDefinition(
       templateId: '90_deg_bend',
@@ -1464,13 +1591,15 @@ class CmsScalingController extends ChangeNotifier {
 
   DsfDocument _generateScaled2DDocument({required DsfDocument baseline, required String paramId, required double delta}) {
     final morphed = _morph2DBlank(baseline: baseline, paramId: paramId, delta: delta);
-    if (effectiveScalingProfile == CmsScalingProfile.outsideRiser ||
-        isOutsideRiserGeometry(baseline) ||
-        effectiveScalingProfile == CmsScalingProfile.insideRiser ||
-        isInsideRiserGeometry(baseline) ||
-        effectiveScalingProfile == CmsScalingProfile.reducer ||
-        isReducerGeometry(baseline)) {
-      return morphed;
+    if (baseline.dimensions.isEmpty && baseline.constraints.isEmpty) {
+      if (effectiveScalingProfile == CmsScalingProfile.outsideRiser ||
+          isOutsideRiserGeometry(baseline) ||
+          effectiveScalingProfile == CmsScalingProfile.insideRiser ||
+          isInsideRiserGeometry(baseline) ||
+          effectiveScalingProfile == CmsScalingProfile.reducer ||
+          isReducerGeometry(baseline)) {
+        return morphed;
+      }
     }
     return CmsPunchConstraintEngine.reconcile(baseline: baseline, scaled: morphed, paramId: paramId, delta: delta);
   }
@@ -1503,6 +1632,17 @@ class CmsScalingController extends ChangeNotifier {
         return _scaleRiserHeight2D(baseline, delta);
       }
       return baseline;
+    }
+
+    // Dedicated Cable Tray Equal Tee Scaling
+    if (TrayEqualTeeScaler.isTrayEqualTee(baseline)) {
+      final targetW = paramId == 'width' ? baseW + delta : baseW;
+      final targetH = paramId == 'height' ? baseH + delta : baseH;
+      return TrayEqualTeeScaler.scale(
+        baseline: baseline,
+        targetWidth: targetW,
+        targetHeight: targetH,
+      );
     }
 
     // 2. Flat Bends and Tees via TopologicalZoneMorpher
@@ -3127,13 +3267,15 @@ class CmsScalingController extends ChangeNotifier {
     }).toList();
 
     // 5. Initial Parameters (progressive learning: untaught by default)
-    final baselineWidth = baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0;
-    final baselineHeight = baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0;
+    final docParamW = (baselineDocument.parameters['width'] as num?)?.toDouble();
+    final docParamH = (baselineDocument.parameters['height'] as num?)?.toDouble();
+    final baselineWidth = docParamW ?? (baselinePorts.isNotEmpty ? toNominalSize(baselinePorts.first.width) : 100.0);
+    final baselineHeight = docParamH ?? (baselinePorts.isNotEmpty ? toNominalSize(baselinePorts.first.height) : 50.0);
 
     final minW = math.min(50.0, baselineWidth - 50.0);
-    final maxW = math.max(750.0, baselineWidth + 200.0);
+    final maxW = 1200.0;
     final minH = math.min(50.0, baselineHeight - 50.0);
-    final maxH = math.max(300.0, baselineHeight + 150.0);
+    final maxH = 250.0;
 
     bool initialLinked = true;
     if (contract == CmsProductContract.unequalTee || contract == CmsProductContract.unequalCross) {
@@ -3155,8 +3297,10 @@ class CmsScalingController extends ChangeNotifier {
 
     final params = <String, CmsScalingParameter>{};
     if (initialLinked || (baselinePorts.length < 3 && contract.scalingProfile != CmsScalingProfile.reducer && !isReducerGeometry(baselineDocument))) {
-      final curW = currentParameterValues?['width'] ?? (baselineDocument.parameters['width'] as num?)?.toDouble() ?? baselineWidth;
-      final curH = currentParameterValues?['height'] ?? (baselineDocument.parameters['height'] as num?)?.toDouble() ?? baselineHeight;
+      var curW = currentParameterValues?['width'] ?? (baselineDocument.parameters['width'] as num?)?.toDouble() ?? baselineWidth;
+      var curH = currentParameterValues?['height'] ?? (baselineDocument.parameters['height'] as num?)?.toDouble() ?? baselineHeight;
+      if ((curW - baselineWidth).abs() < 16.0) curW = baselineWidth;
+      if ((curH - baselineHeight).abs() < 6.0) curH = baselineHeight;
       params['width'] = CmsScalingParameter(
         id: 'width',
         displayName: 'Width (W)',
@@ -3171,12 +3315,23 @@ class CmsScalingController extends ChangeNotifier {
         rigidGroupIds: rigidGroups.map((g) => g.id).toList(),
         derivedPortIds: derivedPorts.map((p) => p.portId).toList(),
       );
+      final isBend = contract.scalingProfile == CmsScalingProfile.flatBend45 ||
+          contract.scalingProfile == CmsScalingProfile.flatBend90 ||
+          isBend45Geometry(baselineDocument) ||
+          isBend90Geometry(baselineDocument) ||
+          TrayBend45Scaler.isTrayBend45(baselineDocument) ||
+          TrayBend90Scaler.isTrayBend90(baselineDocument) ||
+          TrayEqualTeeScaler.isTrayEqualTee(baselineDocument) ||
+          TrayUnequalTeeScaler.isTrayUnequalTee(baselineDocument);
+
+      final effectiveMinH = isBend ? 50.0 : minH;
+
       params['height'] = CmsScalingParameter(
         id: 'height',
         displayName: 'Height (H)',
         currentValue: curH,
         baselineValue: baselineHeight,
-        minValidMm: minH,
+        minValidMm: effectiveMinH,
         maxValidMm: maxH,
         unit: 'mm',
         teachingState: (curH - baselineHeight).abs() > 0.01 ? CmsParameterTeachingState.learned : CmsParameterTeachingState.untaught,
@@ -3185,6 +3340,24 @@ class CmsScalingController extends ChangeNotifier {
         rigidGroupIds: rigidGroups.map((g) => g.id).toList(),
         derivedPortIds: derivedPorts.map((p) => p.portId).toList(),
       );
+
+      if (isBend) {
+        final curR = currentParameterValues?['radius'] ?? (baselineDocument.parameters['radius'] as num?)?.toDouble() ?? 180.0;
+        params['radius'] = CmsScalingParameter(
+          id: 'radius',
+          displayName: 'Bend Radius (R)',
+          currentValue: curR,
+          baselineValue: 180.0,
+          minValidMm: 180.0,
+          maxValidMm: 900.0,
+          unit: 'mm',
+          teachingState: (curR - 180.0).abs() > 0.01 ? CmsParameterTeachingState.learned : CmsParameterTeachingState.untaught,
+          stretchZoneIds: ['ZONE_FLOOR_WEB'],
+          translationZoneIds: ['ZONE_SIDEWALLS_AND_FLANGES'],
+          rigidGroupIds: rigidGroups.map((g) => g.id).toList(),
+          derivedPortIds: derivedPorts.map((p) => p.portId).toList(),
+        );
+      }
       _activeParameterId = 'width';
     } else {
       for (int i = 0; i < baselinePorts.length; i++) {
@@ -3196,23 +3369,30 @@ class CmsScalingController extends ChangeNotifier {
           baseWidth = (i == 0 || i == 2) ? 50.0 : 100.0;
         } else if (contract.scalingProfile == CmsScalingProfile.reducer || isReducerGeometry(baselineDocument)) {
           baseWidth = i == 0 ? 100.0 : 50.0;
+        } else if (TrayUnequalTeeScaler.isTrayUnequalTee(baselineDocument)) {
+          baseWidth = toNominalSize(p.width);
         } else {
           baseWidth = p.width;
         }
-        final curW = currentParameterValues?[wId] ?? (baselineDocument.parameters[wId] as num?)?.toDouble() ?? baseWidth;
+        var curW = currentParameterValues?[wId] ?? (baselineDocument.parameters[wId] as num?)?.toDouble() ?? baseWidth;
+        if (TrayUnequalTeeScaler.isTrayUnequalTee(baselineDocument) && (curW - baseWidth).abs() < 5.0) {
+          curW = baseWidth;
+        }
         params[wId] = CmsScalingParameter(
           id: wId,
           displayName: 'Port ${i + 1} Width',
           currentValue: curW,
           baselineValue: baseWidth,
           minValidMm: math.min(50.0, baseWidth - 50.0),
-          maxValidMm: math.max(750.0, baseWidth + 200.0),
+          maxValidMm: 1200.0,
           unit: 'mm',
           teachingState: (curW - baseWidth).abs() > 0.01 ? CmsParameterTeachingState.learned : CmsParameterTeachingState.untaught,
         );
         final double baseHeight;
         if (contract.scalingProfile == CmsScalingProfile.reducer || isReducerGeometry(baselineDocument)) {
           baseHeight = i == 0 ? 100.0 : 50.0;
+        } else if (TrayUnequalTeeScaler.isTrayUnequalTee(baselineDocument)) {
+          baseHeight = toNominalSize(p.height);
         } else if (contract == CmsProductContract.unequalTee && i == 1) {
           // Port 2 coupler on Unequal Tee has a 50mm baseline coupler height
           baseHeight = 50.0;
@@ -3227,16 +3407,36 @@ class CmsScalingController extends ChangeNotifier {
         } else {
           baseHeight = p.height;
         }
-        final curH = currentParameterValues?[hId] ?? (baselineDocument.parameters[hId] as num?)?.toDouble() ?? baseHeight;
+        var curH = currentParameterValues?[hId] ?? (baselineDocument.parameters[hId] as num?)?.toDouble() ?? baseHeight;
+        if (TrayUnequalTeeScaler.isTrayUnequalTee(baselineDocument) && (curH - baseHeight).abs() < 5.0) {
+          curH = baseHeight;
+        }
         params[hId] = CmsScalingParameter(
           id: hId,
           displayName: 'Port ${i + 1} Height',
           currentValue: curH,
           baselineValue: baseHeight,
           minValidMm: math.min(50.0, baseHeight - 50.0),
-          maxValidMm: math.max(300.0, baseHeight + 150.0),
+          maxValidMm: 250.0,
           unit: 'mm',
           teachingState: (curH - baseHeight).abs() > 0.01 ? CmsParameterTeachingState.learned : CmsParameterTeachingState.untaught,
+        );
+      }
+      if (TrayUnequalTeeScaler.isTrayUnequalTee(baselineDocument)) {
+        final curR = currentParameterValues?['radius'] ?? (baselineDocument.parameters['radius'] as num?)?.toDouble() ?? 180.0;
+        params['radius'] = CmsScalingParameter(
+          id: 'radius',
+          displayName: 'Bend Radius (R)',
+          currentValue: curR,
+          baselineValue: 180.0,
+          minValidMm: 180.0,
+          maxValidMm: 900.0,
+          unit: 'mm',
+          teachingState: (curR - 180.0).abs() > 0.01 ? CmsParameterTeachingState.learned : CmsParameterTeachingState.untaught,
+          stretchZoneIds: ['ZONE_FLOOR_WEB'],
+          translationZoneIds: ['ZONE_SIDEWALLS_AND_FLANGES'],
+          rigidGroupIds: rigidGroups.map((g) => g.id).toList(),
+          derivedPortIds: derivedPorts.map((p) => p.portId).toList(),
         );
       }
       _activeParameterId = 'port1_width';

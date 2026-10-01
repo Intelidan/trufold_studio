@@ -69,6 +69,7 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
   // Controllers for parameters
   final Map<String, TextEditingController> _controllers = {};
   late TextEditingController _thicknessController;
+  late TextEditingController _itemNameController;
   late Map<String, double> _currentParams;
   late Map<String, double> _analyzed;
   late Map<String, String> _portAssignments;
@@ -111,6 +112,9 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     _thicknessController = TextEditingController(
       text: (_currentParams['thickness'] ?? currentThk).toStringAsFixed(1),
     );
+    _itemNameController = TextEditingController(
+      text: widget.viewModel.document.itemName,
+    );
 
     _syncControllers();
   }
@@ -137,6 +141,7 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
   @override
   void dispose() {
     _thicknessController.dispose();
+    _itemNameController.dispose();
     for (final c in _controllers.values) {
       c.dispose();
     }
@@ -249,14 +254,24 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     }
     widget.viewModel.updateFittingMetadata(meta);
 
+    final updatedName = _itemNameController.text.trim();
+
+    final updatedMetadata = Map<String, dynamic>.from(widget.viewModel.document.metadata);
+    updatedMetadata['fittingMetadata'] = meta.toJson();
+    updatedMetadata['category'] = meta.category;
+    updatedMetadata['fittingCategory'] = meta.category;
+    updatedMetadata['product'] = meta.product;
+    updatedMetadata['fittingProduct'] = meta.product;
+    updatedMetadata['variantName'] = meta.variantName;
+    updatedMetadata['fittingVariant'] = meta.variantName;
+
     if (_isDeclaredCms) {
       final contract = CmsProductContract.lookup(_selectedProduct, _selectedVariantName) ??
           CmsProductContract.lookup(meta.product, meta.variantName) ??
-          CmsProductContract.lookup(null, widget.viewModel.document.itemName) ??
+          CmsProductContract.lookup(null, updatedName.isNotEmpty ? updatedName : widget.viewModel.document.itemName) ??
           CmsProductContract.lookup(null, widget.viewModel.document.productType) ??
           CmsProductContract.bend45;
 
-      final updatedMetadata = Map<String, dynamic>.from(widget.viewModel.document.metadata);
       updatedMetadata['isCmsProduct'] = true;
       updatedMetadata['cmsWorkflow'] = {'stage': 'manufacturing_definition', 'stageIndex': 1};
       updatedMetadata['cms_product_contract'] = {
@@ -264,13 +279,38 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
         'variationName': contract.variationName,
         'displayName': contract.displayName,
       };
+      if (updatedMetadata['cmsTemplate'] is Map) {
+        final cms = Map<String, dynamic>.from(updatedMetadata['cmsTemplate'] as Map);
+        cms['category'] = meta.category;
+        cms['productType'] = contract.productType;
+        cms['variation'] = contract.variationName;
+        updatedMetadata['cmsTemplate'] = cms;
+      }
       widget.viewModel.updateDocument(
         widget.viewModel.document.copyWith(
+          itemName: updatedName.isNotEmpty ? updatedName : widget.viewModel.document.itemName,
           productType: contract.productType,
           metadata: updatedMetadata,
         ),
       );
+    } else {
+      if (updatedMetadata['cmsTemplate'] is Map) {
+        final cms = Map<String, dynamic>.from(updatedMetadata['cmsTemplate'] as Map);
+        cms['category'] = meta.category;
+        cms['productType'] = meta.product;
+        cms['variation'] = meta.variantName;
+        updatedMetadata['cmsTemplate'] = cms;
+      }
+      widget.viewModel.updateDocument(
+        widget.viewModel.document.copyWith(
+          itemName: updatedName.isNotEmpty ? updatedName : widget.viewModel.document.itemName,
+          productType: _selectedProduct != 'None' ? _selectedProduct : widget.viewModel.document.productType,
+          metadata: updatedMetadata,
+        ),
+      );
     }
+
+    widget.viewModel.saveActiveFileDirectIfPossible();
 
     if (widget.onClose != null) {
       widget.onClose!();
@@ -281,9 +321,7 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_isDeclaredCms
-            ? 'CMS product parameters attached to DSF: ${meta.product} (${meta.variantName}) | THK: ${widget.viewModel.document.material.thicknessMm.toStringAsFixed(1)}mm'
-            : 'Fitting parameters attached to DSF drawing: ${meta.product} (${meta.variantName}) | THK: ${widget.viewModel.document.material.thicknessMm.toStringAsFixed(1)}mm'),
+        content: Text('✓ Saved category: ${meta.category} | ${meta.product} (${meta.variantName}) to DSF | THK: ${widget.viewModel.document.material.thicknessMm.toStringAsFixed(1)}mm'),
         backgroundColor: const Color(0xFF0F766E),
         duration: const Duration(seconds: 2),
       ),
@@ -298,15 +336,24 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     }
     widget.viewModel.updateFittingMetadata(meta);
 
+    final updatedName = _itemNameController.text.trim();
+
     // Resolve matching CMS Product Contract
     final contract = CmsProductContract.lookup(_selectedProduct, _selectedVariantName) ??
         CmsProductContract.lookup(meta.product, meta.variantName) ??
-        CmsProductContract.lookup(null, widget.viewModel.document.itemName) ??
+        CmsProductContract.lookup(null, updatedName.isNotEmpty ? updatedName : widget.viewModel.document.itemName) ??
         CmsProductContract.lookup(null, widget.viewModel.document.productType) ??
         CmsProductContract.bend45;
 
-    // Attach CMS product flags to DSF document
+    // Attach CMS product flags and category to DSF document
     final updatedMetadata = Map<String, dynamic>.from(widget.viewModel.document.metadata);
+    updatedMetadata['fittingMetadata'] = meta.toJson();
+    updatedMetadata['category'] = meta.category;
+    updatedMetadata['fittingCategory'] = meta.category;
+    updatedMetadata['product'] = meta.product;
+    updatedMetadata['fittingProduct'] = meta.product;
+    updatedMetadata['variantName'] = meta.variantName;
+    updatedMetadata['fittingVariant'] = meta.variantName;
     updatedMetadata['isCmsProduct'] = true;
     updatedMetadata['cmsWorkflow'] = {'stage': 'manufacturing_definition', 'stageIndex': 1};
     updatedMetadata['cms_product_contract'] = {
@@ -314,12 +361,21 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
       'variationName': contract.variationName,
       'displayName': contract.displayName,
     };
+    if (updatedMetadata['cmsTemplate'] is Map) {
+      final cms = Map<String, dynamic>.from(updatedMetadata['cmsTemplate'] as Map);
+      cms['category'] = meta.category;
+      cms['productType'] = contract.productType;
+      cms['variation'] = contract.variationName;
+      updatedMetadata['cmsTemplate'] = cms;
+    }
     widget.viewModel.updateDocument(
       widget.viewModel.document.copyWith(
+        itemName: updatedName.isNotEmpty ? updatedName : widget.viewModel.document.itemName,
         productType: contract.productType,
         metadata: updatedMetadata,
       ),
     );
+    widget.viewModel.saveActiveFileDirectIfPossible();
 
     if (widget.onClose != null) {
       widget.onClose!();
@@ -584,8 +640,42 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // A. Searchable Dropdowns & Sheet Metal Thickness
-                    _buildSectionHeader('1. CATALOG CLASSIFICATION & THICKNESS', Icons.category_outlined),
+                    // A. Product Identity, Classification & Sheet Metal Thickness
+                    _buildSectionHeader('1. PRODUCT IDENTITY & CATALOG CLASSIFICATION', Icons.inventory_2_outlined),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 38,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFCBD5E1), width: 1),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.edit_note, size: 18, color: Color(0xFF0284C7)),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Product Name:',
+                            style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _itemNameController,
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+                              decoration: const InputDecoration(
+                                hintText: 'Enter product name or part number...',
+                                hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(vertical: 8),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -631,11 +721,15 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                     ),
                     const SizedBox(height: 12),
 
-                    // B. Analyzed Geometry Banner
+                    // B. Global Properties & Manufacturing Info Grid
+                    _buildGlobalPropertiesGrid(),
+                    const SizedBox(height: 8),
+
+                    // B2. Analyzed Geometry Banner
                     _buildAnalyzedInfoBanner(),
                     const SizedBox(height: 12),
 
-                    // B2. CMS Product Declaration Banner & Toggle
+                    // B3. CMS Product Declaration Banner & Toggle
                     if (!widget.viewModel.hasVerifiedCmsTemplate) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -725,23 +819,45 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                       ),
                       const SizedBox(height: 3),
                       const Text(
-                        'Baseline CMS template definition complete. Review cross-section, flow schematic, and launch Teach Scaling.',
+                        'Baseline CMS template definition complete. Port dimensions and global properties are displayed below (info only).',
                         style: TextStyle(color: Color(0xFF059669), fontSize: 10, fontWeight: FontWeight.w600),
                       ),
                     ] else ...[
                       _buildSectionHeader(
-                        '2. PORT PARAMETERS ($portCount OPENING${portCount > 1 ? 'S' : ''}) & EDGE ASSIGNMENT',
+                        '2. PORT PARAMETERS ($portCount OPENING${portCount > 1 ? 'S' : ''})',
                         Icons.straighten,
                       ),
                       const SizedBox(height: 3),
                       const Text(
-                        'Right-click any edge on canvas to assign directly, or use buttons below.',
+                        'Port dimensions and geometry specifications displayed below (info only).',
                         style: TextStyle(color: Color(0xFF64748B), fontSize: 10),
                       ),
                     ],
                     const SizedBox(height: 8),
 
                     _buildPortCardsSection(portCount),
+                    if (_isTrayOrLadder && _isBendFitting) _buildBendRadiusInfoCard(),
+                    Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 14, color: Color(0xFF0284C7)),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Live dimensions, bend angles, coupler flaps, and perforations are managed via the CMS Parameter Inspector.',
+                              style: TextStyle(fontSize: 10.5, color: Color(0xFF475569)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1214,6 +1330,198 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     );
   }
 
+  bool get _isBendFitting {
+    final prod = _selectedProduct.toLowerCase();
+    final variant = _selectedVariantName.toLowerCase();
+    final docType = (widget.viewModel.detectedFittingMetadata?.product ?? '').toLowerCase();
+    final item = (_itemNameController.text.isNotEmpty ? _itemNameController.text : widget.viewModel.document.itemName).toLowerCase();
+    return prod.contains('bend') || variant.contains('bend') || docType.contains('bend') || item.contains('bend');
+  }
+
+  bool get _isTrayOrLadder {
+    final cat = _selectedCategory.toLowerCase();
+    final prod = _selectedProduct.toLowerCase();
+    final variant = _selectedVariantName.toLowerCase();
+    final item = (_itemNameController.text.isNotEmpty ? _itemNameController.text : widget.viewModel.document.itemName).toLowerCase();
+    final docType = (widget.viewModel.detectedFittingMetadata?.product ?? widget.viewModel.document.productType).toLowerCase();
+    final full = '$cat $prod $variant $item $docType';
+    if (full.contains('trunk') || full.contains('trunking')) return false;
+    return full.contains('tray') || full.contains('ladder');
+  }
+
+  Widget _buildBendRadiusInfoCard() {
+    final curRadius = double.tryParse(_controllers['radius']?.text ?? '') ??
+        (_currentParams['radius'] ?? 180.0);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F9FF),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFBAE6FD)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.rounded_corner, size: 16, color: Color(0xFF0284C7)),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Inside Throat Bend Radius (Tray/Ladder)',
+              style: TextStyle(
+                color: Color(0xFF0369A1),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0284C7),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${curRadius.toStringAsFixed(0)} mm',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGlobalPropertiesGrid() {
+    final doc = widget.viewModel.document;
+    final thk = double.tryParse(_thicknessController.text) ?? doc.material.thicknessMm;
+    final w = _analyzed['overallWidth'] ?? 0.0;
+    final h = _analyzed['overallHeight'] ?? 0.0;
+    final areaSqM = (w * h) / 1e6;
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildPropInfoTile(
+                  icon: Icons.layers_outlined,
+                  label: 'Material',
+                  value: doc.material.name,
+                  subtext: 'Grade: ${doc.material.materialGrade.isNotEmpty ? doc.material.materialGrade : 'Standard'}',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPropInfoTile(
+                  icon: Icons.line_weight,
+                  label: 'Sheet Thickness',
+                  value: '${thk.toStringAsFixed(1)} mm',
+                  subtext: 'Density: ${doc.material.densityKgM3.toStringAsFixed(0)} kg/m³',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPropInfoTile(
+                  icon: Icons.crop_free,
+                  label: 'Flat Blank Size',
+                  value: '${w > 0 ? w.toStringAsFixed(1) : '--'} × ${h > 0 ? h.toStringAsFixed(1) : '--'} mm',
+                  subtext: areaSqM > 0 ? 'Area: ${areaSqM.toStringAsFixed(3)} m²' : 'Area: --',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildPropInfoTile(
+                  icon: Icons.architecture,
+                  label: 'Bends & Folds',
+                  value: '${doc.bends.length} Fold Lines',
+                  subtext: 'K-Factor: ${doc.material.kFactor.toStringAsFixed(2)}',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPropInfoTile(
+                  icon: Icons.grid_on_outlined,
+                  label: 'Punches & Slots',
+                  value: '${doc.punches.length} Punches',
+                  subtext: '${doc.perforationPatterns.length} Perforations',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPropInfoTile(
+                  icon: Icons.polyline_outlined,
+                  label: 'Outer Boundary',
+                  value: '${doc.outerContour.length} Vertices',
+                  subtext: 'Type: 2D Flat Blank',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPropInfoTile({
+    required IconData icon,
+    required String label,
+    required String value,
+    required String subtext,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: const Color(0xFFCBD5E1), width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 13, color: const Color(0xFF0284C7)),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 11.5, color: Color(0xFF0F172A), fontWeight: FontWeight.bold),
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            subtext,
+            style: const TextStyle(fontSize: 9.5, color: Color(0xFF94A3B8)),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPortCardsSection(int portCount) {
     final verifiedPorts = widget.viewModel.verifiedCmsPorts;
     if (verifiedPorts.isNotEmpty) {
@@ -1491,7 +1799,6 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     required double val,
     required Color accentColor,
   }) {
-    final controller = _controllers[key] ??= TextEditingController(text: val.toStringAsFixed(1));
     return Row(
       children: [
         Expanded(
@@ -1505,43 +1812,19 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
         Expanded(
           flex: 3,
           child: Container(
-            height: 30,
+            height: 28,
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: const Color(0xFFCBD5E1)),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 11.5, fontWeight: FontWeight.bold),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 6),
-                    ),
-                    onChanged: (newValStr) {
-                      if (_isLinkedPorts) {
-                        if (key.endsWith('Width')) {
-                          for (final k in _controllers.keys.where((k) => k.endsWith('Width') || k == 'width')) {
-                            if (k != key && _controllers[k]?.text != newValStr) {
-                              _controllers[k]?.text = newValStr;
-                            }
-                          }
-                        } else if (key.endsWith('Height')) {
-                          for (final k in _controllers.keys.where((k) => k.endsWith('Height') || k == 'height')) {
-                            if (k != key && _controllers[k]?.text != newValStr) {
-                              _controllers[k]?.text = newValStr;
-                            }
-                          }
-                        }
-                      }
-                    },
-                  ),
+                Text(
+                  val.toStringAsFixed(0),
+                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 11.5, fontWeight: FontWeight.bold),
                 ),
                 const Text('mm', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
               ],

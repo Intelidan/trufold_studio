@@ -248,7 +248,7 @@ class _DdsTemplateLibraryDialogState extends State<DdsTemplateLibraryDialog> {
                 ),
                 const SizedBox(height: 2.0),
                 const Text(
-                  'Standard Cable Management System (CMS) parametric fittings residing in assets/dxf_templates/',
+                  'Standard Cable Management System (CMS) parametric fittings residing in assets/dsf_templates/',
                   style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
                 ),
               ],
@@ -451,10 +451,31 @@ class _DdsTemplateLibraryDialogState extends State<DdsTemplateLibraryDialog> {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
-                    fontSize: 12.5,
+                    fontSize: 13.0,
                   ),
                 ),
                 const SizedBox(height: 3.0),
+                Text(
+                  item.defaultDimensions,
+                  style: const TextStyle(
+                    color: Color(0xFF38BDF8),
+                    fontSize: 11.0,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+
+          // 4. Category & Specs
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
                 Row(
                   children: [
                     Container(
@@ -474,35 +495,6 @@ class _DdsTemplateLibraryDialogState extends State<DdsTemplateLibraryDialog> {
                       child: Text(
                         item.fileName,
                         style: const TextStyle(color: Color(0xFF64748B), fontSize: 10.5, fontFamily: 'monospace'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // 4. Baseline Dimensions & Specs
-          Expanded(
-            flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.straighten, size: 13, color: Color(0xFF38BDF8)),
-                    const SizedBox(width: 4.0),
-                    Expanded(
-                      child: Text(
-                        item.defaultDimensions,
-                        style: const TextStyle(
-                          color: Color(0xFFE2E8F0),
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
-                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -624,7 +616,7 @@ class _DdsTemplateLibraryDialogState extends State<DdsTemplateLibraryDialog> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            'Showing $count of ${_items.length} templates  •  Base Directory: assets/dxf_templates/trunking_accessories/',
+            'Showing $count of ${_items.length} templates  •  Base Directory: assets/dsf_templates/trunking_accessories/',
             style: const TextStyle(color: Color(0xFF64748B), fontSize: 11.0),
           ),
           TextButton(

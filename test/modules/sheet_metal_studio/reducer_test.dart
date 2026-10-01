@@ -25,7 +25,7 @@ void main() {
     }
   });
   test('Test decompose and fold of reducer_150x100x100x100', () {
-    final file = File('assets/dxf_templates/trunking_accessories/reducer_150x100x100x100.dsf');
+    final file = File('assets/dsf_templates/trunking_accessories/reducer_150x100x100x100.dsf');
     expect(file.existsSync(), isTrue);
 
     final dsf = DsfDocument.fromJson(jsonDecode(file.readAsStringSync()) as Map<String, dynamic>);

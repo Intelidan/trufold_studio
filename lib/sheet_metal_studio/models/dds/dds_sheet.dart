@@ -8,6 +8,7 @@
 // =============================================================================
 
 import 'package:flutter/foundation.dart';
+
 import '../cad_primitives.dart';
 import 'dds_annotation.dart';
 
@@ -18,6 +19,9 @@ enum DdsSheetType {
 
   /// Detailed Technical Data Sheet for a single engineering product instance.
   productSheet,
+
+  /// Blank engineering drafting sheet for custom sketches, diagrams, and annotations.
+  blankSheet,
 }
 
 /// An entry in the Cover Page's Transmittal / Product Schedule table.
@@ -42,14 +46,14 @@ class DdsTocEntry {
   });
 
   Map<String, dynamic> toJson() => {
-        'sheetNumber': sheetNumber,
-        'orderLine': orderLine,
-        'customerRef': customerRef,
-        'productName': productName,
-        'configuration': configuration,
-        'quantity': quantity,
-        'status': status,
-      };
+    'sheetNumber': sheetNumber,
+    'orderLine': orderLine,
+    'customerRef': customerRef,
+    'productName': productName,
+    'configuration': configuration,
+    'quantity': quantity,
+    'status': status,
+  };
 
   factory DdsTocEntry.fromJson(Map<String, dynamic> json) {
     return DdsTocEntry(
@@ -72,19 +76,14 @@ class DdsCamera3DSettings {
   final double zoom;
   final CadPoint2D panOffset;
 
-  const DdsCamera3DSettings({
-    this.elevationDeg = 30.0,
-    this.azimuthDeg = 45.0,
-    this.zoom = 1.0,
-    this.panOffset = const CadPoint2D(0.0, 0.0),
-  });
+  const DdsCamera3DSettings({this.elevationDeg = 30.0, this.azimuthDeg = 45.0, this.zoom = 1.0, this.panOffset = const CadPoint2D(0.0, 0.0)});
 
   Map<String, dynamic> toJson() => {
-        'elevationDeg': elevationDeg,
-        'azimuthDeg': azimuthDeg,
-        'zoom': zoom,
-        'panOffset': {'x': panOffset.x, 'y': panOffset.y},
-      };
+    'elevationDeg': elevationDeg,
+    'azimuthDeg': azimuthDeg,
+    'zoom': zoom,
+    'panOffset': {'x': panOffset.x, 'y': panOffset.y},
+  };
 
   factory DdsCamera3DSettings.fromJson(Map<String, dynamic> json) {
     final pan = json['panOffset'] as Map<String, dynamic>?;
@@ -92,9 +91,7 @@ class DdsCamera3DSettings {
       elevationDeg: (json['elevationDeg'] as num?)?.toDouble() ?? 30.0,
       azimuthDeg: (json['azimuthDeg'] as num?)?.toDouble() ?? 45.0,
       zoom: (json['zoom'] as num?)?.toDouble() ?? 1.0,
-      panOffset: pan != null
-          ? CadPoint2D((pan['x'] as num).toDouble(), (pan['y'] as num).toDouble())
-          : const CadPoint2D(0.0, 0.0),
+      panOffset: pan != null ? CadPoint2D((pan['x'] as num).toDouble(), (pan['y'] as num).toDouble()) : const CadPoint2D(0.0, 0.0),
     );
   }
 }
@@ -117,12 +114,12 @@ class DdsDrawing2DSettings {
   });
 
   Map<String, dynamic> toJson() => {
-        'viewMode': viewMode,
-        'showBendLines': showBendLines,
-        'showPunches': showPunches,
-        'zoom': zoom,
-        'panOffset': {'x': panOffset.x, 'y': panOffset.y},
-      };
+    'viewMode': viewMode,
+    'showBendLines': showBendLines,
+    'showPunches': showPunches,
+    'zoom': zoom,
+    'panOffset': {'x': panOffset.x, 'y': panOffset.y},
+  };
 
   factory DdsDrawing2DSettings.fromJson(Map<String, dynamic> json) {
     final pan = json['panOffset'] as Map<String, dynamic>?;
@@ -131,9 +128,7 @@ class DdsDrawing2DSettings {
       showBendLines: json['showBendLines'] as bool? ?? true,
       showPunches: json['showPunches'] as bool? ?? true,
       zoom: (json['zoom'] as num?)?.toDouble() ?? 1.0,
-      panOffset: pan != null
-          ? CadPoint2D((pan['x'] as num).toDouble(), (pan['y'] as num).toDouble())
-          : const CadPoint2D(0.0, 0.0),
+      panOffset: pan != null ? CadPoint2D((pan['x'] as num).toDouble(), (pan['y'] as num).toDouble()) : const CadPoint2D(0.0, 0.0),
     );
   }
 }
@@ -170,8 +165,13 @@ class DdsViewSettings {
     this.showDimFlange = true,
     this.showDimThickness = true,
     this.showCadDimensionLines = true,
-    this.showDimensionTags = true,
+    this.showDimensionTags = false,
+    this.combinePortDimensions = true,
+    this.is3DModelLocked = false,
   });
+
+  final bool combinePortDimensions;
+  final bool is3DModelLocked;
 
   DdsViewSettings copyWith({
     String? paperSize,
@@ -188,6 +188,8 @@ class DdsViewSettings {
     bool? showDimThickness,
     bool? showCadDimensionLines,
     bool? showDimensionTags,
+    bool? combinePortDimensions,
+    bool? is3DModelLocked,
   }) {
     return DdsViewSettings(
       paperSize: paperSize ?? this.paperSize,
@@ -204,36 +206,36 @@ class DdsViewSettings {
       showDimThickness: showDimThickness ?? this.showDimThickness,
       showCadDimensionLines: showCadDimensionLines ?? this.showCadDimensionLines,
       showDimensionTags: showDimensionTags ?? this.showDimensionTags,
+      combinePortDimensions: combinePortDimensions ?? this.combinePortDimensions,
+      is3DModelLocked: is3DModelLocked ?? this.is3DModelLocked,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'paperSize': paperSize,
-        'splitRatio2D3D': splitRatio2D3D,
-        'camera3D': camera3D.toJson(),
-        'drawing2D': drawing2D.toJson(),
-        'showCover3D': showCover3D,
-        'showFasteners3D': showFasteners3D,
-        'showDimWidth': showDimWidth,
-        'showDimHeight': showDimHeight,
-        'showDimPorts': showDimPorts,
-        'showDimSlots': showDimSlots,
-        'showDimFlange': showDimFlange,
-        'showDimThickness': showDimThickness,
-        'showCadDimensionLines': showCadDimensionLines,
-        'showDimensionTags': showDimensionTags,
-      };
+    'paperSize': paperSize,
+    'splitRatio2D3D': splitRatio2D3D,
+    'camera3D': camera3D.toJson(),
+    'drawing2D': drawing2D.toJson(),
+    'showCover3D': showCover3D,
+    'showFasteners3D': showFasteners3D,
+    'showDimWidth': showDimWidth,
+    'showDimHeight': showDimHeight,
+    'showDimPorts': showDimPorts,
+    'showDimSlots': showDimSlots,
+    'showDimFlange': showDimFlange,
+    'showDimThickness': showDimThickness,
+    'showCadDimensionLines': showCadDimensionLines,
+    'showDimensionTags': showDimensionTags,
+    'combinePortDimensions': combinePortDimensions,
+    'is3DModelLocked': is3DModelLocked,
+  };
 
   factory DdsViewSettings.fromJson(Map<String, dynamic> json) {
     return DdsViewSettings(
       paperSize: json['paperSize'] as String? ?? 'A4_Landscape',
       splitRatio2D3D: (json['splitRatio2D3D'] as num?)?.toDouble() ?? 0.50,
-      camera3D: json['camera3D'] != null
-          ? DdsCamera3DSettings.fromJson(json['camera3D'] as Map<String, dynamic>)
-          : const DdsCamera3DSettings(),
-      drawing2D: json['drawing2D'] != null
-          ? DdsDrawing2DSettings.fromJson(json['drawing2D'] as Map<String, dynamic>)
-          : const DdsDrawing2DSettings(),
+      camera3D: json['camera3D'] != null ? DdsCamera3DSettings.fromJson(json['camera3D'] as Map<String, dynamic>) : const DdsCamera3DSettings(),
+      drawing2D: json['drawing2D'] != null ? DdsDrawing2DSettings.fromJson(json['drawing2D'] as Map<String, dynamic>) : const DdsDrawing2DSettings(),
       showCover3D: json['showCover3D'] as bool? ?? true,
       showFasteners3D: json['showFasteners3D'] as bool? ?? false,
       showDimWidth: json['showDimWidth'] as bool? ?? true,
@@ -243,7 +245,9 @@ class DdsViewSettings {
       showDimFlange: json['showDimFlange'] as bool? ?? true,
       showDimThickness: json['showDimThickness'] as bool? ?? true,
       showCadDimensionLines: json['showCadDimensionLines'] as bool? ?? true,
-      showDimensionTags: json['showDimensionTags'] as bool? ?? true,
+      showDimensionTags: json['showDimensionTags'] as bool? ?? false,
+      combinePortDimensions: json['combinePortDimensions'] as bool? ?? true,
+      is3DModelLocked: json['is3DModelLocked'] as bool? ?? false,
     );
   }
 }
@@ -272,33 +276,28 @@ class DdsSheet {
   });
 
   bool get isCoverPage => sheetType == DdsSheetType.coverSchedule;
+  bool get isBlankSheet => sheetType == DdsSheetType.blankSheet;
 
   Map<String, dynamic> toJson() => {
-        'sheetId': sheetId,
-        'sheetType': sheetType.name,
-        'sheetNumber': sheetNumber,
-        'title': title,
-        if (productInstanceId != null) 'productInstanceId': productInstanceId,
-        if (tableOfContents.isNotEmpty)
-          'tableOfContents': tableOfContents.map((e) => e.toJson()).toList(),
-        'annotations': annotations.map((a) => a.toJson()).toList(),
-        'viewSettings': viewSettings.toJson(),
-      };
+    'sheetId': sheetId,
+    'sheetType': sheetType.name,
+    'sheetNumber': sheetNumber,
+    'title': title,
+    if (productInstanceId != null) 'productInstanceId': productInstanceId,
+    if (tableOfContents.isNotEmpty) 'tableOfContents': tableOfContents.map((e) => e.toJson()).toList(),
+    'annotations': annotations.map((a) => a.toJson()).toList(),
+    'viewSettings': viewSettings.toJson(),
+  };
 
   factory DdsSheet.fromJson(Map<String, dynamic> json) {
     final typeStr = json['sheetType'] as String? ?? 'productSheet';
-    final sheetType = DdsSheetType.values.firstWhere(
-      (e) => e.name == typeStr,
-      orElse: () => DdsSheetType.productSheet,
-    );
+    final sheetType = DdsSheetType.values.firstWhere((e) => e.name == typeStr, orElse: () => DdsSheetType.productSheet);
 
     final rawToc = json['tableOfContents'] as List<dynamic>? ?? [];
     final toc = rawToc.map((e) => DdsTocEntry.fromJson(e as Map<String, dynamic>)).toList();
 
     final rawAnn = json['annotations'] as List<dynamic>? ?? [];
-    final annotations = rawAnn
-        .map((e) => DdsAnnotation.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final annotations = rawAnn.map((e) => DdsAnnotation.fromJson(e as Map<String, dynamic>)).toList();
 
     return DdsSheet(
       sheetId: json['sheetId'] as String? ?? 'sheet_${DateTime.now().millisecondsSinceEpoch}',
@@ -308,9 +307,7 @@ class DdsSheet {
       productInstanceId: json['productInstanceId'] as String?,
       tableOfContents: toc,
       annotations: annotations,
-      viewSettings: json['viewSettings'] != null
-          ? DdsViewSettings.fromJson(json['viewSettings'] as Map<String, dynamic>)
-          : const DdsViewSettings(),
+      viewSettings: json['viewSettings'] != null ? DdsViewSettings.fromJson(json['viewSettings'] as Map<String, dynamic>) : const DdsViewSettings(),
     );
   }
 

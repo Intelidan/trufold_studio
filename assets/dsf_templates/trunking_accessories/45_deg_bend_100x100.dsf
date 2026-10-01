@@ -1,0 +1,2907 @@
+{
+  "format": "DANISH_SHEET_FOLD",
+  "version": "2.0",
+  "productType": "bend",
+  "itemName": "45_deg_bend_100x100.dxf",
+  "material": {
+    "thicknessMm": 1.5,
+    "materialGrade": "Pre-Galvanized Steel",
+    "materialType": "mildSteel",
+    "finish": "electroGalvanized",
+    "kFactor": 0.4,
+    "defaultBendRadius": 1.5,
+    "edgeChamferMm": 0.0
+  },
+  "outerContour": [
+    {
+      "x": 149.22378301549384,
+      "y": 0.0
+    },
+    {
+      "x": 99.22378301549384,
+      "y": 0.0
+    },
+    {
+      "x": 99.22378301549384,
+      "y": 9.99999999999983
+    },
+    {
+      "x": 79.22378301549497,
+      "y": 9.99999999999983
+    },
+    {
+      "x": 69.22378301549497,
+      "y": 19.99999999999983
+    },
+    {
+      "x": 69.22378301549497,
+      "y": 97.99999999999994
+    },
+    {
+      "x": 79.22378301549497,
+      "y": 107.99999999999994
+    },
+    {
+      "x": 99.22378301549384,
+      "y": 107.99999999999972
+    },
+    {
+      "x": 61.72080664371401,
+      "y": 198.54019418610716
+    },
+    {
+      "x": 42.91493399509204,
+      "y": 190.750554198904
+    },
+    {
+      "x": 29.849307498039025,
+      "y": 196.16251650584655
+    },
+    {
+      "x": 0.0,
+      "y": 268.2251201355187
+    },
+    {
+      "x": 5.411964153171766,
+      "y": 281.29075108976275
+    },
+    {
+      "x": 24.217830498374042,
+      "y": 289.08038846600726
+    },
+    {
+      "x": 20.390996174722886,
+      "y": 298.3191837911202
+    },
+    {
+      "x": 73.65516849760684,
+      "y": 320.38192604994293
+    },
+    {
+      "x": 86.72079814637004,
+      "y": 314.9699650484808
+    },
+    {
+      "x": 124.22378301549293,
+      "y": 224.42975034797126
+    },
+    {
+      "x": 161.72676788461695,
+      "y": 314.9699650484808
+    },
+    {
+      "x": 174.79239753338084,
+      "y": 320.38192604994293
+    },
+    {
+      "x": 228.05656985626388,
+      "y": 298.3191837911202
+    },
+    {
+      "x": 224.22973553261295,
+      "y": 289.08038846600726
+    },
+    {
+      "x": 243.0356018778159,
+      "y": 281.2907510897625
+    },
+    {
+      "x": 248.447566030987,
+      "y": 268.22512013551915
+    },
+    {
+      "x": 218.59825853294797,
+      "y": 196.1625165058461
+    },
+    {
+      "x": 205.53263203589472,
+      "y": 190.7505541989039
+    },
+    {
+      "x": 186.7267593872739,
+      "y": 198.54019418610704
+    },
+    {
+      "x": 149.22378301549588,
+      "y": 108.00000000000028
+    },
+    {
+      "x": 169.22378301549497,
+      "y": 107.99999999999972
+    },
+    {
+      "x": 179.22378301549497,
+      "y": 97.99999999999972
+    },
+    {
+      "x": 179.22378301549497,
+      "y": 19.99999999999983
+    },
+    {
+      "x": 169.22378301549588,
+      "y": 9.99999999999983
+    },
+    {
+      "x": 149.22378301549384,
+      "y": 9.99999999999983
+    },
+    {
+      "x": 149.22378301549384,
+      "y": 0.0
+    }
+  ],
+  "outerContourLayer": "OUTLINE",
+  "bends": [
+    {
+      "id": "B2",
+      "p1": {
+        "x": 61.72080664371401,
+        "y": 198.54019418610716
+      },
+      "p2": {
+        "x": 124.22378301549293,
+        "y": 224.42975034797126
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_6",
+      "childFaceId": "F_1",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "FL3",
+      "p1": {
+        "x": 24.217830498374042,
+        "y": 289.08038846600726
+      },
+      "p2": {
+        "x": 86.72079814637004,
+        "y": 314.9699650484808
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 0.5,
+      "role": "flange",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_1",
+      "childFaceId": "F_0",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "B1",
+      "p1": {
+        "x": 99.22378301549384,
+        "y": 107.99999999999972
+      },
+      "p2": {
+        "x": 149.22378301549588,
+        "y": 108.00000000000028
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_6",
+      "childFaceId": "F_3",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "B3",
+      "p1": {
+        "x": 124.22378301549293,
+        "y": 224.42975034797126
+      },
+      "p2": {
+        "x": 186.7267593872739,
+        "y": 198.54019418610704
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_6",
+      "childFaceId": "F_5",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "FL1",
+      "p1": {
+        "x": 149.22378301549384,
+        "y": 9.99999999999983
+      },
+      "p2": {
+        "x": 99.22378301549384,
+        "y": 9.99999999999983
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 0.5,
+      "role": "flange",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_3",
+      "childFaceId": "F_2",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "FL2",
+      "p1": {
+        "x": 161.72676788461695,
+        "y": 314.9699650484808
+      },
+      "p2": {
+        "x": 224.22973553261295,
+        "y": 289.08038846600726
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 0.5,
+      "role": "flange",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_5",
+      "childFaceId": "F_4",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    }
+  ],
+  "faces": [
+    {
+      "id": "F_0",
+      "label": "Return Flange",
+      "vertices": [
+        {
+          "x": 86.72079814637004,
+          "y": 314.9699650484808
+        },
+        {
+          "x": 73.65516849760684,
+          "y": 320.38192604994293
+        },
+        {
+          "x": 20.390996174722886,
+          "y": 298.3191837911202
+        },
+        {
+          "x": 24.217830498374042,
+          "y": 289.08038846600726
+        }
+      ],
+      "role": "returnFlange",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_1",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 24.217830498374042,
+          "y": 289.08038846600726
+        },
+        {
+          "x": 5.411964153171766,
+          "y": 281.29075108976275
+        },
+        {
+          "x": 0.0,
+          "y": 268.2251201355187
+        },
+        {
+          "x": 29.849307498039025,
+          "y": 196.16251650584655
+        },
+        {
+          "x": 42.91493399509204,
+          "y": 190.750554198904
+        },
+        {
+          "x": 61.72080664371401,
+          "y": 198.54019418610716
+        },
+        {
+          "x": 124.22378301549293,
+          "y": 224.42975034797126
+        },
+        {
+          "x": 86.72079814637004,
+          "y": 314.9699650484808
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_2",
+      "label": "Return Flange",
+      "vertices": [
+        {
+          "x": 99.22378301549384,
+          "y": 9.99999999999983
+        },
+        {
+          "x": 99.22378301549384,
+          "y": 0.0
+        },
+        {
+          "x": 149.22378301549384,
+          "y": 0.0
+        },
+        {
+          "x": 149.22378301549384,
+          "y": 9.99999999999983
+        }
+      ],
+      "role": "returnFlange",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_3",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 149.22378301549384,
+          "y": 9.99999999999983
+        },
+        {
+          "x": 169.22378301549588,
+          "y": 9.99999999999983
+        },
+        {
+          "x": 179.22378301549497,
+          "y": 19.99999999999983
+        },
+        {
+          "x": 179.22378301549497,
+          "y": 97.99999999999972
+        },
+        {
+          "x": 169.22378301549497,
+          "y": 107.99999999999972
+        },
+        {
+          "x": 149.22378301549588,
+          "y": 108.00000000000028
+        },
+        {
+          "x": 99.22378301549384,
+          "y": 107.99999999999972
+        },
+        {
+          "x": 79.22378301549497,
+          "y": 107.99999999999994
+        },
+        {
+          "x": 69.22378301549497,
+          "y": 97.99999999999994
+        },
+        {
+          "x": 69.22378301549497,
+          "y": 19.99999999999983
+        },
+        {
+          "x": 79.22378301549497,
+          "y": 9.99999999999983
+        },
+        {
+          "x": 99.22378301549384,
+          "y": 9.99999999999983
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_4",
+      "label": "Return Flange",
+      "vertices": [
+        {
+          "x": 224.22973553261295,
+          "y": 289.08038846600726
+        },
+        {
+          "x": 228.05656985626388,
+          "y": 298.3191837911202
+        },
+        {
+          "x": 174.79239753338084,
+          "y": 320.38192604994293
+        },
+        {
+          "x": 161.72676788461695,
+          "y": 314.9699650484808
+        }
+      ],
+      "role": "returnFlange",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_5",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 161.72676788461695,
+          "y": 314.9699650484808
+        },
+        {
+          "x": 124.22378301549293,
+          "y": 224.42975034797126
+        },
+        {
+          "x": 186.7267593872739,
+          "y": 198.54019418610704
+        },
+        {
+          "x": 205.53263203589472,
+          "y": 190.7505541989039
+        },
+        {
+          "x": 218.59825853294797,
+          "y": 196.1625165058461
+        },
+        {
+          "x": 248.447566030987,
+          "y": 268.22512013551915
+        },
+        {
+          "x": 243.0356018778159,
+          "y": 281.2907510897625
+        },
+        {
+          "x": 224.22973553261295,
+          "y": 289.08038846600726
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_6",
+      "label": "Bottom Base Floor",
+      "vertices": [
+        {
+          "x": 124.22378301549293,
+          "y": 224.42975034797126
+        },
+        {
+          "x": 61.72080664371401,
+          "y": 198.54019418610716
+        },
+        {
+          "x": 99.22378301549384,
+          "y": 107.99999999999972
+        },
+        {
+          "x": 149.22378301549588,
+          "y": 108.00000000000028
+        },
+        {
+          "x": 186.7267593872739,
+          "y": 198.54019418610704
+        }
+      ],
+      "role": "baseFloor",
+      "isBaseAnchor": true,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    }
+  ],
+  "punches": [
+    {
+      "id": "SLOT_1",
+      "type": "obroundSlot",
+      "center": {
+        "x": 169.22378301549588,
+        "y": 84.00000000000006
+      },
+      "widthMm": 8.0,
+      "lengthMm": 12.0,
+      "diameterMm": 8.0,
+      "rotationDeg": 90.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_2",
+      "type": "obroundSlot",
+      "center": {
+        "x": 214.7311067267549,
+        "y": 212.95735520179215
+      },
+      "widthMm": 7.999999999999629,
+      "lengthMm": 11.999999999999265,
+      "diameterMm": 8.0,
+      "rotationDeg": 67.50000000000446,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_3",
+      "type": "obroundSlot",
+      "center": {
+        "x": 79.22378301549134,
+        "y": 84.00000000000006
+      },
+      "widthMm": 7.999999999998863,
+      "lengthMm": 12.0,
+      "diameterMm": 8.0,
+      "rotationDeg": 90.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_4",
+      "type": "obroundSlot",
+      "center": {
+        "x": 169.22378301549588,
+        "y": 34.00000000000006
+      },
+      "widthMm": 8.0,
+      "lengthMm": 11.999999999999943,
+      "diameterMm": 8.0,
+      "rotationDeg": 90.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_5",
+      "type": "obroundSlot",
+      "center": {
+        "x": 79.22378301549134,
+        "y": 34.00000000000006
+      },
+      "widthMm": 7.999999999998863,
+      "lengthMm": 11.999999999999943,
+      "diameterMm": 8.0,
+      "rotationDeg": 90.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_6",
+      "type": "obroundSlot",
+      "center": {
+        "x": 233.86527834500953,
+        "y": 259.1513318273567
+      },
+      "widthMm": 7.999999999999585,
+      "lengthMm": 11.999999999999595,
+      "diameterMm": 8.0,
+      "rotationDeg": 67.49999999999925,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_7",
+      "type": "obroundSlot",
+      "center": {
+        "x": 33.71645930423165,
+        "y": 212.95735520179215
+      },
+      "widthMm": 8.000000000000679,
+      "lengthMm": 11.999999999999265,
+      "diameterMm": 8.0,
+      "rotationDeg": 112.49999999999552,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_8",
+      "type": "obroundSlot",
+      "center": {
+        "x": 14.582287685977462,
+        "y": 259.1513318273567
+      },
+      "widthMm": 7.999999999999585,
+      "lengthMm": 11.999999999999508,
+      "diameterMm": 8.0,
+      "rotationDeg": 112.49999999999976,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    }
+  ],
+  "perforationPatterns": [],
+  "corners": [],
+  "cutLines": [],
+  "arcs": [
+    {
+      "type": "arc",
+      "id": "ARC_BND_1",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 169.22378301549588,
+        "y": 19.99999999999983
+      },
+      "radius": 10.0,
+      "startAngleRad": 4.71238898038469,
+      "sweepAngleRad": 1.5707963267948966,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_2",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 169.22378301549497,
+        "y": 97.99999999999972
+      },
+      "radius": 10.0,
+      "startAngleRad": 0.0,
+      "sweepAngleRad": 1.5707963267948966,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_3",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 79.22378301549497,
+        "y": 19.99999999999983
+      },
+      "radius": 10.0,
+      "startAngleRad": 3.141592653589793,
+      "sweepAngleRad": 1.5707963267948966,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_4",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 79.22378301549497,
+        "y": 97.99999999999994
+      },
+      "radius": 10.0,
+      "startAngleRad": 1.5707963267948966,
+      "sweepAngleRad": 1.5707963267948966,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_5",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 209.35946320783592,
+        "y": 199.98935082949703
+      },
+      "radius": 10.0,
+      "startAngleRad": 4.319690239824545,
+      "sweepAngleRad": 1.5707959856563642,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_6",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 239.20877070587403,
+        "y": 272.0519544591696
+      },
+      "radius": 10.0,
+      "startAngleRad": 5.890486225480908,
+      "sweepAngleRad": 1.57079666793343,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_7",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 39.088102823151985,
+        "y": 199.98935082949703
+      },
+      "radius": 10.0,
+      "startAngleRad": 3.5342917352884684,
+      "sweepAngleRad": 1.570795985656365,
+      "showLabel": true
+    },
+    {
+      "type": "arc",
+      "id": "ARC_BND_8",
+      "layer": "0",
+      "isVisible": true,
+      "isConstruction": false,
+      "center": {
+        "x": 9.23879532511296,
+        "y": 272.0519544591696
+      },
+      "radius": 10.0,
+      "startAngleRad": 1.96349506735504,
+      "sweepAngleRad": 1.570796667933428,
+      "showLabel": true
+    }
+  ],
+  "dimensions": [],
+  "constraints": [],
+  "constraintDefinitions": [],
+  "referenceGeometries": [],
+  "templateParameters": [],
+  "layers": [
+    {
+      "name": "OUTLINE",
+      "colorHex": 4279179050,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 2.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "HOLES",
+      "colorHex": 4278556265,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "0",
+      "colorHex": 4284773515,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    }
+  ],
+  "baseFaceId": "F_6",
+  "edgeChamfers": {},
+  "parameters": {
+    "width": 100.0,
+    "height": 100.0,
+    "port1Width": 100.0,
+    "port1Height": 100.0,
+    "port2Width": 100.0,
+    "port2Height": 100.0,
+    "angle": 45.0,
+    "thickness": 1.5,
+    "flange": 10.0,
+    "radius": 180.0
+  },
+  "metadata": {
+    "cmsTemplate": {
+      "category": "Trunking Accessories",
+      "productType": "Bend",
+      "variation": "45 Deg Bend",
+      "templateId": "bend_45_deg_bend",
+      "version": 1,
+      "ports": [
+        {
+          "id": "PORT_1",
+          "index": 1,
+          "width": 100.0,
+          "height": 100.0,
+          "flange": 15.0,
+          "center": [
+            80.47229482960392,
+            153.27009709305344,
+            50.0
+          ],
+          "flatCenter": [
+            80.47229482960392,
+            153.27009709305344
+          ],
+          "normal": [
+            -0.9238795325112851,
+            -0.38268343236509383,
+            0.0
+          ],
+          "widthDirection": [
+            0.38268343236509383,
+            -0.923879532511285,
+            0.0
+          ],
+          "heightDirection": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "hostFaceIds": [
+            "F_6",
+            "F_1",
+            "F_3",
+            "F_5"
+          ],
+          "boundaryLoopId": "raw_opening_1",
+          "boundaryEdgeIds": [],
+          "floorP1": [
+            61.72080664371401,
+            198.54019418610716,
+            0.0
+          ],
+          "floorP2": [
+            99.22378301549384,
+            107.99999999999972,
+            0.0
+          ],
+          "flatP1": [
+            61.72080664371401,
+            198.54019418610716
+          ],
+          "flatP2": [
+            99.22378301549384,
+            107.99999999999972
+          ],
+          "derivedMouthCorners": [
+            [
+              61.72080664371401,
+              198.54019418610716,
+              0.0
+            ],
+            [
+              61.72080664371401,
+              198.54019418610716,
+              100.0
+            ],
+            [
+              99.22378301549384,
+              107.99999999999972,
+              100.0
+            ],
+            [
+              99.22378301549384,
+              107.99999999999972,
+              0.0
+            ]
+          ],
+          "calloutAnchor": [
+            80.47229482960392,
+            153.27009709305344,
+            100.0
+          ],
+          "confidence": 1.0,
+          "detectionSource": "foldedTopology",
+          "suggestedRole": "bidirectional",
+          "suggestionReason": "Standard bend ports are physically symmetrical and bidirectional."
+        },
+        {
+          "id": "PORT_2",
+          "index": 2,
+          "width": 100.0,
+          "height": 100.0,
+          "flange": 15.0,
+          "center": [
+            167.97527120138488,
+            153.27009709305366,
+            50.0
+          ],
+          "flatCenter": [
+            167.97527120138488,
+            153.27009709305366
+          ],
+          "normal": [
+            0.9238795325112906,
+            -0.3826834323650805,
+            0.0
+          ],
+          "widthDirection": [
+            0.38268343236508057,
+            0.9238795325112907,
+            0.0
+          ],
+          "heightDirection": [
+            -0.0,
+            0.0,
+            1.0
+          ],
+          "hostFaceIds": [
+            "F_6",
+            "F_1",
+            "F_3",
+            "F_5"
+          ],
+          "boundaryLoopId": "raw_opening_2",
+          "boundaryEdgeIds": [],
+          "floorP1": [
+            149.22378301549588,
+            108.00000000000028,
+            0.0
+          ],
+          "floorP2": [
+            186.7267593872739,
+            198.54019418610704,
+            0.0
+          ],
+          "flatP1": [
+            149.22378301549588,
+            108.00000000000028
+          ],
+          "flatP2": [
+            186.7267593872739,
+            198.54019418610704
+          ],
+          "derivedMouthCorners": [
+            [
+              149.22378301549588,
+              108.00000000000028,
+              0.0
+            ],
+            [
+              149.22378301549588,
+              108.00000000000028,
+              100.0
+            ],
+            [
+              186.7267593872739,
+              198.54019418610704,
+              100.0
+            ],
+            [
+              186.7267593872739,
+              198.54019418610704,
+              0.0
+            ]
+          ],
+          "calloutAnchor": [
+            167.97527120138488,
+            153.27009709305366,
+            100.0
+          ],
+          "confidence": 1.0,
+          "detectionSource": "foldedTopology",
+          "suggestedRole": "bidirectional",
+          "suggestionReason": "Standard bend ports are physically symmetrical and bidirectional."
+        }
+      ],
+      "verifiedBendIds": [
+        "B2",
+        "B1",
+        "B3"
+      ],
+      "verifiedFlangeIds": [
+        "FL3",
+        "FL1",
+        "FL2"
+      ],
+      "couplerSlotPunchIds": [
+        "SLOT_1",
+        "SLOT_2",
+        "SLOT_3",
+        "SLOT_4",
+        "SLOT_5",
+        "SLOT_6",
+        "SLOT_7",
+        "SLOT_8"
+      ],
+      "scalingModel": {
+        "templateId": "bend_45_deg_bend",
+        "category": "Trunking Accessories",
+        "productType": "bend",
+        "variation": "45_deg_bend",
+        "parameters": {
+          "width": {
+            "id": "width",
+            "displayName": "Width (W)",
+            "currentValue": 100.0,
+            "baselineValue": 100.0,
+            "minValidMm": 50.0,
+            "maxValidMm": 1200.0,
+            "unit": "mm",
+            "teachingState": "learned",
+            "stretchZoneIds": [
+              "ZONE_FLOOR_WEB"
+            ],
+            "translationZoneIds": [
+              "ZONE_SIDEWALLS_AND_FLANGES"
+            ],
+            "rigidGroupIds": [
+              "GRP_COUPLER_SLOTS"
+            ],
+            "derivedPortIds": [
+              "PORT_1",
+              "PORT_2"
+            ]
+          },
+          "height": {
+            "id": "height",
+            "displayName": "Height (H)",
+            "currentValue": 100.0,
+            "baselineValue": 100.0,
+            "minValidMm": 50.0,
+            "maxValidMm": 250.0,
+            "unit": "mm",
+            "teachingState": "learned",
+            "stretchZoneIds": [],
+            "translationZoneIds": [
+              "ZONE_SIDEWALLS_AND_FLANGES"
+            ],
+            "rigidGroupIds": [
+              "GRP_COUPLER_SLOTS"
+            ],
+            "derivedPortIds": [
+              "PORT_1",
+              "PORT_2"
+            ]
+          },
+          "radius": {
+            "id": "radius",
+            "displayName": "Bend Radius (R)",
+            "currentValue": 180.0,
+            "baselineValue": 180.0,
+            "minValidMm": 180.0,
+            "maxValidMm": 900.0,
+            "unit": "mm",
+            "teachingState": "learned",
+            "stretchZoneIds": [
+              "ZONE_FLOOR_WEB"
+            ],
+            "translationZoneIds": [
+              "ZONE_SIDEWALLS_AND_FLANGES"
+            ],
+            "rigidGroupIds": [
+              "GRP_COUPLER_SLOTS"
+            ],
+            "derivedPortIds": [
+              "PORT_1",
+              "PORT_2"
+            ]
+          }
+        },
+        "stretchZones": [
+          {
+            "id": "ZONE_FLOOR_WEB",
+            "description": "Floor web expands along transverse bend axis.",
+            "faceIds": [
+              "F_6"
+            ],
+            "axis": [
+              1.0,
+              0.0
+            ]
+          }
+        ],
+        "translationZones": [
+          {
+            "id": "ZONE_SIDEWALLS_AND_FLANGES",
+            "description": "Standing sidewalls and locked flanges translate rigidly.",
+            "faceIds": [
+              "F_1",
+              "F_3",
+              "F_5",
+              "F_0",
+              "F_2",
+              "F_4"
+            ],
+            "bendIds": [
+              "B2",
+              "FL3",
+              "B1",
+              "B3",
+              "FL1",
+              "FL2"
+            ],
+            "flangeIds": [],
+            "direction": [
+              1.0,
+              0.0
+            ]
+          }
+        ],
+        "rigidFeatureGroups": [
+          {
+            "id": "GRP_COUPLER_SLOTS",
+            "name": "Coupler Slots (8)",
+            "punchIds": [
+              "SLOT_1",
+              "SLOT_2",
+              "SLOT_3",
+              "SLOT_4",
+              "SLOT_5",
+              "SLOT_6",
+              "SLOT_7",
+              "SLOT_8"
+            ],
+            "hostFaceId": "F_1",
+            "description": "Maintains exact slot geometry and reference edge mounting distance."
+          }
+        ],
+        "derivedPorts": [
+          {
+            "portId": "PORT_1",
+            "description": "Derived 3D opening mouth for 100 × 100 mm channel."
+          },
+          {
+            "portId": "PORT_2",
+            "description": "Derived 3D opening mouth for 100 × 100 mm channel."
+          }
+        ],
+        "isLinkedPorts": true,
+        "activePortIndex": 0
+      },
+      "canonicalDocument": {
+        "format": "DANISH_SHEET_FOLD",
+        "version": "2.0",
+        "productType": "bend",
+        "itemName": "45_deg_bend_100x100.dxf",
+        "material": {
+          "thicknessMm": 1.5,
+          "materialGrade": "Pre-Galvanized Steel",
+          "materialType": "mildSteel",
+          "finish": "electroGalvanized",
+          "kFactor": 0.4,
+          "defaultBendRadius": 1.5,
+          "edgeChamferMm": 0.0
+        },
+        "outerContour": [
+          {
+            "x": 149.22378301549384,
+            "y": 0.0
+          },
+          {
+            "x": 99.22378301549384,
+            "y": 0.0
+          },
+          {
+            "x": 99.22378301549384,
+            "y": 9.99999999999983
+          },
+          {
+            "x": 79.22378301549497,
+            "y": 9.99999999999983
+          },
+          {
+            "x": 69.22378301549497,
+            "y": 19.99999999999983
+          },
+          {
+            "x": 69.22378301549497,
+            "y": 97.99999999999994
+          },
+          {
+            "x": 79.22378301549497,
+            "y": 107.99999999999994
+          },
+          {
+            "x": 99.22378301549384,
+            "y": 107.99999999999972
+          },
+          {
+            "x": 61.72080664371401,
+            "y": 198.54019418610716
+          },
+          {
+            "x": 42.91493399509204,
+            "y": 190.750554198904
+          },
+          {
+            "x": 29.849307498039025,
+            "y": 196.16251650584655
+          },
+          {
+            "x": 0.0,
+            "y": 268.2251201355187
+          },
+          {
+            "x": 5.411964153171766,
+            "y": 281.29075108976275
+          },
+          {
+            "x": 24.217830498374042,
+            "y": 289.08038846600726
+          },
+          {
+            "x": 20.390996174722886,
+            "y": 298.3191837911202
+          },
+          {
+            "x": 73.65516849760684,
+            "y": 320.38192604994293
+          },
+          {
+            "x": 86.72079814637004,
+            "y": 314.9699650484808
+          },
+          {
+            "x": 124.22378301549293,
+            "y": 224.42975034797126
+          },
+          {
+            "x": 161.72676788461695,
+            "y": 314.9699650484808
+          },
+          {
+            "x": 174.79239753338084,
+            "y": 320.38192604994293
+          },
+          {
+            "x": 228.05656985626388,
+            "y": 298.3191837911202
+          },
+          {
+            "x": 224.22973553261295,
+            "y": 289.08038846600726
+          },
+          {
+            "x": 243.0356018778159,
+            "y": 281.2907510897625
+          },
+          {
+            "x": 248.447566030987,
+            "y": 268.22512013551915
+          },
+          {
+            "x": 218.59825853294797,
+            "y": 196.1625165058461
+          },
+          {
+            "x": 205.53263203589472,
+            "y": 190.7505541989039
+          },
+          {
+            "x": 186.7267593872739,
+            "y": 198.54019418610704
+          },
+          {
+            "x": 149.22378301549588,
+            "y": 108.00000000000028
+          },
+          {
+            "x": 169.22378301549497,
+            "y": 107.99999999999972
+          },
+          {
+            "x": 179.22378301549497,
+            "y": 97.99999999999972
+          },
+          {
+            "x": 179.22378301549497,
+            "y": 19.99999999999983
+          },
+          {
+            "x": 169.22378301549588,
+            "y": 9.99999999999983
+          },
+          {
+            "x": 149.22378301549384,
+            "y": 9.99999999999983
+          },
+          {
+            "x": 149.22378301549384,
+            "y": 0.0
+          }
+        ],
+        "outerContourLayer": "OUTLINE",
+        "bends": [
+          {
+            "id": "B2",
+            "p1": {
+              "x": 61.72080664371401,
+              "y": 198.54019418610716
+            },
+            "p2": {
+              "x": 124.22378301549293,
+              "y": 224.42975034797126
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_6",
+            "childFaceId": "F_1",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL3",
+            "p1": {
+              "x": 24.217830498374042,
+              "y": 289.08038846600726
+            },
+            "p2": {
+              "x": 86.72079814637004,
+              "y": 314.9699650484808
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B1",
+            "p1": {
+              "x": 99.22378301549384,
+              "y": 107.99999999999972
+            },
+            "p2": {
+              "x": 149.22378301549588,
+              "y": 108.00000000000028
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_6",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B3",
+            "p1": {
+              "x": 124.22378301549293,
+              "y": 224.42975034797126
+            },
+            "p2": {
+              "x": 186.7267593872739,
+              "y": 198.54019418610704
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_6",
+            "childFaceId": "F_5",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 149.22378301549384,
+              "y": 9.99999999999983
+            },
+            "p2": {
+              "x": 99.22378301549384,
+              "y": 9.99999999999983
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL2",
+            "p1": {
+              "x": 161.72676788461695,
+              "y": 314.9699650484808
+            },
+            "p2": {
+              "x": 224.22973553261295,
+              "y": 289.08038846600726
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_5",
+            "childFaceId": "F_4",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "faces": [
+          {
+            "id": "F_0",
+            "label": "Return Flange",
+            "vertices": [
+              {
+                "x": 86.72079814637004,
+                "y": 314.9699650484808
+              },
+              {
+                "x": 73.65516849760684,
+                "y": 320.38192604994293
+              },
+              {
+                "x": 20.390996174722886,
+                "y": 298.3191837911202
+              },
+              {
+                "x": 24.217830498374042,
+                "y": 289.08038846600726
+              }
+            ],
+            "role": "returnFlange",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_1",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 24.217830498374042,
+                "y": 289.08038846600726
+              },
+              {
+                "x": 5.411964153171766,
+                "y": 281.29075108976275
+              },
+              {
+                "x": 0.0,
+                "y": 268.2251201355187
+              },
+              {
+                "x": 29.849307498039025,
+                "y": 196.16251650584655
+              },
+              {
+                "x": 42.91493399509204,
+                "y": 190.750554198904
+              },
+              {
+                "x": 61.72080664371401,
+                "y": 198.54019418610716
+              },
+              {
+                "x": 124.22378301549293,
+                "y": 224.42975034797126
+              },
+              {
+                "x": 86.72079814637004,
+                "y": 314.9699650484808
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_2",
+            "label": "Return Flange",
+            "vertices": [
+              {
+                "x": 99.22378301549384,
+                "y": 9.99999999999983
+              },
+              {
+                "x": 99.22378301549384,
+                "y": 0.0
+              },
+              {
+                "x": 149.22378301549384,
+                "y": 0.0
+              },
+              {
+                "x": 149.22378301549384,
+                "y": 9.99999999999983
+              }
+            ],
+            "role": "returnFlange",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_3",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 149.22378301549384,
+                "y": 9.99999999999983
+              },
+              {
+                "x": 169.22378301549588,
+                "y": 9.99999999999983
+              },
+              {
+                "x": 179.22378301549497,
+                "y": 19.99999999999983
+              },
+              {
+                "x": 179.22378301549497,
+                "y": 97.99999999999972
+              },
+              {
+                "x": 169.22378301549497,
+                "y": 107.99999999999972
+              },
+              {
+                "x": 149.22378301549588,
+                "y": 108.00000000000028
+              },
+              {
+                "x": 99.22378301549384,
+                "y": 107.99999999999972
+              },
+              {
+                "x": 79.22378301549497,
+                "y": 107.99999999999994
+              },
+              {
+                "x": 69.22378301549497,
+                "y": 97.99999999999994
+              },
+              {
+                "x": 69.22378301549497,
+                "y": 19.99999999999983
+              },
+              {
+                "x": 79.22378301549497,
+                "y": 9.99999999999983
+              },
+              {
+                "x": 99.22378301549384,
+                "y": 9.99999999999983
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_4",
+            "label": "Return Flange",
+            "vertices": [
+              {
+                "x": 224.22973553261295,
+                "y": 289.08038846600726
+              },
+              {
+                "x": 228.05656985626388,
+                "y": 298.3191837911202
+              },
+              {
+                "x": 174.79239753338084,
+                "y": 320.38192604994293
+              },
+              {
+                "x": 161.72676788461695,
+                "y": 314.9699650484808
+              }
+            ],
+            "role": "returnFlange",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_5",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 161.72676788461695,
+                "y": 314.9699650484808
+              },
+              {
+                "x": 124.22378301549293,
+                "y": 224.42975034797126
+              },
+              {
+                "x": 186.7267593872739,
+                "y": 198.54019418610704
+              },
+              {
+                "x": 205.53263203589472,
+                "y": 190.7505541989039
+              },
+              {
+                "x": 218.59825853294797,
+                "y": 196.1625165058461
+              },
+              {
+                "x": 248.447566030987,
+                "y": 268.22512013551915
+              },
+              {
+                "x": 243.0356018778159,
+                "y": 281.2907510897625
+              },
+              {
+                "x": 224.22973553261295,
+                "y": 289.08038846600726
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_6",
+            "label": "Bottom Base Floor",
+            "vertices": [
+              {
+                "x": 124.22378301549293,
+                "y": 224.42975034797126
+              },
+              {
+                "x": 61.72080664371401,
+                "y": 198.54019418610716
+              },
+              {
+                "x": 99.22378301549384,
+                "y": 107.99999999999972
+              },
+              {
+                "x": 149.22378301549588,
+                "y": 108.00000000000028
+              },
+              {
+                "x": 186.7267593872739,
+                "y": 198.54019418610704
+              }
+            ],
+            "role": "baseFloor",
+            "isBaseAnchor": true,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          }
+        ],
+        "punches": [
+          {
+            "id": "SLOT_1",
+            "type": "obroundSlot",
+            "center": {
+              "x": 169.22378301549588,
+              "y": 84.00000000000006
+            },
+            "widthMm": 8.0,
+            "lengthMm": 12.0,
+            "diameterMm": 8.0,
+            "rotationDeg": 90.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_2",
+            "type": "obroundSlot",
+            "center": {
+              "x": 214.7311067267549,
+              "y": 212.95735520179215
+            },
+            "widthMm": 7.999999999999629,
+            "lengthMm": 11.999999999999265,
+            "diameterMm": 8.0,
+            "rotationDeg": 67.50000000000446,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_3",
+            "type": "obroundSlot",
+            "center": {
+              "x": 79.22378301549134,
+              "y": 84.00000000000006
+            },
+            "widthMm": 7.999999999998863,
+            "lengthMm": 12.0,
+            "diameterMm": 8.0,
+            "rotationDeg": 90.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_4",
+            "type": "obroundSlot",
+            "center": {
+              "x": 169.22378301549588,
+              "y": 34.00000000000006
+            },
+            "widthMm": 8.0,
+            "lengthMm": 11.999999999999943,
+            "diameterMm": 8.0,
+            "rotationDeg": 90.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_5",
+            "type": "obroundSlot",
+            "center": {
+              "x": 79.22378301549134,
+              "y": 34.00000000000006
+            },
+            "widthMm": 7.999999999998863,
+            "lengthMm": 11.999999999999943,
+            "diameterMm": 8.0,
+            "rotationDeg": 90.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_6",
+            "type": "obroundSlot",
+            "center": {
+              "x": 233.86527834500953,
+              "y": 259.1513318273567
+            },
+            "widthMm": 7.999999999999585,
+            "lengthMm": 11.999999999999595,
+            "diameterMm": 8.0,
+            "rotationDeg": 67.49999999999925,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_7",
+            "type": "obroundSlot",
+            "center": {
+              "x": 33.71645930423165,
+              "y": 212.95735520179215
+            },
+            "widthMm": 8.000000000000679,
+            "lengthMm": 11.999999999999265,
+            "diameterMm": 8.0,
+            "rotationDeg": 112.49999999999552,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_8",
+            "type": "obroundSlot",
+            "center": {
+              "x": 14.582287685977462,
+              "y": 259.1513318273567
+            },
+            "widthMm": 7.999999999999585,
+            "lengthMm": 11.999999999999508,
+            "diameterMm": 8.0,
+            "rotationDeg": 112.49999999999976,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          }
+        ],
+        "perforationPatterns": [],
+        "corners": [],
+        "cutLines": [],
+        "arcs": [
+          {
+            "type": "arc",
+            "id": "ARC_BND_1",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 169.22378301549588,
+              "y": 19.99999999999983
+            },
+            "radius": 10.0,
+            "startAngleRad": 4.71238898038469,
+            "sweepAngleRad": 1.5707963267948966,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_2",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 169.22378301549497,
+              "y": 97.99999999999972
+            },
+            "radius": 10.0,
+            "startAngleRad": 0.0,
+            "sweepAngleRad": 1.5707963267948966,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_3",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 79.22378301549497,
+              "y": 19.99999999999983
+            },
+            "radius": 10.0,
+            "startAngleRad": 3.141592653589793,
+            "sweepAngleRad": 1.5707963267948966,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_4",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 79.22378301549497,
+              "y": 97.99999999999994
+            },
+            "radius": 10.0,
+            "startAngleRad": 1.5707963267948966,
+            "sweepAngleRad": 1.5707963267948966,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_5",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 209.35946320783592,
+              "y": 199.98935082949703
+            },
+            "radius": 10.0,
+            "startAngleRad": 4.319690239824545,
+            "sweepAngleRad": 1.5707959856563642,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_6",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 239.20877070587403,
+              "y": 272.0519544591696
+            },
+            "radius": 10.0,
+            "startAngleRad": 5.890486225480908,
+            "sweepAngleRad": 1.57079666793343,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_7",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 39.088102823151985,
+              "y": 199.98935082949703
+            },
+            "radius": 10.0,
+            "startAngleRad": 3.5342917352884684,
+            "sweepAngleRad": 1.570795985656365,
+            "showLabel": true
+          },
+          {
+            "type": "arc",
+            "id": "ARC_BND_8",
+            "layer": "0",
+            "isVisible": true,
+            "isConstruction": false,
+            "center": {
+              "x": 9.23879532511296,
+              "y": 272.0519544591696
+            },
+            "radius": 10.0,
+            "startAngleRad": 1.96349506735504,
+            "sweepAngleRad": 1.570796667933428,
+            "showLabel": true
+          }
+        ],
+        "dimensions": [],
+        "constraints": [],
+        "constraintDefinitions": [],
+        "referenceGeometries": [],
+        "templateParameters": [],
+        "layers": [
+          {
+            "name": "OUTLINE",
+            "colorHex": 4279179050,
+            "lineType": "CONTINUOUS",
+            "strokeWidth": 2.0,
+            "isVisible": true,
+            "isLocked": false
+          },
+          {
+            "name": "HOLES",
+            "colorHex": 4278556265,
+            "lineType": "CONTINUOUS",
+            "strokeWidth": 1.0,
+            "isVisible": true,
+            "isLocked": false
+          },
+          {
+            "name": "0",
+            "colorHex": 4284773515,
+            "lineType": "CONTINUOUS",
+            "strokeWidth": 1.0,
+            "isVisible": true,
+            "isLocked": false
+          }
+        ],
+        "baseFaceId": "F_6",
+        "edgeChamfers": {},
+        "parameters": {
+          "width": 100.0,
+          "height": 100.0,
+          "port1Width": 100.0,
+          "port1Height": 100.0,
+          "port2Width": 100.0,
+          "port2Height": 100.0,
+          "angle": 45.0,
+          "thickness": 1.5,
+          "flange": 10.0
+        },
+        "metadata": {
+          "cmsTemplate": {
+            "category": "Trunking Accessories",
+            "productType": "Bend",
+            "variation": "45 Deg Bend",
+            "templateId": "bend_45_deg_bend",
+            "version": 1,
+            "ports": [
+              {
+                "id": "PORT_1",
+                "index": 1,
+                "width": 98.0,
+                "height": 99.5,
+                "flange": 15.0,
+                "center": [
+                  80.47229482960392,
+                  153.27009709305344,
+                  49.74999999999994
+                ],
+                "flatCenter": [
+                  80.47229482960392,
+                  153.27009709305344
+                ],
+                "normal": [
+                  -0.9238795325112851,
+                  -0.38268343236509383,
+                  0.0
+                ],
+                "widthDirection": [
+                  0.38268343236509383,
+                  -0.923879532511285,
+                  0.0
+                ],
+                "heightDirection": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "hostFaceIds": [
+                  "F_6",
+                  "F_1",
+                  "F_3",
+                  "F_5"
+                ],
+                "boundaryLoopId": "raw_opening_1",
+                "boundaryEdgeIds": [],
+                "floorP1": [
+                  61.72080664371401,
+                  198.54019418610716,
+                  0.0
+                ],
+                "floorP2": [
+                  99.22378301549384,
+                  107.99999999999972,
+                  0.0
+                ],
+                "derivedMouthCorners": [
+                  [
+                    61.72080664371401,
+                    198.54019418610716,
+                    0.0
+                  ],
+                  [
+                    61.72080664371401,
+                    198.54019418610716,
+                    99.49999999999989
+                  ],
+                  [
+                    99.22378301549384,
+                    107.99999999999972,
+                    99.49999999999989
+                  ],
+                  [
+                    99.22378301549384,
+                    107.99999999999972,
+                    0.0
+                  ]
+                ],
+                "calloutAnchor": [
+                  80.47229482960392,
+                  153.27009709305344,
+                  99.49999999999989
+                ],
+                "confidence": 1.0,
+                "detectionSource": "foldedTopology",
+                "suggestedRole": "bidirectional",
+                "suggestionReason": "Standard bend ports are physically symmetrical and bidirectional."
+              },
+              {
+                "id": "PORT_2",
+                "index": 2,
+                "width": 98.0,
+                "height": 99.5,
+                "flange": 15.0,
+                "center": [
+                  167.97527120138488,
+                  153.27009709305366,
+                  49.75000000000023
+                ],
+                "flatCenter": [
+                  167.97527120138488,
+                  153.27009709305366
+                ],
+                "normal": [
+                  0.9238795325112906,
+                  -0.3826834323650805,
+                  0.0
+                ],
+                "widthDirection": [
+                  0.38268343236508057,
+                  0.9238795325112907,
+                  0.0
+                ],
+                "heightDirection": [
+                  -0.0,
+                  0.0,
+                  1.0
+                ],
+                "hostFaceIds": [
+                  "F_6",
+                  "F_1",
+                  "F_3",
+                  "F_5"
+                ],
+                "boundaryLoopId": "raw_opening_2",
+                "boundaryEdgeIds": [],
+                "floorP1": [
+                  149.22378301549588,
+                  108.00000000000028,
+                  0.0
+                ],
+                "floorP2": [
+                  186.7267593872739,
+                  198.54019418610704,
+                  0.0
+                ],
+                "derivedMouthCorners": [
+                  [
+                    149.22378301549588,
+                    108.00000000000028,
+                    0.0
+                  ],
+                  [
+                    149.22378301549588,
+                    108.00000000000028,
+                    99.50000000000045
+                  ],
+                  [
+                    186.7267593872739,
+                    198.54019418610704,
+                    99.50000000000045
+                  ],
+                  [
+                    186.7267593872739,
+                    198.54019418610704,
+                    0.0
+                  ]
+                ],
+                "calloutAnchor": [
+                  167.97527120138488,
+                  153.27009709305366,
+                  99.50000000000045
+                ],
+                "confidence": 1.0,
+                "detectionSource": "foldedTopology",
+                "suggestedRole": "bidirectional",
+                "suggestionReason": "Standard bend ports are physically symmetrical and bidirectional."
+              }
+            ],
+            "verifiedBendIds": [
+              "B2",
+              "B1",
+              "B3"
+            ],
+            "verifiedFlangeIds": [
+              "FL3",
+              "FL1",
+              "FL2"
+            ],
+            "couplerSlotPunchIds": [
+              "SLOT_1",
+              "SLOT_2",
+              "SLOT_3",
+              "SLOT_4",
+              "SLOT_5",
+              "SLOT_6",
+              "SLOT_7",
+              "SLOT_8"
+            ],
+            "scalingModel": {}
+          },
+          "undoDeltas": [
+            {
+              "description": "Model Modification",
+              "actionType": "modify",
+              "timestamp": "2026-10-01T13:40:46.437672",
+              "oldMaterial": {
+                "thicknessMm": 1.5,
+                "materialGrade": "Pre-Galvanized Steel",
+                "materialType": "mildSteel",
+                "finish": "electroGalvanized",
+                "kFactor": 0.4,
+                "defaultBendRadius": 1.5,
+                "edgeChamferMm": 0.0
+              },
+              "newMaterial": {
+                "thicknessMm": 1.5,
+                "materialGrade": "Pre-Galvanized Steel",
+                "materialType": "mildSteel",
+                "finish": "electroGalvanized",
+                "kFactor": 0.4,
+                "defaultBendRadius": 1.5,
+                "edgeChamferMm": 0.0
+              }
+            },
+            {
+              "description": "Update Fitting Metadata",
+              "actionType": "drive_dimension",
+              "timestamp": "2026-10-01T13:40:46.441813",
+              "oldParameters": {},
+              "newParameters": {
+                "width": 100.0,
+                "height": 100.0,
+                "port1Width": 100.0,
+                "port1Height": 100.0,
+                "port2Width": 100.0,
+                "port2Height": 100.0,
+                "angle": 45.0,
+                "thickness": 1.5,
+                "flange": 10.0
+              }
+            },
+            {
+              "description": "Model Modification",
+              "actionType": "modify",
+              "timestamp": "2026-10-01T13:40:46.446979",
+              "oldProductType": "45_deg_bend_100x100",
+              "newProductType": "bend"
+            }
+          ],
+          "cmsWorkflow": {
+            "stage": "ports_mapped",
+            "stageIndex": 2
+          },
+          "featureHistory": [
+            {
+              "step": 1,
+              "action": "modify",
+              "description": "Model Modification",
+              "timestamp": "2026-10-01T13:40:46.437672",
+              "delta": {
+                "description": "Model Modification",
+                "actionType": "modify",
+                "timestamp": "2026-10-01T13:40:46.437672",
+                "oldMaterial": {
+                  "thicknessMm": 1.5,
+                  "materialGrade": "Pre-Galvanized Steel",
+                  "materialType": "mildSteel",
+                  "finish": "electroGalvanized",
+                  "kFactor": 0.4,
+                  "defaultBendRadius": 1.5,
+                  "edgeChamferMm": 0.0
+                },
+                "newMaterial": {
+                  "thicknessMm": 1.5,
+                  "materialGrade": "Pre-Galvanized Steel",
+                  "materialType": "mildSteel",
+                  "finish": "electroGalvanized",
+                  "kFactor": 0.4,
+                  "defaultBendRadius": 1.5,
+                  "edgeChamferMm": 0.0
+                }
+              }
+            },
+            {
+              "step": 2,
+              "action": "drive_dimension",
+              "description": "Update Fitting Metadata",
+              "timestamp": "2026-10-01T13:40:46.441813",
+              "delta": {
+                "description": "Update Fitting Metadata",
+                "actionType": "drive_dimension",
+                "timestamp": "2026-10-01T13:40:46.441813",
+                "oldParameters": {},
+                "newParameters": {
+                  "width": 100.0,
+                  "height": 100.0,
+                  "port1Width": 100.0,
+                  "port1Height": 100.0,
+                  "port2Width": 100.0,
+                  "port2Height": 100.0,
+                  "angle": 45.0,
+                  "thickness": 1.5,
+                  "flange": 10.0
+                }
+              }
+            },
+            {
+              "step": 3,
+              "action": "modify",
+              "description": "Model Modification",
+              "timestamp": "2026-10-01T13:40:46.446979",
+              "delta": {
+                "description": "Model Modification",
+                "actionType": "modify",
+                "timestamp": "2026-10-01T13:40:46.446979",
+                "oldProductType": "45_deg_bend_100x100",
+                "newProductType": "bend"
+              }
+            }
+          ],
+          "fittingMetadata": {
+            "category": "Trunking Accessories",
+            "product": "Bend",
+            "variantName": "45 Deg Bend",
+            "flangeMm": 10.0,
+            "parameters": {
+              "width": 100.0,
+              "height": 100.0,
+              "port1Width": 100.0,
+              "port1Height": 100.0,
+              "port2Width": 100.0,
+              "port2Height": 100.0,
+              "angle": 45.0,
+              "thickness": 1.5
+            },
+            "analyzedDimensions": {
+              "overallWidth": 248.447566030987,
+              "overallHeight": 320.38192604994293,
+              "detectedFlangeMm": 9.99999999999983,
+              "bedWidth": 98.00000000000163,
+              "port1Width": 98.00000000000163,
+              "port2Width": 98.0000000000003,
+              "port3Width": 20.000000000002046,
+              "branchWidth": 20.000000000002046,
+              "detectedPortWidthMm": 98.00000000000163,
+              "detectedBranchWidthMm": 20.000000000002046
+            },
+            "portAssignments": {
+              "port1": "south",
+              "port2": "west"
+            }
+          },
+          "fittingCategory": "Trunking Accessories",
+          "category": "Trunking Accessories",
+          "fittingProduct": "Bend",
+          "product": "Bend",
+          "fittingVariant": "45 Deg Bend",
+          "variantName": "45 Deg Bend",
+          "fittingFlangeMm": 10.0,
+          "ports": [
+            {
+              "id": "port1",
+              "label": "INLET",
+              "side": "south",
+              "width": 100.0,
+              "height": 100.0,
+              "measuredLength": 50.0,
+              "edgeP1": [
+                149.22378301549384,
+                0.0
+              ],
+              "edgeP2": [
+                99.22378301549384,
+                0.0
+              ],
+              "center": [
+                124.22378301549384,
+                0.0
+              ],
+              "normal": [
+                -0.0,
+                -1.0
+              ]
+            },
+            {
+              "id": "port2",
+              "label": "OUTLET",
+              "side": "west",
+              "width": 100.0,
+              "height": 100.0,
+              "measuredLength": 78.00000000000011,
+              "edgeP1": [
+                69.22378301549497,
+                19.99999999999983
+              ],
+              "edgeP2": [
+                69.22378301549497,
+                97.99999999999994
+              ],
+              "center": [
+                69.22378301549497,
+                58.999999999999886
+              ],
+              "normal": [
+                -1.0,
+                0.0
+              ]
+            }
+          ],
+          "isCmsProduct": true,
+          "cms_product_contract": {
+            "productType": "bend",
+            "variationName": "45_deg_bend",
+            "displayName": "45° Bend"
+          },
+          "cmsParameters": {
+            "flange_direction": 0.0,
+            "has_perforations": 0.0
+          },
+          "cms_param_flange_direction": 0.0,
+          "cms_param_has_perforations": 0.0
+        }
+      },
+      "baselinePorts": [
+        {
+          "id": "PORT_1",
+          "index": 1,
+          "width": 98.0,
+          "height": 99.5,
+          "flange": 15.0,
+          "center": [
+            80.47229482960392,
+            153.27009709305344,
+            49.74999999999994
+          ],
+          "flatCenter": [
+            80.47229482960392,
+            153.27009709305344
+          ],
+          "normal": [
+            -0.9238795325112851,
+            -0.38268343236509383,
+            0.0
+          ],
+          "widthDirection": [
+            0.38268343236509383,
+            -0.923879532511285,
+            0.0
+          ],
+          "heightDirection": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "hostFaceIds": [
+            "F_6",
+            "F_1",
+            "F_3",
+            "F_5"
+          ],
+          "boundaryLoopId": "raw_opening_1",
+          "boundaryEdgeIds": [],
+          "floorP1": [
+            61.72080664371401,
+            198.54019418610716,
+            0.0
+          ],
+          "floorP2": [
+            99.22378301549384,
+            107.99999999999972,
+            0.0
+          ],
+          "derivedMouthCorners": [
+            [
+              61.72080664371401,
+              198.54019418610716,
+              0.0
+            ],
+            [
+              61.72080664371401,
+              198.54019418610716,
+              99.49999999999989
+            ],
+            [
+              99.22378301549384,
+              107.99999999999972,
+              99.49999999999989
+            ],
+            [
+              99.22378301549384,
+              107.99999999999972,
+              0.0
+            ]
+          ],
+          "calloutAnchor": [
+            80.47229482960392,
+            153.27009709305344,
+            99.49999999999989
+          ],
+          "confidence": 1.0,
+          "detectionSource": "foldedTopology",
+          "suggestedRole": "bidirectional",
+          "suggestionReason": "Standard bend ports are physically symmetrical and bidirectional."
+        },
+        {
+          "id": "PORT_2",
+          "index": 2,
+          "width": 98.0,
+          "height": 99.5,
+          "flange": 15.0,
+          "center": [
+            167.97527120138488,
+            153.27009709305366,
+            49.75000000000023
+          ],
+          "flatCenter": [
+            167.97527120138488,
+            153.27009709305366
+          ],
+          "normal": [
+            0.9238795325112906,
+            -0.3826834323650805,
+            0.0
+          ],
+          "widthDirection": [
+            0.38268343236508057,
+            0.9238795325112907,
+            0.0
+          ],
+          "heightDirection": [
+            -0.0,
+            0.0,
+            1.0
+          ],
+          "hostFaceIds": [
+            "F_6",
+            "F_1",
+            "F_3",
+            "F_5"
+          ],
+          "boundaryLoopId": "raw_opening_2",
+          "boundaryEdgeIds": [],
+          "floorP1": [
+            149.22378301549588,
+            108.00000000000028,
+            0.0
+          ],
+          "floorP2": [
+            186.7267593872739,
+            198.54019418610704,
+            0.0
+          ],
+          "derivedMouthCorners": [
+            [
+              149.22378301549588,
+              108.00000000000028,
+              0.0
+            ],
+            [
+              149.22378301549588,
+              108.00000000000028,
+              99.50000000000045
+            ],
+            [
+              186.7267593872739,
+              198.54019418610704,
+              99.50000000000045
+            ],
+            [
+              186.7267593872739,
+              198.54019418610704,
+              0.0
+            ]
+          ],
+          "calloutAnchor": [
+            167.97527120138488,
+            153.27009709305366,
+            99.50000000000045
+          ],
+          "confidence": 1.0,
+          "detectionSource": "foldedTopology",
+          "suggestedRole": "bidirectional",
+          "suggestionReason": "Standard bend ports are physically symmetrical and bidirectional."
+        }
+      ]
+    },
+    "undoDeltas": [
+      {
+        "description": "Model Modification",
+        "actionType": "modify",
+        "timestamp": "2026-10-01T13:40:46.437672",
+        "oldMaterial": {
+          "thicknessMm": 1.5,
+          "materialGrade": "Pre-Galvanized Steel",
+          "materialType": "mildSteel",
+          "finish": "electroGalvanized",
+          "kFactor": 0.4,
+          "defaultBendRadius": 1.5,
+          "edgeChamferMm": 0.0
+        },
+        "newMaterial": {
+          "thicknessMm": 1.5,
+          "materialGrade": "Pre-Galvanized Steel",
+          "materialType": "mildSteel",
+          "finish": "electroGalvanized",
+          "kFactor": 0.4,
+          "defaultBendRadius": 1.5,
+          "edgeChamferMm": 0.0
+        }
+      },
+      {
+        "description": "Update Fitting Metadata",
+        "actionType": "drive_dimension",
+        "timestamp": "2026-10-01T13:40:46.441813",
+        "oldParameters": {},
+        "newParameters": {
+          "width": 100.0,
+          "height": 100.0,
+          "port1Width": 100.0,
+          "port1Height": 100.0,
+          "port2Width": 100.0,
+          "port2Height": 100.0,
+          "angle": 45.0,
+          "thickness": 1.5,
+          "flange": 10.0
+        }
+      },
+      {
+        "description": "Model Modification",
+        "actionType": "modify",
+        "timestamp": "2026-10-01T13:40:46.446979",
+        "oldProductType": "45_deg_bend_100x100",
+        "newProductType": "bend"
+      }
+    ],
+    "cmsWorkflow": {
+      "stage": "template_complete",
+      "stageIndex": 3
+    },
+    "featureHistory": [
+      {
+        "step": 1,
+        "action": "modify",
+        "description": "Model Modification",
+        "timestamp": "2026-10-01T13:40:46.437672",
+        "delta": {
+          "description": "Model Modification",
+          "actionType": "modify",
+          "timestamp": "2026-10-01T13:40:46.437672",
+          "oldMaterial": {
+            "thicknessMm": 1.5,
+            "materialGrade": "Pre-Galvanized Steel",
+            "materialType": "mildSteel",
+            "finish": "electroGalvanized",
+            "kFactor": 0.4,
+            "defaultBendRadius": 1.5,
+            "edgeChamferMm": 0.0
+          },
+          "newMaterial": {
+            "thicknessMm": 1.5,
+            "materialGrade": "Pre-Galvanized Steel",
+            "materialType": "mildSteel",
+            "finish": "electroGalvanized",
+            "kFactor": 0.4,
+            "defaultBendRadius": 1.5,
+            "edgeChamferMm": 0.0
+          }
+        }
+      },
+      {
+        "step": 2,
+        "action": "drive_dimension",
+        "description": "Update Fitting Metadata",
+        "timestamp": "2026-10-01T13:40:46.441813",
+        "delta": {
+          "description": "Update Fitting Metadata",
+          "actionType": "drive_dimension",
+          "timestamp": "2026-10-01T13:40:46.441813",
+          "oldParameters": {},
+          "newParameters": {
+            "width": 100.0,
+            "height": 100.0,
+            "port1Width": 100.0,
+            "port1Height": 100.0,
+            "port2Width": 100.0,
+            "port2Height": 100.0,
+            "angle": 45.0,
+            "thickness": 1.5,
+            "flange": 10.0
+          }
+        }
+      },
+      {
+        "step": 3,
+        "action": "modify",
+        "description": "Model Modification",
+        "timestamp": "2026-10-01T13:40:46.446979",
+        "delta": {
+          "description": "Model Modification",
+          "actionType": "modify",
+          "timestamp": "2026-10-01T13:40:46.446979",
+          "oldProductType": "45_deg_bend_100x100",
+          "newProductType": "bend"
+        }
+      }
+    ],
+    "fittingMetadata": {
+      "category": "Trunking Accessories",
+      "product": "Bend",
+      "variantName": "45 Deg Bend",
+      "flangeMm": 10.0,
+      "parameters": {
+        "width": 100.0,
+        "height": 100.0,
+        "port1Width": 100.0,
+        "port1Height": 100.0,
+        "port2Width": 100.0,
+        "port2Height": 100.0,
+        "angle": 45.0,
+        "thickness": 1.5
+      },
+      "analyzedDimensions": {
+        "overallWidth": 248.447566030987,
+        "overallHeight": 320.38192604994293,
+        "detectedFlangeMm": 9.99999999999983,
+        "bedWidth": 98.00000000000163,
+        "port1Width": 98.00000000000163,
+        "port2Width": 98.0000000000003,
+        "port3Width": 20.000000000002046,
+        "branchWidth": 20.000000000002046,
+        "detectedPortWidthMm": 98.00000000000163,
+        "detectedBranchWidthMm": 20.000000000002046
+      },
+      "portAssignments": {
+        "port1": "south",
+        "port2": "west"
+      }
+    },
+    "fittingCategory": "Trunking Accessories",
+    "category": "Trunking Accessories",
+    "fittingProduct": "Bend",
+    "product": "Bend",
+    "fittingVariant": "45 Deg Bend",
+    "variantName": "45 Deg Bend",
+    "fittingFlangeMm": 10.0,
+    "ports": [
+      {
+        "id": "port1",
+        "label": "INLET",
+        "side": "south",
+        "width": 100.0,
+        "height": 100.0,
+        "measuredLength": 50.0,
+        "edgeP1": [
+          149.22378301549384,
+          0.0
+        ],
+        "edgeP2": [
+          99.22378301549384,
+          0.0
+        ],
+        "center": [
+          124.22378301549384,
+          0.0
+        ],
+        "normal": [
+          -0.0,
+          -1.0
+        ]
+      },
+      {
+        "id": "port2",
+        "label": "OUTLET",
+        "side": "west",
+        "width": 100.0,
+        "height": 100.0,
+        "measuredLength": 78.00000000000011,
+        "edgeP1": [
+          69.22378301549497,
+          19.99999999999983
+        ],
+        "edgeP2": [
+          69.22378301549497,
+          97.99999999999994
+        ],
+        "center": [
+          69.22378301549497,
+          58.999999999999886
+        ],
+        "normal": [
+          -1.0,
+          0.0
+        ]
+      }
+    ],
+    "isCmsProduct": true,
+    "cms_product_contract": {
+      "productType": "bend",
+      "variationName": "45_deg_bend"
+    },
+    "cmsParameters": {
+      "flange_direction": 0.0,
+      "has_perforations": 0.0
+    },
+    "cms_param_flange_direction": 0.0,
+    "cms_param_has_perforations": 0.0,
+    "appliedTemplate": "bend"
+  }
+}

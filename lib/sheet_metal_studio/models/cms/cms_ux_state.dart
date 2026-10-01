@@ -6,6 +6,7 @@
 // =============================================================================
 
 import 'package:flutter/foundation.dart';
+
 import '../cad_primitives.dart';
 import 'cms_physical_port.dart';
 import 'cms_product_contract.dart';
@@ -47,6 +48,8 @@ class CmsSuggestedBend {
     this.targetAngleDeg = 90.0,
     this.radiusMm = 1.5,
   });
+
+  double get displayAngleDeg => targetAngleDeg > 90.0 ? (180.0 - targetAngleDeg).abs() : targetAngleDeg;
 }
 
 /// Represents a candidate 3D opening discovered from folded boundary loops.
@@ -81,12 +84,7 @@ class CmsVisualFocus {
   final String? activeFlangeId;
   final List<String> activePunchIds;
 
-  const CmsVisualFocus({
-    this.activePortId,
-    this.activeBendId,
-    this.activeFlangeId,
-    this.activePunchIds = const [],
-  });
+  const CmsVisualFocus({this.activePortId, this.activeBendId, this.activeFlangeId, this.activePunchIds = const []});
 
   static const empty = CmsVisualFocus();
 }
@@ -98,11 +96,7 @@ class CmsLearnedMilestone {
   final String detail;
   final bool isVerified;
 
-  const CmsLearnedMilestone({
-    required this.title,
-    required this.detail,
-    this.isVerified = true,
-  });
+  const CmsLearnedMilestone({required this.title, required this.detail, this.isVerified = true});
 }
 
 /// Autonomous, observable state for the clean CMS template authoring engine.
@@ -123,6 +117,7 @@ class CmsUxState {
   final String stageSubtitle;
   final double progress;
   final String? activeErrorMessage;
+  final bool isDismissed;
 
   const CmsUxState({
     this.phase = CmsUxPhase.idle,
@@ -140,6 +135,7 @@ class CmsUxState {
     this.stageSubtitle = '',
     this.progress = 0.0,
     this.activeErrorMessage,
+    this.isDismissed = false,
   });
 
   bool get isActive => phase != CmsUxPhase.idle && phase != CmsUxPhase.complete;
@@ -247,6 +243,7 @@ class CmsUxState {
     String? stageSubtitle,
     double? progress,
     String? activeErrorMessage,
+    bool? isDismissed,
   }) {
     return CmsUxState(
       phase: phase ?? this.phase,
@@ -264,6 +261,7 @@ class CmsUxState {
       stageSubtitle: stageSubtitle ?? this.stageSubtitle,
       progress: progress ?? this.progress,
       activeErrorMessage: activeErrorMessage ?? this.activeErrorMessage,
+      isDismissed: isDismissed ?? this.isDismissed,
     );
   }
 }

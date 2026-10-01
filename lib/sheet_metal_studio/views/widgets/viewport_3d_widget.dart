@@ -49,8 +49,9 @@ typedef _DrawFacet = ({
 
 class Viewport3dWidget extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
+  final bool isInteractionLocked;
 
-  const Viewport3dWidget({super.key, required this.viewModel});
+  const Viewport3dWidget({super.key, required this.viewModel, this.isInteractionLocked = false});
 
   @override
   State<Viewport3dWidget> createState() => _Viewport3dWidgetState();
@@ -320,12 +321,14 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                   },
                   child: Listener(
                     onPointerSignal: (pointerSignal) {
+                      if (widget.isInteractionLocked) return;
                       if (pointerSignal is PointerScrollEvent) {
                         final factor = pointerSignal.scrollDelta.dy < 0 ? 1.12 : 0.89;
                         viewModel.zoom3D(factor);
                       }
                     },
                     onPointerDown: (event) {
+                      if (widget.isInteractionLocked) return;
                       if ((event.buttons & kPrimaryMouseButton) != 0) {
                         if (!viewModel.isCoverLocked) {
                           final overCover = _isPointOverCover(event.localPosition, size);
@@ -350,6 +353,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                       }
                     },
                     onPointerMove: (event) {
+                      if (widget.isInteractionLocked) return;
                       if (_isDraggingCover) {
                         bool isShiftHeld = false;
                         try {
@@ -375,7 +379,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                     },
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () => viewModel.clearSelection(),
+                      onTap: widget.isInteractionLocked ? null : () => viewModel.clearSelection(),
                       child: ExcludeSemantics(
                         child: CustomPaint(
                           size: Size.infinite,

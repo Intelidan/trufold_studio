@@ -17,6 +17,7 @@ import 'package:trufold_studio/sheet_metal_studio/models/dsf_document.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_product_contract.dart';
 import 'package:trufold_studio/sheet_metal_studio/viewmodels/sheet_metal_studio_viewmodel.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/cms_channel_topology_pictograph.dart';
+import 'package:trufold_studio/sheet_metal_studio/views/widgets/dds/dds_cms_parameter_inspector.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/dxf_fitting_parameter_dialog.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dxf_fitting_metadata.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/cms/cms_scaling_controller.dart';
@@ -335,5 +336,181 @@ void main() {
       expect(find.text('Equal (Linked)'), findsNothing);
       expect(find.text('Unequal (Independent)'), findsNothing);
     });
+
+    test('8. Product category persistence in DSF document, metadata, and viewmodel save', () {
+      final docWithCategory = DsfDocument.sampleCableTray().copyWith(
+        metadata: {
+          'category': 'Trunking Accessories',
+          'fittingCategory': 'Trunking Accessories',
+          'product': 'Bend',
+          'variantName': '90 Deg Bend',
+          'fittingMetadata': {
+            'category': 'Trunking Accessories',
+            'product': 'Bend',
+            'variantName': '90 Deg Bend',
+          },
+        },
+        itemName: '90_deg_bend_100x100.dxf',
+      );
+
+      // Verify DsfDocument.category returns Trunking Accessories
+      expect(docWithCategory.category, equals('Trunking Accessories'));
+
+      // Verify DxfFittingMetadata.fromDocument preserves Trunking Accessories
+      final meta = DxfFittingMetadata.fromDocument(docWithCategory)!;
+      expect(meta.category, equals('Trunking Accessories'));
+
+      // Verify DxfFittingMetadata.detectFromDocument checks doc.category first before filename
+      final detected = DxfFittingMetadata.detectFromDocument(docWithCategory);
+      expect(detected.category, equals('Trunking Accessories'));
+
+      // Verify ViewModel prepareDocumentForSave persists category
+      final testVm = SheetMetalStudioViewModel();
+      testVm.loadDocument(docWithCategory);
+      testVm.updateFittingMetadata(meta);
+      final preparedDoc = testVm.prepareDocumentForSave();
+      expect(preparedDoc.metadata['category'], equals('Trunking Accessories'));
+      expect(preparedDoc.metadata['fittingCategory'], equals('Trunking Accessories'));
+      expect((preparedDoc.metadata['fittingMetadata'] as Map)['category'], equals('Trunking Accessories'));
+    });
+
+    testWidgets('9. DdsCmsParameterInspector sideways folding arrow button calls onFoldSideways', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      bool folded = false;
+      final testVm = SheetMetalStudioViewModel();
+      final doc = DsfDocument.sampleCableTray().copyWith(
+        productType: 'bend',
+        itemName: '90_deg_bend_100x100.dsf',
+      );
+      testVm.loadDocument(doc);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DdsCmsParameterInspector(
+              viewModel: testVm,
+              isDetached: false, // Docked mode
+              onFoldSideways: () {
+                folded = true;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find the fold arrow button
+      final foldBtn = find.byTooltip('Fold / Collapse Sideways');
+      expect(foldBtn, findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsWidgets);
+
+      await tester.tap(foldBtn);
+      await tester.pumpAndSettle();
+
+      expect(folded, isTrue);
+    });
+
+    testWidgets('10. DdsCmsParameterInspector hides Coupler and Bend Radius when category is Trunking Accessories', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final testVm = SheetMetalStudioViewModel();
+      final trunkingDoc = DsfDocument.sampleCableTray().copyWith(
+        productType: 'bend',
+        itemName: 'trunking_90_deg_bend.dsf',
+        metadata: {
+          'category': 'Trunking Accessories',
+          'fittingMetadata': {
+            'category': 'Trunking Accessories',
+          },
+        },
+      );
+      testVm.loadDocument(trunkingDoc);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DdsCmsParameterInspector(
+              viewModel: testVm,
+              isDetached: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // For Trunking Accessories:
+      // Coupler section must NOT be visible
+      expect(find.text('2. COUPLER SLOTS & FLAPS'), findsNothing);
+      // Throat Bend Radius must NOT be visible
+      expect(find.textContaining('Inside Throat Bend Radius'), findsNothing);
+    });
+
+    testWidgets('11. DdsCmsParameterInspector renders Coupler Flap addition button, Bend Radius button and reactive flange direction for Tray Accessories', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final testVm = SheetMetalStudioViewModel();
+      final trayDoc = DsfDocument.sampleCableTray().copyWith(
+        productType: 'flatBend90',
+        itemName: 'cable_tray_90_deg_bend.dsf',
+        metadata: {
+          'category': 'Tray Accessories',
+          'fittingMetadata': {
+            'category': 'Tray Accessories',
+          },
+        },
+      );
+      testVm.loadDocument(trayDoc);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DdsCmsParameterInspector(
+              viewModel: testVm,
+              isDetached: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1. Coupler section must be visible for Tray Accessories
+      expect(find.text('2. COUPLER SLOTS & FLAPS'), findsOneWidget);
+
+      // 2. Coupler Flap Addition Action Button must be visible
+      final addFlapBtn = find.textContaining('Add Coupler Flaps');
+      expect(addFlapBtn, findsOneWidget);
+
+      // Tap to toggle coupler flaps
+      await tester.tap(addFlapBtn);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Coupler Flaps Active'), findsOneWidget);
+
+      // 3. Dedicated Bend Radius button and Inside Throat Bend Radius must be visible
+      expect(find.text('BEND RADIUS'), findsOneWidget);
+      expect(find.textContaining('Inside Throat Bend Radius'), findsOneWidget);
+
+      // 4. Base Flange Direction toggle must be visible and reactive
+      final outsideBtn = find.text('Outside Return Flange');
+      expect(outsideBtn, findsOneWidget);
+      await tester.ensureVisible(outsideBtn);
+      await tester.tap(outsideBtn);
+      await tester.pumpAndSettle();
+      expect(testVm.document.parameters['flange_direction'], equals(1.0));
+
+      final insideBtn = find.text('Inside Flange');
+      expect(insideBtn, findsOneWidget);
+      await tester.ensureVisible(insideBtn);
+      await tester.tap(insideBtn);
+      await tester.pumpAndSettle();
+      expect(testVm.document.parameters['flange_direction'], equals(0.0));
+    });
   });
 }
+

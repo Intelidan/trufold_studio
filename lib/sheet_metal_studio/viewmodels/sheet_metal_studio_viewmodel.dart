@@ -1,4 +1,6 @@
+import '../engine/associative_dimension_engine.dart';
 import '../engine/constraints/dependency_graph_engine.dart';
+import '../services/studio_file_service.dart';
 
 // =============================================================================
 
@@ -373,6 +375,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       _document = newDoc;
     }
 
+    _syncAssociativeDimensions();
     _recomputeMesh();
   }
 
@@ -771,6 +774,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       notifyListeners();
     }
   }
+
   bool get isTeachScalingActive => _isTeachScalingActive;
   CmsScalingController? get scalingController => _scalingController;
 
@@ -923,20 +927,34 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   /// Seamlessly activates the scaling engine if inactive, selects the target parameter,
   /// triggers 2D contour morphing and 3D folding in real time, and broadcasts to CAD & TDS.
   void applyCmsMorphParameter(String key, double value) {
+    final updatedParams = Map<String, double>.from(_document.parameters);
+    updatedParams[key] = value;
+    _document = _document.copyWith(parameters: updatedParams);
+
     if (_scalingController == null) {
       startTeachScaling();
     }
     if (_scalingController != null) {
-      // If a port-specific parameter is changed, make sure ports are unlinked
-      if (key.startsWith('port') &&
-          _scalingController!.model.isLinkedPorts &&
-          _scalingController!.baselinePorts.isNotEmpty) {
-        _scalingController!.togglePortLinking(false);
+      // If a port-specific parameter is changed, make sure ports are unlinked only if the model actually defines distinct port parameters
+      if (key.startsWith('port') && _scalingController!.model.isLinkedPorts && _scalingController!.baselinePorts.isNotEmpty) {
+        if (_scalingController!.model.parameters.containsKey(key)) {
+          _scalingController!.togglePortLinking(false);
+        }
       }
 
       if (_scalingController!.model.parameters.containsKey(key)) {
         _scalingController!.selectParameter(key);
         _scalingController!.evaluateMorph(value);
+      } else if ((key.endsWith('_width') || (key.startsWith('port') && key.contains('width'))) &&
+          _scalingController!.model.parameters.containsKey('width')) {
+        _scalingController!.selectParameter('width');
+        _scalingController!.evaluateMorph(value);
+        _document.parameters['width'] = value;
+      } else if ((key.endsWith('_height') || (key.startsWith('port') && key.contains('height'))) &&
+          _scalingController!.model.parameters.containsKey('height')) {
+        _scalingController!.selectParameter('height');
+        _scalingController!.evaluateMorph(value);
+        _document.parameters['height'] = value;
       } else if (key == 'width' || key == 'height') {
         _scalingController!.selectParameter(key);
         _scalingController!.evaluateMorph(value);
@@ -944,9 +962,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
       // Handle sheet thickness live update
       if (key == 'thickness') {
-        _document = _document.copyWith(
-          material: _document.material.copyWith(thicknessMm: value),
-        );
+        _document = _document.copyWith(material: _document.material.copyWith(thicknessMm: value));
         if (_scalingController != null) {
           final updatedBase = _scalingController!.baselineDocument.copyWith(
             material: _scalingController!.baselineDocument.material.copyWith(thicknessMm: value),
@@ -957,15 +973,16 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         _recomputeMesh();
       }
 
-      // Handle base flange direction live update (0.0 = Outside Return Lip, 1.0 = Inside Flush)
+      // Handle base flange direction live update (0.0 = Inside Flange, 1.0 = Outside Return Lip)
       if (key == 'flange_direction') {
-        final isInside = value == 1.0;
+        final isInside = value == 0.0;
         final targetDir = isInside ? BendDirection.up : BendDirection.down;
         final targetLayer = isInside ? 'BEND_UP' : 'BEND_DOWN';
 
         List<FoldBendLine> updateBends(List<FoldBendLine> bends) {
           return bends.map((b) {
-            final isFlange = b.role == BendLineRole.flange ||
+            final isFlange =
+                b.role == BendLineRole.flange ||
                 b.layer.toUpperCase().contains('FLANGE') ||
                 b.id.toUpperCase().startsWith('FL') ||
                 b.parentFaceId.toUpperCase().contains('FLANGE') ||
@@ -979,9 +996,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
         _document = _document.copyWith(bends: updateBends(_document.bends));
         if (_scalingController != null) {
-          final updatedBase = _scalingController!.baselineDocument.copyWith(
-            bends: updateBends(_scalingController!.baselineDocument.bends),
-          );
+          final updatedBase = _scalingController!.baselineDocument.copyWith(bends: updateBends(_scalingController!.baselineDocument.bends));
           _scalingController!.updateBaselineDocument(updatedBase);
         }
         _previewDocWithCover = null;
@@ -992,7 +1007,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       if (key == 'coupler_slot_length' || key == 'coupler_slot_width' || key == 'coupler_slot_pitch') {
         List<CncPunchPrimitive> updatePunches(List<CncPunchPrimitive> punches) {
           return punches.map((p) {
-            final isCoupler = p.role == CncPunchRole.coupler ||
+            final isCoupler =
+                p.role == CncPunchRole.coupler ||
                 p.isSlot ||
                 p.type == PunchType.obroundSlot ||
                 p.id.toUpperCase().contains('SLOT') ||
@@ -1008,9 +1024,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
         _document = _document.copyWith(punches: updatePunches(_document.punches));
         if (_scalingController != null) {
-          final updatedBase = _scalingController!.baselineDocument.copyWith(
-            punches: updatePunches(_scalingController!.baselineDocument.punches),
-          );
+          final updatedBase = _scalingController!.baselineDocument.copyWith(punches: updatePunches(_scalingController!.baselineDocument.punches));
           _scalingController!.updateBaselineDocument(updatedBase);
         }
         if (_previewCouplerPunches != null) {
@@ -1022,22 +1036,23 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
       // Handle cover flange size live update
       if (key == 'cover_flange_size') {
-        _coverFlangeDepth = value;
-        if (_document.cover != null) {
-          final curCover = _document.cover!;
-          final updatedProps = Map<String, dynamic>.from(curCover.properties);
-          updatedProps['flangeDepthMm'] = value;
-          final updatedCover = curCover.copyWith(properties: updatedProps);
-          _document = _document.copyWith(cover: updatedCover);
-          _previewCoverMesh = _buildCover3DMesh(updatedCover);
-        }
+        setCoverFlangeDepth(value);
       }
 
-      // Cache parameter in metadata
+      // Handle coupler flaps live update
+      if (key == 'include_coupler_flaps') {
+        _scalingController?.setIncludeCouplerFlaps(value > 0.5);
+      }
+      if (key == 'coupler_flap_length') {
+        _scalingController?.setCouplerFlapLength(value);
+      }
+
+      // Cache parameter in metadata and document parameters
       final cmsParams = Map<String, dynamic>.from(_document.metadata['cmsParameters'] as Map? ?? {});
       cmsParams[key] = value;
       _document.metadata['cmsParameters'] = cmsParams;
       _document.metadata['cms_param_$key'] = value;
+      _document.parameters[key] = value;
       notifyListeners();
     }
   }
@@ -1139,12 +1154,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         return CadPoint3D(nx, ny, nz);
       }
 
-      return baseCoverMesh.transform(
-        transformPt,
-        transformNormal: transformNormal,
-        colorOverride: const Color(0xFF64748B),
-        faceIdPrefix: 'COVER',
-      );
+      return baseCoverMesh.transform(transformPt, transformNormal: transformNormal, colorOverride: const Color(0xFF64748B), faceIdPrefix: 'COVER');
     }
 
     final double tx, ty, tz;
@@ -1169,7 +1179,11 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   void _onScalingControllerChanged() {
     if (_isTeachScalingActive && _scalingController?.currentPreview != null) {
-      final previewDoc = _scalingController!.currentPreview!.scaledDocument;
+      final scaled = _scalingController!.currentPreview!.scaledDocument;
+      final previewDoc = scaled.copyWith(
+        parameters: Map<String, double>.from(_document.parameters)..addAll(scaled.parameters),
+        metadata: Map<String, dynamic>.from(_document.metadata)..addAll(scaled.metadata),
+      );
       if (_document.cover != null) {
         final syncedCover = _syncCoverForPreview(previewDoc);
         _previewDocWithCover = previewDoc.copyWith(cover: syncedCover);
@@ -1242,7 +1256,11 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   DsfDocument get document {
     if (_isTeachScalingActive && _scalingController?.currentPreview != null) {
       if (_previewDocWithCover != null) return _previewDocWithCover!;
-      final previewDoc = _scalingController!.currentPreview!.scaledDocument;
+      final scaled = _scalingController!.currentPreview!.scaledDocument;
+      final previewDoc = scaled.copyWith(
+        parameters: Map<String, double>.from(_document.parameters)..addAll(scaled.parameters),
+        metadata: Map<String, dynamic>.from(_document.metadata)..addAll(scaled.metadata),
+      );
       if (_document.cover != null) {
         final syncedCover = _syncCoverForPreview(previewDoc);
         _previewDocWithCover = previewDoc.copyWith(cover: syncedCover);
@@ -1293,8 +1311,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   double _coverFlangeDepth = TrunkingCoverGenerator.defaultFlangeDepth;
 
   /// Current user-configured or document-stored cover side flange depth (in mm).
-  double get coverFlangeDepth =>
-      (_document.cover?.properties['flangeDepthMm'] as num?)?.toDouble() ?? _coverFlangeDepth;
+  double get coverFlangeDepth => (_document.cover?.properties['flangeDepthMm'] as num?)?.toDouble() ?? _coverFlangeDepth;
 
   /// Updates the cover flange depth and regenerates the 2D & 3D cover document.
   void setCoverFlangeDepth(double depth) {
@@ -1329,11 +1346,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     final effectiveOverrides = _scalingController != null
         ? Map<String, double>.fromEntries(_scalingController!.model.parameters.entries.map((e) => MapEntry(e.key, e.value.currentValue)))
         : null;
-    final newCover = TrunkingCoverGenerator.generateCover(
-      _document,
-      parameterOverrides: effectiveOverrides,
-      flangeDepth: _coverFlangeDepth,
-    );
+    final newCover = TrunkingCoverGenerator.generateCover(_document, parameterOverrides: effectiveOverrides, flangeDepth: _coverFlangeDepth);
     if (newCover == null) return;
     _isCoverLocked = true;
     _document = _document.copyWith(cover: newCover);
@@ -1505,6 +1518,29 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   void setCover3DViewerOpen(bool open) {
     _isCover3DViewerOpen = open;
     notifyListeners();
+  }
+
+  String? _currentFilePath;
+  String? get currentFilePath => _currentFilePath;
+  set currentFilePath(String? val) {
+    _currentFilePath = val;
+    notifyListeners();
+  }
+
+  Future<bool> saveActiveFileDirectIfPossible() async {
+    if (_currentFilePath == null || _currentFilePath!.isEmpty) return false;
+    String targetPath = _currentFilePath!;
+    if (targetPath.toLowerCase().endsWith('.dxf')) {
+      targetPath = '.dsf';
+    }
+    final doc = prepareDocumentForSave();
+    final content = doc.toJsonString(pretty: true);
+    final ok = await StudioFileService.saveFileDirect(filePath: targetPath, content: content);
+    if (ok) {
+      _currentFilePath = targetPath;
+      markClean();
+    }
+    return ok;
   }
 
   DxfFittingMetadata? get detectedFittingMetadata => _detectedFittingMetadata;
@@ -1997,9 +2033,25 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     final meta = Map<String, dynamic>.from(_document.metadata);
 
+    final effectiveMeta = _detectedFittingMetadata ?? DxfFittingMetadata.fromDocument(_document);
+    if (effectiveMeta != null && effectiveMeta.category != FittingCategory.none) {
+      meta['fittingMetadata'] = effectiveMeta.toJson();
+      meta['fittingCategory'] = effectiveMeta.category;
+      meta['category'] = effectiveMeta.category;
+      meta['fittingProduct'] = effectiveMeta.product;
+      meta['product'] = effectiveMeta.product;
+      meta['fittingVariant'] = effectiveMeta.variantName;
+      meta['variantName'] = effectiveMeta.variantName;
+    }
+
     if (_persistentCmsPorts.isNotEmpty && _document.metadata['cmsTemplate'] is Map) {
       final cms = Map<String, dynamic>.from(meta['cmsTemplate'] as Map);
       cms['ports'] = _persistentCmsPorts.map((p) => p.toJson()).toList();
+      if (effectiveMeta != null && effectiveMeta.category.isNotEmpty && effectiveMeta.category != FittingCategory.none) {
+        cms['category'] = effectiveMeta.category;
+        cms['productType'] = effectiveMeta.product;
+        cms['variation'] = effectiveMeta.variantName;
+      }
       meta['cmsTemplate'] = cms;
     }
 
@@ -2547,8 +2599,14 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   /// If [isAlt] is true, moves freely without angle quantization.
 
-  static CadPoint2D snapEndpointAngle({required CadPoint2D anchor, required CadPoint2D target, bool isAlt = false}) {
-    if (isAlt) return target;
+  static CadPoint2D snapEndpointAngle({required CadPoint2D anchor, required CadPoint2D target, bool isAlt = false, double? precisionMm}) {
+    if (isAlt) {
+      if (precisionMm != null && precisionMm > 0) {
+        final factor = 1.0 / precisionMm;
+        return CadPoint2D((target.x * factor).roundToDouble() / factor, (target.y * factor).roundToDouble() / factor);
+      }
+      return target;
+    }
 
     final dx = target.x - anchor.x;
 
@@ -2562,7 +2620,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     if (angle < 0) angle += 360.0;
 
-    // Snap to 5-degree increments with 45Â°/90Â°/180Â° priority
+    // Snap to 5-degree increments with 45°/90°/180° priority
 
     double snapped = (angle / 5.0).round() * 5.0;
 
@@ -2581,13 +2639,11 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     return CadPoint2D(anchor.x + len * math.cos(rad), anchor.y + len * math.sin(rad));
   }
 
-  /// Resolves a 2D coordinate with 45Â° angle snapping (if line is in progress and Alt not held)
-
-  /// and magnetic snapping (if enabled).
-
+  /// Resolves a 2D coordinate with 45° angle snapping (if line is in progress and Alt not held)
+  /// and magnetic snapping (if enabled). If Alt is pressed, returns coordinates with 0.1mm precision.
   CadPoint2D resolveEffectivePoint(CadPoint2D point, {double snapRadiusMm = 8.0}) {
     if (isAltPressed) {
-      return point;
+      return CadPoint2D((point.x * 10.0).roundToDouble() / 10.0, (point.y * 10.0).roundToDouble() / 10.0);
     }
 
     CadPoint2D candidate = point;
@@ -2628,9 +2684,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   }
 
   /// Updates cursor position with automatic angle snapping (unless Alt is held)
-
-  /// and localized magnetic snapping.
-
+  /// and localized magnetic snapping. If Alt is held, positions with 0.1mm precision.
   void updateCursorMm(CadPoint2D cursorMm, {double snapRadiusMm = 8.0, bool? isAlt}) {
     if (isAlt != null) {
       isAltPressed = isAlt;
@@ -2639,7 +2693,9 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     if (isAltPressed) {
       _activeSnap = null;
-      _rubberBandEndpoint = cursorMm;
+      final quantized = CadPoint2D((cursorMm.x * 10.0).roundToDouble() / 10.0, (cursorMm.y * 10.0).roundToDouble() / 10.0);
+      _currentCursorMm = quantized;
+      _rubberBandEndpoint = quantized;
       notifyListeners();
       return;
     }
@@ -3050,19 +3106,135 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     } else if (_toolMode == StudioToolMode.addDimension || _toolMode == StudioToolMode.dragDimension) {
       // Find if clicked on or snapped to an entity
       String? clickedEntityId = _activeSnap?.entityId;
-      CadAnchorType clickedAnchorType = _mapSnapTypeToAnchorType(_activeSnap?.type);
+      CadAnchorType clickedAnchorType = _mapSnapTypeToAnchorType(_activeSnap?.type, point: _activeSnap?.point ?? clickedPoint, entityId: _activeSnap?.entityId);
 
-      // If not snapped to a punch/arc/bend/cut/contour, test if close to a punch or edge
-      if (clickedEntityId == null) {
-        for (final punch in _document.punches) {
+      // Check if user clicked directly on a punch or snapped to punch center
+      String? clickedPunchId;
+      if (_activeSnap?.type == SnapType.punchCenter && _activeSnap?.entityId != null) {
+        clickedPunchId = _activeSnap!.entityId;
+        clickedEntityId = _activeSnap!.entityId;
+        clickedAnchorType = CadAnchorType.center;
+        effectivePoint = _activeSnap!.point;
+      } else {
+        for (final punch in _document.allPunches) {
           if (!punch.isVisible) continue;
-          final dist = effectivePoint.distanceTo(punch.center);
+          final dist = clickedPoint.distanceTo(punch.center);
           final effRadius = punch.isRound ? punch.diameterMm / 2.0 : math.max(punch.widthMm, punch.lengthMm) / 2.0;
-          if (dist <= math.max(10.0, effRadius + 4.0)) {
+          if (dist <= math.min(10.0, effRadius + 2.0)) {
+            clickedPunchId = punch.id;
             clickedEntityId = punch.id;
             clickedAnchorType = CadAnchorType.center;
             effectivePoint = punch.center;
             break;
+          }
+        }
+      }
+
+      if (clickedEntityId == null) {
+        final anchor = AssociativeDimensionEngine.findAnchorAt(clickedPoint, _document, toleranceMm: math.max(snapRadiusMm, 8.0));
+        if (anchor != null) {
+          clickedEntityId = anchor.entityId;
+          clickedAnchorType = anchor.anchorType ?? CadAnchorType.endpoint;
+          effectivePoint = anchor.point;
+        }
+      }
+
+      // When the dimension tool is selected, clicking on ANY segment (away from endpoints/vertices)
+      // should draw that segment's dimensional line. If the user clicked/snapped to an endpoint or vertex,
+      // it initiates a two-point dimension between that point and the next clicked point.
+      final isEndpointClick =
+          clickedAnchorType == CadAnchorType.startPoint ||
+          clickedAnchorType == CadAnchorType.endPoint ||
+          clickedAnchorType == CadAnchorType.endpoint ||
+          (_activeSnap != null && _activeSnap!.type.isEndpoint);
+
+      if (_pendingBendStart == null && clickedPunchId == null && !isEndpointClick) {
+        final hitSeg =
+            findSegmentAtPoint(clickedPoint, maxDistMm: math.max(snapRadiusMm * 2.0, 14.0)) ??
+            findSegmentAtPoint(effectivePoint, maxDistMm: math.max(snapRadiusMm * 2.0, 14.0));
+
+        if (hitSeg != null) {
+          final edgeP1 = hitSeg.p1;
+          final edgeP2 = hitSeg.p2;
+          final edgeRefId = hitSeg.refId;
+          final measuredVal = edgeP1.distanceTo(edgeP2);
+
+          if (measuredVal > 0.1) {
+            final dx = edgeP2.x - edgeP1.x;
+            final dy = edgeP2.y - edgeP1.y;
+            final len = math.sqrt(dx * dx + dy * dy);
+            double nx = -dy / len;
+            double ny = dx / len;
+
+            double offset = toolConfig.dimensionOffsetMm;
+            final mid = CadPoint2D((edgeP1.x + edgeP2.x) / 2.0, (edgeP1.y + edgeP2.y) / 2.0);
+
+            if (_document.outerContour.length >= 3 && edgeRefId.startsWith('CONTOUR_EDGE_')) {
+              final testPt = CadPoint2D(mid.x + nx * 2.0, mid.y + ny * 2.0);
+              if (_isPointInsidePolygon(testPt, _document.outerContour)) {
+                offset = -offset;
+              }
+            } else if (edgeRefId.startsWith('FACE_')) {
+              for (final f in _document.faces) {
+                if (edgeRefId.startsWith('FACE_${f.id}_')) {
+                  final testPt = CadPoint2D(mid.x + nx * 2.0, mid.y + ny * 2.0);
+                  if (_isPointInsidePolygon(testPt, f.vertices)) {
+                    offset = -offset;
+                  }
+                  break;
+                }
+              }
+            } else {
+              final clickDot = (clickedPoint.x - mid.x) * nx + (clickedPoint.y - mid.y) * ny;
+              if (clickDot < 0) {
+                offset = -offset;
+              }
+            }
+
+            final existingDim = _document.dimensions
+                .where(
+                  (d) =>
+                      (d.referenceAId == edgeRefId && d.referenceBId == edgeRefId) ||
+                      (d.pointA != null &&
+                          d.pointB != null &&
+                          ((d.pointA!.distanceTo(edgeP1) < 0.1 && d.pointB!.distanceTo(edgeP2) < 0.1) ||
+                              (d.pointA!.distanceTo(edgeP2) < 0.1 && d.pointB!.distanceTo(edgeP1) < 0.1))),
+                )
+                .firstOrNull;
+
+            if (existingDim != null) {
+              setDimensionLineOffset(existingDim.id, offset);
+              selectDimension(existingDim.id);
+            } else {
+              final dimId = 'dim_${DateTime.now().millisecondsSinceEpoch}_${_document.dimensions.length + 1}';
+              final dim = CadDimension(
+                id: dimId,
+                type: CadDimensionType.aligned,
+                referenceAId: edgeRefId,
+                referenceBId: edgeRefId,
+                anchorTypeA: CadAnchorType.endpoint,
+                anchorTypeB: CadAnchorType.endpoint,
+                pointA: edgeP1,
+                pointB: edgeP2,
+                measuredValue: measuredVal,
+                dimensionLineOffset: offset,
+                isDriven: false,
+                isDriving: true,
+                allowedMotion: CadAllowedMotion.structuralParameter,
+                referenceEntityId: edgeRefId,
+                drivenEntityId: edgeRefId,
+              );
+              addDimension(dim);
+              selectDimension(dimId);
+            }
+
+            _pendingBendStart = null;
+            _rubberBandEndpoint = null;
+            _pendingDimensionEntityAId = null;
+            _pendingDimensionAnchorTypeA = null;
+            // Tool remains active in StudioToolMode.addDimension for continuous dimensioning
+            notifyListeners();
+            return;
           }
         }
       }
@@ -3077,79 +3249,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         }
       }
 
-      CadPoint2D? edgeP1;
-      CadPoint2D? edgeP2;
-      String? edgeRefId;
-
-      if (clickedEntityId == null) {
-        for (final cut in _document.cutLines) {
-          if (_distToSegment(effectivePoint, cut.p1, cut.p2) <= 8.0) {
-            edgeP1 = cut.p1;
-            edgeP2 = cut.p2;
-            edgeRefId = cut.id;
-            break;
-          }
-        }
-      }
-
-      if (clickedEntityId == null && edgeP1 == null) {
-        for (final bend in _document.bends) {
-          if (_distToSegment(effectivePoint, bend.p1, bend.p2) <= 8.0) {
-            edgeP1 = bend.p1;
-            edgeP2 = bend.p2;
-            edgeRefId = bend.id;
-            break;
-          }
-        }
-      }
-
-      if (clickedEntityId == null && edgeP1 == null && _document.outerContour.length >= 2) {
-        for (int i = 0; i < _document.outerContour.length; i++) {
-          final c1 = _document.outerContour[i];
-          final c2 = _document.outerContour[(i + 1) % _document.outerContour.length];
-          if (_distToSegment(effectivePoint, c1, c2) <= 8.0) {
-            edgeP1 = c1;
-            edgeP2 = c2;
-            edgeRefId = 'CONTOUR_EDGE_$i';
-            break;
-          }
-        }
-      }
-
-      if (clickedEntityId == null && edgeRefId != null) {
-        clickedEntityId = edgeRefId;
-        clickedAnchorType = CadAnchorType.midpoint;
-      }
-
       if (_pendingBendStart == null) {
-        if (edgeRefId != null && edgeP1 != null && edgeP2 != null) {
-          // 1-click edge measurement
-          final measuredVal = edgeP1.distanceTo(edgeP2);
-          final dimId = 'dim_${_document.dimensions.length + 1}';
-          final dim = CadDimension(
-            id: dimId,
-            type: CadDimensionType.aligned,
-            referenceAId: edgeRefId,
-            referenceBId: edgeRefId,
-            anchorTypeA: CadAnchorType.endpoint,
-            anchorTypeB: CadAnchorType.endpoint,
-            pointA: edgeP1,
-            pointB: edgeP2,
-            measuredValue: measuredVal,
-            dimensionLineOffset: toolConfig.dimensionOffsetMm,
-            isDriven: false,
-            isDriving: true,
-            allowedMotion: CadAllowedMotion.structuralParameter,
-            referenceEntityId: edgeRefId,
-            drivenEntityId: edgeRefId,
-          );
-          addDimension(dim);
-          _pendingInPlaceEditDimId = dimId;
-          _toolMode = StudioToolMode.select;
-          notifyListeners();
-          return;
-        }
-
         // CLICK 1: Select Entity A
         _pendingBendStart = effectivePoint;
         _rubberBandEndpoint = effectivePoint;
@@ -3170,9 +3270,22 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         _pendingDimensionEntityAId = null;
         _pendingDimensionAnchorTypeA = null;
 
-        // Auto-detect edge if point is on or near an edge/bend
-        var resolvedEntityAId = entityAId ?? _findNearestEdgeOrBendId(pA);
-        var resolvedEntityBId = entityBId ?? _findNearestEdgeOrBendId(pB);
+        // Auto-detect edge or entity if point is on or near an edge/bend/vertex
+        var resolvedEntityAId = entityAId;
+        var resolvedAnchorA = anchorTypeA;
+        if (resolvedEntityAId == null) {
+          final aA = AssociativeDimensionEngine.findAnchorAt(pA, _document);
+          resolvedEntityAId = aA?.entityId ?? _findNearestEdgeOrBendId(pA);
+          if (aA?.anchorType != null) resolvedAnchorA = aA!.anchorType!;
+        }
+
+        var resolvedEntityBId = entityBId;
+        var resolvedAnchorB = anchorTypeB;
+        if (resolvedEntityBId == null) {
+          final aB = AssociativeDimensionEngine.findAnchorAt(pB, _document);
+          resolvedEntityBId = aB?.entityId ?? _findNearestEdgeOrBendId(pB);
+          if (aB?.anchorType != null) resolvedAnchorB = aB!.anchorType!;
+        }
 
         // Categorize dimension
         CadDimensionType categorizedType = toolConfig.activeDimensionType;
@@ -3180,16 +3293,18 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         String? refEntityId = resolvedEntityAId;
         String? drivenEntityId = resolvedEntityBId;
 
-        final isPunchA = resolvedEntityAId != null && _document.punches.any((p) => p.id == resolvedEntityAId);
-        final isPunchB = resolvedEntityBId != null && _document.punches.any((p) => p.id == resolvedEntityBId);
+        final isPunchA = resolvedEntityAId != null && _document.allPunchesRaw.any((p) => p.id == resolvedEntityAId);
+        final isPunchB = resolvedEntityBId != null && _document.allPunchesRaw.any((p) => p.id == resolvedEntityBId);
         final isEdgeA =
             resolvedEntityAId != null &&
             (resolvedEntityAId.startsWith('CONTOUR_EDGE_') ||
+                resolvedEntityAId.startsWith('FACE_') ||
                 _document.bends.any((b) => b.id == resolvedEntityAId) ||
                 _document.cutLines.any((c) => c.id == resolvedEntityAId));
         final isEdgeB =
             resolvedEntityBId != null &&
             (resolvedEntityBId.startsWith('CONTOUR_EDGE_') ||
+                resolvedEntityBId.startsWith('FACE_') ||
                 _document.bends.any((b) => b.id == resolvedEntityBId) ||
                 _document.cutLines.any((c) => c.id == resolvedEntityBId));
 
@@ -3223,24 +3338,27 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
           allowedMotion = CadAllowedMotion.structuralParameter;
           refEntityId = resolvedEntityAId;
           drivenEntityId = resolvedEntityBId;
-        } else if (isEdgeA && resolvedEntityAId == resolvedEntityBId && edgeP1 != null && edgeP2 != null) {
+        } else if (isEdgeA && resolvedEntityAId == resolvedEntityBId) {
           // Clicked same edge twice -> measure edge length
-          categorizedType = CadDimensionType.aligned;
-          allowedMotion = CadAllowedMotion.structuralParameter;
-          pA = edgeP1;
-          pB = edgeP2;
+          final edgeSeg = _resolveEdgeSegment(resolvedEntityAId);
+          if (edgeSeg != null) {
+            categorizedType = CadDimensionType.aligned;
+            allowedMotion = CadAllowedMotion.structuralParameter;
+            pA = edgeSeg.$1;
+            pB = edgeSeg.$2;
+          }
         }
 
         final dist = pA.distanceTo(pB);
         if (dist > 0.5) {
-          final dimId = 'dim_${_document.dimensions.length + 1}';
+          final dimId = 'dim_${DateTime.now().millisecondsSinceEpoch}_${_document.dimensions.length + 1}';
           final dim = CadDimension(
             id: dimId,
             type: categorizedType,
             referenceAId: resolvedEntityAId,
             referenceBId: resolvedEntityBId,
-            anchorTypeA: anchorTypeA,
-            anchorTypeB: anchorTypeB,
+            anchorTypeA: resolvedAnchorA,
+            anchorTypeB: resolvedAnchorB,
             pointA: pA,
             pointB: pB,
             measuredValue: dist,
@@ -3253,7 +3371,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
           );
           addDimension(dim);
           _pendingInPlaceEditDimId = dimId;
-          _toolMode = StudioToolMode.select;
+          // Tool remains active in StudioToolMode.addDimension for continuous dimensioning
         }
       }
     } else if (_toolMode == StudioToolMode.setBaseAnchor) {
@@ -3387,7 +3505,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }
   }
 
-  CadAnchorType _mapSnapTypeToAnchorType(SnapType? snapType) {
+  CadAnchorType _mapSnapTypeToAnchorType(SnapType? snapType, {CadPoint2D? point, String? entityId}) {
     if (snapType == null) return CadAnchorType.endpoint;
     switch (snapType) {
       case SnapType.center:
@@ -3401,9 +3519,29 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       case SnapType.perpendicular:
         return CadAnchorType.perpendicular;
       case SnapType.tangent:
-      case SnapType.endpoint:
-      case SnapType.cornerVertex:
+        return CadAnchorType.endpoint;
       case SnapType.bendEndpoint:
+        if (entityId != null && point != null) {
+          final bend = _document.bends.where((b) => b.id == entityId).firstOrNull;
+          if (bend != null) {
+            return point.distanceTo(bend.p1) < point.distanceTo(bend.p2) ? CadAnchorType.startPoint : CadAnchorType.endPoint;
+          }
+        }
+        return CadAnchorType.endpoint;
+      case SnapType.endpoint:
+        if (entityId != null && point != null) {
+          final cut = _document.cutLines.where((c) => c.id == entityId).firstOrNull;
+          if (cut != null) {
+            return point.distanceTo(cut.p1) < point.distanceTo(cut.p2) ? CadAnchorType.startPoint : CadAnchorType.endPoint;
+          }
+          final arc = _document.arcs.where((a) => a.id == entityId).firstOrNull;
+          if (arc != null) {
+            return point.distanceTo(arc.startPoint) < point.distanceTo(arc.endPoint) ? CadAnchorType.startPoint : CadAnchorType.endPoint;
+          }
+        }
+        return CadAnchorType.endpoint;
+      case SnapType.cornerVertex:
+        return CadAnchorType.endpoint;
       case SnapType.junctionDot:
       case SnapType.intersection:
       case SnapType.edgeIntersection:
@@ -3415,6 +3553,9 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   }
 
   String? _findNearestEdgeOrBendId(CadPoint2D pt, {double maxDistMm = 6.0}) {
+    final anchor = AssociativeDimensionEngine.findAnchorAt(pt, _document, toleranceMm: maxDistMm);
+    if (anchor != null) return anchor.entityId;
+
     for (final bend in _document.bends) {
       if (_distToSegment(pt, bend.p1, bend.p2) <= maxDistMm) return bend.id;
     }
@@ -3432,23 +3573,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   }
 
   (CadPoint2D, CadPoint2D)? _resolveEdgeSegment(String? edgeId) {
-    if (edgeId == null) return null;
-    for (final cut in _document.cutLines) {
-      if (cut.id == edgeId) return (cut.p1, cut.p2);
-    }
-    for (final bend in _document.bends) {
-      if (bend.id == edgeId) return (bend.p1, bend.p2);
-    }
-    if (edgeId.startsWith('CONTOUR_EDGE_')) {
-      final idxStr = edgeId.replaceFirst('CONTOUR_EDGE_', '');
-      final idx = int.tryParse(idxStr);
-      if (idx != null && _document.outerContour.length >= 2 && idx < _document.outerContour.length) {
-        final c1 = _document.outerContour[idx];
-        final c2 = _document.outerContour[(idx + 1) % _document.outerContour.length];
-        return (c1, c2);
-      }
-    }
-    return null;
+    return AssociativeDimensionEngine.resolveEdgeSegment(edgeId, _document);
   }
 
   CadPoint2D _projectPointToSegmentLine(CadPoint2D p, CadPoint2D e1, CadPoint2D e2) {
@@ -3458,6 +3583,141 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     if (lenSq < 1e-9) return e1;
     final t = ((p.x - e1.x) * dx + (p.y - e1.y) * dy) / lenSq;
     return CadPoint2D(e1.x + t * dx, e1.y + t * dy);
+  }
+
+  /// Finds the closest line segment (bend, cut line, outer contour edge, or face edge)
+  /// within [maxDistMm] of [pt].
+  ({CadPoint2D p1, CadPoint2D p2, String refId})? findSegmentAtPoint(CadPoint2D pt, {double maxDistMm = 14.0}) {
+    // 1. Check actively hovered contour edge
+    if (_hoveredContourEdgeP1 != null && _hoveredContourEdgeP2 != null) {
+      final d = _distToSegment(pt, _hoveredContourEdgeP1!, _hoveredContourEdgeP2!);
+      if (d <= maxDistMm * 1.5) {
+        String refId = 'CONTOUR_EDGE_0';
+        bool foundFaceEdge = false;
+        for (final f in _document.faces) {
+          for (int i = 0; i < f.vertices.length; i++) {
+            final v1 = f.vertices[i];
+            final v2 = f.vertices[(i + 1) % f.vertices.length];
+            if ((v1.distanceTo(_hoveredContourEdgeP1!) < 0.5 && v2.distanceTo(_hoveredContourEdgeP2!) < 0.5) ||
+                (v2.distanceTo(_hoveredContourEdgeP1!) < 0.5 && v1.distanceTo(_hoveredContourEdgeP2!) < 0.5)) {
+              refId = 'FACE_${f.id}_EDGE_$i';
+              foundFaceEdge = true;
+              break;
+            }
+          }
+          if (foundFaceEdge) break;
+        }
+        if (!foundFaceEdge && _document.outerContour.length >= 2) {
+          for (int i = 0; i < _document.outerContour.length; i++) {
+            final c1 = _document.outerContour[i];
+            final c2 = _document.outerContour[(i + 1) % _document.outerContour.length];
+            if ((c1.distanceTo(_hoveredContourEdgeP1!) < 0.5 && c2.distanceTo(_hoveredContourEdgeP2!) < 0.5) ||
+                (c2.distanceTo(_hoveredContourEdgeP1!) < 0.5 && c1.distanceTo(_hoveredContourEdgeP2!) < 0.5)) {
+              refId = 'CONTOUR_EDGE_$i';
+              break;
+            }
+          }
+        }
+        return (p1: _hoveredContourEdgeP1!, p2: _hoveredContourEdgeP2!, refId: refId);
+      }
+    }
+
+    // 2. Check actively hovered bend
+    if (_hoveredBendId != null) {
+      final bend = _document.bends.where((b) => b.id == _hoveredBendId).firstOrNull;
+      if (bend != null) {
+        final d = _distToSegment(pt, bend.p1, bend.p2);
+        if (d <= maxDistMm * 1.5) {
+          return (p1: bend.p1, p2: bend.p2, refId: bend.id);
+        }
+      }
+    }
+
+    // 3. Check actively hovered cut
+    if (_hoveredCutId != null) {
+      final cut = _document.cutLines.where((c) => c.id == _hoveredCutId).firstOrNull;
+      if (cut != null) {
+        final d = _distToSegment(pt, cut.p1, cut.p2);
+        if (d <= maxDistMm * 1.5) {
+          return (p1: cut.p1, p2: cut.p2, refId: cut.id);
+        }
+      }
+    }
+
+    // 4. Distance-ranked search across all candidate segments in document
+    CadPoint2D? bestP1;
+    CadPoint2D? bestP2;
+    String? bestRefId;
+    double bestDist = maxDistMm;
+
+    for (final bend in _document.bends) {
+      if (!bend.isVisible) continue;
+      final d = _distToSegment(pt, bend.p1, bend.p2);
+      if (d < bestDist) {
+        bestDist = d;
+        bestP1 = bend.p1;
+        bestP2 = bend.p2;
+        bestRefId = bend.id;
+      }
+    }
+
+    for (final cut in _document.cutLines) {
+      if (!cut.isVisible) continue;
+      final d = _distToSegment(pt, cut.p1, cut.p2);
+      if (d < bestDist) {
+        bestDist = d;
+        bestP1 = cut.p1;
+        bestP2 = cut.p2;
+        bestRefId = cut.id;
+      }
+    }
+
+    for (final f in _document.faces) {
+      if (!f.isVisible) continue;
+      for (int i = 0; i < f.vertices.length; i++) {
+        final v1 = f.vertices[i];
+        final v2 = f.vertices[(i + 1) % f.vertices.length];
+        final d = _distToSegment(pt, v1, v2);
+        final len = v1.distanceTo(v2);
+        if (d < bestDist - 0.5 || ((d - bestDist).abs() <= 0.5 && (bestP1 == null || len < bestP1.distanceTo(bestP2!)))) {
+          bestDist = d;
+          bestP1 = v1;
+          bestP2 = v2;
+          bestRefId = 'FACE_${f.id}_EDGE_$i';
+        }
+      }
+    }
+
+    if (bestP1 == null && _document.outerContour.length >= 2) {
+      for (int i = 0; i < _document.outerContour.length; i++) {
+        final c1 = _document.outerContour[i];
+        final c2 = _document.outerContour[(i + 1) % _document.outerContour.length];
+        final d = _distToSegment(pt, c1, c2);
+        if (d < bestDist) {
+          bestDist = d;
+          bestP1 = c1;
+          bestP2 = c2;
+          bestRefId = 'CONTOUR_EDGE_$i';
+        }
+      }
+    }
+
+    if (bestP1 != null && bestP2 != null && bestRefId != null) {
+      return (p1: bestP1, p2: bestP2, refId: bestRefId);
+    }
+    return null;
+  }
+
+  bool _isPointInsidePolygon(CadPoint2D pt, List<CadPoint2D> poly) {
+    if (poly.length < 3) return false;
+    bool inside = false;
+    for (int i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      final xi = poly[i].x, yi = poly[i].y;
+      final xj = poly[j].x, yj = poly[j].y;
+      final intersect = ((yi > pt.y) != (yj > pt.y)) && (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
   }
 
   void selectPunch(String? punchId, {bool multiSelect = false}) {
@@ -4491,6 +4751,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     _document = _document.copyWith(perforationPatterns: newPatterns);
 
+    _syncAssociativeDimensions();
     if (!_isDraggingObject) _recomputeMesh();
 
     notifyListeners();
@@ -4971,6 +5232,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     _document = _document.copyWith(punches: newPunches);
 
+    _syncAssociativeDimensions();
+
     _recomputeMesh();
 
     notifyListeners();
@@ -5011,6 +5274,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       if (res.success) _document = res.updatedDocument;
     }
 
+    _syncAssociativeDimensions();
     if (!_isDraggingObject) _recomputeMesh();
     notifyListeners();
   }
@@ -5186,6 +5450,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       if (res.success) _document = res.updatedDocument;
     }
 
+    _syncAssociativeDimensions();
     if (!_isDraggingObject) _recomputeMesh();
     notifyListeners();
   }
@@ -5220,19 +5485,24 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       if (res.success) _document = res.updatedDocument;
     }
 
+    _syncAssociativeDimensions();
     if (!_isDraggingObject) _recomputeMesh();
     notifyListeners();
   }
 
   /// Drags an individual endpoint of a bend line (e.g. to snap it onto an edge or another bend).
 
-  void updateBendEndpoint({required String bendId, required bool isP1, required CadPoint2D newPoint}) {
+  void updateBendEndpoint({required String bendId, required bool isP1, required CadPoint2D newPoint, bool? isAlt}) {
     if (!_isDraggingObject) _recordHistory('Update Bend Endpoint');
+
+    final effectivePoint = (isAlt ?? isAltPressed)
+        ? CadPoint2D((newPoint.x * 10.0).roundToDouble() / 10.0, (newPoint.y * 10.0).roundToDouble() / 10.0)
+        : newPoint;
 
     final newBends = _document.bends.map((b) {
       if (b.id != bendId) return b;
 
-      return b.copyWith(p1: isP1 ? newPoint : b.p1, p2: !isP1 ? newPoint : b.p2);
+      return b.copyWith(p1: isP1 ? effectivePoint : b.p1, p2: !isP1 ? effectivePoint : b.p2);
     }).toList();
 
     final decomp = PlanarFaceDecomposer.decompose(
@@ -5244,6 +5514,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     _document = _document.copyWith(bends: decomp.connectedBends, faces: decomp.faces, baseFaceId: decomp.baseFaceId);
 
+    _syncAssociativeDimensions();
     if (!_isDraggingObject) _recomputeMesh();
 
     notifyListeners();
@@ -5332,13 +5603,17 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   /// Drags an individual endpoint of a cut line.
 
-  void updateCutEndpoint({required String cutId, required bool isP1, required CadPoint2D newPoint}) {
+  void updateCutEndpoint({required String cutId, required bool isP1, required CadPoint2D newPoint, bool? isAlt}) {
     if (!_isDraggingObject) _recordHistory('Update Cut Endpoint');
+
+    final effectivePoint = (isAlt ?? isAltPressed)
+        ? CadPoint2D((newPoint.x * 10.0).roundToDouble() / 10.0, (newPoint.y * 10.0).roundToDouble() / 10.0)
+        : newPoint;
 
     final newCuts = _document.cutLines.map((c) {
       if (c.id != cutId) return c;
 
-      return c.copyWith(p1: isP1 ? newPoint : c.p1, p2: !isP1 ? newPoint : c.p2);
+      return c.copyWith(p1: isP1 ? effectivePoint : c.p1, p2: !isP1 ? effectivePoint : c.p2);
     }).toList();
 
     final decomp = PlanarFaceDecomposer.decompose(
@@ -5350,6 +5625,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     _document = _document.copyWith(cutLines: newCuts, bends: decomp.connectedBends, faces: decomp.faces, baseFaceId: decomp.baseFaceId);
 
+    _syncAssociativeDimensions();
     if (!_isDraggingObject) _recomputeMesh();
 
     notifyListeners();
@@ -5375,6 +5651,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     );
 
     _document = _document.copyWith(cutLines: newCuts, bends: decomp.connectedBends, faces: decomp.faces, baseFaceId: decomp.baseFaceId);
+
+    _syncAssociativeDimensions();
 
     _recomputeMesh();
 
@@ -5436,11 +5714,42 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   void addDimension(CadDimension dimension) {
     _recordHistory();
 
-    _document = _document.copyWith(dimensions: [..._document.dimensions, dimension]);
+    final bound = AssociativeDimensionEngine.ensureDimensionBound(dimension, _document);
+    final assoc = AssociativeDimensionEngine.resolveAssociation(bound, _document);
+    final resolved = bound.copyWith(pointA: assoc.pA, pointB: assoc.pB, measuredValue: assoc.value);
 
-    _selectedDimensionId = dimension.id;
+    _document = _document.copyWith(dimensions: [..._document.dimensions, resolved]);
+
+    _selectedDimensionId = resolved.id;
 
     notifyListeners();
+  }
+
+  /// Synchronizes all associative dimensions in _document with the current geometric state.
+  /// Recomputes point A, point B, and measured values for all dimensions attached to entities or points.
+  void _syncAssociativeDimensions() {
+    if (_document.dimensions.isEmpty) return;
+    final updatedDims = <CadDimension>[];
+    bool changed = false;
+    for (final dim in _document.dimensions) {
+      final boundDim = AssociativeDimensionEngine.ensureDimensionBound(dim, _document);
+      final assoc = AssociativeDimensionEngine.resolveAssociation(boundDim, _document);
+
+      final pAChanged = boundDim.pointA == null || (assoc.pA.distanceTo(boundDim.pointA!) > 1e-4);
+      final pBChanged = boundDim.pointB == null || (assoc.pB.distanceTo(boundDim.pointB!) > 1e-4);
+      final valChanged = (assoc.value - boundDim.measuredValue).abs() > 1e-4;
+      final refChanged = boundDim.referenceAId != dim.referenceAId || boundDim.referenceBId != dim.referenceBId;
+
+      if (pAChanged || pBChanged || valChanged || refChanged) {
+        changed = true;
+        updatedDims.add(boundDim.copyWith(pointA: assoc.pA, pointB: assoc.pB, measuredValue: assoc.value));
+      } else {
+        updatedDims.add(dim);
+      }
+    }
+    if (changed) {
+      _document = _document.copyWith(dimensions: updatedDims);
+    }
   }
 
   /// Commits a dimension placed interactively with custom leader line offset and optional driven value.
@@ -5480,18 +5789,62 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     final dist = pA.distanceTo(pB);
     if (dist < 0.5) return null;
 
-    final dimId = 'dim_${_document.dimensions.length + 1}';
+    final anchorA = AssociativeDimensionEngine.findAnchorAt(pA, _document);
+    final anchorB = AssociativeDimensionEngine.findAnchorAt(pB, _document);
+
+    final effPA = anchorA?.point ?? pA;
+    final effPB = anchorB?.point ?? pB;
+    final measuredDist = effPA.distanceTo(effPB);
+    if (measuredDist < 0.5) return null;
+
+    CadDimensionType type = toolConfig.activeDimensionType;
+    CadAllowedMotion motion = CadAllowedMotion.free;
+
+    final isPunchA = anchorA?.entityId != null && _document.allPunchesRaw.any((p) => p.id == anchorA!.entityId);
+    final isPunchB = anchorB?.entityId != null && _document.allPunchesRaw.any((p) => p.id == anchorB!.entityId);
+    final isEdgeA =
+        anchorA?.entityId != null &&
+        (anchorA!.entityId!.startsWith('CONTOUR_EDGE_') ||
+            _document.bends.any((b) => b.id == anchorA.entityId) ||
+            _document.cutLines.any((c) => c.id == anchorA.entityId));
+    final isEdgeB =
+        anchorB?.entityId != null &&
+        (anchorB!.entityId!.startsWith('CONTOUR_EDGE_') ||
+            _document.bends.any((b) => b.id == anchorB.entityId) ||
+            _document.cutLines.any((c) => c.id == anchorB.entityId));
+
+    if (isPunchA && isPunchB) {
+      type = CadDimensionType.holeToHole;
+      motion = CadAllowedMotion.constraintVector;
+    } else if ((isPunchA && isEdgeB) || (isEdgeA && isPunchB)) {
+      type = CadDimensionType.holeToEdge;
+      motion = CadAllowedMotion.edgeNormal;
+    } else if (isEdgeA && isEdgeB) {
+      type = CadDimensionType.edgeToEdge;
+      motion = CadAllowedMotion.structuralParameter;
+    }
+
+    final dimId = 'dim_${DateTime.now().millisecondsSinceEpoch}_${_document.dimensions.length + 1}';
     final dim = CadDimension(
       id: dimId,
-      type: CadDimensionType.aligned,
-      pointA: pA,
-      pointB: pB,
-      measuredValue: dist,
+      type: type,
+      referenceAId: anchorA?.entityId,
+      referenceBId: anchorB?.entityId,
+      anchorTypeA: anchorA?.anchorType ?? CadAnchorType.endpoint,
+      anchorTypeB: anchorB?.anchorType ?? CadAnchorType.endpoint,
+      pointA: effPA,
+      pointB: effPB,
+      measuredValue: measuredDist,
       dimensionLineOffset: offset,
       isDriven: false,
+      isDriving: true,
+      allowedMotion: motion,
+      referenceEntityId: anchorA?.entityId,
+      drivenEntityId: anchorB?.entityId,
     );
     addDimension(dim);
     _selectedDimensionId = dimId;
+    _syncAssociativeDimensions();
     notifyListeners();
     return dim;
   }
@@ -5594,6 +5947,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     if (result.success) {
       _document = result.updatedDocument;
 
+      _syncAssociativeDimensions();
       _renestPatternsForUpdatedFaces();
 
       _recomputeMesh();
@@ -5829,6 +6183,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       baseFaceId: decomp.baseFaceId,
     );
 
+    _syncAssociativeDimensions();
     if (!_isDraggingObject) _recomputeMesh();
 
     notifyListeners();
@@ -7362,10 +7717,21 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     updatedMetadata['fittingMetadata'] = meta.toJson();
 
     updatedMetadata['fittingCategory'] = meta.category;
+    updatedMetadata['category'] = meta.category;
 
     updatedMetadata['fittingProduct'] = meta.product;
+    updatedMetadata['product'] = meta.product;
 
     updatedMetadata['fittingVariant'] = meta.variantName;
+    updatedMetadata['variantName'] = meta.variantName;
+
+    if (updatedMetadata['cmsTemplate'] is Map) {
+      final cms = Map<String, dynamic>.from(updatedMetadata['cmsTemplate'] as Map);
+      cms['category'] = meta.category;
+      cms['productType'] = meta.product;
+      cms['variation'] = meta.variantName;
+      updatedMetadata['cmsTemplate'] = cms;
+    }
 
     updatedMetadata['fittingFlangeMm'] = meta.flangeMm;
 
@@ -8301,6 +8667,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     _document = _document.copyWith(bends: newBends);
 
+    _syncAssociativeDimensions();
+
     _recomputeMesh();
 
     notifyListeners();
@@ -8508,13 +8876,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   /// ensuring the 3D model rests upright on its bottom base floor in isometric view.
   DsfDocument _normalizeUprightBends(DsfDocument doc) {
     if (doc.bends.isEmpty || doc.faces.isEmpty) return doc;
-    final baseFace = doc.faces.firstWhere(
-      (f) => f.id == doc.baseFaceId || f.role == FaceRole.baseFloor || f.isBaseAnchor,
-      orElse: () => doc.faces.first,
-    );
-    final baseBends = doc.bends.where(
-      (b) => b.parentFaceId == baseFace.id || b.childFaceId == baseFace.id,
-    ).toList();
+    final baseFace = doc.faces.firstWhere((f) => f.id == doc.baseFaceId || f.role == FaceRole.baseFloor || f.isBaseAnchor, orElse: () => doc.faces.first);
+    final baseBends = doc.bends.where((b) => b.parentFaceId == baseFace.id || b.childFaceId == baseFace.id).toList();
     if (baseBends.isEmpty) return doc;
 
     final downCount = baseBends.where((b) => b.direction == BendDirection.down).length;

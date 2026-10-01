@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dsf_document.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dds/dds_annotation.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dds/dds_document.dart';
@@ -124,7 +125,7 @@ void main() {
 
   group('DDS Instance Evaluator Tests', () {
     test('3. Evaluates Reducer instance with overrides and cover generation', () {
-      final templateFile = File('assets/dxf_templates/trunking_accessories/reducer_100x100x50x50.dsf');
+      final templateFile = File('assets/dsf_templates/trunking_accessories/reducer_100x100x50x50.dsf');
       expect(templateFile.existsSync(), isTrue, reason: 'Reducer template must exist');
 
       final baseDoc = DsfDocument.fromJson(jsonDecode(templateFile.readAsStringSync()) as Map<String, dynamic>);
@@ -168,6 +169,118 @@ void main() {
       expect(evalResult.combinedMesh3D.polygons.length, greaterThan(evalResult.baseMesh3D.polygons.length));
       expect(evalResult.calculatedTakeoff.blankSurfaceAreaM2, greaterThan(0.0));
       expect(evalResult.calculatedTakeoff.estimatedNetWeightKg, greaterThan(0.0));
+    });
+
+    test('4. Blank sheet, annotation styling colors, and 3D lock view settings', () {
+      final blankSheet = DdsSheet(
+        sheetId: 'sheet_blank_01',
+        sheetNumber: 2,
+        sheetType: DdsSheetType.blankSheet,
+        title: 'Blank Drafting Sheet',
+        annotations: [
+          DdsNoteBoxAnnotation(
+            id: 'note_1',
+            x: 10,
+            y: 20,
+            width: 80,
+            height: 40,
+            text: 'Fabrication note',
+            backgroundColor: '#FFFBEB',
+            textColor: '#78350F',
+            lineColor: '#D97706',
+          ),
+          DdsLeaderNoteAnnotation(
+            id: 'leader_1',
+            targetPoint: CadPoint2D(50, 50),
+            textPosition: CadPoint2D(100, 80),
+            text: 'Coupler Flap',
+            textColor: '#0284C7',
+            lineColor: '#0284C7',
+          ),
+        ],
+        viewSettings: const DdsViewSettings(
+          is3DModelLocked: true,
+          showCover3D: false,
+        ),
+      );
+
+      expect(blankSheet.isBlankSheet, isTrue);
+      expect(blankSheet.isCoverPage, isFalse);
+
+      final json = blankSheet.toJson();
+      final restored = DdsSheet.fromJson(json);
+
+      expect(restored.isBlankSheet, isTrue);
+      expect(restored.viewSettings.is3DModelLocked, isTrue);
+      expect(restored.annotations.length, equals(2));
+
+      final note = restored.annotations[0] as DdsNoteBoxAnnotation;
+      expect(note.backgroundColor, equals('#FFFBEB'));
+      expect(note.textColor, equals('#78350F'));
+      expect(note.lineColor, equals('#D97706'));
+
+      final recolored = note.withColors(backgroundColor: '#FFFFFF', textColor: '#000000');
+      expect(recolored.backgroundColor, equals('#FFFFFF'));
+      expect(recolored.textColor, equals('#000000'));
+      expect(recolored.lineColor, equals('#D97706'));
+    });
+
+    test('5. DdsNoteArrow border root attachment, serialization and deletion', () {
+      final arrow1 = DdsNoteArrow(
+        id: 'arrow_top',
+        tip: CadPoint2D(60, 20),
+        root: CadPoint2D(60, 30), // Attached to top border
+        anchorEntity: 'port_1',
+      );
+      final arrow2 = DdsNoteArrow(
+        id: 'arrow_left',
+        tip: CadPoint2D(20, 50),
+        root: CadPoint2D(40, 50), // Attached to left border
+      );
+
+      final noteBox = DdsNoteBoxAnnotation(
+        id: 'note_with_arrows',
+        x: 40,
+        y: 30,
+        width: 60,
+        height: 40,
+        text: 'Arrow test note',
+        arrows: [arrow1, arrow2],
+      );
+
+      // Verify arrows list and properties
+      expect(noteBox.arrows.length, equals(2));
+      expect(noteBox.arrows.first.root?.x, equals(60.0));
+      expect(noteBox.arrows.first.root?.y, equals(30.0));
+      expect(noteBox.arrows.first.tip.x, equals(60.0));
+      expect(noteBox.arrows.first.anchorEntity, equals('port_1'));
+
+      // Serialization round-trip
+      final json = noteBox.toJson();
+      final roundTrip = DdsNoteBoxAnnotation.fromJson(json);
+
+      expect(roundTrip.arrows.length, equals(2));
+      expect(roundTrip.arrows.first.id, equals('arrow_top'));
+      expect(roundTrip.arrows.first.root?.x, equals(60.0));
+      expect(roundTrip.arrows.first.root?.y, equals(30.0));
+      expect(roundTrip.arrows.first.tip.x, equals(60.0));
+      expect(roundTrip.arrows.first.anchorEntity, equals('port_1'));
+      expect(roundTrip.arrows[1].id, equals('arrow_left'));
+      expect(roundTrip.arrows[1].root?.x, equals(40.0));
+      expect(roundTrip.arrows[1].anchorEntity, isNull);
+
+      // Test arrow deletion (deleting arrow_top)
+      final withoutArrow1 = noteBox.copyWith(
+        arrows: noteBox.arrows.where((a) => a.id != 'arrow_top').toList(),
+      );
+      expect(withoutArrow1.arrows.length, equals(1));
+      expect(withoutArrow1.arrows.first.id, equals('arrow_left'));
+
+      // Test deleting all arrows
+      final withoutAnyArrows = withoutArrow1.copyWith(
+        arrows: withoutArrow1.arrows.where((a) => a.id != 'arrow_left').toList(),
+      );
+      expect(withoutAnyArrows.arrows, isEmpty);
     });
   });
 }

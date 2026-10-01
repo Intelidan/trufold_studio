@@ -325,80 +325,102 @@ class CadDimension {
     if (entityId == null || entityId.isEmpty) return fallbackPoint;
 
     // 1. Punch / Hole
-    final punch = doc.punches.where((p) => p.id == entityId).firstOrNull;
-    if (punch != null) {
-      return punch.center;
+    for (final punch in doc.allPunchesRaw) {
+      if (punch.id == entityId) {
+        if (anchorType == CadAnchorType.quadrant && fallbackPoint != null) {
+          final r = punch.widthMm / 2.0;
+          final quads = [
+            CadPoint2D(punch.center.x + r, punch.center.y),
+            CadPoint2D(punch.center.x, punch.center.y + r),
+            CadPoint2D(punch.center.x - r, punch.center.y),
+            CadPoint2D(punch.center.x, punch.center.y - r),
+          ];
+          quads.sort((a, b) => fallbackPoint.distanceTo(a).compareTo(fallbackPoint.distanceTo(b)));
+          return quads.first;
+        }
+        return punch.center;
+      }
     }
 
     // 2. Arc
-    final arc = doc.arcs.where((a) => a.id == entityId).firstOrNull;
-    if (arc != null) {
-      switch (anchorType) {
-        case CadAnchorType.center:
-          return arc.center;
-        case CadAnchorType.startPoint:
-          return arc.startPoint;
-        case CadAnchorType.endPoint:
-        case CadAnchorType.endpoint:
-          return arc.endPoint;
-        case CadAnchorType.arcMidpoint:
-          final midAngle = (arc.startAngleRad + arc.sweepAngleRad / 2.0);
-          return CadPoint2D(
-            arc.center.x + arc.radius * math.cos(midAngle),
-            arc.center.y + arc.radius * math.sin(midAngle),
-          );
-        default:
-          return arc.center;
+    for (final arc in doc.arcs) {
+      if (arc.id == entityId) {
+        switch (anchorType) {
+          case CadAnchorType.center:
+            return arc.center;
+          case CadAnchorType.startPoint:
+            return arc.startPoint;
+          case CadAnchorType.endPoint:
+            return arc.endPoint;
+          case CadAnchorType.endpoint:
+            if (fallbackPoint != null) {
+              return fallbackPoint.distanceTo(arc.startPoint) < fallbackPoint.distanceTo(arc.endPoint)
+                  ? arc.startPoint
+                  : arc.endPoint;
+            }
+            return arc.endPoint;
+          case CadAnchorType.arcMidpoint:
+            final midAngle = (arc.startAngleRad + arc.sweepAngleRad / 2.0);
+            return CadPoint2D(
+              arc.center.x + arc.radius * math.cos(midAngle),
+              arc.center.y + arc.radius * math.sin(midAngle),
+            );
+          default:
+            return arc.center;
+        }
       }
     }
 
     // 3. Bend
-    final bend = doc.bends.where((b) => b.id == entityId).firstOrNull;
-    if (bend != null) {
-      switch (anchorType) {
-        case CadAnchorType.midpoint:
-          return CadPoint2D(
-            (bend.p1.x + bend.p2.x) / 2.0,
-            (bend.p1.y + bend.p2.y) / 2.0,
-          );
-        case CadAnchorType.startPoint:
-          return bend.p1;
-        case CadAnchorType.endPoint:
-        case CadAnchorType.endpoint:
-          return bend.p2;
-        default:
-          return CadPoint2D(
-            (bend.p1.x + bend.p2.x) / 2.0,
-            (bend.p1.y + bend.p2.y) / 2.0,
-          );
+    for (final bend in doc.bends) {
+      if (bend.id == entityId) {
+        switch (anchorType) {
+          case CadAnchorType.midpoint:
+            return bend.midpoint;
+          case CadAnchorType.startPoint:
+            return bend.p1;
+          case CadAnchorType.endPoint:
+            return bend.p2;
+          case CadAnchorType.endpoint:
+            if (fallbackPoint != null) {
+              return fallbackPoint.distanceTo(bend.p1) < fallbackPoint.distanceTo(bend.p2)
+                  ? bend.p1
+                  : bend.p2;
+            }
+            return bend.p2;
+          default:
+            return bend.midpoint;
+        }
       }
     }
 
     // 4. Cut Line
-    final cut = doc.cutLines.where((c) => c.id == entityId).firstOrNull;
-    if (cut != null) {
-      switch (anchorType) {
-        case CadAnchorType.midpoint:
-          return CadPoint2D(
-            (cut.p1.x + cut.p2.x) / 2.0,
-            (cut.p1.y + cut.p2.y) / 2.0,
-          );
-        case CadAnchorType.startPoint:
-          return cut.p1;
-        case CadAnchorType.endPoint:
-        case CadAnchorType.endpoint:
-          return cut.p2;
-        default:
-          return CadPoint2D(
-            (cut.p1.x + cut.p2.x) / 2.0,
-            (cut.p1.y + cut.p2.y) / 2.0,
-          );
+    for (final cut in doc.cutLines) {
+      if (cut.id == entityId) {
+        switch (anchorType) {
+          case CadAnchorType.midpoint:
+            return cut.midpoint;
+          case CadAnchorType.startPoint:
+            return cut.p1;
+          case CadAnchorType.endPoint:
+            return cut.p2;
+          case CadAnchorType.endpoint:
+            if (fallbackPoint != null) {
+              return fallbackPoint.distanceTo(cut.p1) < fallbackPoint.distanceTo(cut.p2)
+                  ? cut.p1
+                  : cut.p2;
+            }
+            return cut.p2;
+          default:
+            return cut.midpoint;
+        }
       }
     }
 
     // 5. Contour Edge / Vertex
-    if (entityId.startsWith('CONTOUR_EDGE_')) {
-      final idxStr = entityId.replaceFirst('CONTOUR_EDGE_', '');
+    final upperId = entityId.toUpperCase();
+    if (upperId.startsWith('CONTOUR_EDGE_')) {
+      final idxStr = upperId.replaceFirst('CONTOUR_EDGE_', '');
       final idx = int.tryParse(idxStr);
       if (idx != null && doc.outerContour.length >= 2 && idx < doc.outerContour.length) {
         final c1 = doc.outerContour[idx];
@@ -409,18 +431,54 @@ class CadDimension {
           case CadAnchorType.startPoint:
             return c1;
           case CadAnchorType.endPoint:
+            return c2;
           case CadAnchorType.endpoint:
+            if (fallbackPoint != null) {
+              return fallbackPoint.distanceTo(c1) < fallbackPoint.distanceTo(c2) ? c1 : c2;
+            }
             return c2;
           default:
             return CadPoint2D((c1.x + c2.x) / 2.0, (c1.y + c2.y) / 2.0);
         }
       }
     }
-    if (entityId.startsWith('CONTOUR_VERTEX_')) {
-      final idxStr = entityId.replaceFirst('CONTOUR_VERTEX_', '');
+    if (upperId.startsWith('CONTOUR_VERTEX_')) {
+      final idxStr = upperId.replaceFirst('CONTOUR_VERTEX_', '');
       final idx = int.tryParse(idxStr);
-      if (idx != null && idx < doc.outerContour.length) {
+      if (idx != null && idx >= 0 && idx < doc.outerContour.length) {
         return doc.outerContour[idx];
+      }
+    } else if (entityId.toLowerCase().startsWith('contour_')) {
+      final idxStr = entityId.toLowerCase().replaceFirst('contour_', '');
+      final idx = int.tryParse(idxStr);
+      if (idx != null && idx >= 0 && idx < doc.outerContour.length) {
+        return doc.outerContour[idx];
+      }
+    }
+
+    // 6. Face Edges
+    if (upperId.startsWith('FACE_') && upperId.contains('_EDGE_')) {
+      final parts = upperId.split('_EDGE_');
+      final faceId = parts[0].replaceFirst('FACE_', '');
+      final edgeIdx = int.tryParse(parts[1]);
+      final f = doc.faces.where((face) => face.id.toUpperCase() == faceId).firstOrNull;
+      if (f != null && edgeIdx != null && edgeIdx >= 0 && edgeIdx < f.vertices.length) {
+        final p1 = f.vertices[edgeIdx];
+        final p2 = f.vertices[(edgeIdx + 1) % f.vertices.length];
+        switch (anchorType) {
+          case CadAnchorType.startPoint:
+            return p1;
+          case CadAnchorType.endPoint:
+            return p2;
+          case CadAnchorType.endpoint:
+            if (fallbackPoint != null) {
+              return fallbackPoint.distanceTo(p1) < fallbackPoint.distanceTo(p2) ? p1 : p2;
+            }
+            return p2;
+          case CadAnchorType.midpoint:
+          default:
+            return CadPoint2D((p1.x + p2.x) / 2.0, (p1.y + p2.y) / 2.0);
+        }
       }
     }
 

@@ -23,7 +23,7 @@ void main() {
     late List<CmsMeasuredOpening> measuredOpenings;
 
     setUpAll(() async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       expect(file.existsSync(), isTrue);
 
       final content = await file.readAsString();

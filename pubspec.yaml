@@ -60,10 +60,18 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  assets:
+    - assets/dsf_templates/
+    - assets/dsf_templates/tray_accessories/
+    - assets/dsf_templates/tray_accessories/tray_cover/
+    - assets/dsf_templates/trunking_accessories/
+    - assets/dxf_templates/
+    - assets/dxf_templates/tray_accessories/
+    - assets/dxf_templates/tray_accessories/tray_cover/
+    - assets/dxf_templates/trunking_accessories/
+    - assets/dxf_templates/trunking_accessories/trunking_cover/
+    - assets/icons/
+    - assets/images/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

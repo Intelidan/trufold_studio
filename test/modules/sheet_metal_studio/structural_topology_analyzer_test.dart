@@ -7,7 +7,7 @@ import 'package:trufold_studio/sheet_metal_studio/engine/structural_topology_ana
 void main() {
   group('StructuralTopologyAnalyzer Tests (3D Bend Topology & Contract Matching)', () {
     test('1. Analyzes 45_deg_bend_100x100.dsf using bend lines, folded topology, and catalog contract', () async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       expect(file.existsSync(), isTrue, reason: '45_deg_bend_100x100.dsf must exist');
 
       final content = await file.readAsString();

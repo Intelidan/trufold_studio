@@ -8,6 +8,7 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import 'cad_parameter.dart';
 import '../engine/fitting_port_annotation_engine.dart';
 
@@ -71,28 +72,19 @@ class TopologicalZoneRule {
     'drivingParamKey': drivingParamKey,
   };
 
-  factory TopologicalZoneRule.fromJson(Map<String, dynamic> json) =>
-      TopologicalZoneRule(
-        id: json['id'] as String? ?? 'zone',
-        type: TopologicalZoneType.values.firstWhere(
-          (t) => t.name == json['type'],
-          orElse: () => TopologicalZoneType.rigidAnchor,
-        ),
-        normalizedBounds: (json['normalizedBounds'] as List?)
-            ?.map((e) => (e as num).toDouble())
-            .toList(),
-        minX: (json['minX'] as num?)?.toDouble() ?? 0.0,
-        maxX: (json['maxX'] as num?)?.toDouble() ?? 1.0,
-        minY: (json['minY'] as num?)?.toDouble() ?? 0.0,
-        maxY: (json['maxY'] as num?)?.toDouble() ?? 1.0,
-        affectedEntityIds: (json['affectedEntityIds'] as List<dynamic>?)
-            ?.map((e) => e.toString())
-            .toList() ??
-            const [],
-        dxFactor: (json['dxFactor'] as num?)?.toDouble() ?? 1.0,
-        dyFactor: (json['dyFactor'] as num?)?.toDouble() ?? 1.0,
-        drivingParamKey: json['drivingParamKey'] as String? ?? 'width',
-      );
+  factory TopologicalZoneRule.fromJson(Map<String, dynamic> json) => TopologicalZoneRule(
+    id: json['id'] as String? ?? 'zone',
+    type: TopologicalZoneType.values.firstWhere((t) => t.name == json['type'], orElse: () => TopologicalZoneType.rigidAnchor),
+    normalizedBounds: (json['normalizedBounds'] as List?)?.map((e) => (e as num).toDouble()).toList(),
+    minX: (json['minX'] as num?)?.toDouble() ?? 0.0,
+    maxX: (json['maxX'] as num?)?.toDouble() ?? 1.0,
+    minY: (json['minY'] as num?)?.toDouble() ?? 0.0,
+    maxY: (json['maxY'] as num?)?.toDouble() ?? 1.0,
+    affectedEntityIds: (json['affectedEntityIds'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+    dxFactor: (json['dxFactor'] as num?)?.toDouble() ?? 1.0,
+    dyFactor: (json['dyFactor'] as num?)?.toDouble() ?? 1.0,
+    drivingParamKey: json['drivingParamKey'] as String? ?? 'width',
+  );
 }
 
 /// Represents an entry/exit port on a sheet metal fitting (e.g. cable tray, trunking, duct)
@@ -133,8 +125,7 @@ class TemplatePortDefinition {
   double get effectiveDefaultHeightB => defaultHeightB ?? defaultHeight;
   bool get isSymmetric => (effectiveDefaultHeightA - effectiveDefaultHeightB).abs() < 1e-3;
 
-  double resolveWidth(Map<String, double> params) =>
-      params[widthParamKey] ?? defaultWidth;
+  double resolveWidth(Map<String, double> params) => params[widthParamKey] ?? defaultWidth;
 
   double resolveHeightA(Map<String, double> params) {
     if (heightAParamKey != null && params.containsKey(heightAParamKey)) {
@@ -201,26 +192,22 @@ class TemplatePortDefinition {
     if (description != null) 'description': description,
   };
 
-  factory TemplatePortDefinition.fromJson(Map<String, dynamic> json) =>
-      TemplatePortDefinition(
-        portIndex: (json['portIndex'] as num?)?.toInt() ?? 1,
-        name: json['name'] as String? ?? 'Port 1',
-        widthParamKey: json['widthParamKey'] as String? ?? 'width',
-        heightParamKey: json['heightParamKey'] as String? ?? 'height',
-        heightAParamKey: json['heightAParamKey'] as String?,
-        heightBParamKey: json['heightBParamKey'] as String?,
-        defaultWidth: (json['defaultWidth'] as num?)?.toDouble() ?? 100.0,
-        defaultHeight: (json['defaultHeight'] as num?)?.toDouble() ?? 50.0,
-        defaultHeightA: (json['defaultHeightA'] as num?)?.toDouble(),
-        defaultHeightB: (json['defaultHeightB'] as num?)?.toDouble(),
-        side: json['side'] != null ? PortSide.fromString(json['side'] as String) : null,
-        outwardNormalAngleRad: (json['outwardNormalAngleRad'] as num?)?.toDouble(),
-        associatedFeatureIds: (json['associatedFeatureIds'] as List<dynamic>?)
-                ?.map((e) => e.toString())
-                .toList() ??
-            const [],
-        description: json['description'] as String?,
-      );
+  factory TemplatePortDefinition.fromJson(Map<String, dynamic> json) => TemplatePortDefinition(
+    portIndex: (json['portIndex'] as num?)?.toInt() ?? 1,
+    name: json['name'] as String? ?? 'Port 1',
+    widthParamKey: json['widthParamKey'] as String? ?? 'width',
+    heightParamKey: json['heightParamKey'] as String? ?? 'height',
+    heightAParamKey: json['heightAParamKey'] as String?,
+    heightBParamKey: json['heightBParamKey'] as String?,
+    defaultWidth: (json['defaultWidth'] as num?)?.toDouble() ?? 100.0,
+    defaultHeight: (json['defaultHeight'] as num?)?.toDouble() ?? 50.0,
+    defaultHeightA: (json['defaultHeightA'] as num?)?.toDouble(),
+    defaultHeightB: (json['defaultHeightB'] as num?)?.toDouble(),
+    side: json['side'] != null ? PortSide.fromString(json['side'] as String) : null,
+    outwardNormalAngleRad: (json['outwardNormalAngleRad'] as num?)?.toDouble(),
+    associatedFeatureIds: (json['associatedFeatureIds'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+    description: json['description'] as String?,
+  );
 }
 
 /// Full specification for a parameter-driven product template.
@@ -275,36 +262,24 @@ class TemplateParameterDefinition {
     if (ports.isNotEmpty) 'ports': ports.map((p) => p.toJson()).toList(),
   };
 
-  factory TemplateParameterDefinition.fromJson(Map<String, dynamic> json) =>
-      TemplateParameterDefinition(
-        templateId: json['templateId'] as String,
-        name: json['name'] as String,
-        category: json['category'] as String,
-        productType: json['productType'] as String,
-        sourceDxfPath: json['sourceDxfPath'] as String?,
-        parameters: (json['parameters'] as List? ?? [])
-            .map((p) => CadParameter.fromJson(p as Map<String, dynamic>))
-            .toList(),
-        baselineParameters: (json['baselineParameters'] as Map<String, dynamic>? ?? {})
-            .map((k, v) => MapEntry(k, (v as num).toDouble())),
-        zoneRules: (json['zoneRules'] as List? ?? [])
-            .map((r) => TopologicalZoneRule.fromJson(r as Map<String, dynamic>))
-            .toList(),
-        ports: (json['ports'] as List? ?? [])
-            .map((p) => TemplatePortDefinition.fromJson(p as Map<String, dynamic>))
-            .toList(),
-      );
+  factory TemplateParameterDefinition.fromJson(Map<String, dynamic> json) => TemplateParameterDefinition(
+    templateId: json['templateId'] as String,
+    name: json['name'] as String,
+    category: json['category'] as String,
+    productType: json['productType'] as String,
+    sourceDxfPath: json['sourceDxfPath'] as String?,
+    parameters: (json['parameters'] as List? ?? []).map((p) => CadParameter.fromJson(p as Map<String, dynamic>)).toList(),
+    baselineParameters: (json['baselineParameters'] as Map<String, dynamic>? ?? {}).map((k, v) => MapEntry(k, (v as num).toDouble())),
+    zoneRules: (json['zoneRules'] as List? ?? []).map((r) => TopologicalZoneRule.fromJson(r as Map<String, dynamic>)).toList(),
+    ports: (json['ports'] as List? ?? []).map((p) => TemplatePortDefinition.fromJson(p as Map<String, dynamic>)).toList(),
+  );
 
   // ===========================================================================
   // Standard Factory Presets from product_variations.csv & assets/dxf_templates
   // ===========================================================================
 
   /// Cable Tray Equal / Unequal Tee Template
-  factory TemplateParameterDefinition.cableTrayTee({
-    double width = 100.0,
-    double branchWidth = 100.0,
-    double height = 50.0,
-  }) {
+  factory TemplateParameterDefinition.cableTrayTee({double width = 100.0, double branchWidth = 100.0, double height = 50.0}) {
     return TemplateParameterDefinition(
       templateId: 'tray_tee',
       name: 'Cable Tray Equal / Unequal Tee',
@@ -365,9 +340,9 @@ class TemplateParameterDefinition {
           value: width,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900, 1000, 1200],
           description: 'Width of the through main channel bed',
         ),
         CadParameter(
@@ -376,9 +351,9 @@ class TemplateParameterDefinition {
           value: branchWidth,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900, 1000, 1200],
           description: 'Width of the 90° tee branch bed',
         ),
         CadParameter(
@@ -387,17 +362,13 @@ class TemplateParameterDefinition {
           value: height,
           unit: 'mm',
           minValue: 25.0,
-          maxValue: 150.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
           description: 'Flange wall height for all branches',
         ),
       ],
-      baselineParameters: {
-        'width': width,
-        'branchWidth': branchWidth,
-        'height': height,
-      },
+      baselineParameters: {'width': width, 'branchWidth': branchWidth, 'height': height},
       zoneRules: const [
         TopologicalZoneRule(
           id: 'right_flange_tab',
@@ -504,9 +475,9 @@ class TemplateParameterDefinition {
           value: port1Width,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900, 1000, 1200],
         ),
         CadParameter(
           id: 'port1Height',
@@ -514,9 +485,9 @@ class TemplateParameterDefinition {
           value: port1Height,
           unit: 'mm',
           minValue: 25.0,
-          maxValue: 150.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
         ),
         CadParameter(
           id: 'port2Width',
@@ -524,9 +495,9 @@ class TemplateParameterDefinition {
           value: port2Width,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900, 1000, 1200],
         ),
         CadParameter(
           id: 'port2Height',
@@ -534,9 +505,9 @@ class TemplateParameterDefinition {
           value: port2Height,
           unit: 'mm',
           minValue: 25.0,
-          maxValue: 150.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
         ),
         CadParameter(
           id: 'port3Width',
@@ -544,9 +515,9 @@ class TemplateParameterDefinition {
           value: port3Width,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900, 1000, 1200],
         ),
         CadParameter(
           id: 'port3Height',
@@ -554,9 +525,9 @@ class TemplateParameterDefinition {
           value: port3Height,
           unit: 'mm',
           minValue: 25.0,
-          maxValue: 150.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
         ),
       ],
       baselineParameters: {
@@ -571,11 +542,7 @@ class TemplateParameterDefinition {
   }
 
   /// Cable Tray 90° Bend Template
-  factory TemplateParameterDefinition.cableTrayBend90({
-    double width = 100.0,
-    double height = 50.0,
-    double radius = 100.0,
-  }) {
+  factory TemplateParameterDefinition.cableTrayBend90({double width = 100.0, double height = 50.0, double radius = 180.0}) {
     return TemplateParameterDefinition(
       templateId: 'tray_bend_90',
       name: 'Cable Tray 90° Flat Bend',
@@ -621,9 +588,9 @@ class TemplateParameterDefinition {
           value: width,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900, 1000, 1200],
           description: 'Width of tray channel',
         ),
         CadParameter(
@@ -631,10 +598,10 @@ class TemplateParameterDefinition {
           name: 'Flange Height',
           value: height,
           unit: 'mm',
-          minValue: 25.0,
-          maxValue: 150.0,
+          minValue: 50.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [50, 75, 100, 125, 150, 200, 250],
           description: 'Side wall height',
         ),
         CadParameter(
@@ -642,42 +609,23 @@ class TemplateParameterDefinition {
           name: 'Bend Radius',
           value: radius,
           unit: 'mm',
-          minValue: 50.0,
-          maxValue: 600.0,
+          minValue: 180.0,
+          maxValue: 900.0,
           step: 50.0,
+          allowedValues: [180, 300, 600, 900],
           description: 'Inside corner turn radius',
         ),
       ],
-      baselineParameters: {
-        'width': width,
-        'height': height,
-        'radius': radius,
-      },
+      baselineParameters: {'width': width, 'height': height, 'radius': radius},
       zoneRules: const [
-        TopologicalZoneRule(
-          id: 'bend_right_arm',
-          type: TopologicalZoneType.rigidAnchor,
-          dxFactor: 1.0,
-          dyFactor: 0.0,
-          drivingParamKey: 'width',
-        ),
-        TopologicalZoneRule(
-          id: 'bend_top_arm',
-          type: TopologicalZoneType.rigidAnchor,
-          dxFactor: 0.0,
-          dyFactor: 1.0,
-          drivingParamKey: 'width',
-        ),
+        TopologicalZoneRule(id: 'bend_right_arm', type: TopologicalZoneType.rigidAnchor, dxFactor: 1.0, dyFactor: 0.0, drivingParamKey: 'width'),
+        TopologicalZoneRule(id: 'bend_top_arm', type: TopologicalZoneType.rigidAnchor, dxFactor: 0.0, dyFactor: 1.0, drivingParamKey: 'width'),
       ],
     );
   }
 
   /// Cable Tray 45° Flat Bend Template
-  factory TemplateParameterDefinition.cableTrayBend45({
-    double width = 100.0,
-    double height = 50.0,
-    double radius = 100.0,
-  }) {
+  factory TemplateParameterDefinition.cableTrayBend45({double width = 100.0, double height = 50.0, double radius = 180.0}) {
     return TemplateParameterDefinition(
       templateId: 'tray_bend_45',
       name: 'Cable Tray 45° Flat Bend',
@@ -723,45 +671,37 @@ class TemplateParameterDefinition {
           value: width,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900, 1000, 1200],
         ),
         CadParameter(
           id: 'height',
           name: 'Flange Height',
           value: height,
           unit: 'mm',
-          minValue: 25.0,
-          maxValue: 150.0,
+          minValue: 50.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [50, 75, 100, 125, 150, 200, 250],
         ),
         CadParameter(
           id: 'radius',
           name: 'Bend Radius',
           value: radius,
           unit: 'mm',
-          minValue: 50.0,
-          maxValue: 600.0,
+          minValue: 180.0,
+          maxValue: 900.0,
           step: 50.0,
+          allowedValues: [180, 300, 600, 900],
         ),
       ],
-      baselineParameters: {
-        'width': width,
-        'height': height,
-        'radius': radius,
-      },
+      baselineParameters: {'width': width, 'height': height, 'radius': radius},
     );
   }
 
   /// Cable Tray Concentric / Eccentric Reducer Template
-  factory TemplateParameterDefinition.cableTrayReducer({
-    double widthIn = 100.0,
-    double widthOut = 50.0,
-    double height = 50.0,
-    double length = 150.0,
-  }) {
+  factory TemplateParameterDefinition.cableTrayReducer({double widthIn = 100.0, double widthOut = 50.0, double height = 50.0, double length = 150.0}) {
     return TemplateParameterDefinition(
       templateId: 'tray_reducer',
       name: 'Cable Tray Reducer',
@@ -807,9 +747,9 @@ class TemplateParameterDefinition {
           value: widthIn,
           unit: 'mm',
           minValue: 75.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [75, 100, 150, 200, 300, 450, 600, 750, 900],
+          allowedValues: [75, 100, 150, 200, 300, 450, 600, 750, 900, 1000, 1200],
           description: 'Width of larger input side',
         ),
         CadParameter(
@@ -818,9 +758,9 @@ class TemplateParameterDefinition {
           value: widthOut,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 750.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750],
+          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900, 1000, 1200],
           description: 'Width of smaller output side',
         ),
         CadParameter(
@@ -829,35 +769,18 @@ class TemplateParameterDefinition {
           value: height,
           unit: 'mm',
           minValue: 25.0,
-          maxValue: 150.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
         ),
-        CadParameter(
-          id: 'length',
-          name: 'Transition Length',
-          value: length,
-          unit: 'mm',
-          minValue: 100.0,
-          maxValue: 500.0,
-          step: 25.0,
-        ),
+        CadParameter(id: 'length', name: 'Transition Length', value: length, unit: 'mm', minValue: 100.0, maxValue: 500.0, step: 25.0),
       ],
-      baselineParameters: {
-        'widthIn': widthIn,
-        'widthOut': widthOut,
-        'height': height,
-        'length': length,
-      },
+      baselineParameters: {'widthIn': widthIn, 'widthOut': widthOut, 'height': height, 'length': length},
     );
   }
 
   /// Cable Tray Equal / Unequal Cross Template
-  factory TemplateParameterDefinition.cableTrayCross({
-    double widthMain = 100.0,
-    double widthBranch = 100.0,
-    double height = 50.0,
-  }) {
+  factory TemplateParameterDefinition.cableTrayCross({double widthMain = 100.0, double widthBranch = 100.0, double height = 50.0}) {
     return TemplateParameterDefinition(
       templateId: 'tray_cross',
       name: 'Cable Tray Cross (4-Way)',
@@ -933,9 +856,9 @@ class TemplateParameterDefinition {
           value: widthMain,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900, 1000, 1200],
         ),
         CadParameter(
           id: 'widthBranch',
@@ -943,9 +866,9 @@ class TemplateParameterDefinition {
           value: widthBranch,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900, 1000, 1200],
         ),
         CadParameter(
           id: 'height',
@@ -953,16 +876,12 @@ class TemplateParameterDefinition {
           value: height,
           unit: 'mm',
           minValue: 25.0,
-          maxValue: 150.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
         ),
       ],
-      baselineParameters: {
-        'widthMain': widthMain,
-        'widthBranch': widthBranch,
-        'height': height,
-      },
+      baselineParameters: {'widthMain': widthMain, 'widthBranch': widthBranch, 'height': height},
     );
   }
 
@@ -1024,9 +943,9 @@ class TemplateParameterDefinition {
           value: port1Width,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900, 1000, 1200],
         ),
         CadParameter(
           id: 'port1Height',
@@ -1034,9 +953,9 @@ class TemplateParameterDefinition {
           value: port1Height,
           unit: 'mm',
           minValue: 25.0,
-          maxValue: 150.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
         ),
         CadParameter(
           id: 'port2Width',
@@ -1044,9 +963,9 @@ class TemplateParameterDefinition {
           value: port2Width,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900, 1000, 1200],
         ),
         CadParameter(
           id: 'port2Height',
@@ -1054,9 +973,9 @@ class TemplateParameterDefinition {
           value: port2Height,
           unit: 'mm',
           minValue: 25.0,
-          maxValue: 150.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
         ),
         CadParameter(
           id: 'port3Width',
@@ -1064,9 +983,9 @@ class TemplateParameterDefinition {
           value: port3Width,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900, 1000, 1200],
         ),
         CadParameter(
           id: 'port3Height',
@@ -1074,9 +993,9 @@ class TemplateParameterDefinition {
           value: port3Height,
           unit: 'mm',
           minValue: 25.0,
-          maxValue: 150.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
         ),
         CadParameter(
           id: 'port4Width',
@@ -1084,9 +1003,9 @@ class TemplateParameterDefinition {
           value: port4Width,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 250, 300, 450, 600, 750, 900, 1000, 1200],
         ),
         CadParameter(
           id: 'port4Height',
@@ -1094,9 +1013,9 @@ class TemplateParameterDefinition {
           value: port4Height,
           unit: 'mm',
           minValue: 25.0,
-          maxValue: 150.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
         ),
       ],
       baselineParameters: {
@@ -1113,12 +1032,7 @@ class TemplateParameterDefinition {
   }
 
   /// Cable Tray Straight Channel Blank Template
-  factory TemplateParameterDefinition.cableTrayStraight({
-    double width = 100.0,
-    double height = 50.0,
-    double length = 1000.0,
-    double flange = 15.0,
-  }) {
+  factory TemplateParameterDefinition.cableTrayStraight({double width = 100.0, double height = 50.0, double length = 1000.0, double flange = 15.0}) {
     return TemplateParameterDefinition(
       templateId: 'tray_straight',
       name: 'Straight Cable Tray Channel',
@@ -1163,9 +1077,9 @@ class TemplateParameterDefinition {
           value: width,
           unit: 'mm',
           minValue: 50.0,
-          maxValue: 900.0,
+          maxValue: 1200.0,
           step: 25.0,
-          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900],
+          allowedValues: [50, 75, 100, 150, 200, 300, 450, 600, 750, 900, 1000, 1200],
         ),
         CadParameter(
           id: 'height',
@@ -1173,9 +1087,9 @@ class TemplateParameterDefinition {
           value: height,
           unit: 'mm',
           minValue: 25.0,
-          maxValue: 150.0,
+          maxValue: 250.0,
           step: 25.0,
-          allowedValues: [25, 50, 75, 100, 125, 150],
+          allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
         ),
         CadParameter(
           id: 'length',
@@ -1187,22 +1101,9 @@ class TemplateParameterDefinition {
           step: 100.0,
           allowedValues: [500, 1000, 1500, 2000, 2500, 3000],
         ),
-        CadParameter(
-          id: 'flange',
-          name: 'Return Flange',
-          value: flange,
-          unit: 'mm',
-          minValue: 10.0,
-          maxValue: 25.0,
-          step: 5.0,
-        ),
+        CadParameter(id: 'flange', name: 'Return Flange', value: flange, unit: 'mm', minValue: 10.0, maxValue: 25.0, step: 5.0),
       ],
-      baselineParameters: {
-        'width': width,
-        'height': height,
-        'length': length,
-        'flange': flange,
-      },
+      baselineParameters: {'width': width, 'height': height, 'length': length, 'flange': flange},
     );
   }
 
@@ -1640,4 +1541,3 @@ class ProductVariationContract {
     return null;
   }
 }
-

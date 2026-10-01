@@ -402,11 +402,20 @@ class DxfFittingMetadata {
 
   /// Extracts fitting metadata stored in a DSF document
   static DxfFittingMetadata? fromDocument(DsfDocument doc) {
+    DxfFittingMetadata? result;
     final meta = doc.metadata['fittingMetadata'];
     if (meta is Map<String, dynamic>) {
-      return DxfFittingMetadata.fromJson(meta);
+      result = DxfFittingMetadata.fromJson(meta);
     } else if (meta is Map) {
-      return DxfFittingMetadata.fromJson(Map<String, dynamic>.from(meta));
+      result = DxfFittingMetadata.fromJson(Map<String, dynamic>.from(meta));
+    }
+
+    final docCat = doc.category;
+    if (result != null) {
+      if ((result.category == FittingCategory.none || result.category.isEmpty) && docCat.isNotEmpty) {
+        result = result.copyWith(category: docCat);
+      }
+      return result;
     }
 
     // Auto-detect from filename and geometry if not explicitly saved
@@ -446,7 +455,10 @@ class DxfFittingMetadata {
     }
 
     String category = FittingCategory.trayAccessories;
-    if (name.contains('trunking')) {
+    final docCat = doc.category;
+    if (docCat.isNotEmpty && docCat != FittingCategory.none) {
+      category = docCat;
+    } else if (name.contains('trunking')) {
       category = FittingCategory.trunkingAccessories;
     } else if (name.contains('ladder')) {
       category = FittingCategory.ladderAccessories;
@@ -508,12 +520,29 @@ class DxfFittingMetadata {
       variantName = name.contains('45') ? '45 Deg Bend' : '90 Deg Bend';
     }
 
-    // Extract numerical dimensions from filename if present (e.g. 100x50x100x50 or 45_100x100)
-    final numbers = RegExp(r'\d+')
-        .allMatches(name)
-        .map((m) => double.tryParse(m.group(0)!) ?? 0.0)
-        .where((v) => v >= 10.0)
-        .toList();
+    // Extract numerical dimensions from filename if present (e.g. 100x50 or 45_deg_bend_100x50)
+    final xMatch = RegExp(r'\b(\d+(?:x\d+)+)\b').firstMatch(name);
+    List<double> numbers;
+    if (xMatch != null) {
+      numbers = xMatch.group(1)!
+          .split('x')
+          .map((s) => double.tryParse(s) ?? 0.0)
+          .where((v) => v >= 10.0)
+          .toList();
+    } else {
+      final rawNumbers = RegExp(r'\d+')
+          .allMatches(name)
+          .map((m) => double.tryParse(m.group(0)!) ?? 0.0)
+          .where((v) => v >= 10.0)
+          .toList();
+      if ((name.contains('45') || name.contains('90')) &&
+          (name.contains('bend') || name.contains('riser')) &&
+          rawNumbers.isNotEmpty &&
+          (rawNumbers.first == 45.0 || rawNumbers.first == 90.0)) {
+        rawNumbers.removeAt(0);
+      }
+      numbers = rawNumbers;
+    }
 
     var dimNumbers = List<double>.from(numbers);
     if (product == FittingProductType.bend ||

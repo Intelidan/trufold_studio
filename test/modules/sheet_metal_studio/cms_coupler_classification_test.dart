@@ -20,7 +20,7 @@ import 'package:trufold_studio/sheet_metal_studio/engine/cms/cms_coupler_classif
 void main() {
   group('Sprint 5: Coupler Feature Classification & Rigid Invariant Locking', () {
     test('1. Accurately identifies 8 coupler slots on 45_deg_bend_100x100.dsf and associates with ports', () async {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       expect(file.existsSync(), isTrue);
 
       final content = await file.readAsString();

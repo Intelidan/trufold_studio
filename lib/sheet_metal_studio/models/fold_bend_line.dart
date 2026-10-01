@@ -83,6 +83,11 @@ class FoldBendLine {
   double get y2 => p2.y;
   double get angleDeg => targetAngleDeg;
 
+  /// Display angle in degrees.
+  /// If bent beyond 90° (e.g. 135° return flange bent inside at 45° slanting angle),
+  /// displays the acute / supplementary angle (e.g. 180° - 135° = 45°).
+  double get displayAngleDeg => targetAngleDeg > 90.0 ? (180.0 - targetAngleDeg).abs() : targetAngleDeg;
+
   /// Midpoint of the bend line
   CadPoint2D get midpoint => CadPoint2D((p1.x + p2.x) / 2.0, (p1.y + p2.y) / 2.0);
 

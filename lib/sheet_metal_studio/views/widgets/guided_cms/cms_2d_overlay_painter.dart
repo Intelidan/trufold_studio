@@ -71,7 +71,7 @@ class Cms2DOverlayPainter extends CustomPainter {
 
       // Midpoint badge
       final mid = Offset((s1.dx + s2.dx) / 2, (s1.dy + s2.dy) / 2);
-      final labelText = '${bend.label} (${bend.targetAngleDeg.toInt()}°)';
+      final labelText = '${bend.label} (${bend.displayAngleDeg.toInt()}°)';
       final textSpan = TextSpan(
         text: labelText,
         style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w700, letterSpacing: 0.2),
@@ -110,6 +110,25 @@ class Cms2DOverlayPainter extends CustomPainter {
     for (final port in ports) {
       final isFocused = port.id == focus.activePortId;
       final screenPos = worldToScreen(port.flatCenter.x, port.flatCenter.y);
+
+      // Draw port aperture line passing through coupler hole centers
+      if (port.flatP1 != null && port.flatP2 != null) {
+        final sP1 = worldToScreen(port.flatP1!.x, port.flatP1!.y);
+        final sP2 = worldToScreen(port.flatP2!.x, port.flatP2!.y);
+
+        final linePaint = Paint()
+          ..color = isFocused ? const Color(0xFF00E5FF) : const Color(0xFF0284C7).withValues(alpha: 0.75)
+          ..strokeWidth = isFocused ? 2.0 : 1.5
+          ..style = PaintingStyle.stroke;
+
+        _drawDashedLine(canvas, sP1, sP2, linePaint, dash: 6.0, gap: 4.0);
+
+        final dotPaint = Paint()
+          ..color = isFocused ? const Color(0xFF00E5FF) : const Color(0xFF0284C7)
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(sP1, 3.5, dotPaint);
+        canvas.drawCircle(sP2, 3.5, dotPaint);
+      }
 
       // Draw subtle glowing halo if active
       if (isFocused) {

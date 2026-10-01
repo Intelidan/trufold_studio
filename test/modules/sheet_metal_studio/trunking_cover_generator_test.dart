@@ -35,7 +35,7 @@ import 'package:trufold_studio/sheet_metal_studio/viewmodels/sheet_metal_studio_
 void main() {
   group('TrunkingCoverGenerator Unit & Manufacturing Geometry Tests', () {
     test('Test 1 — Equal Tee Cover Generation (3 flanges, open ports, central mounting hole)', () {
-      final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+      final teeFile = File('assets/dsf_templates/trunking_accessories/equal_tee_100x100.dsf');
       final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
 
@@ -74,7 +74,7 @@ void main() {
     });
 
     test('Test 2 — Unequal Tee Cover with Hbody - Hport Extended 90° Drop Flaps', () {
-      final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+      final teeFile = File('assets/dsf_templates/trunking_accessories/equal_tee_100x100.dsf');
       final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json).copyWith(productType: 'Cable Trunking Unequal Tee', itemName: 'Unequal Tee 100x100x50x100x100x50x50');
 
@@ -109,7 +109,7 @@ void main() {
     });
 
     test('Test 3 — Equal Cross Cover Generation (4 corner cheek flanges at 45°, 4 open ports)', () {
-      final crossFile = File('assets/dxf_templates/trunking_accessories/equal_cross_100x100.dsf');
+      final crossFile = File('assets/dsf_templates/trunking_accessories/equal_cross_100x100.dsf');
       final json = jsonDecode(crossFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
 
@@ -134,7 +134,7 @@ void main() {
     });
 
     test('Test 4 — Unequal Cross Cover with Hbody - Hport Extended 90° Drop Flaps', () {
-      final crossFile = File('assets/dxf_templates/trunking_accessories/equal_cross_100x100.dsf');
+      final crossFile = File('assets/dsf_templates/trunking_accessories/equal_cross_100x100.dsf');
       final json = jsonDecode(crossFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json).copyWith(productType: 'Cable Trunking Unequal Cross', itemName: 'Unequal Cross 100x50x100x50');
 
@@ -167,7 +167,7 @@ void main() {
     });
 
     test('Test 5 — 45° Bend Cover Generation (inner and outer cheek flanges)', () {
-      final bendFile = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final bendFile = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       final json = jsonDecode(bendFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
 
@@ -188,7 +188,7 @@ void main() {
     });
 
     test('Test 6 — DSF Round-trip Serialization with Cover (Backward Compatible)', () {
-      final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+      final teeFile = File('assets/dsf_templates/trunking_accessories/equal_tee_100x100.dsf');
       final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
 
@@ -222,7 +222,7 @@ void main() {
     });
 
     test('Test 7 — DXF Export Base Only Scope', () {
-      final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+      final teeFile = File('assets/dsf_templates/trunking_accessories/equal_tee_100x100.dsf');
       final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
       final coverData = TrunkingCoverGenerator.generateCover(baseDoc);
@@ -237,7 +237,7 @@ void main() {
     });
 
     test('Test 8 — DXF Export Cover Only Scope', () {
-      final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+      final teeFile = File('assets/dsf_templates/trunking_accessories/equal_tee_100x100.dsf');
       final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
       final coverData = TrunkingCoverGenerator.generateCover(baseDoc);
@@ -252,7 +252,7 @@ void main() {
     });
 
     test('Test 9 — DXF Export Both Base and Cover Side-by-Side Scope', () {
-      final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+      final teeFile = File('assets/dsf_templates/trunking_accessories/equal_tee_100x100.dsf');
       final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
       final coverData = TrunkingCoverGenerator.generateCover(baseDoc);
@@ -269,7 +269,7 @@ void main() {
     });
 
     test('Test 10 — Beside-Base Offset Guarantees Positive Clearance Gap', () {
-      final teeFile = File('assets/dxf_templates/trunking_accessories/equal_tee_100x100.dsf');
+      final teeFile = File('assets/dsf_templates/trunking_accessories/equal_tee_100x100.dsf');
       final json = jsonDecode(teeFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
       final coverData = TrunkingCoverGenerator.generateCover(baseDoc);
@@ -286,7 +286,7 @@ void main() {
     });
 
     test('Test 11 — Direct Unequal Tee Template Cover Generation (Port 2 Drop Flap)', () {
-      final file = File('assets/dxf_templates/trunking_accessories/unequal_tee_100x100x50x100x100x50x50.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/unequal_tee_100x100x50x100x100x50x50.dsf');
       final baseDoc = DsfDocument.fromJson(jsonDecode(file.readAsStringSync()));
 
       final coverData = TrunkingCoverGenerator.generateCover(baseDoc);
@@ -324,7 +324,7 @@ void main() {
     });
 
     test('Test 12 — Direct Unequal Cross Template Cover Generation (Ports 1 & 3 Drop Flaps)', () {
-      final file = File('assets/dxf_templates/trunking_accessories/unequal_cross_100x50x100x50.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/unequal_cross_100x50x100x50.dsf');
       final baseDoc = DsfDocument.fromJson(jsonDecode(file.readAsStringSync()));
 
       final coverData = TrunkingCoverGenerator.generateCover(baseDoc);
@@ -349,7 +349,7 @@ void main() {
     });
 
     test('Test 13 — Real-time 3D Cover Scaling during CMS Teach Scaling', () {
-      final file = File('assets/dxf_templates/trunking_accessories/unequal_tee_100x100x50x100x100x50x50.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/unequal_tee_100x100x50x100x100x50x50.dsf');
       final baseDoc = DsfDocument.fromJson(jsonDecode(file.readAsStringSync()));
       final vm = SheetMetalStudioViewModel(initialDocument: baseDoc);
       vm.createCoverForCurrentFitting();
@@ -384,7 +384,7 @@ void main() {
     });
 
     test('Test 14 — Non-Overlapping Guarantee when Base Part and Cover Expand', () {
-      final file = File('assets/dxf_templates/trunking_accessories/unequal_tee_100x100x50x100x100x50x50.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/unequal_tee_100x100x50x100x100x50x50.dsf');
       final baseDoc = DsfDocument.fromJson(jsonDecode(file.readAsStringSync()));
       final vm = SheetMetalStudioViewModel(initialDocument: baseDoc);
       vm.createCoverForCurrentFitting();
@@ -424,7 +424,7 @@ void main() {
     });
 
     test('Test 15 — 3D Cover Movement, Elevation Lift, and Custom Offset', () {
-      final file = File('assets/dxf_templates/trunking_accessories/unequal_tee_100x100x50x100x100x50x50.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/unequal_tee_100x100x50x100x100x50x50.dsf');
       final baseDoc = DsfDocument.fromJson(jsonDecode(file.readAsStringSync()));
       final vm = SheetMetalStudioViewModel(initialDocument: baseDoc);
       vm.createCoverForCurrentFitting();
@@ -471,7 +471,7 @@ void main() {
     });
 
     test('Test 16 — 3D Viewport Facet Sorting & Occlusion (Solid Body, Cover Caps Flanges, No Bleed-through)', () {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
       final baseDoc = DsfDocument.fromJson(jsonDecode(file.readAsStringSync()));
       final vm = SheetMetalStudioViewModel(initialDocument: baseDoc);
       vm.createCoverForCurrentFitting();
@@ -660,7 +660,7 @@ void main() {
     });
 
     test('Test 17 — Diagnose 45 deg bend face sorting', () {
-      final bendFile = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final bendFile = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       final json = jsonDecode(bendFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
       final vm = SheetMetalStudioViewModel(initialDocument: baseDoc);
@@ -788,7 +788,7 @@ void main() {
     });
 
     test('Test 18 — 45° Bend Cover: Flanges wrap only on sidewalls, 0 flanges on port mouths (SS1)', () {
-      final bendFile = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final bendFile = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       final json = jsonDecode(bendFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
 
@@ -813,7 +813,7 @@ void main() {
     });
 
     test('Test 19 — 45° Inside Riser Cover: Reduced length to horizontal flat opening, 0 port flanges (SS2)', () {
-      final riserFile = File('assets/dxf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
+      final riserFile = File('assets/dsf_templates/trunking_accessories/45_deg_inside_riser_100x100.dsf');
       final json = jsonDecode(riserFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
 
@@ -847,7 +847,7 @@ void main() {
     });
 
     test('Test 20 — 45° Outside Riser Cover: Covers whole straight top opening, 0 port flanges (SS3)', () {
-      final riserFile = File('assets/dxf_templates/trunking_accessories/45_deg_outside_riser_100x100.dsf');
+      final riserFile = File('assets/dsf_templates/trunking_accessories/45_deg_outside_riser_100x100.dsf');
       final json = jsonDecode(riserFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
 
@@ -897,7 +897,7 @@ void main() {
     });
 
     test('Test 21 — 90° Bend: Accurate Port Mapping & Cover Generation (SS1 & SS2)', () async {
-      final bendFile = File('assets/dxf_templates/trunking_accessories/90_deg_bend_100x100.dsf');
+      final bendFile = File('assets/dsf_templates/trunking_accessories/90_deg_bend_100x100.dsf');
       final json = jsonDecode(bendFile.readAsStringSync()) as Map<String, dynamic>;
       final baseDoc = DsfDocument.fromJson(json);
 

@@ -228,6 +228,18 @@ class _DdsParameterTableState extends State<DdsParameterTable> {
           source: ParameterSource.templateFixed,
         ));
       }
+      if (tId.contains('bend')) {
+        items.add(DdsParameterItem(
+          key: 'radius',
+          label: 'Bend Radius',
+          symbol: 'R',
+          numValue: p['radius'] ?? 180.0,
+          unit: 'mm',
+          minValue: 180.0,
+          maxValue: 900.0,
+          source: ParameterSource.ddsEditable,
+        ));
+      }
     }
 
     return items;
@@ -245,6 +257,8 @@ class _DdsParameterTableState extends State<DdsParameterTable> {
       updatedParams['port1_width'] = parsed;
     } else if (key == 'height') {
       updatedParams['port1_height'] = parsed;
+    } else if (key == 'radius') {
+      updatedParams['radius'] = parsed;
     }
 
     final updatedInstance = widget.instance.copyWith(

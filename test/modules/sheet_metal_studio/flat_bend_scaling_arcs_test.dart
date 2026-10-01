@@ -15,7 +15,7 @@ void main() {
     late List<CmsPhysicalPort> baselinePorts;
 
     setUp(() {
-      final file = File('assets/dxf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
       expect(file.existsSync(), isTrue);
       final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
       baselineDoc = DsfDocument.fromJson(json);
@@ -154,7 +154,7 @@ void main() {
     late List<CmsPhysicalPort> baselinePorts90;
 
     setUp(() {
-      final file = File('assets/dxf_templates/trunking_accessories/90_deg_bend_100x100.dsf');
+      final file = File('assets/dsf_templates/trunking_accessories/90_deg_bend_100x100.dsf');
       expect(file.existsSync(), isTrue);
       final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
       baselineDoc90 = DsfDocument.fromJson(json);

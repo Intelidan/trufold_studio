@@ -24,6 +24,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 
 import '../../../models/cad_primitives.dart';
 import '../../../models/cnc_punch_primitive.dart';
@@ -32,6 +33,8 @@ import '../../../models/dds/dds_annotation.dart';
 import '../../../models/dds/dds_document.dart';
 import '../../../models/dds/dds_product_instance.dart';
 import '../../../models/dds/dds_sheet.dart';
+import '../../../models/fold_bend_line.dart';
+import '../../../models/planar_sheet_face.dart';
 import '../../../engine/dds/dds_instance_evaluator.dart';
 import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../viewport_3d_widget.dart';
@@ -89,6 +92,52 @@ class DdsPaperCanvas extends StatefulWidget {
   State<DdsPaperCanvas> createState() => _DdsPaperCanvasState();
 }
 
+enum _AnnotationDragMode {
+  none,
+  move,
+  topLeft,
+  topCenter,
+  topRight,
+  middleLeft,
+  middleRight,
+  bottomLeft,
+  bottomCenter,
+  bottomRight,
+  targetPoint,
+  textPosition,
+  dimP1,
+  dimP2,
+
+  /// Dragging a pull-out arrow tip on a DdsNoteBoxAnnotation.
+  arrowTip,
+
+  /// Dragging a pull-out arrow root (attachment on note-box border).
+  arrowRoot,
+}
+
+/// Computes the nearest point on the rectangle perimeter of [ann] to [pt].
+CadPoint2D _getNearestBorderPoint(CadPoint2D pt, DdsNoteBoxAnnotation ann) {
+  final rx = ann.x;
+  final ry = ann.y;
+  final rw = ann.width;
+  final rh = ann.height;
+
+  final cx = pt.x.clamp(rx, rx + rw);
+  final cy = pt.y.clamp(ry, ry + rh);
+
+  final distLeft = (pt.x - rx).abs();
+  final distRight = (pt.x - (rx + rw)).abs();
+  final distTop = (pt.y - ry).abs();
+  final distBottom = (pt.y - (ry + rh)).abs();
+
+  final minDist = math.min(math.min(distLeft, distRight), math.min(distTop, distBottom));
+
+  if (minDist == distLeft) return CadPoint2D(rx, cy);
+  if (minDist == distRight) return CadPoint2D(rx + rw, cy);
+  if (minDist == distTop) return CadPoint2D(cx, ry);
+  return CadPoint2D(cx, ry + rh);
+}
+
 class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStateMixin {
   // Dedicated fitting ViewModel for this sheet's specific evaluated model (Reducer, Cross, Bend, Tee)
   SheetMetalStudioViewModel? _sheetViewModel;
@@ -99,13 +148,28 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   CadPoint2D? _currentHoverPoint;
   final List<CadPoint2D> _pendingCloudPoints = [];
 
-  // Dragging annotations state
+  // Dragging & Resizing annotations state
   bool _isDraggingAnnotation = false;
   String? _draggedAnnotationId;
   CadPoint2D? _dragLastPointMm;
+  _AnnotationDragMode _activeDragMode = _AnnotationDragMode.none;
+  _AnnotationDragMode _activeHoverMode = _AnnotationDragMode.none;
+
+  /// Arrow drag: id of the DdsNoteArrow being dragged (on a note box).
+  String? _draggingArrowId;
+
+  /// Currently selected arrow id on the active note box (for deletion and highlight).
+  String? _selectedArrowId;
 
   // Hit test radius in sheet mm
   static const double _hitTestRadiusMm = 8.0;
+  static const double _handleRadiusMm = 6.0;
+
+  // Focus node to capture Delete key and shortcuts whenever canvas is clicked
+  final FocusNode _canvasFocusNode = FocusNode();
+
+  // 3D Model rotation & movement lock state
+  bool _is3DModelLocked = false;
 
   // Viewport mode and 3D technical presentation parameters
   DdsViewportMode _viewportMode = DdsViewportMode.presentation3D;
@@ -124,7 +188,8 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   bool _showDimFlange = true;
   bool _showDimThickness = true;
   bool _showCadDimensionLines = true;
-  bool _showDimensionTags = true;
+  bool _showDimensionTags = false;
+  bool _combinePortDimensions = true;
 
   void _onSheetVmChanged() {
     if (mounted) {
@@ -151,6 +216,8 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     _showDimThickness = widget.showDimThickness ?? vs.showDimThickness;
     _showCadDimensionLines = vs.showCadDimensionLines;
     _showDimensionTags = vs.showDimensionTags;
+    _combinePortDimensions = vs.combinePortDimensions;
+    _is3DModelLocked = vs.is3DModelLocked;
 
     if (_sheetViewModel != null) {
       if (_sheetViewModel!.isCoverVisible3D != vs.showCover3D) {
@@ -186,6 +253,8 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
       showDimThickness: _showDimThickness,
       showCadDimensionLines: _showCadDimensionLines,
       showDimensionTags: _showDimensionTags,
+      combinePortDimensions: _combinePortDimensions,
+      is3DModelLocked: _is3DModelLocked,
       camera3D: cam,
     );
 
@@ -203,16 +272,22 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   void _syncSheetViewModel() {
     final eval = widget.evaluatedInstance;
     if (eval != null) {
-      final newInstId = eval.instance.instanceId;
-      if (_activeLoadedInstanceId == newInstId && _sheetViewModel != null) {
-        return;
-      }
-      _sheetViewModel?.removeListener(_onSheetVmChanged);
-      _sheetViewModel?.dispose();
       var doc = eval.scaledBaseDocument;
       if (eval.coverData != null) {
         doc = doc.copyWith(cover: eval.coverData);
       }
+      final newInstId = eval.instance.instanceId;
+      if (_activeLoadedInstanceId == newInstId && _sheetViewModel != null) {
+        _sheetViewModel!.loadDocument(doc);
+        final vs = widget.sheet.viewSettings;
+        if (_sheetViewModel!.isCoverVisible3D != vs.showCover3D) {
+          _sheetViewModel!.toggleCoverVisibility3D();
+        }
+        _sheetViewModel!.showCmsPortHighlights = _showDimPorts;
+        return;
+      }
+      _sheetViewModel?.removeListener(_onSheetVmChanged);
+      _sheetViewModel?.dispose();
       _sheetViewModel = SheetMetalStudioViewModel(initialDocument: doc);
       final vs = widget.sheet.viewSettings;
       if (_sheetViewModel!.isCoverVisible3D != vs.showCover3D) {
@@ -291,6 +366,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
 
   @override
   void dispose() {
+    _canvasFocusNode.dispose();
     _sheetViewModel?.removeListener(_onSheetVmChanged);
     _sheetViewModel?.dispose();
     _sweepController.dispose();
@@ -312,17 +388,100 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   // Interactive Pointer Gestures for Markup Authoring
   // ===========================================================================
 
+  /// Checks if [pt] is within [tolerance] mm of the perimeter of [ann].
+  bool _isNearBorder(CadPoint2D pt, DdsNoteBoxAnnotation ann, {double tolerance = 4.5}) {
+    final borderPt = _getNearestBorderPoint(pt, ann);
+    return (pt - borderPt).length <= tolerance;
+  }
+
+  _AnnotationDragMode _hitTestHandles(CadPoint2D ptMm, DdsAnnotation ann) {
+    if (ann is DdsNoteBoxAnnotation) {
+      final x = ann.x;
+      final y = ann.y;
+      final w = ann.width;
+      final h = ann.height;
+
+      // 1. Pull-out arrow tips (diamond handles)
+      for (final arrow in ann.arrows) {
+        if ((ptMm - arrow.tip).length <= _handleRadiusMm) return _AnnotationDragMode.arrowTip;
+      }
+
+      // 2. Pull-out arrow roots (border attachment handles)
+      for (final arrow in ann.arrows) {
+        final root = arrow.root ?? _getNearestBorderPoint(arrow.tip, ann);
+        if ((ptMm - root).length <= _handleRadiusMm) return _AnnotationDragMode.arrowRoot;
+      }
+
+      // 3. Corner resize handles
+      if ((ptMm - CadPoint2D(x, y)).length <= _handleRadiusMm) return _AnnotationDragMode.topLeft;
+      if ((ptMm - CadPoint2D(x + w, y)).length <= _handleRadiusMm) return _AnnotationDragMode.topRight;
+      if ((ptMm - CadPoint2D(x, y + h)).length <= _handleRadiusMm) return _AnnotationDragMode.bottomLeft;
+      if ((ptMm - CadPoint2D(x + w, y + h)).length <= _handleRadiusMm) return _AnnotationDragMode.bottomRight;
+
+      // 4. Any point on the border picks an arrow
+      if (_isNearBorder(ptMm, ann, tolerance: 4.5)) {
+        return _AnnotationDragMode.arrowTip;
+      }
+
+      // 5. Interior moves the note box
+      if (ptMm.x >= x && ptMm.x <= x + w && ptMm.y >= y && ptMm.y <= y + h) {
+        return _AnnotationDragMode.move;
+      }
+    } else if (ann is DdsApprovalStampAnnotation) {
+      final x = ann.x;
+      final y = ann.y;
+      final w = ann.width;
+      final h = ann.height;
+
+      if ((ptMm - CadPoint2D(x, y)).length <= _handleRadiusMm) return _AnnotationDragMode.topLeft;
+      if ((ptMm - CadPoint2D(x + w, y)).length <= _handleRadiusMm) return _AnnotationDragMode.topRight;
+      if ((ptMm - CadPoint2D(x, y + h)).length <= _handleRadiusMm) return _AnnotationDragMode.bottomLeft;
+      if ((ptMm - CadPoint2D(x + w, y + h)).length <= _handleRadiusMm) return _AnnotationDragMode.bottomRight;
+      if ((ptMm - CadPoint2D(x + w / 2, y)).length <= _handleRadiusMm) return _AnnotationDragMode.topCenter;
+      if ((ptMm - CadPoint2D(x + w / 2, y + h)).length <= _handleRadiusMm) return _AnnotationDragMode.bottomCenter;
+      if ((ptMm - CadPoint2D(x, y + h / 2)).length <= _handleRadiusMm) return _AnnotationDragMode.middleLeft;
+      if ((ptMm - CadPoint2D(x + w, y + h / 2)).length <= _handleRadiusMm) return _AnnotationDragMode.middleRight;
+
+      if (ptMm.x >= x && ptMm.x <= x + w && ptMm.y >= y && ptMm.y <= y + h) {
+        return _AnnotationDragMode.move;
+      }
+    } else if (ann is DdsLeaderNoteAnnotation) {
+      if ((ptMm - ann.targetPoint).length <= _handleRadiusMm) return _AnnotationDragMode.targetPoint;
+      if ((ptMm - ann.textPosition).length <= _handleRadiusMm) return _AnnotationDragMode.textPosition;
+      final dMid = ((ann.targetPoint + ann.textPosition) * 0.5 - ptMm).length;
+      if (dMid <= _hitTestRadiusMm) return _AnnotationDragMode.move;
+    } else if (ann is DdsLinearDimensionAnnotation) {
+      if ((ptMm - ann.p1).length <= _handleRadiusMm) return _AnnotationDragMode.dimP1;
+      if ((ptMm - ann.p2).length <= _handleRadiusMm) return _AnnotationDragMode.dimP2;
+      final mid = (ann.p1 + ann.p2) * 0.5;
+      if ((ptMm - mid).length <= _hitTestRadiusMm) return _AnnotationDragMode.move;
+    }
+    return _AnnotationDragMode.none;
+  }
+
   void _handlePointerHover(PointerHoverEvent event, Size paperSize) {
     if (paperSize.width <= 0 || paperSize.height <= 0) return;
     final mmX = (event.localPosition.dx / paperSize.width) * 297.0;
     final mmY = (event.localPosition.dy / paperSize.height) * 210.0;
+    final hoverMm = CadPoint2D(mmX, mmY);
+
+    _AnnotationDragMode hoverMode = _AnnotationDragMode.none;
+    if (widget.selectedAnnotationId != null) {
+      final selAnn = widget.sheet.annotations.cast<DdsAnnotation?>().firstWhere((a) => a?.id == widget.selectedAnnotationId, orElse: () => null);
+      if (selAnn != null) {
+        hoverMode = _hitTestHandles(hoverMm, selAnn);
+      }
+    }
+
     setState(() {
-      _currentHoverPoint = CadPoint2D(mmX, mmY);
+      _currentHoverPoint = hoverMm;
+      _activeHoverMode = hoverMode;
     });
   }
 
   void _handlePointerDown(PointerDownEvent event, Size paperSize) {
     if (paperSize.width <= 0 || paperSize.height <= 0) return;
+    _canvasFocusNode.requestFocus();
     final mmX = (event.localPosition.dx / paperSize.width) * 297.0;
     final mmY = (event.localPosition.dy / paperSize.height) * 210.0;
     final clickPoint = CadPoint2D(mmX, mmY);
@@ -371,6 +530,89 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   }
 
   void _performHitTest(CadPoint2D clickMm) {
+    // 1. If an annotation is already selected, test if we clicked on any of its resize handles or body
+    if (widget.selectedAnnotationId != null) {
+      final selAnn = widget.sheet.annotations.cast<DdsAnnotation?>().firstWhere((a) => a?.id == widget.selectedAnnotationId, orElse: () => null);
+      if (selAnn != null && selAnn.isVisible) {
+        // Check if user clicked the delete button near the selected arrow tip
+        if (selAnn is DdsNoteBoxAnnotation && _selectedArrowId != null) {
+          final selArrow = selAnn.arrows.where((a) => a.id == _selectedArrowId).firstOrNull;
+          if (selArrow != null) {
+            final delBtnMm = CadPoint2D(selArrow.tip.x + 4.0, selArrow.tip.y - 4.0);
+            if ((clickMm - delBtnMm).length <= 5.0) {
+              _deleteArrow(selAnn.id, _selectedArrowId!);
+              return;
+            }
+          }
+        }
+
+        final mode = _hitTestHandles(clickMm, selAnn);
+        if (mode != _AnnotationDragMode.none) {
+          if (mode == _AnnotationDragMode.arrowTip && selAnn is DdsNoteBoxAnnotation) {
+            String? hitArrowId;
+            for (final arrow in selAnn.arrows) {
+              if ((clickMm - arrow.tip).length <= _handleRadiusMm) {
+                hitArrowId = arrow.id;
+                break;
+              }
+            }
+            if (hitArrowId != null) {
+              // Clicked existing arrow tip
+              _draggingArrowId = hitArrowId;
+              _selectedArrowId = hitArrowId;
+            } else {
+              // Pick an arrow from ANY point on the border
+              final rootPt = _getNearestBorderPoint(clickMm, selAnn);
+              final newArrow = DdsNoteArrow(id: 'arrow_${DateTime.now().millisecondsSinceEpoch}', tip: clickMm, root: rootPt);
+              final updatedAnns = List<DdsAnnotation>.from(widget.sheet.annotations);
+              final idx = updatedAnns.indexWhere((a) => a.id == selAnn.id);
+              if (idx != -1) {
+                updatedAnns[idx] = selAnn.copyWith(arrows: [...selAnn.arrows, newArrow]);
+              }
+              widget.onAnnotationsChanged?.call(updatedAnns);
+              hitArrowId = newArrow.id;
+              _draggingArrowId = hitArrowId;
+              _selectedArrowId = hitArrowId;
+            }
+            _draggedAnnotationId = selAnn.id;
+            _activeDragMode = _AnnotationDragMode.arrowTip;
+            _isDraggingAnnotation = true;
+            _dragLastPointMm = clickMm;
+            setState(() {});
+            return;
+          }
+          if (mode == _AnnotationDragMode.arrowRoot && selAnn is DdsNoteBoxAnnotation) {
+            String? hitArrowId;
+            for (final arrow in selAnn.arrows) {
+              final root = arrow.root ?? _getNearestBorderPoint(arrow.tip, selAnn);
+              if ((clickMm - root).length <= _handleRadiusMm) {
+                hitArrowId = arrow.id;
+                break;
+              }
+            }
+            if (hitArrowId != null) {
+              _draggingArrowId = hitArrowId;
+              _selectedArrowId = hitArrowId;
+              _draggedAnnotationId = selAnn.id;
+              _activeDragMode = _AnnotationDragMode.arrowRoot;
+              _isDraggingAnnotation = true;
+              _dragLastPointMm = clickMm;
+              setState(() {});
+              return;
+            }
+          }
+          _selectedArrowId = null;
+          _activeDragMode = mode;
+          _isDraggingAnnotation = true;
+          _draggedAnnotationId = selAnn.id;
+          _dragLastPointMm = clickMm;
+          setState(() {});
+          return;
+        }
+      }
+    }
+
+    // 2. Otherwise hit-test all visible annotations to select a new one
     for (final ann in widget.sheet.annotations.reversed) {
       if (!ann.isVisible) continue;
 
@@ -381,6 +623,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
         final dMid = (mid - clickMm).length;
         if (d1 < _hitTestRadiusMm || d2 < _hitTestRadiusMm || dMid < _hitTestRadiusMm) {
           _draggedAnnotationId = ann.id;
+          _activeDragMode = _AnnotationDragMode.move;
           _isDraggingAnnotation = true;
           _dragLastPointMm = clickMm;
           widget.onAnnotationSelected?.call(ann.id);
@@ -391,6 +634,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
         final dP = (ann.textPosition - clickMm).length;
         if (dT < _hitTestRadiusMm || dP < _hitTestRadiusMm) {
           _draggedAnnotationId = ann.id;
+          _activeDragMode = _AnnotationDragMode.move;
           _isDraggingAnnotation = true;
           _dragLastPointMm = clickMm;
           widget.onAnnotationSelected?.call(ann.id);
@@ -399,6 +643,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
       } else if (ann is DdsNoteBoxAnnotation) {
         if (clickMm.x >= ann.x && clickMm.x <= ann.x + ann.width && clickMm.y >= ann.y && clickMm.y <= ann.y + ann.height) {
           _draggedAnnotationId = ann.id;
+          _activeDragMode = _AnnotationDragMode.move;
           _isDraggingAnnotation = true;
           _dragLastPointMm = clickMm;
           widget.onAnnotationSelected?.call(ann.id);
@@ -407,6 +652,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
       } else if (ann is DdsApprovalStampAnnotation) {
         if (clickMm.x >= ann.x && clickMm.x <= ann.x + ann.width && clickMm.y >= ann.y && clickMm.y <= ann.y + ann.height) {
           _draggedAnnotationId = ann.id;
+          _activeDragMode = _AnnotationDragMode.move;
           _isDraggingAnnotation = true;
           _dragLastPointMm = clickMm;
           widget.onAnnotationSelected?.call(ann.id);
@@ -416,6 +662,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
         for (final pt in ann.points) {
           if ((pt - clickMm).length < _hitTestRadiusMm) {
             _draggedAnnotationId = ann.id;
+            _activeDragMode = _AnnotationDragMode.move;
             _isDraggingAnnotation = true;
             _dragLastPointMm = clickMm;
             widget.onAnnotationSelected?.call(ann.id);
@@ -427,6 +674,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
 
     // Deselect if clicked blank area
     _draggedAnnotationId = null;
+    _activeDragMode = _AnnotationDragMode.none;
     _isDraggingAnnotation = false;
     _dragLastPointMm = null;
     widget.onAnnotationSelected?.call(null);
@@ -446,17 +694,131 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
 
     final updatedList = widget.sheet.annotations.map((ann) {
       if (ann.id != _draggedAnnotationId) return ann;
-      if (ann is DdsLinearDimensionAnnotation) {
-        return ann.copyWith(p1: CadPoint2D(ann.p1.x + dx, ann.p1.y + dy), p2: CadPoint2D(ann.p2.x + dx, ann.p2.y + dy));
-      } else if (ann is DdsLeaderNoteAnnotation) {
-        return ann.copyWith(
-          targetPoint: CadPoint2D(ann.targetPoint.x + dx, ann.targetPoint.y + dy),
-          textPosition: CadPoint2D(ann.textPosition.x + dx, ann.textPosition.y + dy),
-        );
-      } else if (ann is DdsNoteBoxAnnotation) {
-        return ann.copyWith(x: ann.x + dx, y: ann.y + dy);
+      if (ann is DdsNoteBoxAnnotation) {
+        switch (_activeDragMode) {
+          case _AnnotationDragMode.move:
+            return ann.copyWith(x: ann.x + dx, y: ann.y + dy);
+          case _AnnotationDragMode.topLeft:
+            final newW = ann.width - dx;
+            final newH = ann.height - dy;
+            return ann.copyWith(
+              x: newW >= 20.0 ? ann.x + dx : ann.x,
+              y: newH >= 10.0 ? ann.y + dy : ann.y,
+              width: math.max(20.0, newW),
+              height: math.max(10.0, newH),
+            );
+          case _AnnotationDragMode.topCenter:
+            final newH = ann.height - dy;
+            return ann.copyWith(y: newH >= 10.0 ? ann.y + dy : ann.y, height: math.max(10.0, newH));
+          case _AnnotationDragMode.topRight:
+            final newW = ann.width + dx;
+            final newH = ann.height - dy;
+            return ann.copyWith(y: newH >= 10.0 ? ann.y + dy : ann.y, width: math.max(20.0, newW), height: math.max(10.0, newH));
+          case _AnnotationDragMode.middleLeft:
+            final newW = ann.width - dx;
+            return ann.copyWith(x: newW >= 20.0 ? ann.x + dx : ann.x, width: math.max(20.0, newW));
+          case _AnnotationDragMode.middleRight:
+            return ann.copyWith(width: math.max(20.0, ann.width + dx));
+          case _AnnotationDragMode.bottomLeft:
+            final newW = ann.width - dx;
+            final newH = ann.height + dy;
+            return ann.copyWith(x: newW >= 20.0 ? ann.x + dx : ann.x, width: math.max(20.0, newW), height: math.max(10.0, newH));
+          case _AnnotationDragMode.bottomCenter:
+            return ann.copyWith(height: math.max(10.0, ann.height + dy));
+          case _AnnotationDragMode.bottomRight:
+            return ann.copyWith(width: math.max(20.0, ann.width + dx), height: math.max(10.0, ann.height + dy));
+          case _AnnotationDragMode.arrowTip:
+            // Move only the dragged arrow tip
+            if (_draggingArrowId != null) {
+              final updatedArrows = ann.arrows.map((a) {
+                if (a.id != _draggingArrowId) return a;
+                return a.copyWith(tip: CadPoint2D(a.tip.x + dx, a.tip.y + dy));
+              }).toList();
+              return ann.copyWith(arrows: updatedArrows);
+            }
+            return ann;
+          case _AnnotationDragMode.arrowRoot:
+            // Slide the dragged arrow's root along the border
+            if (_draggingArrowId != null) {
+              final updatedArrows = ann.arrows.map((a) {
+                if (a.id != _draggingArrowId) return a;
+                final curRoot = a.root ?? _getNearestBorderPoint(a.tip, ann);
+                final shifted = CadPoint2D(curRoot.x + dx, curRoot.y + dy);
+                final clampedRoot = _getNearestBorderPoint(shifted, ann);
+                return a.copyWith(root: clampedRoot);
+              }).toList();
+              return ann.copyWith(arrows: updatedArrows);
+            }
+            return ann;
+          default:
+            // Move note box: also move all arrow roots and free tips with it
+            final movedArrows = ann.arrows.map((a) {
+              final oldRoot = a.root ?? _getNearestBorderPoint(a.tip, ann);
+              final newRoot = CadPoint2D(oldRoot.x + dx, oldRoot.y + dy);
+              if (a.anchorEntity != null) {
+                return a.copyWith(root: newRoot);
+              } else {
+                final newTip = CadPoint2D(a.tip.x + dx, a.tip.y + dy);
+                return a.copyWith(root: newRoot, tip: newTip);
+              }
+            }).toList();
+            return ann.copyWith(x: ann.x + dx, y: ann.y + dy, arrows: movedArrows);
+        }
       } else if (ann is DdsApprovalStampAnnotation) {
-        return ann.copyWith(x: ann.x + dx, y: ann.y + dy);
+        switch (_activeDragMode) {
+          case _AnnotationDragMode.move:
+            return ann.copyWith(x: ann.x + dx, y: ann.y + dy);
+          case _AnnotationDragMode.topLeft:
+            final newW = ann.width - dx;
+            final newH = ann.height - dy;
+            return ann.copyWith(
+              x: newW >= 40.0 ? ann.x + dx : ann.x,
+              y: newH >= 25.0 ? ann.y + dy : ann.y,
+              width: math.max(40.0, newW),
+              height: math.max(25.0, newH),
+            );
+          case _AnnotationDragMode.topCenter:
+            final newH = ann.height - dy;
+            return ann.copyWith(y: newH >= 25.0 ? ann.y + dy : ann.y, height: math.max(25.0, newH));
+          case _AnnotationDragMode.topRight:
+            final newW = ann.width + dx;
+            final newH = ann.height - dy;
+            return ann.copyWith(y: newH >= 25.0 ? ann.y + dy : ann.y, width: math.max(40.0, newW), height: math.max(25.0, newH));
+          case _AnnotationDragMode.middleLeft:
+            final newW = ann.width - dx;
+            return ann.copyWith(x: newW >= 40.0 ? ann.x + dx : ann.x, width: math.max(40.0, newW));
+          case _AnnotationDragMode.middleRight:
+            return ann.copyWith(width: math.max(40.0, ann.width + dx));
+          case _AnnotationDragMode.bottomLeft:
+            final newW = ann.width - dx;
+            final newH = ann.height + dy;
+            return ann.copyWith(x: newW >= 40.0 ? ann.x + dx : ann.x, width: math.max(40.0, newW), height: math.max(25.0, newH));
+          case _AnnotationDragMode.bottomCenter:
+            return ann.copyWith(height: math.max(25.0, ann.height + dy));
+          case _AnnotationDragMode.bottomRight:
+            return ann.copyWith(width: math.max(40.0, ann.width + dx), height: math.max(25.0, ann.height + dy));
+          default:
+            return ann.copyWith(x: ann.x + dx, y: ann.y + dy);
+        }
+      } else if (ann is DdsLeaderNoteAnnotation) {
+        if (_activeDragMode == _AnnotationDragMode.targetPoint) {
+          return ann.copyWith(targetPoint: CadPoint2D(ann.targetPoint.x + dx, ann.targetPoint.y + dy));
+        } else if (_activeDragMode == _AnnotationDragMode.textPosition) {
+          return ann.copyWith(textPosition: CadPoint2D(ann.textPosition.x + dx, ann.textPosition.y + dy));
+        } else {
+          return ann.copyWith(
+            targetPoint: CadPoint2D(ann.targetPoint.x + dx, ann.targetPoint.y + dy),
+            textPosition: CadPoint2D(ann.textPosition.x + dx, ann.textPosition.y + dy),
+          );
+        }
+      } else if (ann is DdsLinearDimensionAnnotation) {
+        if (_activeDragMode == _AnnotationDragMode.dimP1) {
+          return ann.copyWith(p1: CadPoint2D(ann.p1.x + dx, ann.p1.y + dy));
+        } else if (_activeDragMode == _AnnotationDragMode.dimP2) {
+          return ann.copyWith(p2: CadPoint2D(ann.p2.x + dx, ann.p2.y + dy));
+        } else {
+          return ann.copyWith(p1: CadPoint2D(ann.p1.x + dx, ann.p1.y + dy), p2: CadPoint2D(ann.p2.x + dx, ann.p2.y + dy));
+        }
       } else if (ann is DdsRevisionCloudAnnotation) {
         return ann.copyWith(points: ann.points.map((p) => CadPoint2D(p.x + dx, p.y + dy)).toList());
       }
@@ -467,9 +829,31 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   }
 
   void _handlePointerUp(PointerUpEvent event) {
+    if (_activeDragMode == _AnnotationDragMode.arrowTip && _draggingArrowId != null) {
+      final selAnn = widget.sheet.annotations.where((a) => a.id == widget.selectedAnnotationId).firstOrNull;
+      if (selAnn is DdsNoteBoxAnnotation) {
+        final arrow = selAnn.arrows.where((a) => a.id == _draggingArrowId).firstOrNull;
+        if (arrow != null) {
+          final root = arrow.root ?? _getNearestBorderPoint(arrow.tip, selAnn);
+          if ((arrow.tip - root).length < 4.0) {
+            final center = CadPoint2D(selAnn.x + selAnn.width / 2, selAnn.y + selAnn.height / 2);
+            var dir = root - center;
+            if (dir.length < 0.1) dir = const CadPoint2D(1, 0);
+            final norm = CadPoint2D(dir.x / dir.length, dir.y / dir.length);
+            final extendedTip = CadPoint2D(root.x + norm.x * 16.0, root.y + norm.y * 16.0);
+            final updatedArrows = selAnn.arrows.map((a) => a.id == arrow.id ? a.copyWith(tip: extendedTip) : a).toList();
+            final updatedAnns = widget.sheet.annotations.map((a) => a.id == selAnn.id ? selAnn.copyWith(arrows: updatedArrows) : a).toList();
+            widget.onAnnotationsChanged?.call(updatedAnns);
+          }
+        }
+      }
+    }
     _isDraggingAnnotation = false;
+    _activeDragMode = _AnnotationDragMode.none;
     _draggedAnnotationId = null;
+    _draggingArrowId = null;
     _dragLastPointMm = null;
+    setState(() {});
   }
 
   void _createLinearDimension(CadPoint2D p1, CadPoint2D p2) {
@@ -626,6 +1010,25 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     final list = widget.sheet.annotations.where((a) => a.id != widget.selectedAnnotationId).toList();
     widget.onAnnotationsChanged?.call(list);
     widget.onAnnotationSelected?.call(null);
+    setState(() {
+      _selectedArrowId = null;
+      _draggingArrowId = null;
+    });
+  }
+
+  /// Deletes a specific pull-out arrow from a note box.
+  void _deleteArrow(String boxId, String arrowId) {
+    final updatedList = widget.sheet.annotations.map((ann) {
+      if (ann.id == boxId && ann is DdsNoteBoxAnnotation) {
+        return ann.copyWith(arrows: ann.arrows.where((a) => a.id != arrowId).toList());
+      }
+      return ann;
+    }).toList();
+    widget.onAnnotationsChanged?.call(updatedList);
+    setState(() {
+      _selectedArrowId = null;
+      _draggingArrowId = null;
+    });
   }
 
   // ===========================================================================
@@ -654,90 +1057,139 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
           child: MouseRegion(
             onHover: (e) => _handlePointerHover(e, paperSize),
             cursor: _getCursorForMarkupTool(),
-            child: Listener(
-              onPointerDown: (e) => _handlePointerDown(e, paperSize),
-              onPointerMove: (e) => _handlePointerMove(e, paperSize),
-              onPointerUp: (e) => _handlePointerUp(e),
-              child: Container(
-                width: paperWidth,
-                height: paperHeight,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(4.0),
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 16.0, offset: const Offset(0, 6))],
-                ),
-                child: Stack(
-                  children: [
-                    // Physical Sheet Content (Cover or Product Layout)
-                    Positioned.fill(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20.0, 10.0, 10.0, 10.0), // 20mm filing margin
-                        child: Container(
-                          decoration: BoxDecoration(border: Border.all(color: const Color(0xFF0F172A), width: 1.2)),
-                          child: widget.sheet.isCoverPage ? _buildCoverPageSheet() : _buildProductSheet(),
-                        ),
-                      ),
-                    ),
-
-                    // Interactive Annotation Layer (Linear dimensions, leader notes, clouds, stamps)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          painter: _DdsAnnotationOverlayPainter(
-                            annotations: widget.sheet.annotations,
-                            selectedAnnotationId: widget.selectedAnnotationId,
-                            paperSize: paperSize,
-                            pendingStartPoint: _pendingStartPoint,
-                            hoverPoint: _currentHoverPoint,
-                            pendingCloudPoints: _pendingCloudPoints,
-                            activeTool: widget.activeMarkupTool,
+            child: Focus(
+              focusNode: _canvasFocusNode,
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent && widget.selectedAnnotationId != null) {
+                  if (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace) {
+                    if (_selectedArrowId != null) {
+                      _deleteArrow(widget.selectedAnnotationId!, _selectedArrowId!);
+                      return KeyEventResult.handled;
+                    }
+                    _deleteSelectedAnnotation();
+                    return KeyEventResult.handled;
+                  }
+                }
+                return KeyEventResult.ignored;
+              },
+              child: Listener(
+                onPointerDown: (e) => _handlePointerDown(e, paperSize),
+                onPointerMove: (e) => _handlePointerMove(e, paperSize),
+                onPointerUp: (e) => _handlePointerUp(e),
+                child: Container(
+                  width: paperWidth,
+                  height: paperHeight,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4.0),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 16.0, offset: const Offset(0, 6))],
+                  ),
+                  child: Stack(
+                    children: [
+                      // Physical Sheet Content (Cover, Blank, or Product Layout)
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20.0, 10.0, 10.0, 10.0), // 20mm filing margin
+                          child: Container(
+                            decoration: BoxDecoration(border: Border.all(color: const Color(0xFF0F172A), width: 1.2)),
+                            child: widget.sheet.isCoverPage ? _buildCoverPageSheet() : (widget.sheet.isBlankSheet ? _buildBlankSheet() : _buildProductSheet()),
                           ),
                         ),
                       ),
-                    ),
 
-                    // Revision Cloud "Finish Cloud" floating button
-                    if (_pendingCloudPoints.length >= 2 && widget.activeMarkupTool == DdsMarkupTool.revisionCloud)
-                      Positioned(
-                        bottom: 16,
-                        right: 16,
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7)),
-                          icon: const Icon(Icons.check, size: 16, color: Colors.white),
-                          label: const Text('Finish Cloud', style: TextStyle(color: Colors.white, fontSize: 12.0)),
-                          onPressed: _finishRevisionCloud,
-                        ),
-                      ),
-
-                    // Quick Delete Floating Button for Selected Annotation
-                    if (widget.selectedAnnotationId != null)
-                      Positioned(
-                        top: 16,
-                        right: 16,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B),
-                            borderRadius: BorderRadius.circular(6.0),
-                            border: Border.all(color: const Color(0xFFEF4444)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('Markup Selected', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11.0)),
-                              const SizedBox(width: 8.0),
-                              IconButton(
-                                constraints: const BoxConstraints(),
-                                padding: EdgeInsets.zero,
-                                icon: const Icon(Icons.delete, color: Color(0xFFEF4444), size: 16),
-                                tooltip: 'Delete Annotation',
-                                onPressed: _deleteSelectedAnnotation,
-                              ),
-                            ],
+                      // Interactive Annotation Layer (Linear dimensions, leader notes, clouds, stamps)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _DdsAnnotationOverlayPainter(
+                              annotations: widget.sheet.annotations,
+                              selectedAnnotationId: widget.selectedAnnotationId,
+                              selectedArrowId: _selectedArrowId,
+                              paperSize: paperSize,
+                              pendingStartPoint: _pendingStartPoint,
+                              hoverPoint: _currentHoverPoint,
+                              pendingCloudPoints: _pendingCloudPoints,
+                              activeTool: widget.activeMarkupTool,
+                            ),
                           ),
                         ),
                       ),
-                  ],
+
+                      // Revision Cloud "Finish Cloud" floating button
+                      if (_pendingCloudPoints.length >= 2 && widget.activeMarkupTool == DdsMarkupTool.revisionCloud)
+                        Positioned(
+                          bottom: 16,
+                          right: 16,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7)),
+                            icon: const Icon(Icons.check, size: 16, color: Colors.white),
+                            label: const Text('Finish Cloud', style: TextStyle(color: Colors.white, fontSize: 12.0)),
+                            onPressed: _finishRevisionCloud,
+                          ),
+                        ),
+
+                      // Quick Delete Floating Button for Selected Annotation or Arrow
+                      if (_selectedArrowId != null && widget.selectedAnnotationId != null)
+                        Positioned(
+                          top: 16,
+                          right: 16,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(6.0),
+                              border: Border.all(color: const Color(0xFFF59E0B)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Arrow Selected',
+                                  style: TextStyle(color: Color(0xFFFCD34D), fontSize: 11.0, fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(width: 8.0),
+                                IconButton(
+                                  constraints: const BoxConstraints(),
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(Icons.delete, color: Color(0xFFEF4444), size: 16),
+                                  tooltip: 'Delete Arrow (or press Del)',
+                                  onPressed: () {
+                                    _deleteArrow(widget.selectedAnnotationId!, _selectedArrowId!);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else if (widget.selectedAnnotationId != null)
+                        Positioned(
+                          top: 16,
+                          right: 16,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(6.0),
+                              border: Border.all(color: const Color(0xFFEF4444)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('Markup Selected', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11.0)),
+                                const SizedBox(width: 8.0),
+                                IconButton(
+                                  constraints: const BoxConstraints(),
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(Icons.delete, color: Color(0xFFEF4444), size: 16),
+                                  tooltip: 'Delete Annotation',
+                                  onPressed: _deleteSelectedAnnotation,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -748,9 +1200,38 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   }
 
   MouseCursor _getCursorForMarkupTool() {
+    // During active drag, the drag mode overrides hover mode
+    final effectiveMode = _activeDragMode != _AnnotationDragMode.none ? _activeDragMode : _activeHoverMode;
+    if (effectiveMode != _AnnotationDragMode.none) {
+      switch (effectiveMode) {
+        case _AnnotationDragMode.topLeft:
+        case _AnnotationDragMode.bottomRight:
+          return SystemMouseCursors.resizeUpLeftDownRight;
+        case _AnnotationDragMode.topRight:
+        case _AnnotationDragMode.bottomLeft:
+          return SystemMouseCursors.resizeUpRightDownLeft;
+        case _AnnotationDragMode.topCenter:
+        case _AnnotationDragMode.bottomCenter:
+          return SystemMouseCursors.resizeUpDown;
+        case _AnnotationDragMode.middleLeft:
+        case _AnnotationDragMode.middleRight:
+          return SystemMouseCursors.resizeLeftRight;
+        case _AnnotationDragMode.targetPoint:
+        case _AnnotationDragMode.textPosition:
+        case _AnnotationDragMode.dimP1:
+        case _AnnotationDragMode.dimP2:
+        case _AnnotationDragMode.arrowTip:
+        case _AnnotationDragMode.arrowRoot:
+          return SystemMouseCursors.grab;
+        case _AnnotationDragMode.move:
+          return SystemMouseCursors.move;
+        case _AnnotationDragMode.none:
+          break;
+      }
+    }
     switch (widget.activeMarkupTool) {
       case DdsMarkupTool.select:
-        return SystemMouseCursors.click;
+        return SystemMouseCursors.basic;
       case DdsMarkupTool.linearDimension:
       case DdsMarkupTool.leaderNote:
       case DdsMarkupTool.revisionCloud:
@@ -759,6 +1240,98 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
       case DdsMarkupTool.approvalStamp:
         return SystemMouseCursors.copy;
     }
+  }
+
+  // ===========================================================================
+  // 0. Blank Sheet Layout
+  // ===========================================================================
+
+  Widget _buildBlankSheet() {
+    final proj = widget.document.projectInfo;
+
+    return Column(
+      children: [
+        // Sheet Product Top Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+          decoration: const BoxDecoration(
+            color: Color(0xFF0F172A),
+            border: Border(bottom: BorderSide(color: Color(0xFF0F172A), width: 1.2)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    widget.sheet.title.isNotEmpty ? widget.sheet.title : 'Blank Engineering Sheet',
+                    style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  ),
+                  const SizedBox(width: 8.0),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.5),
+                    decoration: BoxDecoration(color: const Color(0xFF0284C7), borderRadius: BorderRadius.circular(3.0)),
+                    child: Text(
+                      'SHEET ${widget.sheet.sheetNumber.toString().padLeft(2, '0')}',
+                      style: const TextStyle(color: Colors.white, fontSize: 9.0, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'BLANK DRAFTING CANVAS  •  DOC: ${proj.documentNumber}',
+                    style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10.0, fontWeight: FontWeight.bold),
+                  ),
+                  if (widget.onDeleteSheet != null && widget.document.sheets.length > 1) ...[
+                    const SizedBox(width: 10),
+                    Tooltip(
+                      message: 'Delete this Sheet Page',
+                      child: InkWell(
+                        onTap: widget.onDeleteSheet,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.5), width: 0.8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.delete_outline, size: 12, color: Color(0xFFEF4444)),
+                              SizedBox(width: 3),
+                              Text(
+                                'DELETE PAGE',
+                                style: TextStyle(color: Color(0xFFEF4444), fontSize: 8.5, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // Blank Technical Drawing Canvas with subtle drafting grid
+        Expanded(
+          child: Container(
+            color: const Color(0xFFF8FAFC),
+            child: CustomPaint(painter: _ViewportGridPainter()),
+          ),
+        ),
+
+        // Bottom Technical Strip + Docked ISO 7200 Title Block
+        _buildProductBottomDock(null, null),
+      ],
+    );
   }
 
   // ===========================================================================
@@ -1050,7 +1623,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
               Row(
                 children: [
                   Text(
-                    inst?.productName ?? widget.sheet.title,
+                    (inst?.productName ?? widget.sheet.title).replaceAll('Equal Gusset Cross', 'Equal Cross'),
                     style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                   ),
                   const SizedBox(width: 8.0),
@@ -1154,6 +1727,18 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
               if (_viewportMode == DdsViewportMode.presentation3D)
                 Row(
                   children: [
+                    // 3D Model Movement / Rotation Lock
+                    _buildDisplayModeChip(
+                      label: _is3DModelLocked ? 'Model Locked' : 'Model Unlocked',
+                      icon: _is3DModelLocked ? Icons.lock : Icons.lock_open_outlined,
+                      active: _is3DModelLocked,
+                      activeColor: const Color(0xFFEF4444),
+                      onTap: () {
+                        setState(() => _is3DModelLocked = !_is3DModelLocked);
+                        _persistSheetViewSettings();
+                      },
+                    ),
+                    const SizedBox(width: 4),
                     // Option to display actual CAD Dimension Lines (like 2D sketch) and/or Callout Tags
                     _buildDisplayModeChip(
                       label: 'CAD Lines',
@@ -1171,6 +1756,16 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                       active: _showDimensionTags,
                       onTap: () {
                         setState(() => _showDimensionTags = !_showDimensionTags);
+                        _persistSheetViewSettings();
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    _buildDisplayModeChip(
+                      label: _combinePortDimensions ? 'W×H Joint' : 'W/H Split',
+                      icon: _combinePortDimensions ? Icons.join_inner : Icons.splitscreen,
+                      active: _combinePortDimensions,
+                      onTap: () {
+                        setState(() => _combinePortDimensions = !_combinePortDimensions);
                         _persistSheetViewSettings();
                       },
                     ),
@@ -1400,22 +1995,23 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     );
   }
 
-  Widget _buildDisplayModeChip({required String label, required IconData icon, required bool active, required VoidCallback onTap}) {
+  Widget _buildDisplayModeChip({required String label, required IconData icon, required bool active, required VoidCallback onTap, Color? activeColor}) {
+    final effectiveActive = activeColor ?? const Color(0xFF0284C7);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
         decoration: BoxDecoration(
-          color: active ? const Color(0xFF0284C7) : Colors.white,
-          border: Border.all(color: active ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1), width: 1.0),
+          color: active ? effectiveActive : Colors.white,
+          border: Border.all(color: active ? effectiveActive : const Color(0xFFCBD5E1), width: 1.0),
           borderRadius: BorderRadius.circular(4),
           boxShadow: [if (!active) BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 2, offset: const Offset(0, 1))],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 10, color: active ? Colors.white : const Color(0xFF0284C7)),
+            Icon(icon, size: 10, color: active ? Colors.white : effectiveActive),
             const SizedBox(width: 4),
             Text(
               label,
@@ -1634,20 +2230,29 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     final isReducer = !isCross && !isTee && (tId.contains('reducer') || pName.contains('reducer') || p.containsKey('port2_width') || p.containsKey('width2'));
     final hasMultiplePorts = isReducer || isTee || isCross;
 
-    final w1 = (p['port1_width'] ?? p['width'] ?? 100.0).toDouble();
-    final h1 = (p['port1_height'] ?? p['height'] ?? 100.0).toDouble();
-    final w2 = (p['port2_width'] ?? p['width2'] ?? (isReducer ? w1 * 0.5 : w1)).toDouble();
-    final h2 = (p['port2_height'] ?? p['height2'] ?? (isReducer ? h1 * 0.5 : h1)).toDouble();
-    final w3 = (p['port3_width'] ?? p['branch_width'] ?? (isCross ? w1 : 50.0)).toDouble();
-    final h3 = (p['port3_height'] ?? p['branch_height'] ?? (isCross ? h1 : 50.0)).toDouble();
-    final w4 = (p['port4_width'] ?? (isCross ? w2 : 50.0)).toDouble();
-    final h4 = (p['port4_height'] ?? (isCross ? h2 : 50.0)).toDouble();
+    final physicalPorts = (eval?.scaledPorts.isNotEmpty == true) ? eval!.scaledPorts : (effectiveVm?.verifiedCmsPorts ?? []);
+
+    final port1 = physicalPorts.isNotEmpty ? physicalPorts[0] : null;
+    final port2 = physicalPorts.length > 1 ? physicalPorts[1] : null;
+    final port3 = physicalPorts.length > 2 ? physicalPorts[2] : null;
+    final port4 = physicalPorts.length > 3 ? physicalPorts[3] : null;
+
+    final w1 = (p['port1_width'] ?? port1?.nominalWidth ?? p['width'] ?? 100.0).toDouble();
+    final h1 = (p['port1_height'] ?? port1?.nominalHeight ?? p['height'] ?? 100.0).toDouble();
+    final w2 = (p['port2_width'] ?? p['width2'] ?? port2?.nominalWidth ?? (isReducer ? (port2?.nominalWidth ?? w1 * 0.5) : (port2?.nominalWidth ?? 50.0)))
+        .toDouble();
+    final h2 = (p['port2_height'] ?? p['height2'] ?? port2?.nominalHeight ?? (isReducer ? (port2?.nominalHeight ?? h1 * 0.5) : (port2?.nominalHeight ?? 50.0)))
+        .toDouble();
+    final w3 = (p['port3_width'] ?? p['branch_width'] ?? port3?.nominalWidth ?? (isCross ? (port3?.nominalWidth ?? 50.0) : 50.0)).toDouble();
+    final h3 = (p['port3_height'] ?? p['branch_height'] ?? port3?.nominalHeight ?? (isCross ? (port3?.nominalHeight ?? 50.0) : 50.0)).toDouble();
+    final w4 = (p['port4_width'] ?? port4?.nominalWidth ?? (isCross ? (port4?.nominalWidth ?? w2) : 50.0)).toDouble();
+    final h4 = (p['port4_height'] ?? port4?.nominalHeight ?? (isCross ? (port4?.nominalHeight ?? h2) : 50.0)).toDouble();
 
     final slotW = (p['coupler_slot_width'] ?? 9.0).toDouble();
     final slotL = (p['coupler_slot_length'] ?? 20.0).toDouble();
     final slotP = (p['coupler_slot_pitch'] ?? 25.0).toDouble();
     final baseFlange = (p['base_flange_size'] ?? 20.0).toDouble();
-    final flangeDir = (p['flange_direction'] ?? 0.0) == 1.0 ? 'Inside Flush' : 'Outside Return';
+    final flangeDir = (p['flange_direction'] ?? 0.0) == 0.0 ? 'Inside Flange' : 'Outside Return';
     final coverFlange = (inst?.coverConfiguration.flangeDepthMm ?? p['cover_flange_size'] ?? 15.0).toDouble();
     final isCoverActive =
         (effectiveVm?.isCoverVisible3D ?? true) &&
@@ -1824,30 +2429,83 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
         CadPoint3D? flangeOuter3D;
 
         if (hasMesh) {
-          final flangeFaceIds = effectiveVm.document.faces
-              .where((f) => f.role.name == 'returnFlange' ||
-                            f.id.toUpperCase().contains('FLANGE') ||
-                            f.label.toLowerCase().contains('flange'))
-              .map((f) => f.id)
-              .toSet();
-          flangeFaceIds.addAll(['F_2', 'F_6', 'F_10', 'F_14', 'F_8', 'F_9', 'FLANGE_1', 'FLANGE_2']);
+          final flangeFaceIds = <String>{};
 
-          final flangePolys = m.polygons.where((poly) => flangeFaceIds.contains(poly.faceId)).toList();
+          // 1. Collect child face IDs from bends marked as flange
+          for (final b in effectiveVm.document.bends) {
+            if (b.role == BendLineRole.flange || b.id.toUpperCase().startsWith('FL') || b.layer.toUpperCase().contains('FLANGE')) {
+              if (b.childFaceId.isNotEmpty) {
+                flangeFaceIds.add(b.childFaceId);
+              }
+            }
+          }
+
+          // 2. Collect from template metadata verifiedFlangeIds if present
+          final cmsMeta = effectiveVm.document.metadata['cmsTemplate'] as Map<String, dynamic>?;
+          final verifiedFlangeIds = (cmsMeta?['verifiedFlangeIds'] as List?)?.map((e) => e.toString()).toSet() ?? {};
+          for (final b in effectiveVm.document.bends) {
+            if (verifiedFlangeIds.contains(b.id) && b.childFaceId.isNotEmpty) {
+              flangeFaceIds.add(b.childFaceId);
+            }
+          }
+
+          // 3. Collect from faces explicitly flagged as returnFlange
+          for (final f in effectiveVm.document.faces) {
+            if (f.role == FaceRole.returnFlange ||
+                f.id.toUpperCase().contains('FLANGE') ||
+                f.label.toLowerCase().contains('flange') ||
+                f.label.toLowerCase().contains('return')) {
+              flangeFaceIds.add(f.id);
+            }
+          }
+
+          // Filter polygons: return flanges are planar 4-vertex quadrilaterals at the top rim of sidewalls
+          List<CadFoldedPolygon3D> flangePolys = m.polygons.where((poly) {
+            if (!flangeFaceIds.contains(poly.faceId)) return false;
+            if (poly.vertices.length != 4) return false;
+            final avgZ = poly.vertices.map((v) => v.z).reduce((a, b) => a + b) / 4.0;
+            // Return flanges strictly reside at top sidewall elevation, never at floor or mid-flaps
+            if (avgZ < minZ + (maxZ - minZ) * 0.50) return false;
+            return true;
+          }).toList();
+
+          // Fallback: If no face was tagged with role flange, detect geometric top return lip
+          if (flangePolys.isEmpty) {
+            for (final poly in m.polygons) {
+              if (poly.vertices.length == 4) {
+                final avgZ = poly.vertices.map((v) => v.z).reduce((a, b) => a + b) / 4.0;
+                if (avgZ >= minZ + (maxZ - minZ) * 0.65) {
+                  final v = poly.vertices;
+                  final d01 = (v[0] - v[1]).length;
+                  final d12 = (v[1] - v[2]).length;
+                  final minSide = math.min(d01, d12);
+                  final maxSide = math.max(d01, d12);
+                  if (minSide >= 5.0 && minSide <= 35.0 && maxSide > minSide * 1.5) {
+                    flangePolys.add(poly);
+                  }
+                }
+              }
+            }
+          }
+
           if (flangePolys.isNotEmpty) {
             CadFoldedPolygon3D? bestPoly;
-            double maxScreenY = -double.infinity;
+            double bestScore = -double.infinity;
             for (final poly in flangePolys) {
-              if (poly.vertices.length >= 4) {
-                final c3D = CadPoint3D(
-                  poly.vertices.map((v) => v.x).reduce((a, b) => a + b) / poly.vertices.length,
-                  poly.vertices.map((v) => v.y).reduce((a, b) => a + b) / poly.vertices.length,
-                  poly.vertices.map((v) => v.z).reduce((a, b) => a + b) / poly.vertices.length,
-                );
-                final c2D = _projectMeshPoint(c3D, viewportSize, effectiveVm);
-                if (c2D.dy > maxScreenY) {
-                  maxScreenY = c2D.dy;
-                  bestPoly = poly;
-                }
+              final c3D = CadPoint3D(
+                poly.vertices.map((v) => v.x).reduce((a, b) => a + b) / 4.0,
+                poly.vertices.map((v) => v.y).reduce((a, b) => a + b) / 4.0,
+                poly.vertices.map((v) => v.z).reduce((a, b) => a + b) / 4.0,
+              );
+              final c2D = _projectMeshPoint(c3D, viewportSize, effectiveVm);
+              // Prioritize foreground left-hand return flange for clean isometric presentation
+              double score = c2D.dy;
+              if (c3D.x <= m.center.x + 5.0) {
+                score += 500.0;
+              }
+              if (score > bestScore) {
+                bestScore = score;
+                bestPoly = poly;
               }
             }
 
@@ -1876,6 +2534,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
 
         if (flangeInner3D == null || flangeOuter3D == null) {
           if (port1Corners != null) {
+            // Anchor to the top lip of port 1 (z = port1Corners[1].z which is at max sidewall elevation)
             flangeInner3D = port1Corners[1];
             flangeOuter3D = CadPoint3D(flangeInner3D.x, flangeInner3D.y - baseFlange, flangeInner3D.z);
           } else {
@@ -1891,12 +2550,15 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
         final wBadgePos = Offset((topAnchor.dx - 60).clamp(12.0, viewportSize.width - 150.0), (topAnchor.dy - 44).clamp(38.0, viewportSize.height - 40.0));
         final p2BadgePos = Offset((port2Anchor.dx + 20).clamp(12.0, viewportSize.width - 160.0), (port2Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0));
         final p3BadgePos = Offset((port3Anchor.dx + 20).clamp(12.0, viewportSize.width - 160.0), (port3Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0));
-        final p4BadgePos = Offset((port4Anchor.dx - 160).clamp(12.0, viewportSize.width - 160.0), (port4Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0));
+        final p4BadgePos = Offset(
+          (port4Anchor.dx - 160).clamp(12.0, viewportSize.width - 160.0),
+          (port4Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0),
+        );
         final hBadgePos = Offset((rightAnchor.dx + 14).clamp(12.0, viewportSize.width - 140.0), (rightAnchor.dy - 16).clamp(38.0, viewportSize.height - 40.0));
         final sBadgePos = Offset((sAnchor.dx - 180).clamp(12.0, viewportSize.width - 190.0), (sAnchor.dy - 14).clamp(38.0, viewportSize.height - 40.0));
         final fBadgePos = Offset(
           (flangeAnchor.dx - 110).clamp(12.0, viewportSize.width - 210.0),
-          (flangeAnchor.dy + 15).clamp(38.0, viewportSize.height - 40.0),
+          (flangeAnchor.dy - 35).clamp(38.0, viewportSize.height - 40.0),
         );
         final tBadgePos = Offset(
           (bottomAnchor.dx - 85).clamp(12.0, viewportSize.width - 200.0),
@@ -1939,211 +2601,319 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
 
         final cadDimensionItems = <DdsCadDimensionItem>[];
 
-        // 1. Port 1 (Inlet) Width & Height
-        final w1Label = hasMultiplePorts ? 'W1' : 'W';
-        final h1Label = hasMultiplePorts ? 'H1' : 'H';
+        if (_combinePortDimensions) {
+          // Combined Joint Port Tags: 1 tag per port showing both W and H together (e.g. PORT 1: 100×100 mm)
+          // 1. Port 1 Joint
+          if (_showDimWidth || _showDimPorts) {
+            final pA = port1Corners != null
+                ? _projectMeshPoint(port1Corners[1], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x - w1 / 2, minY, maxZ), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.35, viewportSize.height * 0.35));
+            final pB = port1Corners != null
+                ? _projectMeshPoint(port1Corners[2], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, maxZ), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'port1_joint',
+                label: hasMultiplePorts ? 'PORT 1' : 'SIZE',
+                valueText: '${w1.toStringAsFixed(0)}×${h1.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFF0284C7),
+              ),
+            );
+          }
 
-        if (_showDimWidth) {
-          final pA = port1Corners != null
-              ? _projectMeshPoint(port1Corners[1], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(m.center.x - w1 / 2, minY, maxZ), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.35, viewportSize.height * 0.35));
-          final pB = port1Corners != null
-              ? _projectMeshPoint(port1Corners[2], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, maxZ), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
-          final norm = calcPerpNormal(pA, pB, center2D);
-          cadDimensionItems.add(
-            DdsCadDimensionItem(
-              id: 'width1',
-              label: w1Label,
-              valueText: '${w1.toStringAsFixed(0)} mm',
-              p1: pA,
-              p2: pB,
-              offsetVector: norm * 14.0,
-              color: const Color(0xFF0284C7),
-            ),
-          );
-        }
+          // 2. Port 2 Joint (for Reducer, Unequal Tee, Unequal Cross)
+          if (hasMultiplePorts && (_showDimWidth || _showDimPorts)) {
+            final pA = port2Corners != null
+                ? _projectMeshPoint(port2Corners[1], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.40));
+            final pB = port2Corners != null
+                ? _projectMeshPoint(port2Corners[2], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x + w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.85, viewportSize.height * 0.40));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'port2_joint',
+                label: 'PORT 2',
+                valueText: '${w2.toStringAsFixed(0)}×${h2.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFF059669),
+              ),
+            );
+          }
 
-        if (_showDimHeight) {
-          final pA = port1Corners != null
-              ? _projectMeshPoint(port1Corners[3], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, minZ), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.65, viewportSize.height * 0.65));
-          final pB = port1Corners != null
-              ? _projectMeshPoint(port1Corners[2], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, maxZ), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
-          final norm = calcPerpNormal(pA, pB, center2D);
-          cadDimensionItems.add(
-            DdsCadDimensionItem(
-              id: 'height1',
-              label: h1Label,
-              valueText: '${h1.toStringAsFixed(0)} mm',
-              p1: pA,
-              p2: pB,
-              offsetVector: norm * 14.0,
-              color: const Color(0xFF0284C7),
-            ),
-          );
-        }
+          // 3. Port 3 Joint (East / Branch 1 for Tee & Cross)
+          if ((isTee || isCross) && (_showDimWidth || _showDimPorts)) {
+            final pA = port3Corners != null
+                ? _projectMeshPoint(port3Corners[1], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
+            final pB = port3Corners != null
+                ? _projectMeshPoint(port3Corners[2], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y + w3 / 2, minZ + h3), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.85, viewportSize.height * 0.65));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'port3_joint',
+                label: 'PORT 3',
+                valueText: '${w3.toStringAsFixed(0)}×${h3.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFFD97706),
+              ),
+            );
+          }
 
-        // 2. Port 2 (Outlet) Width & Height (for Reducer, Unequal Tee, Unequal Cross)
-        if (hasMultiplePorts && (_showDimWidth || _showDimPorts)) {
-          final pA = port2Corners != null
-              ? _projectMeshPoint(port2Corners[1], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.65, viewportSize.height * 0.40));
-          final pB = port2Corners != null
-              ? _projectMeshPoint(port2Corners[2], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(m.center.x + w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.85, viewportSize.height * 0.40));
-          final norm = calcPerpNormal(pA, pB, center2D);
-          cadDimensionItems.add(
-            DdsCadDimensionItem(
-              id: 'width2',
-              label: 'W2',
-              valueText: '${w2.toStringAsFixed(0)} mm',
-              p1: pA,
-              p2: pB,
-              offsetVector: norm * 14.0,
-              color: const Color(0xFF0284C7),
-            ),
-          );
-        }
+          // 4. Port 4 Joint (West / Branch 2 for Cross)
+          if (isCross && (_showDimWidth || _showDimPorts)) {
+            final pA = port4Corners != null
+                ? _projectMeshPoint(port4Corners[1], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
+            final pB = port4Corners != null
+                ? _projectMeshPoint(port4Corners[2], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y - w4 / 2, minZ + h4), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.15, viewportSize.height * 0.45));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'port4_joint',
+                label: 'PORT 4',
+                valueText: '${w4.toStringAsFixed(0)}×${h4.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFF7C3AED),
+              ),
+            );
+          }
+        } else {
+          // Separate W and H Dimension Lines
+          // 1. Port 1 (Inlet) Width & Height
+          final w1Label = hasMultiplePorts ? 'W1' : 'W';
+          final h1Label = hasMultiplePorts ? 'H1' : 'H';
 
-        if (hasMultiplePorts && (_showDimHeight || _showDimPorts)) {
-          final pA = port2Corners != null
-              ? _projectMeshPoint(port2Corners[0], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.35, viewportSize.height * 0.60));
-          final pB = port2Corners != null
-              ? _projectMeshPoint(port2Corners[1], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.35, viewportSize.height * 0.40));
-          final norm = calcPerpNormal(pA, pB, center2D);
-          cadDimensionItems.add(
-            DdsCadDimensionItem(
-              id: 'height2',
-              label: 'H2',
-              valueText: '${h2.toStringAsFixed(0)} mm',
-              p1: pA,
-              p2: pB,
-              offsetVector: norm * 14.0,
-              color: const Color(0xFF0284C7),
-            ),
-          );
-        }
+          if (_showDimWidth) {
+            final pA = port1Corners != null
+                ? _projectMeshPoint(port1Corners[1], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x - w1 / 2, minY, maxZ), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.35, viewportSize.height * 0.35));
+            final pB = port1Corners != null
+                ? _projectMeshPoint(port1Corners[2], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, maxZ), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'width1',
+                label: w1Label,
+                valueText: '${w1.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFF0284C7),
+              ),
+            );
+          }
 
-        // 3. Port 3 (East / Branch 1) Width & Height (for Tee & Cross)
-        if ((isTee || isCross) && (_showDimWidth || _showDimPorts)) {
-          final pA = port3Corners != null
-              ? _projectMeshPoint(port3Corners[1], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
-          final pB = port3Corners != null
-              ? _projectMeshPoint(port3Corners[2], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(maxX, m.center.y + w3 / 2, minZ + h3), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.85, viewportSize.height * 0.65));
-          final norm = calcPerpNormal(pA, pB, center2D);
-          cadDimensionItems.add(
-            DdsCadDimensionItem(
-              id: 'width3',
-              label: 'W3',
-              valueText: '${w3.toStringAsFixed(0)} mm',
-              p1: pA,
-              p2: pB,
-              offsetVector: norm * 14.0,
-              color: const Color(0xFFD97706),
-            ),
-          );
-        }
+          if (_showDimHeight) {
+            final pA = port1Corners != null
+                ? _projectMeshPoint(port1Corners[3], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, minZ), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.65));
+            final pB = port1Corners != null
+                ? _projectMeshPoint(port1Corners[2], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, maxZ), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'height1',
+                label: h1Label,
+                valueText: '${h1.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFF0284C7),
+              ),
+            );
+          }
 
-        if ((isTee || isCross) && (_showDimHeight || _showDimPorts)) {
-          final pA = port3Corners != null
-              ? _projectMeshPoint(port3Corners[0], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.70, viewportSize.height * 0.75));
-          final pB = port3Corners != null
-              ? _projectMeshPoint(port3Corners[1], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
-          final norm = calcPerpNormal(pA, pB, center2D);
-          cadDimensionItems.add(
-            DdsCadDimensionItem(
-              id: 'height3',
-              label: 'H3',
-              valueText: '${h3.toStringAsFixed(0)} mm',
-              p1: pA,
-              p2: pB,
-              offsetVector: norm * 14.0,
-              color: const Color(0xFFD97706),
-            ),
-          );
-        }
+          // 2. Port 2 (Outlet) Width & Height (for Reducer, Unequal Tee, Unequal Cross)
+          if (hasMultiplePorts && (_showDimWidth || _showDimPorts)) {
+            final pA = port2Corners != null
+                ? _projectMeshPoint(port2Corners[1], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.40));
+            final pB = port2Corners != null
+                ? _projectMeshPoint(port2Corners[2], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x + w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.85, viewportSize.height * 0.40));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'width2',
+                label: 'W2',
+                valueText: '${w2.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFF0284C7),
+              ),
+            );
+          }
 
-        // 4. Port 4 (West / Branch 2) Width & Height (for Cross)
-        if (isCross && (_showDimWidth || _showDimPorts)) {
-          final pA = port4Corners != null
-              ? _projectMeshPoint(port4Corners[1], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
-          final pB = port4Corners != null
-              ? _projectMeshPoint(port4Corners[2], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(minX, m.center.y - w4 / 2, minZ + h4), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.15, viewportSize.height * 0.45));
-          final norm = calcPerpNormal(pA, pB, center2D);
-          cadDimensionItems.add(
-            DdsCadDimensionItem(
-              id: 'width4',
-              label: 'W4',
-              valueText: '${w4.toStringAsFixed(0)} mm',
-              p1: pA,
-              p2: pB,
-              offsetVector: norm * 14.0,
-              color: const Color(0xFF7C3AED),
-            ),
-          );
-        }
+          if (hasMultiplePorts && (_showDimHeight || _showDimPorts)) {
+            final pA = port2Corners != null
+                ? _projectMeshPoint(port2Corners[0], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.35, viewportSize.height * 0.60));
+            final pB = port2Corners != null
+                ? _projectMeshPoint(port2Corners[1], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.35, viewportSize.height * 0.40));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'height2',
+                label: 'H2',
+                valueText: '${h2.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFF0284C7),
+              ),
+            );
+          }
 
-        if (isCross && (_showDimHeight || _showDimPorts)) {
-          final pA = port4Corners != null
-              ? _projectMeshPoint(port4Corners[0], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.25, viewportSize.height * 0.55));
-          final pB = port4Corners != null
-              ? _projectMeshPoint(port4Corners[1], viewportSize, effectiveVm)
-              : (hasMesh
-                    ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4), viewportSize, effectiveVm)
-                    : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
-          final norm = calcPerpNormal(pA, pB, center2D);
-          cadDimensionItems.add(
-            DdsCadDimensionItem(
-              id: 'height4',
-              label: 'H4',
-              valueText: '${h4.toStringAsFixed(0)} mm',
-              p1: pA,
-              p2: pB,
-              offsetVector: norm * 14.0,
-              color: const Color(0xFF7C3AED),
-            ),
-          );
+          // 3. Port 3 (East / Branch 1) Width & Height (for Tee & Cross)
+          if ((isTee || isCross) && (_showDimWidth || _showDimPorts)) {
+            final pA = port3Corners != null
+                ? _projectMeshPoint(port3Corners[1], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
+            final pB = port3Corners != null
+                ? _projectMeshPoint(port3Corners[2], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y + w3 / 2, minZ + h3), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.85, viewportSize.height * 0.65));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'width3',
+                label: 'W3',
+                valueText: '${w3.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFFD97706),
+              ),
+            );
+          }
+
+          if ((isTee || isCross) && (_showDimHeight || _showDimPorts)) {
+            final pA = port3Corners != null
+                ? _projectMeshPoint(port3Corners[0], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.70, viewportSize.height * 0.75));
+            final pB = port3Corners != null
+                ? _projectMeshPoint(port3Corners[1], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'height3',
+                label: 'H3',
+                valueText: '${h3.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFFD97706),
+              ),
+            );
+          }
+
+          // 4. Port 4 (West / Branch 2) Width & Height (for Cross)
+          if (isCross && (_showDimWidth || _showDimPorts)) {
+            final pA = port4Corners != null
+                ? _projectMeshPoint(port4Corners[1], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
+            final pB = port4Corners != null
+                ? _projectMeshPoint(port4Corners[2], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y - w4 / 2, minZ + h4), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.15, viewportSize.height * 0.45));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'width4',
+                label: 'W4',
+                valueText: '${w4.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFF7C3AED),
+              ),
+            );
+          }
+
+          if (isCross && (_showDimHeight || _showDimPorts)) {
+            final pA = port4Corners != null
+                ? _projectMeshPoint(port4Corners[0], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.25, viewportSize.height * 0.55));
+            final pB = port4Corners != null
+                ? _projectMeshPoint(port4Corners[1], viewportSize, effectiveVm)
+                : (hasMesh
+                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4), viewportSize, effectiveVm)
+                      : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
+            final norm = calcPerpNormal(pA, pB, center2D);
+            cadDimensionItems.add(
+              DdsCadDimensionItem(
+                id: 'height4',
+                label: 'H4',
+                valueText: '${h4.toStringAsFixed(0)} mm',
+                p1: pA,
+                p2: pB,
+                offsetVector: norm * 14.0,
+                color: const Color(0xFF7C3AED),
+              ),
+            );
+          }
         }
 
         // 5. Coupler Slots Dimension Line (Anchored directly on the coupler flap)
@@ -2194,7 +2964,9 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
 
               // 3D Rendering Engine: Reusing the main CAD's Viewport3dWidget directly with the active fitting's ViewModel
               Positioned.fill(
-                child: effectiveVm != null ? Viewport3dWidget(viewModel: effectiveVm) : CustomPaint(painter: Dds3DIsometricPainter(mesh: eval?.combinedMesh3D)),
+                child: effectiveVm != null
+                    ? Viewport3dWidget(viewModel: effectiveVm, isInteractionLocked: _is3DModelLocked)
+                    : CustomPaint(painter: Dds3DIsometricPainter(mesh: eval?.combinedMesh3D)),
               ),
 
               // CAD Witness & Dimension Lines Anchored to 3D Model (Engineering 2D Sketch Style)
@@ -2221,8 +2993,10 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                     left: wBadgePos.dx,
                     top: wBadgePos.dy,
                     child: _buildDimCalloutBadge(
-                      label: hasMultiplePorts ? 'PORT 1 (INLET)' : 'WIDTH (W)',
-                      value: hasMultiplePorts ? '${w1.toStringAsFixed(0)}×${h1.toStringAsFixed(0)} mm' : '${w1.toStringAsFixed(0)} mm',
+                      label: hasMultiplePorts ? 'PORT 1 (INLET)' : (_combinePortDimensions ? 'SIZE (W×H)' : 'WIDTH (W)'),
+                      value: hasMultiplePorts || _combinePortDimensions
+                          ? '${w1.toStringAsFixed(0)}×${h1.toStringAsFixed(0)} mm'
+                          : '${w1.toStringAsFixed(0)} mm',
                       accentColor: const Color(0xFF0284C7),
                       icon: Icons.straighten,
                       onDismiss: () {
@@ -2283,8 +3057,8 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                     ),
                   ),
 
-                // 3. Height Dimension Callout (for single port fitting)
-                if (!hasMultiplePorts && _showDimHeight)
+                // 3. Height Dimension Callout (for single port fitting in split mode)
+                if (!hasMultiplePorts && _showDimHeight && !_combinePortDimensions)
                   Positioned(
                     left: hBadgePos.dx,
                     top: hBadgePos.dy,
@@ -2435,40 +3209,46 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     }
 
     // Dynamic port specification string
+    final physicalPorts = (eval?.scaledPorts.isNotEmpty == true) ? eval!.scaledPorts : (widget.viewModel?.verifiedCmsPorts ?? []);
+    final p1 = physicalPorts.isNotEmpty ? physicalPorts[0] : null;
+    final p2 = physicalPorts.length > 1 ? physicalPorts[1] : null;
+    final p3 = physicalPorts.length > 2 ? physicalPorts[2] : null;
+    final p4 = physicalPorts.length > 3 ? physicalPorts[3] : null;
+
     final tId = (inst?.templateReference.templateId ?? '').toLowerCase();
     String portSpecsStr;
     if (tId.contains('reducer')) {
-      final w1 = (p['port1_width'] ?? 100.0).toStringAsFixed(0);
-      final h1 = (p['port1_height'] ?? 100.0).toStringAsFixed(0);
-      final w2 = (p['port2_width'] ?? 50.0).toStringAsFixed(0);
-      final h2 = (p['port2_height'] ?? 50.0).toStringAsFixed(0);
+      final w1 = (p['port1_width'] ?? p1?.nominalWidth ?? 100.0).toStringAsFixed(0);
+      final h1 = (p['port1_height'] ?? p1?.nominalHeight ?? 100.0).toStringAsFixed(0);
+      final w2 = (p['port2_width'] ?? p2?.nominalWidth ?? 50.0).toStringAsFixed(0);
+      final h2 = (p['port2_height'] ?? p2?.nominalHeight ?? 50.0).toStringAsFixed(0);
       portSpecsStr = 'P1 (Inlet): $w1×$h1 mm  |  P2 (Outlet): $w2×$h2 mm';
     } else if (tId.contains('cross')) {
       if (tId.contains('unequal')) {
-        final w1 = (p['port1_width'] ?? 100.0).toStringAsFixed(0);
-        final h1 = (p['port1_height'] ?? 100.0).toStringAsFixed(0);
-        final w2 = (p['port2_width'] ?? 100.0).toStringAsFixed(0);
-        final h2 = (p['port2_height'] ?? 100.0).toStringAsFixed(0);
-        final w3 = (p['port3_width'] ?? 50.0).toStringAsFixed(0);
-        final h3 = (p['port3_height'] ?? 50.0).toStringAsFixed(0);
-        final w4 = (p['port4_width'] ?? 50.0).toStringAsFixed(0);
-        final h4 = (p['port4_height'] ?? 50.0).toStringAsFixed(0);
+        final w1 = (p['port1_width'] ?? p1?.nominalWidth ?? 100.0).toStringAsFixed(0);
+        final h1 = (p['port1_height'] ?? p1?.nominalHeight ?? 100.0).toStringAsFixed(0);
+        final w2 = (p['port2_width'] ?? p2?.nominalWidth ?? 100.0).toStringAsFixed(0);
+        final h2 = (p['port2_height'] ?? p2?.nominalHeight ?? 100.0).toStringAsFixed(0);
+        final w3 = (p['port3_width'] ?? p3?.nominalWidth ?? 50.0).toStringAsFixed(0);
+        final h3 = (p['port3_height'] ?? p3?.nominalHeight ?? 50.0).toStringAsFixed(0);
+        final w4 = (p['port4_width'] ?? p4?.nominalWidth ?? 50.0).toStringAsFixed(0);
+        final h4 = (p['port4_height'] ?? p4?.nominalHeight ?? 50.0).toStringAsFixed(0);
         portSpecsStr = 'P1: $w1×$h1  |  P2: $w2×$h2  |  P3: $w3×$h3  |  P4: $w4×$h4 mm';
       } else {
-        final w = (p['width'] ?? p['port1_width'] ?? 100.0).toStringAsFixed(0);
-        final h = (p['height'] ?? p['port1_height'] ?? 100.0).toStringAsFixed(0);
+        final w = (p['width'] ?? p1?.nominalWidth ?? p['port1_width'] ?? 100.0).toStringAsFixed(0);
+        final h = (p['height'] ?? p1?.nominalHeight ?? p['port1_height'] ?? 100.0).toStringAsFixed(0);
         portSpecsStr = '4 Ports (Equal Cross): $w×$h mm';
       }
     } else if (tId.contains('tee')) {
       if (tId.contains('unequal')) {
-        final w1 = (p['port1_width'] ?? 100.0).toStringAsFixed(0);
-        final h1 = (p['port1_height'] ?? 100.0).toStringAsFixed(0);
-        final w3 = (p['port3_width'] ?? p['branch_width'] ?? 50.0).toStringAsFixed(0);
-        final h3 = (p['port3_height'] ?? p['branch_height'] ?? 50.0).toStringAsFixed(0);
+        final w1 = (p['port1_width'] ?? p1?.nominalWidth ?? 100.0).toStringAsFixed(0);
+        final h1 = (p['port1_height'] ?? p1?.nominalHeight ?? 100.0).toStringAsFixed(0);
+        final w3 = (p['port3_width'] ?? p['branch_width'] ?? p3?.nominalWidth ?? 50.0).toStringAsFixed(0);
+        final h3 = (p['port3_height'] ?? p['branch_height'] ?? p3?.nominalHeight ?? 50.0).toStringAsFixed(0);
         portSpecsStr = 'Main Trunk (P1 & P2): $w1×$h1 mm  |  Branch (P3): $w3×$h3 mm';
       } else {
-        final w = (p['width'] ?? p['port1_width'] ?? 100.0).toStringAsFixed(0);
-        final h = (p['height'] ?? p['port1_height'] ?? 100.0).toStringAsFixed(0);
+        final w = (p['width'] ?? p1?.nominalWidth ?? p['port1_width'] ?? 100.0).toStringAsFixed(0);
+        final h = (p['height'] ?? p1?.nominalHeight ?? p['port1_height'] ?? 100.0).toStringAsFixed(0);
         portSpecsStr = '3 Ports (Equal Tee): $w×$h mm';
       }
     } else {
@@ -2479,7 +3259,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     }
 
     final baseFlange = (p['base_flange_size'] ?? 20.0).toStringAsFixed(0);
-    final flangeDir = (p['flange_direction'] ?? 0.0) == 1.0 ? 'Inside Flange' : 'Outside Return';
+    final flangeDir = (p['flange_direction'] ?? 0.0) == 0.0 ? 'Inside Flange' : 'Outside Return';
     final coverFlange = (inst?.coverConfiguration.flangeDepthMm ?? p['cover_flange_size'] ?? 15.0).toStringAsFixed(0);
     final slotW = (p['coupler_slot_width'] ?? 9.0).toStringAsFixed(1);
     final slotL = (p['coupler_slot_length'] ?? 20.0).toStringAsFixed(0);
@@ -2907,12 +3687,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF0F172A),
-              onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: Color(0xFF0F172A),
-            ),
+            colorScheme: const ColorScheme.light(primary: Color(0xFF0F172A), onPrimary: Colors.white, surface: Colors.white, onSurface: Color(0xFF0F172A)),
           ),
           child: child!,
         );
@@ -2980,8 +3755,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (widget.onProjectInfoChanged != null)
-                  const Icon(Icons.edit_calendar, size: 9, color: Color(0xFF0284C7)),
+                if (widget.onProjectInfoChanged != null) const Icon(Icons.edit_calendar, size: 9, color: Color(0xFF0284C7)),
               ],
             ),
           ),
@@ -3021,6 +3795,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
 class _DdsAnnotationOverlayPainter extends CustomPainter {
   final List<DdsAnnotation> annotations;
   final String? selectedAnnotationId;
+  final String? selectedArrowId;
   final Size paperSize;
   final CadPoint2D? pendingStartPoint;
   final CadPoint2D? hoverPoint;
@@ -3030,6 +3805,7 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
   _DdsAnnotationOverlayPainter({
     required this.annotations,
     this.selectedAnnotationId,
+    this.selectedArrowId,
     required this.paperSize,
     this.pendingStartPoint,
     this.hoverPoint,
@@ -3039,6 +3815,18 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
 
   Offset _toPixel(CadPoint2D mm) {
     return Offset((mm.x / 297.0) * paperSize.width, (mm.y / 210.0) * paperSize.height);
+  }
+
+  static Color _parseColor(String? hex, Color fallback) {
+    if (hex == null || hex.isEmpty) return fallback;
+    final lower = hex.trim().toLowerCase();
+    if (lower == 'transparent' || lower == 'none') return Colors.transparent;
+    try {
+      String clean = lower.replaceAll('#', '');
+      if (clean.length == 6) clean = 'ff$clean';
+      if (clean.length == 8) return Color(int.parse(clean, radix: 16));
+    } catch (_) {}
+    return fallback;
   }
 
   @override
@@ -3058,6 +3846,14 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
         _paintRevisionCloud(canvas, ann, isSelected);
       } else if (ann is DdsApprovalStampAnnotation) {
         _paintApprovalStamp(canvas, ann, isSelected);
+      }
+    }
+
+    // 1b. Draw Selection & Resize Handles for Active Annotation
+    if (selectedAnnotationId != null) {
+      final selAnn = annotations.cast<DdsAnnotation?>().firstWhere((a) => a?.id == selectedAnnotationId, orElse: () => null);
+      if (selAnn != null && selAnn.isVisible) {
+        _paintSelectionAndHandles(canvas, selAnn);
       }
     }
 
@@ -3109,6 +3905,181 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
     }
   }
 
+  void _paintSelectionAndHandles(Canvas canvas, DdsAnnotation ann) {
+    const handleBorder = Color(0xFF0284C7);
+    const handleFill = Colors.white;
+    const handleRadius = 4.0;
+    final handlePaint = Paint()
+      ..color = handleFill
+      ..style = PaintingStyle.fill;
+    final handleStroke = Paint()
+      ..color = handleBorder
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    void drawHandle(Offset pt) {
+      canvas.drawCircle(pt, handleRadius, handlePaint);
+      canvas.drawCircle(pt, handleRadius, handleStroke);
+    }
+
+    if (ann is DdsNoteBoxAnnotation) {
+      final rect = Rect.fromLTWH(
+        (ann.x / 297.0) * paperSize.width,
+        (ann.y / 210.0) * paperSize.height,
+        (ann.width / 297.0) * paperSize.width,
+        (ann.height / 210.0) * paperSize.height,
+      );
+      final boxOutline = Paint()
+        ..color = const Color(0xFF0284C7).withValues(alpha: 0.7)
+        ..strokeWidth = 1.2
+        ..style = PaintingStyle.stroke;
+      canvas.drawRect(rect.inflate(2.0), boxOutline);
+
+      // 4 corner resize handles
+      drawHandle(rect.topLeft);
+      drawHandle(rect.topRight);
+      drawHandle(rect.bottomLeft);
+      drawHandle(rect.bottomRight);
+
+      // Arrow spawn handles on the 4 border midpoints
+      final spawnMidpoints = [
+        Offset(rect.center.dx, rect.top),
+        Offset(rect.center.dx, rect.bottom),
+        Offset(rect.left, rect.center.dy),
+        Offset(rect.right, rect.center.dy),
+      ];
+      for (final sp in spawnMidpoints) {
+        const spawnR = 4.5;
+        canvas.drawCircle(
+          sp,
+          spawnR,
+          Paint()
+            ..color = const Color(0xFFEA580C)
+            ..style = PaintingStyle.fill,
+        );
+        canvas.drawCircle(
+          sp,
+          spawnR,
+          Paint()
+            ..color = Colors.white
+            ..strokeWidth = 1.0
+            ..style = PaintingStyle.stroke,
+        );
+        final plusPaint = Paint()
+          ..color = Colors.white
+          ..strokeWidth = 1.2
+          ..style = PaintingStyle.stroke;
+        canvas.drawLine(sp - const Offset(2.5, 0), sp + const Offset(2.5, 0), plusPaint);
+        canvas.drawLine(sp - const Offset(0, 2.5), sp + const Offset(0, 2.5), plusPaint);
+      }
+
+      // Existing arrows: root handle on border, tip diamond handle, and delete button if selected
+      for (final arrow in ann.arrows) {
+        final isSelectedArrow = arrow.id == selectedArrowId;
+        final rootMm = arrow.root ?? _getNearestBorderPoint(arrow.tip, ann);
+        final rootPx = _toPixel(rootMm);
+        final tipPx = _toPixel(arrow.tip);
+
+        // Root handle on border (small orange circle)
+        canvas.drawCircle(
+          rootPx,
+          3.5,
+          Paint()
+            ..color = const Color(0xFFEA580C)
+            ..style = PaintingStyle.fill,
+        );
+        canvas.drawCircle(
+          rootPx,
+          3.5,
+          Paint()
+            ..color = Colors.white
+            ..strokeWidth = 1.0
+            ..style = PaintingStyle.stroke,
+        );
+
+        // Tip handle: diamond shape
+        final r = isSelectedArrow ? 6.5 : 5.0;
+        final diamondPath = Path()
+          ..moveTo(tipPx.dx, tipPx.dy - r)
+          ..lineTo(tipPx.dx + r, tipPx.dy)
+          ..lineTo(tipPx.dx, tipPx.dy + r)
+          ..lineTo(tipPx.dx - r, tipPx.dy)
+          ..close();
+        canvas.drawPath(
+          diamondPath,
+          Paint()
+            ..color = isSelectedArrow ? const Color(0xFFF59E0B) : const Color(0xFFEA580C)
+            ..style = PaintingStyle.fill,
+        );
+        canvas.drawPath(
+          diamondPath,
+          Paint()
+            ..color = Colors.white
+            ..strokeWidth = isSelectedArrow ? 1.6 : 1.2
+            ..style = PaintingStyle.stroke,
+        );
+
+        // Delete button near tip if selected
+        if (isSelectedArrow) {
+          final delPx = tipPx + const Offset(14, -14);
+          canvas.drawCircle(
+            delPx,
+            8.0,
+            Paint()
+              ..color = const Color(0xFFEF4444)
+              ..style = PaintingStyle.fill,
+          );
+          canvas.drawCircle(
+            delPx,
+            8.0,
+            Paint()
+              ..color = Colors.white
+              ..strokeWidth = 1.0
+              ..style = PaintingStyle.stroke,
+          );
+          final xPaint = Paint()
+            ..color = Colors.white
+            ..strokeWidth = 1.6
+            ..strokeCap = StrokeCap.round
+            ..style = PaintingStyle.stroke;
+          canvas.drawLine(delPx + const Offset(-3.5, -3.5), delPx + const Offset(3.5, 3.5), xPaint);
+          canvas.drawLine(delPx + const Offset(-3.5, 3.5), delPx + const Offset(3.5, -3.5), xPaint);
+        }
+      }
+    } else if (ann is DdsApprovalStampAnnotation) {
+      final rect = Rect.fromLTWH(
+        (ann.x / 297.0) * paperSize.width,
+        (ann.y / 210.0) * paperSize.height,
+        (ann.width / 297.0) * paperSize.width,
+        (ann.height / 210.0) * paperSize.height,
+      );
+      final boxOutline = Paint()
+        ..color = const Color(0xFF0284C7).withValues(alpha: 0.7)
+        ..strokeWidth = 1.2
+        ..style = PaintingStyle.stroke;
+      canvas.drawRect(rect.inflate(2.0), boxOutline);
+
+      drawHandle(rect.topLeft);
+      drawHandle(Offset(rect.center.dx, rect.top));
+      drawHandle(rect.topRight);
+      drawHandle(Offset(rect.left, rect.center.dy));
+      drawHandle(Offset(rect.right, rect.center.dy));
+      drawHandle(rect.bottomLeft);
+      drawHandle(Offset(rect.center.dx, rect.bottom));
+      drawHandle(rect.bottomRight);
+    } else if (ann is DdsLeaderNoteAnnotation) {
+      drawHandle(_toPixel(ann.targetPoint));
+      drawHandle(_toPixel(ann.textPosition));
+    } else if (ann is DdsLinearDimensionAnnotation) {
+      drawHandle(_toPixel(ann.p1));
+      drawHandle(_toPixel(ann.p2));
+    } else if (ann is DdsRevisionCloudAnnotation) {
+      for (final pt in ann.points) {
+        drawHandle(_toPixel(pt));
+      }
+    }
+  }
+
   // --- Dimension Line Drawing ---
   void _paintLinearDimension(Canvas canvas, DdsLinearDimensionAnnotation ann, bool isSelected) {
     final p1 = _toPixel(ann.p1);
@@ -3124,9 +4095,11 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
     final dimP1 = p1 + normal * offsetPx;
     final dimP2 = p2 + normal * offsetPx;
 
-    final color = isSelected ? const Color(0xFF0284C7) : const Color(0xFF0F172A);
+    final strokeColor = ann.lineColor != null
+        ? _parseColor(ann.lineColor, isSelected ? const Color(0xFF0284C7) : const Color(0xFF0F172A))
+        : (isSelected ? const Color(0xFF0284C7) : const Color(0xFF0F172A));
     final stroke = Paint()
-      ..color = color
+      ..color = strokeColor
       ..strokeWidth = isSelected ? 1.6 : 1.1
       ..style = PaintingStyle.stroke;
 
@@ -3138,12 +4111,19 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
     canvas.drawLine(dimP1, dimP2, stroke);
 
     // Arrowheads
-    _drawArrowhead(canvas, dimP1, dimP2, color);
-    _drawArrowhead(canvas, dimP2, dimP1, color);
+    _drawArrowhead(canvas, dimP1, dimP2, strokeColor);
+    _drawArrowhead(canvas, dimP2, dimP1, strokeColor);
 
     // Centered Text
     final mid = (dimP1 + dimP2) / 2;
-    _drawTextBadge(canvas, mid, ann.displayText, isSelected: isSelected);
+    _drawTextBadge(
+      canvas,
+      mid,
+      ann.displayText,
+      isSelected: isSelected,
+      textColor: ann.textColor != null ? _parseColor(ann.textColor, Colors.black) : null,
+      bgColor: ann.backgroundColor != null ? _parseColor(ann.backgroundColor, Colors.white) : null,
+    );
   }
 
   // --- Leader Note Drawing ---
@@ -3151,14 +4131,17 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
     final target = _toPixel(ann.targetPoint);
     final textPos = _toPixel(ann.textPosition);
 
-    final color = isSelected ? const Color(0xFF0284C7) : const Color(0xFF0F172A);
+    final strokeColor = ann.lineColor != null
+        ? _parseColor(ann.lineColor, isSelected ? const Color(0xFF0284C7) : const Color(0xFF0F172A))
+        : (isSelected ? const Color(0xFF0284C7) : const Color(0xFF0F172A));
+    final txtColor = ann.textColor != null ? _parseColor(ann.textColor, strokeColor) : strokeColor;
     final leaderPaint = Paint()
-      ..color = color
+      ..color = strokeColor
       ..strokeWidth = isSelected ? 1.6 : 1.1
       ..style = PaintingStyle.stroke;
 
     // Arrowhead at target pointing towards target
-    _drawArrowhead(canvas, target, textPos, color);
+    _drawArrowhead(canvas, target, textPos, strokeColor);
 
     // Angled line
     canvas.drawLine(target, textPos, leaderPaint);
@@ -3172,12 +4155,18 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: ann.text,
-        style: TextStyle(color: color, fontSize: 9.5, fontWeight: isSelected ? FontWeight.bold : FontWeight.w600),
+        style: TextStyle(color: txtColor, fontSize: 9.5, fontWeight: isSelected ? FontWeight.bold : FontWeight.w600),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
     final textOffset = Offset(textPos.dx >= target.dx ? textPos.dx + 2 : textPos.dx - tp.width - 2, textPos.dy - tp.height - 2);
+
+    if (ann.backgroundColor != null) {
+      final bg = _parseColor(ann.backgroundColor, Colors.white);
+      final bgRect = Rect.fromLTWH(textOffset.dx - 2, textOffset.dy - 1, tp.width + 4, tp.height + 2);
+      canvas.drawRRect(RRect.fromRectAndRadius(bgRect, const Radius.circular(2.0)), Paint()..color = bg);
+    }
     tp.paint(canvas, textOffset);
   }
 
@@ -3190,25 +4179,51 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
       (ann.height / 210.0) * paperSize.height,
     );
 
-    final bgPaint = Paint()..color = const Color(0xFFFFFBEB).withValues(alpha: 0.95);
-    final borderPaint = Paint()
-      ..color = isSelected ? const Color(0xFF0284C7) : const Color(0xFFD97706)
-      ..strokeWidth = isSelected ? 1.8 : 1.0
-      ..style = PaintingStyle.stroke;
+    // Use entity colors directly; fallback to defaults when none set.
+    final bgCol = _parseColor(ann.backgroundColor, const Color(0xFFFFFBEB));
+    final borderCol = _parseColor(ann.lineColor, const Color(0xFFD97706));
+    final textCol = _parseColor(ann.textColor, const Color(0xFF78350F));
 
-    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(4.0));
-    canvas.drawRRect(rrect, bgPaint);
-    canvas.drawRRect(rrect, borderPaint);
+    // Draw background only when not transparent
+    if (bgCol != Colors.transparent) {
+      canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(4.0)), Paint()..color = bgCol.withValues(alpha: 0.95));
+    }
+
+    // Draw border when hasBorder is true
+    if (ann.hasBorder) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(4.0)),
+        Paint()
+          ..color = borderCol
+          ..strokeWidth = 1.2
+          ..style = PaintingStyle.stroke,
+      );
+    }
+
+    // Draw pull-out arrows
+    for (final arrow in ann.arrows) {
+      final isSelectedArrow = arrow.id == selectedArrowId;
+      final rootMm = arrow.root ?? _getNearestBorderPoint(arrow.tip, ann);
+      final rootPx = _toPixel(rootMm);
+      final tipPx = _toPixel(arrow.tip);
+      final drawCol = isSelectedArrow ? const Color(0xFFF59E0B) : borderCol;
+      final arrowPaint = Paint()
+        ..color = drawCol
+        ..strokeWidth = isSelectedArrow ? 2.0 : 1.4
+        ..style = PaintingStyle.stroke;
+      canvas.drawLine(rootPx, tipPx, arrowPaint);
+      _drawArrowhead(canvas, tipPx, rootPx, drawCol);
+    }
 
     // Text inside box
     final tp = TextPainter(
       text: TextSpan(
         text: ann.text,
-        style: const TextStyle(color: Color(0xFF78350F), fontSize: 8.5, fontWeight: FontWeight.w500),
+        style: TextStyle(color: textCol, fontSize: 8.5, fontWeight: FontWeight.w500),
       ),
       textDirection: TextDirection.ltr,
       maxLines: 4,
-    )..layout(maxWidth: rect.width - 8.0);
+    )..layout(maxWidth: math.max(10.0, rect.width - 8.0));
 
     tp.paint(canvas, rect.topLeft + const Offset(4.0, 4.0));
   }
@@ -3217,9 +4232,11 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
   void _paintRevisionCloud(Canvas canvas, DdsRevisionCloudAnnotation ann, bool isSelected) {
     if (ann.points.length < 2) return;
 
-    final color = isSelected ? const Color(0xFF0284C7) : const Color(0xFFDC2626);
+    final borderCol = _parseColor(ann.lineColor, const Color(0xFFDC2626));
+    final textCol = _parseColor(ann.textColor, borderCol);
+
     final cloudPaint = Paint()
-      ..color = color
+      ..color = borderCol
       ..strokeWidth = isSelected ? 1.8 : 1.2
       ..style = PaintingStyle.stroke;
 
@@ -3228,7 +4245,6 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
 
     final path = Path();
     path.moveTo(pts.first.dx, pts.first.dy);
-
     for (int i = 0; i < pts.length - 1; i++) {
       final pA = pts[i];
       final pB = pts[i + 1];
@@ -3241,20 +4257,29 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
         final end = pA + (pB - pA) * ((s + 1) / steps);
         final segMid = (start + end) / 2;
         final segVec = end - start;
-        final segNormal = Offset(-segVec.dy, segVec.dx) / segVec.distance;
+        final segNormal = Offset(-segVec.dy, segVec.dx) / (segVec.distance > 0 ? segVec.distance : 1.0);
         final control = segMid + segNormal * 4.5;
         path.quadraticBezierTo(control.dx, control.dy, end.dx, end.dy);
       }
     }
 
+    if (ann.backgroundColor != null) {
+      final bgCol = _parseColor(ann.backgroundColor, Colors.transparent);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = bgCol.withValues(alpha: 0.15)
+          ..style = PaintingStyle.fill,
+      );
+    }
     canvas.drawPath(path, cloudPaint);
 
     // Draw Δ tag triangle badge
     final tagPos = pts.first + const Offset(-14, -14);
-    _drawRevisionDeltaTag(canvas, tagPos, ann.revisionTag, color);
+    _drawRevisionDeltaTag(canvas, tagPos, ann.revisionTag, borderCol, textColor: textCol);
   }
 
-  void _drawRevisionDeltaTag(Canvas canvas, Offset pos, String tag, Color color) {
+  void _drawRevisionDeltaTag(Canvas canvas, Offset pos, String tag, Color color, {Color? textColor}) {
     final path = Path()
       ..moveTo(pos.dx, pos.dy - 8)
       ..lineTo(pos.dx + 8, pos.dy + 6)
@@ -3278,7 +4303,7 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: tag,
-        style: TextStyle(color: color, fontSize: 7.0, fontWeight: FontWeight.bold),
+        style: TextStyle(color: textColor ?? color, fontSize: 7.0, fontWeight: FontWeight.bold),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -3294,36 +4319,39 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
       (ann.height / 210.0) * paperSize.height,
     );
 
-    final color = const Color(0xFF059669); // Emerald 600
+    final bgCol = _parseColor(ann.backgroundColor, const Color(0xFFECFDF5));
+    final borderCol = _parseColor(ann.lineColor, const Color(0xFF059669));
+    final textCol = _parseColor(ann.textColor, const Color(0xFF065F46));
+
     final borderPaint = Paint()
-      ..color = isSelected ? const Color(0xFF0284C7) : color
-      ..strokeWidth = 1.6
+      ..color = borderCol
+      ..strokeWidth = isSelected ? 1.8 : 1.6
       ..style = PaintingStyle.stroke;
 
     final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(3.0));
-    canvas.drawRRect(rrect, Paint()..color = const Color(0xFFECFDF5).withValues(alpha: 0.95));
+    canvas.drawRRect(rrect, Paint()..color = bgCol.withValues(alpha: 0.95));
     canvas.drawRRect(rrect, borderPaint);
 
     final tp = TextPainter(
       text: TextSpan(
         children: [
-          const TextSpan(
+          TextSpan(
             text: 'CLIENT REVIEW STATUS\n',
-            style: TextStyle(color: Color(0xFF065F46), fontSize: 7.5, fontWeight: FontWeight.bold),
+            style: TextStyle(color: textCol, fontSize: 7.5, fontWeight: FontWeight.bold),
           ),
           TextSpan(
             text: '${ann.status.toUpperCase()}\n',
-            style: const TextStyle(color: Color(0xFF047857), fontSize: 9.5, fontWeight: FontWeight.bold),
+            style: TextStyle(color: borderCol, fontSize: 9.5, fontWeight: FontWeight.bold),
           ),
           TextSpan(
             text: 'By: ${ann.reviewedBy}  •  ${ann.reviewDate}',
-            style: const TextStyle(color: Color(0xFF065F46), fontSize: 7.0),
+            style: TextStyle(color: textCol, fontSize: 7.0),
           ),
         ],
       ),
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
-    )..layout(maxWidth: rect.width - 4.0);
+    )..layout(maxWidth: math.max(10.0, rect.width - 4.0));
 
     tp.paint(canvas, rect.topLeft + Offset((rect.width - tp.width) / 2, (rect.height - tp.height) / 2));
   }
@@ -3357,18 +4385,19 @@ class _DdsAnnotationOverlayPainter extends CustomPainter {
   }
 
   // --- Text Badge Helper ---
-  void _drawTextBadge(Canvas canvas, Offset center, String text, {required bool isSelected}) {
+  void _drawTextBadge(Canvas canvas, Offset center, String text, {required bool isSelected, Color? textColor, Color? bgColor}) {
+    final effectiveTextColor = textColor ?? (isSelected ? const Color(0xFF0284C7) : const Color(0xFF0F172A));
     final tp = TextPainter(
       text: TextSpan(
         text: text,
-        style: TextStyle(color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF0F172A), fontSize: 8.5, fontWeight: FontWeight.bold),
+        style: TextStyle(color: effectiveTextColor, fontSize: 8.5, fontWeight: FontWeight.bold),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
     final bgRect = Rect.fromCenter(center: center, width: tp.width + 6.0, height: tp.height + 4.0);
 
-    canvas.drawRRect(RRect.fromRectAndRadius(bgRect, const Radius.circular(2.0)), Paint()..color = Colors.white);
+    canvas.drawRRect(RRect.fromRectAndRadius(bgRect, const Radius.circular(2.0)), Paint()..color = bgColor ?? Colors.white);
     canvas.drawRRect(
       RRect.fromRectAndRadius(bgRect, const Radius.circular(2.0)),
       Paint()

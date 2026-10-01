@@ -12,6 +12,68 @@
 import 'package:flutter/foundation.dart';
 import '../cad_primitives.dart';
 
+/// A pull-out arrow attached to a [DdsNoteBoxAnnotation].
+/// The arrow originates from the note-box border and its tip can be
+/// snapped to a product entity id or left free-floating.
+@immutable
+class DdsNoteArrow {
+  final String id;
+  /// Arrow tip in paper-space mm (A4 = 297×210 mm).
+  final CadPoint2D tip;
+  /// Arrow root attachment point on the note-box border in paper-space mm.
+  /// If null, defaults dynamically to the closest border point to [tip].
+  final CadPoint2D? root;
+  /// Optional entity id this arrow is anchored to.
+  final String? anchorEntity;
+
+  const DdsNoteArrow({
+    required this.id,
+    required this.tip,
+    this.root,
+    this.anchorEntity,
+  });
+
+  DdsNoteArrow copyWith({
+    CadPoint2D? tip,
+    CadPoint2D? root,
+    String? anchorEntity,
+    bool clearAnchor = false,
+    bool clearRoot = false,
+  }) {
+    return DdsNoteArrow(
+      id: id,
+      tip: tip ?? this.tip,
+      root: clearRoot ? null : (root ?? this.root),
+      anchorEntity: clearAnchor ? null : (anchorEntity ?? this.anchorEntity),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'tip': {'x': tip.x, 'y': tip.y},
+    if (root != null) 'root': {'x': root!.x, 'y': root!.y},
+    if (anchorEntity != null) 'anchorEntity': anchorEntity,
+  };
+
+  factory DdsNoteArrow.fromJson(Map<String, dynamic> json) {
+    final tMap = json['tip'] as Map<String, dynamic>? ?? {'x': 0.0, 'y': 0.0};
+    final rMap = json['root'] as Map<String, dynamic>?;
+    CadPoint2D? parsedRoot;
+    if (rMap != null) {
+      parsedRoot = CadPoint2D(
+        (rMap['x'] as num).toDouble(),
+        (rMap['y'] as num).toDouble(),
+      );
+    }
+    return DdsNoteArrow(
+      id: json['id'] as String? ?? 'arrow_${DateTime.now().millisecondsSinceEpoch}',
+      tip: CadPoint2D((tMap['x'] as num).toDouble(), (tMap['y'] as num).toDouble()),
+      root: parsedRoot,
+      anchorEntity: json['anchorEntity'] as String?,
+    );
+  }
+}
+
 /// Coordinate space where the annotation lives.
 enum DdsAnnotationSpace {
   /// Anchored to physical CAD model coordinates (in mm).
@@ -47,12 +109,18 @@ abstract class DdsAnnotation {
   final DdsAnnotationType type;
   final DdsAnnotationSpace space;
   final bool isVisible;
+  final String? backgroundColor;
+  final String? textColor;
+  final String? lineColor;
 
   const DdsAnnotation({
     required this.id,
     required this.type,
     required this.space,
     this.isVisible = true,
+    this.backgroundColor,
+    this.textColor,
+    this.lineColor,
   });
 
   Map<String, dynamic> toJson();
@@ -106,6 +174,95 @@ abstract class DdsAnnotation {
     }
     return ann;
   }
+
+  static const String unset = '__UNSET__';
+
+  /// Clones this annotation with updated color styling.
+  DdsAnnotation withColors({
+    String? backgroundColor = unset,
+    String? textColor = unset,
+    String? lineColor = unset,
+  }) {
+    final effectiveBg = identical(backgroundColor, unset) ? this.backgroundColor : backgroundColor;
+    final effectiveText = identical(textColor, unset) ? this.textColor : textColor;
+    final effectiveLine = identical(lineColor, unset) ? this.lineColor : lineColor;
+
+    final ann = this;
+    if (ann is DdsNoteBoxAnnotation) {
+      return DdsNoteBoxAnnotation(
+        id: ann.id,
+        space: ann.space,
+        isVisible: ann.isVisible,
+        backgroundColor: effectiveBg,
+        textColor: effectiveText,
+        lineColor: effectiveLine,
+        x: ann.x,
+        y: ann.y,
+        width: ann.width,
+        height: ann.height,
+        text: ann.text,
+        fontSize: ann.fontSize,
+        hasBorder: ann.hasBorder,
+        arrows: ann.arrows,
+      );
+    } else if (ann is DdsApprovalStampAnnotation) {
+      return DdsApprovalStampAnnotation(
+        id: ann.id,
+        space: ann.space,
+        isVisible: ann.isVisible,
+        backgroundColor: effectiveBg,
+        textColor: effectiveText,
+        lineColor: effectiveLine,
+        x: ann.x,
+        y: ann.y,
+        width: ann.width,
+        height: ann.height,
+        status: ann.status,
+        reviewedBy: ann.reviewedBy,
+        reviewDate: ann.reviewDate,
+      );
+    } else if (ann is DdsLeaderNoteAnnotation) {
+      return DdsLeaderNoteAnnotation(
+        id: ann.id,
+        space: ann.space,
+        isVisible: ann.isVisible,
+        backgroundColor: effectiveBg,
+        textColor: effectiveText,
+        lineColor: effectiveLine,
+        targetPoint: ann.targetPoint,
+        textPosition: ann.textPosition,
+        text: ann.text,
+      );
+    } else if (ann is DdsLinearDimensionAnnotation) {
+      return DdsLinearDimensionAnnotation(
+        id: ann.id,
+        space: ann.space,
+        isVisible: ann.isVisible,
+        backgroundColor: effectiveBg,
+        textColor: effectiveText,
+        lineColor: effectiveLine,
+        p1: ann.p1,
+        p2: ann.p2,
+        anchorEntity: ann.anchorEntity,
+        prefix: ann.prefix,
+        suffix: ann.suffix,
+        textOverride: ann.textOverride,
+        offsetDistance: ann.offsetDistance,
+      );
+    } else if (ann is DdsRevisionCloudAnnotation) {
+      return DdsRevisionCloudAnnotation(
+        id: ann.id,
+        space: ann.space,
+        isVisible: ann.isVisible,
+        backgroundColor: effectiveBg,
+        textColor: effectiveText,
+        lineColor: effectiveLine,
+        points: ann.points,
+        revisionTag: ann.revisionTag,
+      );
+    }
+    return ann;
+  }
 }
 
 /// Linear dimension annotation displaying a measurement with extension lines.
@@ -122,6 +279,9 @@ class DdsLinearDimensionAnnotation extends DdsAnnotation {
     required super.id,
     super.space = DdsAnnotationSpace.model,
     super.isVisible = true,
+    super.backgroundColor,
+    super.textColor,
+    super.lineColor,
     required this.p1,
     required this.p2,
     this.anchorEntity,
@@ -150,11 +310,17 @@ class DdsLinearDimensionAnnotation extends DdsAnnotation {
     String? textOverride,
     double? offsetDistance,
     bool? isVisible,
+    String? backgroundColor,
+    String? textColor,
+    String? lineColor,
   }) {
     return DdsLinearDimensionAnnotation(
       id: id ?? this.id,
       space: space,
       isVisible: isVisible ?? this.isVisible,
+      backgroundColor: backgroundColor ?? this.backgroundColor,
+      textColor: textColor ?? this.textColor,
+      lineColor: lineColor ?? this.lineColor,
       p1: p1 ?? this.p1,
       p2: p2 ?? this.p2,
       anchorEntity: anchorEntity ?? this.anchorEntity,
@@ -171,6 +337,9 @@ class DdsLinearDimensionAnnotation extends DdsAnnotation {
         'type': type.name,
         'space': space.name,
         'isVisible': isVisible,
+        if (backgroundColor != null) 'backgroundColor': backgroundColor,
+        if (textColor != null) 'textColor': textColor,
+        if (lineColor != null) 'lineColor': lineColor,
         'p1': {'x': p1.x, 'y': p1.y},
         'p2': {'x': p2.x, 'y': p2.y},
         if (anchorEntity != null) 'anchorEntity': anchorEntity,
@@ -190,6 +359,9 @@ class DdsLinearDimensionAnnotation extends DdsAnnotation {
         orElse: () => DdsAnnotationSpace.model,
       ),
       isVisible: json['isVisible'] as bool? ?? true,
+      backgroundColor: json['backgroundColor'] as String?,
+      textColor: json['textColor'] as String?,
+      lineColor: json['lineColor'] as String?,
       p1: CadPoint2D((p1Map['x'] as num).toDouble(), (p1Map['y'] as num).toDouble()),
       p2: CadPoint2D((p2Map['x'] as num).toDouble(), (p2Map['y'] as num).toDouble()),
       anchorEntity: json['anchorEntity'] as String?,
@@ -212,6 +384,9 @@ class DdsLeaderNoteAnnotation extends DdsAnnotation {
     required super.id,
     super.space = DdsAnnotationSpace.model,
     super.isVisible = true,
+    super.backgroundColor,
+    super.textColor,
+    super.lineColor,
     required this.targetPoint,
     required this.textPosition,
     required this.text,
@@ -225,11 +400,17 @@ class DdsLeaderNoteAnnotation extends DdsAnnotation {
     String? text,
     String? anchorEntity,
     bool? isVisible,
+    String? backgroundColor,
+    String? textColor,
+    String? lineColor,
   }) {
     return DdsLeaderNoteAnnotation(
       id: id ?? this.id,
       space: space,
       isVisible: isVisible ?? this.isVisible,
+      backgroundColor: backgroundColor ?? this.backgroundColor,
+      textColor: textColor ?? this.textColor,
+      lineColor: lineColor ?? this.lineColor,
       targetPoint: targetPoint ?? this.targetPoint,
       textPosition: textPosition ?? this.textPosition,
       text: text ?? this.text,
@@ -243,6 +424,9 @@ class DdsLeaderNoteAnnotation extends DdsAnnotation {
         'type': type.name,
         'space': space.name,
         'isVisible': isVisible,
+        if (backgroundColor != null) 'backgroundColor': backgroundColor,
+        if (textColor != null) 'textColor': textColor,
+        if (lineColor != null) 'lineColor': lineColor,
         'targetPoint': {'x': targetPoint.x, 'y': targetPoint.y},
         'textPosition': {'x': textPosition.x, 'y': textPosition.y},
         'text': text,
@@ -259,6 +443,9 @@ class DdsLeaderNoteAnnotation extends DdsAnnotation {
         orElse: () => DdsAnnotationSpace.model,
       ),
       isVisible: json['isVisible'] as bool? ?? true,
+      backgroundColor: json['backgroundColor'] as String?,
+      textColor: json['textColor'] as String?,
+      lineColor: json['lineColor'] as String?,
       targetPoint: CadPoint2D((tMap['x'] as num).toDouble(), (tMap['y'] as num).toDouble()),
       textPosition: CadPoint2D((pMap['x'] as num).toDouble(), (pMap['y'] as num).toDouble()),
       text: json['text'] as String? ?? '',
@@ -268,6 +455,7 @@ class DdsLeaderNoteAnnotation extends DdsAnnotation {
 }
 
 /// Standalone text/note box placed on the sheet.
+/// Each note box can own zero-or-more pull-out [DdsNoteArrow]s.
 class DdsNoteBoxAnnotation extends DdsAnnotation {
   final double x;
   final double y;
@@ -276,11 +464,16 @@ class DdsNoteBoxAnnotation extends DdsAnnotation {
   final String text;
   final double fontSize;
   final bool hasBorder;
+  /// Pull-out arrows originating from this note box.
+  final List<DdsNoteArrow> arrows;
 
   const DdsNoteBoxAnnotation({
     required super.id,
     super.space = DdsAnnotationSpace.sheet,
     super.isVisible = true,
+    super.backgroundColor,
+    super.textColor,
+    super.lineColor,
     required this.x,
     required this.y,
     required this.width,
@@ -288,6 +481,7 @@ class DdsNoteBoxAnnotation extends DdsAnnotation {
     required this.text,
     this.fontSize = 10.0,
     this.hasBorder = true,
+    this.arrows = const [],
   }) : super(type: DdsAnnotationType.noteBox);
 
   DdsNoteBoxAnnotation copyWith({
@@ -300,11 +494,18 @@ class DdsNoteBoxAnnotation extends DdsAnnotation {
     double? fontSize,
     bool? hasBorder,
     bool? isVisible,
+    String? backgroundColor,
+    String? textColor,
+    String? lineColor,
+    List<DdsNoteArrow>? arrows,
   }) {
     return DdsNoteBoxAnnotation(
       id: id ?? this.id,
       space: space,
       isVisible: isVisible ?? this.isVisible,
+      backgroundColor: backgroundColor ?? this.backgroundColor,
+      textColor: textColor ?? this.textColor,
+      lineColor: lineColor ?? this.lineColor,
       x: x ?? this.x,
       y: y ?? this.y,
       width: width ?? this.width,
@@ -312,6 +513,7 @@ class DdsNoteBoxAnnotation extends DdsAnnotation {
       text: text ?? this.text,
       fontSize: fontSize ?? this.fontSize,
       hasBorder: hasBorder ?? this.hasBorder,
+      arrows: arrows ?? this.arrows,
     );
   }
 
@@ -321,6 +523,9 @@ class DdsNoteBoxAnnotation extends DdsAnnotation {
         'type': type.name,
         'space': space.name,
         'isVisible': isVisible,
+        if (backgroundColor != null) 'backgroundColor': backgroundColor,
+        if (textColor != null) 'textColor': textColor,
+        if (lineColor != null) 'lineColor': lineColor,
         'x': x,
         'y': y,
         'width': width,
@@ -328,9 +533,11 @@ class DdsNoteBoxAnnotation extends DdsAnnotation {
         'text': text,
         'fontSize': fontSize,
         'hasBorder': hasBorder,
+        if (arrows.isNotEmpty) 'arrows': arrows.map((a) => a.toJson()).toList(),
       };
 
   factory DdsNoteBoxAnnotation.fromJson(Map<String, dynamic> json) {
+    final rawArrows = json['arrows'] as List<dynamic>? ?? [];
     return DdsNoteBoxAnnotation(
       id: json['id'] as String? ?? 'notebox_${DateTime.now().millisecondsSinceEpoch}',
       space: DdsAnnotationSpace.values.firstWhere(
@@ -338,6 +545,9 @@ class DdsNoteBoxAnnotation extends DdsAnnotation {
         orElse: () => DdsAnnotationSpace.sheet,
       ),
       isVisible: json['isVisible'] as bool? ?? true,
+      backgroundColor: json['backgroundColor'] as String?,
+      textColor: json['textColor'] as String?,
+      lineColor: json['lineColor'] as String?,
       x: (json['x'] as num?)?.toDouble() ?? 0.0,
       y: (json['y'] as num?)?.toDouble() ?? 0.0,
       width: (json['width'] as num?)?.toDouble() ?? 100.0,
@@ -345,6 +555,7 @@ class DdsNoteBoxAnnotation extends DdsAnnotation {
       text: json['text'] as String? ?? '',
       fontSize: (json['fontSize'] as num?)?.toDouble() ?? 10.0,
       hasBorder: json['hasBorder'] as bool? ?? true,
+      arrows: rawArrows.map((a) => DdsNoteArrow.fromJson(a as Map<String, dynamic>)).toList(),
     );
   }
 }
@@ -359,6 +570,9 @@ class DdsRevisionCloudAnnotation extends DdsAnnotation {
     required super.id,
     super.space = DdsAnnotationSpace.model,
     super.isVisible = true,
+    super.backgroundColor,
+    super.textColor,
+    super.lineColor,
     required this.points,
     this.revisionTag = 'Δ1',
     this.arcRadius = 8.0,
@@ -370,11 +584,17 @@ class DdsRevisionCloudAnnotation extends DdsAnnotation {
     String? revisionTag,
     double? arcRadius,
     bool? isVisible,
+    String? backgroundColor,
+    String? textColor,
+    String? lineColor,
   }) {
     return DdsRevisionCloudAnnotation(
       id: id ?? this.id,
       space: space,
       isVisible: isVisible ?? this.isVisible,
+      backgroundColor: backgroundColor ?? this.backgroundColor,
+      textColor: textColor ?? this.textColor,
+      lineColor: lineColor ?? this.lineColor,
       points: points ?? this.points,
       revisionTag: revisionTag ?? this.revisionTag,
       arcRadius: arcRadius ?? this.arcRadius,
@@ -387,6 +607,9 @@ class DdsRevisionCloudAnnotation extends DdsAnnotation {
         'type': type.name,
         'space': space.name,
         'isVisible': isVisible,
+        if (backgroundColor != null) 'backgroundColor': backgroundColor,
+        if (textColor != null) 'textColor': textColor,
+        if (lineColor != null) 'lineColor': lineColor,
         'points': points.map((p) => {'x': p.x, 'y': p.y}).toList(),
         'revisionTag': revisionTag,
         'arcRadius': arcRadius,
@@ -407,6 +630,9 @@ class DdsRevisionCloudAnnotation extends DdsAnnotation {
         orElse: () => DdsAnnotationSpace.model,
       ),
       isVisible: json['isVisible'] as bool? ?? true,
+      backgroundColor: json['backgroundColor'] as String?,
+      textColor: json['textColor'] as String?,
+      lineColor: json['lineColor'] as String?,
       points: pts,
       revisionTag: json['revisionTag'] as String? ?? 'Δ1',
       arcRadius: (json['arcRadius'] as num?)?.toDouble() ?? 8.0,
@@ -429,6 +655,9 @@ class DdsApprovalStampAnnotation extends DdsAnnotation {
     required super.id,
     super.space = DdsAnnotationSpace.sheet,
     super.isVisible = true,
+    super.backgroundColor,
+    super.textColor,
+    super.lineColor,
     required this.x,
     required this.y,
     this.width = 180.0,
@@ -450,11 +679,17 @@ class DdsApprovalStampAnnotation extends DdsAnnotation {
     String? reviewDate,
     String? comments,
     bool? isVisible,
+    String? backgroundColor,
+    String? textColor,
+    String? lineColor,
   }) {
     return DdsApprovalStampAnnotation(
       id: id ?? this.id,
       space: space,
       isVisible: isVisible ?? this.isVisible,
+      backgroundColor: backgroundColor ?? this.backgroundColor,
+      textColor: textColor ?? this.textColor,
+      lineColor: lineColor ?? this.lineColor,
       x: x ?? this.x,
       y: y ?? this.y,
       width: width ?? this.width,
@@ -472,6 +707,9 @@ class DdsApprovalStampAnnotation extends DdsAnnotation {
         'type': type.name,
         'space': space.name,
         'isVisible': isVisible,
+        if (backgroundColor != null) 'backgroundColor': backgroundColor,
+        if (textColor != null) 'textColor': textColor,
+        if (lineColor != null) 'lineColor': lineColor,
         'x': x,
         'y': y,
         'width': width,
@@ -490,6 +728,9 @@ class DdsApprovalStampAnnotation extends DdsAnnotation {
         orElse: () => DdsAnnotationSpace.sheet,
       ),
       isVisible: json['isVisible'] as bool? ?? true,
+      backgroundColor: json['backgroundColor'] as String?,
+      textColor: json['textColor'] as String?,
+      lineColor: json['lineColor'] as String?,
       x: (json['x'] as num?)?.toDouble() ?? 0.0,
       y: (json['y'] as num?)?.toDouble() ?? 0.0,
       width: (json['width'] as num?)?.toDouble() ?? 180.0,

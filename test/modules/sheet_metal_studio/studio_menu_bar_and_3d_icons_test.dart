@@ -13,7 +13,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
-import 'package:trufold_studio/sheet_metal_studio/models/cad_geometry.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/planar_sheet_face.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/fold_bend_line.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cad_dimension.dart';

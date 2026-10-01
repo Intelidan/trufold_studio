@@ -17,6 +17,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../engine/cms/cms_scaling_controller.dart';
+import '../../../engine/cms/tray_unequal_tee_scaler.dart';
 
 class CmsTeachScalingOverlay extends StatefulWidget {
   final CmsScalingController controller;
@@ -68,6 +69,16 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
 
   String _getPortDescriptor(int idx) {
     if (widget.controller.baselinePorts.length == 3) {
+      if (TrayUnequalTeeScaler.isTrayUnequalTee(widget.controller.baselineDocument)) {
+        switch (idx) {
+          case 0:
+            return 'Left';
+          case 1:
+            return 'Right';
+          case 2:
+            return 'Branch';
+        }
+      }
       switch (idx) {
         case 0:
           return 'Branch';
@@ -128,10 +139,13 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
         final baselineVal = param.baselineValue;
         final delta = previewVal - baselineVal;
         final isHeight = param.id.endsWith('_height') || param.id == 'height';
+        final isRadius = param.id == 'radius';
 
-        final profileName = widget.controller.contract.displayName.isNotEmpty
-            ? widget.controller.contract.displayName
-            : widget.controller.effectiveScalingProfile.displayName;
+        final profileName = widget.controller.effectiveScalingProfile.displayName.isNotEmpty
+            ? widget.controller.effectiveScalingProfile.displayName
+            : (widget.controller.contract.displayName.isNotEmpty
+                ? widget.controller.contract.displayName
+                : 'CMS Fitting');
 
         final isMultiPort = !widget.controller.isLinkedPorts && widget.controller.baselinePorts.length >= 3;
         final activePortIdx = widget.controller.activePortIndex;
@@ -172,17 +186,19 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                             style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.w800, color: Color(0xFF0F172A), letterSpacing: 0.6),
                           ),
                           const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7.0, vertical: 2.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF0FDF4),
-                              borderRadius: BorderRadius.circular(5.0),
-                              border: Border.all(color: const Color(0xFFBBF7D0)),
-                            ),
-                            child: Text(
-                              profileName,
-                              style: const TextStyle(fontSize: 10.0, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
-                              overflow: TextOverflow.ellipsis,
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7.0, vertical: 2.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(5.0),
+                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                              ),
+                              child: Text(
+                                profileName,
+                                style: const TextStyle(fontSize: 10.0, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 6.0),
@@ -512,7 +528,12 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                         Wrap(
                           spacing: 4.5,
                           runSpacing: 4.0,
-                          children: (isHeight ? const [50.0, 75.0, 95.0, 100.0, 150.0, 200.0] : const [50.0, 75.0, 100.0, 150.0, 200.0, 300.0]).map((size) {
+                          children: (isRadius
+                                  ? const [180.0, 300.0, 600.0, 900.0]
+                                  : (isHeight
+                                      ? const [50.0, 75.0, 95.0, 100.0, 150.0, 200.0, 250.0]
+                                      : const [50.0, 75.0, 100.0, 150.0, 200.0, 300.0, 450.0, 600.0, 900.0, 1200.0]))
+                              .map((size) {
                             final isSelected = (previewVal - size).abs() < 0.5;
                             final isThreshold = isHeight && size == 95.0;
                             return InkWell(
@@ -597,6 +618,10 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                       ],
                     ),
                   ),
+                  if (widget.controller.isCurrentTrayAccessory) ...[
+                    _buildPerforationControlCard(),
+                    _buildCouplerFlapsCard(),
+                  ],
                   const SizedBox(height: 12.0),
 
                   // 5. Action Buttons (Apply Scaling & Cancel)
@@ -707,6 +732,271 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPerforationControlCard() {
+    final pitch = widget.controller.perforationPitch;
+    final totalPunches = widget.controller.currentPreview?.scaledDocument.punches.length ??
+        widget.controller.baselineDocument.punches.length;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(9.0),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.grid_on_rounded, size: 13.0, color: Color(0xFF0284C7)),
+              const SizedBox(width: 5.0),
+              const Expanded(
+                child: Text(
+                  'Perforations Control',
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE0F2FE),
+                  borderRadius: BorderRadius.circular(4.0),
+                ),
+                child: Text(
+                  '$totalPunches Punches',
+                  style: const TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'monospace',
+                    color: Color(0xFF0284C7),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6.0),
+          Row(
+            children: [
+              _buildStepButton(
+                icon: Icons.remove,
+                label: '-25',
+                tooltip: 'Decrease pitch by 25 mm (more holes)',
+                onPressed: () => widget.controller.setPerforationPitch(pitch - 25.0),
+              ),
+              const SizedBox(width: 6.0),
+              Expanded(
+                child: Container(
+                  height: 30.0,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(5.0),
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                  ),
+                  child: Text(
+                    'Pitch: ${pitch.toStringAsFixed(0)} mm',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'monospace',
+                      color: Color(0xFF0284C7),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6.0),
+              _buildStepButton(
+                icon: Icons.add,
+                label: '+25',
+                tooltip: 'Increase pitch by 25 mm (fewer holes)',
+                onPressed: () => widget.controller.setPerforationPitch(pitch + 25.0),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4.0),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: const Color(0xFF0284C7),
+              inactiveTrackColor: const Color(0xFFCBD5E1),
+              thumbColor: const Color(0xFF0284C7),
+              trackHeight: 3.0,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.5),
+            ),
+            child: Slider(
+              value: pitch.clamp(75.0, 200.0),
+              min: 75.0,
+              max: 200.0,
+              divisions: 25,
+              onChanged: (val) => widget.controller.setPerforationPitch(val),
+            ),
+          ),
+          Wrap(
+            spacing: 5.0,
+            children: [
+              _buildPitchPresetChip('Sparse', 150.0, pitch),
+              _buildPitchPresetChip('Standard', 100.0, pitch),
+              _buildPitchPresetChip('Dense', 75.0, pitch),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPitchPresetChip(String label, double targetPitch, double currentPitch) {
+    final isSelected = (currentPitch - targetPitch).abs() < 1.0;
+    return InkWell(
+      onTap: () => widget.controller.setPerforationPitch(targetPitch),
+      borderRadius: BorderRadius.circular(4.0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0),
+          borderRadius: BorderRadius.circular(4.0),
+        ),
+        child: Text(
+          '$label (${targetPitch.toInt()}mm)',
+          style: TextStyle(
+            fontSize: 9.5,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFF334155),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCouplerFlapsCard() {
+    final hasFlaps = widget.controller.includeCouplerFlaps;
+    final flapLen = widget.controller.couplerFlapLength;
+    final activePortIdx = widget.controller.activePortIndex;
+    final activeH = _getPortHeight(activePortIdx);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(9.0),
+        border: Border.all(
+          color: hasFlaps ? const Color(0xFF8B5CF6) : const Color(0xFFE2E8F0),
+          width: hasFlaps ? 1.3 : 1.0,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.link_rounded, size: 14.0, color: Color(0xFF7C3AED)),
+              const SizedBox(width: 5.0),
+              const Expanded(
+                child: Text(
+                  'Coupler Flaps',
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                ),
+              ),
+              Transform.scale(
+                scale: 0.75,
+                child: Switch(
+                  value: hasFlaps,
+                  activeThumbColor: const Color(0xFF7C3AED),
+                  onChanged: (val) => widget.controller.setIncludeCouplerFlaps(val),
+                ),
+              ),
+            ],
+          ),
+          if (hasFlaps) ...[
+            const SizedBox(height: 4.0),
+            Row(
+              children: [
+                _buildStepButton(
+                  icon: Icons.remove,
+                  label: '-5',
+                  tooltip: 'Decrease flap length by 5 mm',
+                  onPressed: () => widget.controller.setCouplerFlapLength(flapLen - 5.0),
+                ),
+                const SizedBox(width: 6.0),
+                Expanded(
+                  child: Container(
+                    height: 30.0,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(5.0),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: Text(
+                      'Length: ${flapLen.toStringAsFixed(0)} mm',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'monospace',
+                        color: Color(0xFF7C3AED),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6.0),
+                _buildStepButton(
+                  icon: Icons.add,
+                  label: '+5',
+                  tooltip: 'Increase flap length by 5 mm',
+                  onPressed: () => widget.controller.setCouplerFlapLength(flapLen + 5.0),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4.0),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: const Color(0xFF7C3AED),
+                inactiveTrackColor: const Color(0xFFCBD5E1),
+                thumbColor: const Color(0xFF7C3AED),
+                trackHeight: 3.0,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.5),
+              ),
+              child: Slider(
+                value: flapLen.clamp(20.0, 50.0),
+                min: 20.0,
+                max: 50.0,
+                divisions: 6,
+                onChanged: (val) => widget.controller.setCouplerFlapLength(val),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 3.0),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEDE9FE),
+                borderRadius: BorderRadius.circular(4.0),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.auto_awesome, size: 10.0, color: Color(0xFF7C3AED)),
+                  const SizedBox(width: 4.0),
+                  Expanded(
+                    child: Text(
+                      activeH <= 50.0
+                          ? '2 vertically aligned obround holes (H ≤ 50mm)'
+                          : '4 holes (2 rows × 2 cols, H > 50mm)',
+                      style: const TextStyle(fontSize: 9.0, fontWeight: FontWeight.w600, color: Color(0xFF5B21B6)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 2.0),
+            const Text(
+              'Flap bend angles β(θ) dynamically realign parallel to connecting run',
+              style: TextStyle(fontSize: 8.5, color: Color(0xFF64748B), fontStyle: FontStyle.italic),
+            ),
+          ],
+        ],
       ),
     );
   }

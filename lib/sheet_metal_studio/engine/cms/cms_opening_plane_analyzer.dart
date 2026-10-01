@@ -84,6 +84,7 @@ class CmsOpeningPlaneAnalyzer {
     final isOutsideRiser = !isReducer && docType.contains('outside') && (docType.contains('riser') || docType.contains('rise'));
     final isInsideRiser = !isReducer && ((docType.contains('inside') && (docType.contains('riser') || docType.contains('rise'))) ||
         CmsScalingController.isInsideRiserGeometry(document));
+    final isTee = docType.contains('tee');
 
     // 1. Measure opening width directly from floor edge length
     final dx = p2.x - p1.x;
@@ -188,6 +189,15 @@ class CmsOpeningPlaneAnalyzer {
         }
       }
       nominalH ??= isPort1 ? 100.0 : 50.0;
+    } else if (isTee) {
+      if (normal.x < -0.5) {
+        nominalH = (document.parameters['port1_height'] as num?)?.toDouble();
+      } else if (normal.x > 0.5) {
+        nominalH = (document.parameters['port2_height'] as num?)?.toDouble();
+      } else {
+        nominalH = (document.parameters['port3_height'] as num?)?.toDouble();
+      }
+      nominalH ??= (document.parameters['height'] as num?)?.toDouble();
     } else if (nominalH == null || nominalH <= 15.0) {
       final match = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
       if (match != null) {

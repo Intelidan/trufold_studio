@@ -76,53 +76,21 @@ void main() {
       const doc = DsfDocument(
         productType: 'Test Part',
         itemName: 'TEST-01',
-        outerContour: [
-          CadPoint2D(0, 0),
-          CadPoint2D(200, 0),
-          CadPoint2D(200, 300),
-          CadPoint2D(0, 300),
-        ],
-        punches: [
-          CncPunchPrimitive(
-            id: 'P1',
-            type: PunchType.roundHole,
-            center: CadPoint2D(40, 50),
-            diameterMm: 10,
-          ),
-        ],
-        bends: [
-          FoldBendLine(
-            id: 'B1',
-            p1: CadPoint2D(0, 100),
-            p2: CadPoint2D(200, 100),
-            targetAngleDeg: 90,
-            radiusMm: 1.5,
-          ),
-        ],
+        outerContour: [CadPoint2D(0, 0), CadPoint2D(200, 0), CadPoint2D(200, 300), CadPoint2D(0, 300)],
+        punches: [CncPunchPrimitive(id: 'P1', type: PunchType.roundHole, center: CadPoint2D(40, 50), diameterMm: 10)],
+        bends: [FoldBendLine(id: 'B1', p1: CadPoint2D(0, 100), p2: CadPoint2D(200, 100), targetAngleDeg: 90, radiusMm: 1.5)],
       );
 
       // Punch center
-      final punchCenter = CadDimension.resolveAnchorPoint(
-        doc: doc,
-        entityId: 'P1',
-        anchorType: CadAnchorType.center,
-      );
+      final punchCenter = CadDimension.resolveAnchorPoint(doc: doc, entityId: 'P1', anchorType: CadAnchorType.center);
       expect(punchCenter, equals(const CadPoint2D(40, 50)));
 
       // Bend midpoint
-      final bendMid = CadDimension.resolveAnchorPoint(
-        doc: doc,
-        entityId: 'B1',
-        anchorType: CadAnchorType.midpoint,
-      );
+      final bendMid = CadDimension.resolveAnchorPoint(doc: doc, entityId: 'B1', anchorType: CadAnchorType.midpoint);
       expect(bendMid, equals(const CadPoint2D(100, 100)));
 
       // Contour edge midpoint
-      final edgeMid = CadDimension.resolveAnchorPoint(
-        doc: doc,
-        entityId: 'CONTOUR_EDGE_0',
-        anchorType: CadAnchorType.midpoint,
-      );
+      final edgeMid = CadDimension.resolveAnchorPoint(doc: doc, entityId: 'CONTOUR_EDGE_0', anchorType: CadAnchorType.midpoint);
       expect(edgeMid, equals(const CadPoint2D(100, 0)));
     });
   });
@@ -132,69 +100,28 @@ void main() {
       const doc = DsfDocument(
         productType: 'Test Part',
         itemName: 'TEST-01',
-        outerContour: [
-          CadPoint2D(0, 0),
-          CadPoint2D(200, 0),
-          CadPoint2D(200, 300),
-          CadPoint2D(0, 300),
-        ],
-        punches: [
-          CncPunchPrimitive(
-            id: 'P1',
-            type: PunchType.roundHole,
-            center: CadPoint2D(50, 50),
-            diameterMm: 10,
-          ),
-        ],
-        bends: [
-          FoldBendLine(
-            id: 'B1',
-            p1: CadPoint2D(0, 100),
-            p2: CadPoint2D(200, 100),
-            targetAngleDeg: 90,
-            radiusMm: 1.5,
-          ),
-        ],
-        cutLines: [
-          CadLineSegment(
-            id: 'C1',
-            p1: CadPoint2D(50, 200),
-            p2: CadPoint2D(150, 200),
-          ),
-        ],
+        outerContour: [CadPoint2D(0, 0), CadPoint2D(200, 0), CadPoint2D(200, 300), CadPoint2D(0, 300)],
+        punches: [CncPunchPrimitive(id: 'P1', type: PunchType.roundHole, center: CadPoint2D(50, 50), diameterMm: 10)],
+        bends: [FoldBendLine(id: 'B1', p1: CadPoint2D(0, 100), p2: CadPoint2D(200, 100), targetAngleDeg: 90, radiusMm: 1.5)],
+        cutLines: [CadLineSegment(id: 'C1', p1: CadPoint2D(50, 200), p2: CadPoint2D(150, 200))],
       );
 
       final targets = MagneticSnapEngine.extractTargets(doc);
 
       // Test snap to punch center
-      final punchSnap = MagneticSnapEngine.findClosestSnap(
-        cursorMm: const CadPoint2D(51, 49),
-        targets: targets,
-        doc: doc,
-        snapRadiusMm: 8.0,
-      );
+      final punchSnap = MagneticSnapEngine.findClosestSnap(cursorMm: const CadPoint2D(51, 49), targets: targets, doc: doc, snapRadiusMm: 8.0);
       expect(punchSnap, isNotNull);
       expect(punchSnap!.entityId, equals('P1'));
       expect(punchSnap.type, equals(SnapType.punchCenter));
 
       // Test snap to bend midpoint
-      final bendSnap = MagneticSnapEngine.findClosestSnap(
-        cursorMm: const CadPoint2D(100, 101),
-        targets: targets,
-        doc: doc,
-        snapRadiusMm: 8.0,
-      );
+      final bendSnap = MagneticSnapEngine.findClosestSnap(cursorMm: const CadPoint2D(100, 101), targets: targets, doc: doc, snapRadiusMm: 8.0);
       expect(bendSnap, isNotNull);
       expect(bendSnap!.entityId, equals('B1'));
       expect(bendSnap.type, equals(SnapType.edgeMidpoint));
 
       // Test snap to cut line endpoint
-      final cutSnap = MagneticSnapEngine.findClosestSnap(
-        cursorMm: const CadPoint2D(50.5, 200.5),
-        targets: targets,
-        doc: doc,
-        snapRadiusMm: 8.0,
-      );
+      final cutSnap = MagneticSnapEngine.findClosestSnap(cursorMm: const CadPoint2D(50.5, 200.5), targets: targets, doc: doc, snapRadiusMm: 8.0);
       expect(cutSnap, isNotNull);
       expect(cutSnap!.entityId, equals('C1'));
     });
@@ -208,26 +135,11 @@ void main() {
       const doc = DsfDocument(
         productType: 'Test Part',
         itemName: 'TEST-01',
-        outerContour: [
-          CadPoint2D(0, 0),
-          CadPoint2D(200, 0),
-          CadPoint2D(200, 300),
-          CadPoint2D(0, 300),
-        ],
+        outerContour: [CadPoint2D(0, 0), CadPoint2D(200, 0), CadPoint2D(200, 300), CadPoint2D(0, 300)],
         bends: [],
         punches: [
-          CncPunchPrimitive(
-            id: 'P1',
-            type: PunchType.roundHole,
-            center: CadPoint2D(50, 50),
-            diameterMm: 10,
-          ),
-          CncPunchPrimitive(
-            id: 'P2',
-            type: PunchType.roundHole,
-            center: CadPoint2D(150, 50),
-            diameterMm: 10,
-          ),
+          CncPunchPrimitive(id: 'P1', type: PunchType.roundHole, center: CadPoint2D(50, 50), diameterMm: 10),
+          CncPunchPrimitive(id: 'P2', type: PunchType.roundHole, center: CadPoint2D(150, 50), diameterMm: 10),
         ],
       );
       vm.loadDocument(doc);
@@ -259,7 +171,7 @@ void main() {
 
       // Inline editable badge pending ID is set
       expect(vm.pendingInPlaceEditDimId, equals(dim.id));
-      expect(vm.toolMode, equals(StudioToolMode.select));
+      expect(vm.toolMode, equals(StudioToolMode.addDimension));
     });
 
     test('Direct driving Hole-to-Hole dimension translates driven punch along constraint vector', () {
@@ -321,32 +233,12 @@ void main() {
       const doc = DsfDocument(
         productType: 'Test Part',
         itemName: 'TEST-01',
-        outerContour: [
-          CadPoint2D(0, 0),
-          CadPoint2D(300, 0),
-          CadPoint2D(300, 300),
-          CadPoint2D(0, 300),
-        ],
+        outerContour: [CadPoint2D(0, 0), CadPoint2D(300, 0), CadPoint2D(300, 300), CadPoint2D(0, 300)],
         bends: [],
         punches: [
-          CncPunchPrimitive(
-            id: 'P1',
-            type: PunchType.roundHole,
-            center: CadPoint2D(50, 50),
-            diameterMm: 10,
-          ),
-          CncPunchPrimitive(
-            id: 'P2',
-            type: PunchType.roundHole,
-            center: CadPoint2D(100, 50),
-            diameterMm: 10,
-          ),
-          CncPunchPrimitive(
-            id: 'P3',
-            type: PunchType.roundHole,
-            center: CadPoint2D(150, 50),
-            diameterMm: 10,
-          ),
+          CncPunchPrimitive(id: 'P1', type: PunchType.roundHole, center: CadPoint2D(50, 50), diameterMm: 10),
+          CncPunchPrimitive(id: 'P2', type: PunchType.roundHole, center: CadPoint2D(100, 50), diameterMm: 10),
+          CncPunchPrimitive(id: 'P3', type: PunchType.roundHole, center: CadPoint2D(150, 50), diameterMm: 10),
         ],
         dimensions: [
           CadDimension(
@@ -401,35 +293,11 @@ void main() {
       const doc = DsfDocument(
         productType: 'Test Part',
         itemName: 'TEST-01',
-        outerContour: [
-          CadPoint2D(0, 0),
-          CadPoint2D(300, 0),
-          CadPoint2D(300, 300),
-          CadPoint2D(0, 300),
-        ],
-        bends: [
-          FoldBendLine(
-            id: 'B1',
-            p1: CadPoint2D(10, 0),
-            p2: CadPoint2D(10, 300),
-            targetAngleDeg: 90,
-            radiusMm: 1.5,
-          ),
-        ],
+        outerContour: [CadPoint2D(0, 0), CadPoint2D(300, 0), CadPoint2D(300, 300), CadPoint2D(0, 300)],
+        bends: [FoldBendLine(id: 'B1', p1: CadPoint2D(10, 0), p2: CadPoint2D(10, 300), targetAngleDeg: 90, radiusMm: 1.5)],
         punches: [
-          CncPunchPrimitive(
-            id: 'P1',
-            type: PunchType.roundHole,
-            center: CadPoint2D(50, 100),
-            diameterMm: 10,
-          ),
-          CncPunchPrimitive(
-            id: 'P2',
-            type: PunchType.square,
-            center: CadPoint2D(150, 105),
-            widthMm: 15,
-            lengthMm: 15,
-          ),
+          CncPunchPrimitive(id: 'P1', type: PunchType.roundHole, center: CadPoint2D(50, 100), diameterMm: 10),
+          CncPunchPrimitive(id: 'P2', type: PunchType.square, center: CadPoint2D(150, 105), widthMm: 15, lengthMm: 15),
         ],
         dimensions: [
           CadDimension(
@@ -461,14 +329,7 @@ void main() {
       vm.selectDimension('dim_1');
       expect(vm.selectedDimensionId, equals('dim_1'));
 
-      vm.selectFeature(const SheetHoleFeature(
-        id: 'feat_p1',
-        name: 'Hole P1',
-        punchId: 'P1',
-        holeType: 'round',
-        x: 50,
-        y: 100,
-      ));
+      vm.selectFeature(const SheetHoleFeature(id: 'feat_p1', name: 'Hole P1', punchId: 'P1', holeType: 'round', x: 50, y: 100));
       expect(vm.selectedDimensionId, isNull);
       expect(vm.selectedPunchId, equals('P1'));
     });
@@ -491,10 +352,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 340,
-              child: CadPropertyInspector(viewModel: vm),
-            ),
+            body: SizedBox(width: 340, child: CadPropertyInspector(viewModel: vm)),
           ),
         ),
       );
@@ -587,12 +445,7 @@ void main() {
     });
 
     test('removeConstraint deletes constraint, clears selection, and supports undo', () {
-      const constraint = CadConstraint(
-        id: 'c_to_delete',
-        type: CadConstraintType.distance,
-        entityIds: ['P1', 'P2'],
-        parameterValue: 100.0,
-      );
+      const constraint = CadConstraint(id: 'c_to_delete', type: CadConstraintType.distance, entityIds: ['P1', 'P2'], parameterValue: 100.0);
       vm.addConstraint(constraint);
       vm.selectConstraint('c_to_delete');
       expect(vm.selectedConstraintId, equals('c_to_delete'));
@@ -623,6 +476,291 @@ void main() {
       expect(createdDim.referenceAId, equals('P1'));
       expect(createdDim.referenceBId, isNotNull);
       expect(createdDim.referenceBId!.startsWith('CONTOUR_EDGE_'), isTrue);
+    });
+  });
+
+  group('7. Single-Click Segment Dimensioning on Any Segment', () {
+    late SheetMetalStudioViewModel vm;
+
+    setUp(() {
+      vm = SheetMetalStudioViewModel();
+      const testDoc = DsfDocument(
+        productType: 'Test Sheet',
+        itemName: 'SEG-DIM-01',
+        outerContour: [CadPoint2D(0, 0), CadPoint2D(200, 0), CadPoint2D(200, 300), CadPoint2D(0, 300)],
+        bends: [FoldBendLine(id: 'B1', p1: CadPoint2D(0, 120), p2: CadPoint2D(200, 120), targetAngleDeg: 90, radiusMm: 1.5)],
+        cutLines: [CadLineSegment(id: 'C1', p1: CadPoint2D(60, 40), p2: CadPoint2D(60, 200))],
+        punches: [CncPunchPrimitive(id: 'P1', type: PunchType.roundHole, center: CadPoint2D(100, 250), diameterMm: 12.0)],
+      );
+      vm.loadDocument(testDoc);
+    });
+
+    test('Clicking on a bend line immediately creates an associative dimension spanning its endpoints', () {
+      vm.setToolMode(StudioToolMode.addDimension);
+      expect(vm.toolMode, equals(StudioToolMode.addDimension));
+
+      // Click at the midpoint of bend B1 (100, 120)
+      vm.handleCanvasClick(const CadPoint2D(100, 120));
+
+      expect(vm.document.dimensions.isNotEmpty, isTrue);
+      final dim = vm.document.dimensions.last;
+      expect(dim.type, equals(CadDimensionType.aligned));
+      expect(dim.referenceAId, equals('B1'));
+      expect(dim.referenceBId, equals('B1'));
+      expect(dim.pointA, equals(const CadPoint2D(0, 120)));
+      expect(dim.pointB, equals(const CadPoint2D(200, 120)));
+      expect(dim.measuredValue, equals(200.0));
+      expect(vm.toolMode, equals(StudioToolMode.addDimension));
+      expect(vm.selectedDimensionId, equals(dim.id));
+
+      // Association check
+      final assoc = AssociativeDimensionEngine.resolveAssociation(dim, vm.document);
+      expect(assoc.pA, equals(const CadPoint2D(0, 120)));
+      expect(assoc.pB, equals(const CadPoint2D(200, 120)));
+      expect(assoc.value, equals(200.0));
+
+      // Layout check - verify witness lines and dimension line are non-zero
+      final layout = AssociativeDimensionEngine.resolveLayout(dim, vm.document);
+      expect(layout.dimLineStart.dx, isNot(equals(layout.dimLineEnd.dx)));
+      expect(layout.witnessAStart, isNot(equals(layout.witnessAEnd)));
+    });
+
+    test('Clicking on an outer contour edge immediately creates a dimension pointing outward', () {
+      vm.setToolMode(StudioToolMode.addDimension);
+
+      // Click near the bottom contour edge (from 0,0 to 200,0) at (80, 2)
+      vm.handleCanvasClick(const CadPoint2D(80, 2));
+
+      expect(vm.document.dimensions.isNotEmpty, isTrue);
+      final dim = vm.document.dimensions.last;
+      expect(dim.type, equals(CadDimensionType.aligned));
+      expect(dim.referenceAId?.startsWith('FACE_') == true || dim.referenceAId == 'CONTOUR_EDGE_0', isTrue);
+      expect(dim.referenceBId, equals(dim.referenceAId));
+      expect(dim.pointA, equals(const CadPoint2D(0, 0)));
+      expect(dim.pointB, equals(const CadPoint2D(200, 0)));
+      expect(dim.measuredValue, equals(200.0));
+
+      // Dimension line offset should be directed outward (downwards into negative Y)
+      final layout = AssociativeDimensionEngine.resolveLayout(dim, vm.document);
+      expect(layout.dimLineStart.dy, lessThan(0.0));
+      expect(layout.dimLineEnd.dy, lessThan(0.0));
+    });
+
+    test('Clicking on a cut line immediately creates an associative dimension', () {
+      vm.setToolMode(StudioToolMode.addDimension);
+
+      // Cut line C1 is from (60, 40) to (60, 200), length = 160 mm. Click at (60, 100).
+      vm.handleCanvasClick(const CadPoint2D(60, 100));
+
+      expect(vm.document.dimensions.isNotEmpty, isTrue);
+      final dim = vm.document.dimensions.last;
+      expect(dim.type, equals(CadDimensionType.aligned));
+      expect(dim.referenceAId, equals('C1'));
+      expect(dim.referenceBId, equals('C1'));
+      expect(dim.pointA, equals(const CadPoint2D(60, 40)));
+      expect(dim.pointB, equals(const CadPoint2D(60, 200)));
+      expect(dim.measuredValue, equals(160.0));
+    });
+
+    test('Clicking on a segment while magnetic snap is active still dimensions the segment', () {
+      vm.setToolMode(StudioToolMode.addDimension);
+
+      // Hover near bend midpoint which triggers magnetic snap to the midpoint of B1
+      vm.updateCursorMm(const CadPoint2D(100.5, 120.2));
+      expect(vm.activeSnap, isNotNull);
+
+      // Click with snap active
+      vm.handleCanvasClick(const CadPoint2D(100.5, 120.2));
+
+      expect(vm.document.dimensions.isNotEmpty, isTrue);
+      final dim = vm.document.dimensions.last;
+      expect(dim.referenceAId, equals('B1'));
+      expect(dim.measuredValue, equals(200.0));
+      expect(dim.pointA, equals(const CadPoint2D(0, 120)));
+      expect(dim.pointB, equals(const CadPoint2D(200, 120)));
+    });
+
+    test('Clicking a segment in dragDimension mode also immediately dimensions the segment', () {
+      vm.setToolMode(StudioToolMode.dragDimension);
+
+      // Click on bend B1 at (50, 120)
+      vm.handleCanvasClick(const CadPoint2D(50, 120));
+
+      expect(vm.document.dimensions.isNotEmpty, isTrue);
+      final dim = vm.document.dimensions.last;
+      expect(dim.type, equals(CadDimensionType.aligned));
+      expect(dim.referenceAId, equals('B1'));
+      expect(dim.measuredValue, equals(200.0));
+    });
+
+    test('Moving a bend endpoint updates the segment dimension associatively', () {
+      vm.setToolMode(StudioToolMode.addDimension);
+      vm.handleCanvasClick(const CadPoint2D(100, 120));
+
+      final dim = vm.document.dimensions.last;
+      expect(dim.measuredValue, equals(200.0));
+
+      // Drag bend B1 endpoint P2 from (200, 120) to (250, 120)
+      vm.updateBendEndpoint(bendId: 'B1', isP1: false, newPoint: const CadPoint2D(250, 120));
+
+      // Resolve association with the updated document
+      final updatedAssoc = AssociativeDimensionEngine.resolveAssociation(dim, vm.document);
+      expect(updatedAssoc.pA, equals(const CadPoint2D(0, 120)));
+      expect(updatedAssoc.pB, equals(const CadPoint2D(250, 120)));
+      expect(updatedAssoc.value, equals(250.0));
+    });
+  });
+
+  group('8. Two-Entity Associative Dimensions Dynamic Updating on Entity Move', () {
+    late SheetMetalStudioViewModel vm;
+
+    setUp(() {
+      vm = SheetMetalStudioViewModel();
+      const doc = DsfDocument(
+        productType: 'Test Part',
+        itemName: 'TEST-01',
+        outerContour: [CadPoint2D(0, 0), CadPoint2D(300, 0), CadPoint2D(300, 300), CadPoint2D(0, 300)],
+        bends: [
+          FoldBendLine(id: 'B1', p1: CadPoint2D(10, 0), p2: CadPoint2D(10, 300), targetAngleDeg: 90, radiusMm: 1.5),
+        ],
+        cutLines: [
+          CadLineSegment(id: 'C1', p1: CadPoint2D(60, 50), p2: CadPoint2D(60, 250)),
+        ],
+        punches: [
+          CncPunchPrimitive(id: 'P1', type: PunchType.roundHole, center: CadPoint2D(50, 100), diameterMm: 10),
+          CncPunchPrimitive(id: 'P2', type: PunchType.roundHole, center: CadPoint2D(150, 100), diameterMm: 10),
+        ],
+      );
+      vm.loadDocument(doc);
+    });
+
+    test('Dimension connecting 2 punches updates immediately when a punch is moved', () {
+      vm.setToolMode(StudioToolMode.addDimension);
+
+      // Snap and click P1 (50, 100)
+      vm.updateCursorMm(const CadPoint2D(50, 100));
+      vm.handleCanvasClick(const CadPoint2D(50, 100));
+
+      // Snap and click P2 (150, 100)
+      vm.updateCursorMm(const CadPoint2D(150, 100));
+      vm.handleCanvasClick(const CadPoint2D(150, 100));
+
+      expect(vm.document.dimensions.length, 1);
+      final dim = vm.document.dimensions.first;
+      expect(dim.referenceAId, equals('P1'));
+      expect(dim.referenceBId, equals('P2'));
+      expect(dim.pointA, equals(const CadPoint2D(50, 100)));
+      expect(dim.pointB, equals(const CadPoint2D(150, 100)));
+      expect(dim.measuredValue, equals(100.0));
+
+      // Select and move P2 by +50mm X to (200, 100)
+      vm.selectPunch('P2');
+      vm.moveSelectedPunch(const CadPoint2D(200, 100));
+
+      // The document dimension must be updated immediately
+      final updatedDim = vm.document.dimensions.first;
+      expect(updatedDim.pointA, equals(const CadPoint2D(50, 100)));
+      expect(updatedDim.pointB, equals(const CadPoint2D(200, 100)));
+      expect(updatedDim.measuredValue, equals(150.0));
+
+      // Move P1 to (20, 100)
+      vm.selectPunch('P1');
+      vm.moveSelectedPunch(const CadPoint2D(20, 100));
+
+      final updatedDim2 = vm.document.dimensions.first;
+      expect(updatedDim2.pointA, equals(const CadPoint2D(20, 100)));
+      expect(updatedDim2.pointB, equals(const CadPoint2D(200, 100)));
+      expect(updatedDim2.measuredValue, equals(180.0));
+    });
+
+    test('Dimension connecting punch to bend updates when punch is moved', () {
+      // Connect P1 (50, 100) to Bend B1 (at X=10) via click-and-drag
+      vm.setToolMode(StudioToolMode.dragDimension);
+      vm.commitDragDimension(
+        pA: const CadPoint2D(50, 100),
+        pB: const CadPoint2D(10, 100),
+      );
+
+      expect(vm.document.dimensions.length, 1);
+      final dim = vm.document.dimensions.first;
+      expect(dim.referenceAId, equals('P1'));
+      expect(dim.referenceBId, equals('B1'));
+      expect(dim.measuredValue, equals(40.0));
+
+      // Move P1 from (50, 100) to (90, 100)
+      vm.selectPunch('P1');
+      vm.moveSelectedPunch(const CadPoint2D(90, 100));
+
+      final updatedDim = vm.document.dimensions.first;
+      expect(updatedDim.pointA, equals(const CadPoint2D(90, 100)));
+      expect(updatedDim.pointB, equals(const CadPoint2D(10, 100)));
+      expect(updatedDim.measuredValue, equals(80.0));
+    });
+
+    test('Dimension connecting bend endpoint and cut line endpoint updates when bend endpoint is moved', () {
+      vm.setToolMode(StudioToolMode.addDimension);
+
+      // Snap and click B1 start point (10, 0)
+      vm.updateCursorMm(const CadPoint2D(10, 0));
+      vm.handleCanvasClick(const CadPoint2D(10, 0));
+
+      // Snap and click C1 start point (60, 50)
+      vm.updateCursorMm(const CadPoint2D(60, 50));
+      vm.handleCanvasClick(const CadPoint2D(60, 50));
+
+      expect(vm.document.dimensions.length, 1);
+      final dim = vm.document.dimensions.first;
+      expect(dim.referenceAId, equals('B1'));
+      expect(dim.referenceBId, equals('C1'));
+      expect(dim.pointA, equals(const CadPoint2D(10, 0)));
+      expect(dim.pointB, equals(const CadPoint2D(60, 50)));
+
+      // Move bend endpoint p1 from (10, 0) to (10, 50)
+      vm.updateBendEndpoint(bendId: 'B1', isP1: true, newPoint: const CadPoint2D(10, 50));
+
+      final updatedDim = vm.document.dimensions.first;
+      expect(updatedDim.pointA, equals(const CadPoint2D(10, 50)));
+      expect(updatedDim.pointB, equals(const CadPoint2D(60, 50)));
+      expect(updatedDim.measuredValue, equals(50.0));
+    });
+
+    test('Multi-entity movement updates all connected dimensions', () {
+      // Connect P1 to B1
+      vm.setToolMode(StudioToolMode.dragDimension);
+      vm.commitDragDimension(
+        pA: const CadPoint2D(50, 100),
+        pB: const CadPoint2D(10, 100),
+      );
+
+      // Connect P1 to P2
+      vm.setToolMode(StudioToolMode.addDimension);
+      vm.updateCursorMm(const CadPoint2D(50, 100));
+      vm.handleCanvasClick(const CadPoint2D(50, 100));
+      vm.updateCursorMm(const CadPoint2D(150, 100));
+      vm.handleCanvasClick(const CadPoint2D(150, 100));
+
+      expect(vm.document.dimensions.length, 2);
+
+      // Select both P1 and P2
+      vm.selectPunch('P1');
+      vm.selectPunch('P2', multiSelect: true);
+
+      // Move both punches by +20mm in X
+      vm.moveSelectedEntities(20, 0);
+
+      // P1 moved from (50, 100) to (70, 100)
+      // P2 moved from (150, 100) to (170, 100)
+      // Dim 1 (P1 to B1 at X=10): was 40mm, now 60mm
+      final dimP1B1 = vm.document.dimensions.firstWhere((d) => d.referenceBId == 'B1');
+      expect(dimP1B1.pointA, equals(const CadPoint2D(70, 100)));
+      expect(dimP1B1.pointB, equals(const CadPoint2D(10, 100)));
+      expect(dimP1B1.measuredValue, equals(60.0));
+
+      // Dim 2 (P1 to P2): distance remains 100mm, but endpoints shifted
+      final dimP1P2 = vm.document.dimensions.firstWhere((d) => d.referenceBId == 'P2');
+      expect(dimP1P2.pointA, equals(const CadPoint2D(70, 100)));
+      expect(dimP1P2.pointB, equals(const CadPoint2D(170, 100)));
+      expect(dimP1P2.measuredValue, equals(100.0));
     });
   });
 }

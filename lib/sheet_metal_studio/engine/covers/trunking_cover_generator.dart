@@ -257,12 +257,38 @@ class TrunkingCoverGenerator {
     final midY = (effectiveMinY + effectiveMaxY) / 2.0;
 
     // Read body height
-    final double bodyHeight;
-    if (portHeights.isNotEmpty) {
-      bodyHeight = portHeights.values.reduce(math.max);
-    } else {
-      bodyHeight = parameterOverrides?['height'] ?? (baseDocument.parameters['height'] as num?)?.toDouble() ?? 100.0;
+    double? detectedH = parameterOverrides?['height'];
+    if (detectedH == null || detectedH <= 0) {
+      if (portHeights.isNotEmpty) {
+        detectedH = portHeights.values.reduce(math.max);
+      }
     }
+    detectedH ??= (baseDocument.parameters['height'] as num?)?.toDouble();
+    if (detectedH == null || detectedH <= 0) {
+      // Try regex from itemName or productType, e.g. 100x50 or 45x100
+      final m = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch('${baseDocument.itemName} ${baseDocument.productType}');
+      if (m != null) {
+        final d1 = double.tryParse(m.group(1)!);
+        final d2 = double.tryParse(m.group(2)!);
+        if (d1 != null && d2 != null) {
+          detectedH = math.min(d1, d2);
+        }
+      }
+    }
+    if (detectedH == null || detectedH <= 0) {
+      for (final b in baseDocument.bends) {
+        if (b.role != BendLineRole.flange && (b.targetAngleDeg.abs() - 90.0).abs() < 15.0) {
+          final sideFace = baseDocument.faces.where((f) => f.id == b.childFaceId || f.id == b.parentFaceId).firstOrNull;
+          if (sideFace != null && sideFace.id != baseFloor.id) {
+            final h = _estimateFaceHeight(sideFace.vertices);
+            if (h > 15.0) {
+              detectedH = math.max(detectedH ?? 0.0, h);
+            }
+          }
+        }
+      }
+    }
+    final double bodyHeight = detectedH ?? 100.0;
 
     final DsfDocument coverDoc;
     if (profile == CmsScalingProfile.outsideRiser) {
@@ -292,23 +318,27 @@ class TrunkingCoverGenerator {
     // Compute automatic beside-base offset (placed cleanly to the right of the base part)
     final defaultOffset = computeDefaultBesideOffset(baseDocument, coverDoc);
 
-    return TrunkingCoverData(
-      document: coverDoc,
-      isVisible2D: isVisible2D,
-      isVisible3D: isVisible3D,
-      placementMode2D: placementMode2D,
-      placementMode3D: placementMode3D,
-      offset2D: offset2D ?? (placementMode2D == CoverPlacementMode2D.snappedToBase
-          ? const CadPoint2D(0, 0)
-          : defaultOffset),
-      offset3D: offset3D ?? const CadPoint3D(0, 0, 0),
-      properties: {
-        'productType': '${baseDocument.productType} Cover',
-        'generatedBy': 'TruFold Studio Cover Engine',
-        'flangeDepthMm': flangeDepth,
-        'bodyHeightMm': bodyHeight,
-        'snappedClearanceZ': defaultCoverClearanceZ,
-        'snugFitClearanceMm': defaultCoverClearanceOffset,
+      final isTray = baseDocument.productType.toLowerCase().contains('tray') ||
+          baseDocument.itemName.toLowerCase().contains('tray') ||
+          baseDocument.bends.any((b) => b.role == BendLineRole.flange && (b.targetAngleDeg.abs() - 135.0).abs() < 10.0);
+
+      return TrunkingCoverData(
+        document: coverDoc,
+        isVisible2D: isVisible2D,
+        isVisible3D: isVisible3D,
+        placementMode2D: placementMode2D,
+        placementMode3D: placementMode3D,
+        offset2D: offset2D ?? (placementMode2D == CoverPlacementMode2D.snappedToBase
+            ? const CadPoint2D(0, 0)
+            : defaultOffset),
+        offset3D: offset3D ?? const CadPoint3D(0, 0, 0),
+        properties: {
+          'productType': '${baseDocument.productType} Cover',
+          'generatedBy': 'TruFold Studio Cover Engine',
+          'flangeDepthMm': flangeDepth,
+          'bodyHeightMm': bodyHeight,
+          'snappedClearanceZ': isTray ? 0.5 : defaultCoverClearanceZ,
+          'snugFitClearanceMm': defaultCoverClearanceOffset,
         if (profile == CmsScalingProfile.reducer || CmsScalingController.isReducerGeometry(baseDocument)) ...{
           'isReducerCover': true,
           'port1Height': reducerPort1Height,
@@ -1440,4 +1470,18 @@ class TrunkingCoverGenerator {
     }
     return expanded;
   }
+
+  static double _estimateFaceHeight(List<CadPoint2D> vertices) {
+    if (vertices.length < 3) return 0.0;
+    double minX = vertices.first.x, maxX = vertices.first.x;
+    double minY = vertices.first.y, maxY = vertices.first.y;
+    for (final v in vertices) {
+      if (v.x < minX) minX = v.x;
+      if (v.x > maxX) maxX = v.x;
+      if (v.y < minY) minY = v.y;
+      if (v.y > maxY) maxY = v.y;
+    }
+    return math.min(maxX - minX, maxY - minY);
+  }
 }
+
