@@ -9,6 +9,7 @@
 
 import 'package:flutter/material.dart';
 import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
+import '../../../models/dynamic_dimension_input_state.dart';
 
 class StudioBottomBar extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -31,14 +32,21 @@ class _StudioBottomBarState extends State<StudioBottomBar> {
 
   @override
   Widget build(BuildContext context) {
-    final vm = widget.viewModel;
-    final constraintCount = vm.activeConstraintDefinitions.length;
-    final underConstrainedPoints = vm.document.outerContour.length;
+    return ListenableBuilder(
+      listenable: widget.viewModel,
+      builder: (context, _) {
+        final vm = widget.viewModel;
+        final constraintCount = vm.activeConstraintDefinitions.length;
+        final underConstrainedPoints = vm.document.outerContour.length;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // 1. Floating Navigation Toolbar (Centered above bottom bar)
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 0. Dynamic Dimension Input Command Bar (Visible during active drawing)
+            if (vm.isDrawingInProgress)
+              _buildDynamicInputCommandBar(vm, vm.dynamicInputState),
+
+            // 1. Floating Navigation Toolbar (Centered above bottom bar)
         Center(
           child: Container(
             margin: const EdgeInsets.only(bottom: 6),
@@ -328,12 +336,14 @@ class _StudioBottomBarState extends State<StudioBottomBar> {
                       ],
                     ),
                   ),
-                ),
+              ),
             ],
           ),
         ),
       ],
     );
+  },
+);
   }
 
   Widget _buildNavTool({
@@ -358,6 +368,264 @@ class _StudioBottomBarState extends State<StudioBottomBar> {
             size: 15,
             color: isActive ? const Color(0xFF0284C7) : const Color(0xFF475569),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Builds the professional CAD Dynamic Dimension Input bar displayed in the 2D view footer.
+  Widget _buildDynamicInputCommandBar(SheetMetalStudioViewModel vm, DynamicDimensionInputState inputState) {
+    final mode = vm.toolMode;
+    final hasTyped = inputState.hasTypedPrimary;
+    final primaryVal = inputState.formatPrimary(mode);
+    final isSecActive = inputState.isEditingSecondary;
+    final secondaryLabel = inputState.getSecondaryLabel(mode);
+    final hasSec = secondaryLabel != null;
+    final hasTypedSec = inputState.hasTypedSecondary;
+    final secVal = inputState.formatSecondary(mode);
+    final promptTitle = inputState.getPromptTitle(mode);
+    final primaryLabel = inputState.getPrimaryLabel(mode);
+    final unit = inputState.unit;
+    final angleDeg = inputState.angleDeg;
+
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A).withValues(alpha: 0.95),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: const Color(0xFF0284C7).withValues(alpha: 0.8),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Active CAD pulse indicator
+            Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF38BDF8),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Prompt title
+            Text(
+              'COMMAND: ${promptTitle.toUpperCase()}',
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+                color: Color(0xFFF8FAFC),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(width: 1, height: 16, color: const Color(0xFF334155)),
+            const SizedBox(width: 10),
+            // Primary input box
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: !isSecActive ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: !isSecActive ? const Color(0xFF38BDF8) : const Color(0xFF475569),
+                  width: !isSecActive ? 1.4 : 1.0,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$primaryLabel: ',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: !isSecActive ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    ),
+                  ),
+                  Text(
+                    primaryVal,
+                    style: TextStyle(
+                      fontFamily: 'Consolas',
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: hasTyped ? const Color(0xFFFACC15) : const Color(0xFFF8FAFC),
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    unit,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: !isSecActive ? const Color(0xFF38BDF8) : const Color(0xFF64748B),
+                    ),
+                  ),
+                  if (!isSecActive && hasTyped) ...[
+                    const SizedBox(width: 3),
+                    Container(width: 4, height: 10, color: const Color(0xFF38BDF8)),
+                  ],
+                ],
+              ),
+            ),
+            // Secondary input box (if applicable)
+            if (hasSec) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: const Color(0xFF475569), width: 0.8),
+                ),
+                child: const Text(
+                  'Tab ⇄',
+                  style: TextStyle(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF94A3B8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: isSecActive ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: isSecActive ? const Color(0xFF38BDF8) : const Color(0xFF475569),
+                    width: isSecActive ? 1.4 : 1.0,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$secondaryLabel: ',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: isSecActive ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                    Text(
+                      secVal,
+                      style: TextStyle(
+                        fontFamily: 'Consolas',
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: hasTypedSec ? const Color(0xFFFACC15) : const Color(0xFFF8FAFC),
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      unit,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: isSecActive ? const Color(0xFF38BDF8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                    if (isSecActive && hasTypedSec) ...[
+                      const SizedBox(width: 3),
+                      Container(width: 4, height: 10, color: const Color(0xFF38BDF8)),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            // Angle indicator
+            if (angleDeg.abs() > 0.05) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  '∠ ${angleDeg.toStringAsFixed(1)}°',
+                  style: const TextStyle(
+                    fontFamily: 'Consolas',
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFCBD5E1),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(width: 10),
+            Container(width: 1, height: 16, color: const Color(0xFF334155)),
+            const SizedBox(width: 8),
+            // Apply chip
+            InkWell(
+              onTap: () => vm.commitCurrentDrawingWithDynamicInput(),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0284C7),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check, size: 11, color: Colors.white),
+                    SizedBox(width: 3),
+                    Text(
+                      '↵ Enter',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 5),
+            // Cancel chip
+            InkWell(
+              onTap: () => vm.cancelActiveDrawing(),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF334155),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.close, size: 11, color: Color(0xFFCBD5E1)),
+                    SizedBox(width: 2),
+                    Text(
+                      'Esc',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFCBD5E1),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

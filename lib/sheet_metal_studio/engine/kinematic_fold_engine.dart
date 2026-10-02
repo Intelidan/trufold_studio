@@ -899,8 +899,13 @@ class KinematicFoldEngine {
           final vBotB = currentTransform.transformPoint(CadPoint3D(pB.x, pB.y, -thicknessMm));
           final vBotA = currentTransform.transformPoint(CadPoint3D(pA.x, pA.y, -thicknessMm));
 
+          final outVec = currentTransform.transformVector(CadPoint3D(-inVec.x, -inVec.y, 0.0)).normalized();
           var rimNorm = (vBotA - vTopA).cross(vTopB - vTopA).normalized();
-          if (rimNorm.length < 1e-3) rimNorm = const CadPoint3D(1, 0, 0);
+          if (rimNorm.length < 1e-3) {
+            rimNorm = outVec.length > 1e-3 ? outVec : const CadPoint3D(1, 0, 0);
+          } else if (outVec.length > 1e-3 && rimNorm.dot(outVec) < 0) {
+            rimNorm = rimNorm * -1.0;
+          }
 
           thicknessPolygons.add(
             CadFoldedPolygon3D(faceId: 'RIM_${node.face.id}_$i', vertices: [vTopA, vTopB, vBotB, vBotA], normal: rimNorm, color: const Color(0xFF78909C)),
@@ -963,8 +968,13 @@ class KinematicFoldEngine {
             ),
           );
 
+          final outVec = currentTransform.transformVector(CadPoint3D(-inVec.x, -inVec.y, 0.0)).normalized();
           var rimNorm = (vBotA - vMidA).cross(vMidB - vMidA).normalized();
-          if (rimNorm.length < 1e-3) rimNorm = const CadPoint3D(1, 0, 0);
+          if (rimNorm.length < 1e-3) {
+            rimNorm = outVec.length > 1e-3 ? outVec : const CadPoint3D(1, 0, 0);
+          } else if (outVec.length > 1e-3 && rimNorm.dot(outVec) < 0) {
+            rimNorm = rimNorm * -1.0;
+          }
           thicknessPolygons.add(
             CadFoldedPolygon3D(
               faceId: 'RIM_${node.face.id}_$i',

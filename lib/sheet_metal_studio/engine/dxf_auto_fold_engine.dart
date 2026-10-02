@@ -126,7 +126,7 @@ class DxfAutoFoldEngine {
     final contour = document.outerContour;
     if (contour.length < 3) return document;
 
-    final targetFlange = customFlangeMm ?? metadata?.flangeMm ?? 10.0;
+    final targetFlange = customFlangeMm ?? metadata?.flangeMm ?? 13.0;
     final candidates = detectCandidateLines(contour);
 
     final newBends = <FoldBendLine>[];

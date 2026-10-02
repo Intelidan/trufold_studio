@@ -18,6 +18,8 @@ void main() {
   late DsfDocument equalTeeDoc;
   late DsfDocument bend90Doc;
   late DsfDocument bend45Doc;
+  late DsfDocument insideRiserDoc;
+  late DsfDocument outsideRiserDoc;
   late DsfDocument trunkingEqualTeeDoc;
 
   setUpAll(() {
@@ -33,6 +35,12 @@ void main() {
     final b45File = File('assets/dsf_templates/tray_accessories/45_deg_bend_100x50.dsf');
     bend45Doc = DsfDocument.fromJson(jsonDecode(b45File.readAsStringSync()) as Map<String, dynamic>);
 
+    final irFile = File('assets/dsf_templates/tray_accessories/45_deg_inside_riser_100_50.dsf');
+    insideRiserDoc = DsfDocument.fromJson(jsonDecode(irFile.readAsStringSync()) as Map<String, dynamic>);
+
+    final orFile = File('assets/dsf_templates/tray_accessories/45_deg_outside_riser_100_50.dsf');
+    outsideRiserDoc = DsfDocument.fromJson(jsonDecode(orFile.readAsStringSync()) as Map<String, dynamic>);
+
     final trunkingFile = File('assets/dsf_templates/trunking_accessories/equal_tee_100x100.dsf');
     trunkingEqualTeeDoc = DsfDocument.fromJson(jsonDecode(trunkingFile.readAsStringSync()) as Map<String, dynamic>);
   });
@@ -43,6 +51,8 @@ void main() {
       expect(CmsScalingController.isTrayAccessory(equalTeeDoc), isTrue);
       expect(CmsScalingController.isTrayAccessory(bend90Doc), isTrue);
       expect(CmsScalingController.isTrayAccessory(bend45Doc), isTrue);
+      expect(CmsScalingController.isTrayAccessory(insideRiserDoc), isTrue);
+      expect(CmsScalingController.isTrayAccessory(outsideRiserDoc), isTrue);
 
       expect(CmsScalingController.isTrayAccessory(trunkingEqualTeeDoc), isFalse);
     });
@@ -327,6 +337,141 @@ void main() {
       for (final p in noFlapsBodyCouplers) {
         expect(p.isVisible, isTrue);
       }
+    });
+
+    test('TC-07: Flap Solid 3D Rim Normal Outward Orientation (Non-thin Sheet Solid Wall)', () {
+      final withFlaps = TrayBend90Scaler.scale(
+        baseline: bend90Doc,
+        targetWidth: 100.0,
+        targetHeight: 50.0,
+        targetRadius: 180.0,
+        includeCouplerFlaps: true,
+        couplerFlapLength: 30.0,
+      );
+
+      final fold3D = KinematicFoldEngine.foldDocument(withFlaps);
+
+      // Verify top rim faces for all 4 flaps exist and have upward-facing normals (z > 0.8)
+      final flapIds = ['F_FLAP_THROAT_P1', 'F_FLAP_WING_P1', 'F_FLAP_THROAT_P2', 'F_FLAP_WING_P2'];
+      for (final fid in flapIds) {
+        final flapRims = fold3D.thicknessPolygons.where((p) => p.faceId.startsWith('RIM_$fid')).toList();
+        expect(flapRims, isNotEmpty, reason: 'Flap $fid must have rim faces for solid sheet metal thickness');
+
+        // Look for the top rim quad (connecting the top sheet edge)
+        final topRims = flapRims.where((r) => r.normal.z > 0.8).toList();
+        expect(topRims, isNotEmpty, reason: 'Top rim on flap $fid must point up (+Z) so it is not culled');
+        for (final r in topRims) {
+          expect(r.normal.z, greaterThan(0.9));
+        }
+      }
+    });
+
+    test('TC-08: Height Scaling Coupler Slots Invariance (3 Vertical Slots Side-by-Side with 10mm Margins)', () {
+      // 1. At H = 100mm: Hole length = 80mm (100 - 20mm margins), 8mm width
+      final scaledH100 = TrayBend90Scaler.scale(
+        baseline: bend90Doc,
+        targetWidth: 100.0,
+        targetHeight: 100.0,
+        targetRadius: 180.0,
+        includeCouplerFlaps: true,
+        couplerFlapLength: 90.0,
+      );
+
+      final flapSlotsH100 = scaledH100.punches.where((p) => p.id.startsWith('FLAP_SLOT_')).toList();
+      // 4 flaps * 3 slots per flap = 12 slots total
+      expect(flapSlotsH100.length, equals(12));
+
+      for (final slot in flapSlotsH100) {
+        expect(slot.isVisible, isTrue);
+        expect(slot.role, equals(CncPunchRole.coupler));
+        // Slot length is 80mm for 100mm port height (leaving 10mm margin top & bottom)
+        expect(slot.lengthMm, equals(80.0));
+        expect(slot.widthMm, equals(8.0));
+      }
+
+      // Check throat flap slots (vertical rotation: 90.0)
+      final throatSlots = flapSlotsH100.where((p) => (p.rotationDeg - 90.0).abs() < 1e-3).toList();
+      expect(throatSlots.length, equals(6)); // 3 for P1 Throat, 3 for P2 Throat
+
+      // For throat slots, verify 25.0mm pitch between side-by-side slots
+      final p1ThroatSlots = throatSlots.where((p) => p.center.x < 162.0).toList()
+        ..sort((a, b) => a.center.x.compareTo(b.center.x));
+      expect(p1ThroatSlots.length, equals(3));
+      expect((p1ThroatSlots[1].center.x - p1ThroatSlots[0].center.x).abs(), closeTo(25.0, 0.01));
+      expect((p1ThroatSlots[2].center.x - p1ThroatSlots[1].center.x).abs(), closeTo(25.0, 0.01));
+
+      // 2. At H = 50mm: Hole length = 30mm (50 - 20mm margins), 8mm width
+      final scaledH50 = TrayBend90Scaler.scale(
+        baseline: bend90Doc,
+        targetWidth: 100.0,
+        targetHeight: 50.0,
+        targetRadius: 180.0,
+        includeCouplerFlaps: true,
+        couplerFlapLength: 90.0,
+      );
+
+      final flapSlotsH50 = scaledH50.punches.where((p) => p.id.startsWith('FLAP_SLOT_')).toList();
+      expect(flapSlotsH50.length, equals(12));
+      for (final slot in flapSlotsH50) {
+        expect(slot.lengthMm, equals(30.0));
+        expect(slot.widthMm, equals(8.0));
+      }
+    });
+
+    test('TC-09: Cable Tray Riser Coupler Flaps Synthesis, 3D Kinematics & Toggle Behavior', () {
+      const riserPorts = [
+        CmsPhysicalPort(id: 'PORT_1', index: 1, width: 200.0, height: 50.0),
+        CmsPhysicalPort(id: 'PORT_2', index: 2, width: 200.0, height: 50.0),
+      ];
+
+      final ctrl = CmsScalingController(
+        baselineDocument: insideRiserDoc,
+        contract: CmsProductContract.insideRiser45,
+        baselinePorts: riserPorts,
+      );
+
+      // Baseline: no flaps
+      expect(ctrl.includeCouplerFlaps, isFalse);
+      expect(ctrl.previewDocument.faces.any((f) => f.id.startsWith('F_FLAP_RISER_')), isFalse);
+
+      // Enable coupler flaps
+      ctrl.setIncludeCouplerFlaps(true);
+      expect(ctrl.includeCouplerFlaps, isTrue);
+
+      final withFlapsDoc = ctrl.previewDocument;
+      final flapFaces = withFlapsDoc.faces.where((f) => f.id.startsWith('F_FLAP_RISER_')).toList();
+      expect(flapFaces.length, equals(4));
+      expect(
+        flapFaces.map((f) => f.id).toSet(),
+        equals({'F_FLAP_RISER_P1_L', 'F_FLAP_RISER_P1_R', 'F_FLAP_RISER_P2_L', 'F_FLAP_RISER_P2_R'}),
+      );
+
+      final flapBends = withFlapsDoc.bends.where((b) => b.id.startsWith('BF_RISER_')).toList();
+      expect(flapBends.length, equals(4));
+      for (final b in flapBends) {
+        expect(b.direction, equals(BendDirection.down));
+        expect(b.targetAngleDeg, equals(0.0));
+      }
+
+      // Verify 3 vertical slots per flap = 12 flap slots
+      final flapSlots = withFlapsDoc.punches.where((p) => p.id.startsWith('FLAP_SLOT_RISER_')).toList();
+      expect(flapSlots.length, equals(12));
+      for (final s in flapSlots) {
+        expect(s.isVisible, isTrue);
+        expect(s.role, equals(CncPunchRole.coupler));
+        expect(s.rotationDeg, equals(90.0)); // Placed vertically
+      }
+
+      // Verify 3D folding
+      final fold3D = KinematicFoldEngine.foldDocument(withFlapsDoc);
+      expect(fold3D.polygons.any((p) => p.faceId == 'F_FLAP_RISER_P1_L'), isTrue);
+      expect(fold3D.polygons.any((p) => p.faceId == 'F_FLAP_RISER_P2_L'), isTrue);
+
+      // Toggle off removes flaps
+      ctrl.setIncludeCouplerFlaps(false);
+      expect(ctrl.previewDocument.faces.any((f) => f.id.startsWith('F_FLAP_RISER_')), isFalse);
+      expect(ctrl.previewDocument.bends.any((b) => b.id.startsWith('BF_RISER_')), isFalse);
+      expect(ctrl.previewDocument.punches.any((p) => p.id.startsWith('FLAP_SLOT_RISER_')), isFalse);
     });
   });
 }

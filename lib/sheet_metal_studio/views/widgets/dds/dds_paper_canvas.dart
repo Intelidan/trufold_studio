@@ -3289,18 +3289,20 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     }
 
     final double thkVal = double.tryParse(thickness) ?? 1.5;
-    const double densityMildSteel = 7850.0; // DX51D mild steel kg/m³
-    double baseMassKg = baseAreaM2 > 0 ? (baseAreaM2 * (thkVal / 1000.0) * densityMildSteel) : 0.64;
-    double coverMassKg = coverAreaM2 > 0 ? (coverAreaM2 * (thkVal / 1000.0) * densityMildSteel) : 0.20;
+    final activeMaterial = inst?.material ?? effectiveVm?.document.material.materialGrade ?? 'Pre-Galv DX51D';
+    final activeDensity = DdsInstanceEvaluator.resolveDensity(activeMaterial);
+    double baseMassKg = baseAreaM2 > 0 ? (baseAreaM2 * (thkVal / 1000.0) * activeDensity) : (0.64 * (activeDensity / 7850.0));
+    double coverMassKg = coverAreaM2 > 0 ? (coverAreaM2 * (thkVal / 1000.0) * activeDensity) : (0.20 * (activeDensity / 7850.0));
 
     if (baseAreaM2 == 0.0 && takeoff != null) {
+      final dynWeight = takeoff.blankSurfaceAreaM2 * (thkVal / 1000.0) * activeDensity;
       if (isCoverActive) {
-        baseMassKg = takeoff.estimatedNetWeightKg * 0.75;
-        coverMassKg = takeoff.estimatedNetWeightKg * 0.25;
+        baseMassKg = dynWeight * 0.75;
+        coverMassKg = dynWeight * 0.25;
         baseAreaM2 = takeoff.blankSurfaceAreaM2 * 0.75;
         coverAreaM2 = takeoff.blankSurfaceAreaM2 * 0.25;
       } else {
-        baseMassKg = takeoff.estimatedNetWeightKg;
+        baseMassKg = dynWeight;
         baseAreaM2 = takeoff.blankSurfaceAreaM2;
       }
     }

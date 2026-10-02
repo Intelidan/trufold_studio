@@ -45,7 +45,7 @@ class TrayEqualTeeScaleParameters {
       (dH).abs() > 1e-4 ||
       (dR).abs() > 1e-4 ||
       includeCouplerFlaps ||
-      (couplerFlapLength - 30.0).abs() > 1e-4 ||
+      (couplerFlapLength - 90.0).abs() > 1e-4 ||
       (perforationPitch - 100.0).abs() > 1e-4;
 
   const TrayEqualTeeScaleParameters({
@@ -56,7 +56,7 @@ class TrayEqualTeeScaleParameters {
     this.baselineHeight = 50.0,
     this.baselineRadius = 180.0,
     this.includeCouplerFlaps = false,
-    this.couplerFlapLength = 30.0,
+    this.couplerFlapLength = 90.0,
     this.perforationPitch = 100.0,
   });
 }
@@ -95,7 +95,7 @@ class TrayEqualTeeScaler {
     required double targetHeight,
     double targetRadius = 180.0,
     bool includeCouplerFlaps = false,
-    double couplerFlapLength = 30.0,
+    double couplerFlapLength = 90.0,
     double perforationPitch = 100.0,
   }) {
     final params = TrayEqualTeeScaleParameters(
@@ -596,49 +596,36 @@ class TrayEqualTeeScaler {
         required CadPoint2D vDir,
         required double rotDeg,
       }) {
-        final slotLen = math.min(20.0, math.max(12.0, couplerFlapLength - 8.0));
-        if (H <= 50.0) {
-          final u = couplerFlapLength / 2.0;
-          final vOffsets = H <= 35.0 ? [H * 0.3, H * 0.7] : [15.0, 35.0];
-          for (final v in vOffsets) {
-            punches.add(
-              sampleSlot.copyWith(
-                id: nextSlotId(),
-                center: CadPoint2D(origin.x + u * uDir.x + v * vDir.x, origin.y + u * uDir.y + v * vDir.y),
-                lengthMm: slotLen,
-                role: CncPunchRole.coupler,
-                rotationDeg: rotDeg,
-                isVisible: true,
-              ),
-            );
-          }
-        } else {
-          final uCols = [couplerFlapLength * 0.35, couplerFlapLength * 0.75];
-          final vPitch = math.min(50.0, H - 30.0);
-          final vOffsets = [H / 2.0 - vPitch / 2.0, H / 2.0 + vPitch / 2.0];
-          for (final u in uCols) {
-            for (final v in vOffsets) {
-              punches.add(
-                sampleSlot.copyWith(
-                  id: nextSlotId(),
-                  center: CadPoint2D(origin.x + u * uDir.x + v * vDir.x, origin.y + u * uDir.y + v * vDir.y),
-                  lengthMm: slotLen,
-                  role: CncPunchRole.coupler,
-                  rotationDeg: rotDeg,
-                  isVisible: true,
-                ),
-              );
-            }
-          }
+        final slotLen = math.max(10.0, H - 20.0);
+        const slotWid = 8.0;
+        const slotPitch = 25.0;
+
+        final uCenter = couplerFlapLength / 2.0;
+        final uOffsets = [uCenter - slotPitch, uCenter, uCenter + slotPitch];
+        final v = H / 2.0;
+        for (final u in uOffsets) {
+          punches.add(
+            sampleSlot.copyWith(
+              id: nextSlotId(),
+              center: CadPoint2D(origin.x + u * uDir.x + v * vDir.x, origin.y + u * uDir.y + v * vDir.y),
+              lengthMm: slotLen,
+              widthMm: slotWid,
+              role: CncPunchRole.coupler,
+              rotationDeg: rotDeg,
+              isVisible: true,
+            ),
+          );
         }
       }
 
-      addFlapPunches(origin: pB1Bot, uDir: uWing1, vDir: nWing1, rotDeg: 135.0);
-      addFlapPunches(origin: pB1Top, uDir: CadPoint2D(-uWing1.x, -uWing1.y), vDir: nWing1, rotDeg: 135.0);
-      addFlapPunches(origin: pB2Top, uDir: CadPoint2D(-uWing2.x, -uWing2.y), vDir: nWing2, rotDeg: 45.0);
-      addFlapPunches(origin: pB2Bot, uDir: uWing2, vDir: nWing2, rotDeg: 45.0);
-      addFlapPunches(origin: pLeftBottom, uDir: const CadPoint2D(-1.0, 0.0), vDir: const CadPoint2D(0.0, 1.0), rotDeg: 0.0);
-      addFlapPunches(origin: pRightBottom, uDir: const CadPoint2D(1.0, 0.0), vDir: const CadPoint2D(0.0, 1.0), rotDeg: 0.0);
+      final rotWing1 = ((math.atan2(nWing1.y, nWing1.x) * 180.0 / math.pi) % 180.0 + 180.0) % 180.0;
+      final rotWing2 = ((math.atan2(nWing2.y, nWing2.x) * 180.0 / math.pi) % 180.0 + 180.0) % 180.0;
+      addFlapPunches(origin: pB1Bot, uDir: uWing1, vDir: nWing1, rotDeg: rotWing1);
+      addFlapPunches(origin: pB1Top, uDir: CadPoint2D(-uWing1.x, -uWing1.y), vDir: nWing1, rotDeg: rotWing1);
+      addFlapPunches(origin: pB2Top, uDir: CadPoint2D(-uWing2.x, -uWing2.y), vDir: nWing2, rotDeg: rotWing2);
+      addFlapPunches(origin: pB2Bot, uDir: uWing2, vDir: nWing2, rotDeg: rotWing2);
+      addFlapPunches(origin: pLeftBottom, uDir: const CadPoint2D(-1.0, 0.0), vDir: const CadPoint2D(0.0, 1.0), rotDeg: 90.0);
+      addFlapPunches(origin: pRightBottom, uDir: const CadPoint2D(1.0, 0.0), vDir: const CadPoint2D(0.0, 1.0), rotDeg: 90.0);
     }
 
     return punches;

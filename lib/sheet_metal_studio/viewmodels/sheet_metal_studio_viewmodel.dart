@@ -127,6 +127,7 @@ import '../models/constraints/entity_constraint_state.dart';
 import '../models/canvas_display_settings.dart';
 import '../models/trunking_cover_data.dart';
 import '../engine/covers/trunking_cover_generator.dart';
+import '../models/dynamic_dimension_input_state.dart';
 
 enum StudioToolMode {
   select, // Click on bend line, face, cut, or punch to inspect/drag
@@ -411,6 +412,14 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   CadPoint2D? _pendingBendStart;
 
   CadPoint2D? _rubberBandEndpoint;
+
+  final DynamicDimensionInputState dynamicInputState = DynamicDimensionInputState();
+
+  bool get isDynamicInputActive => dynamicInputState.hasValue;
+
+  bool get isDrawingInProgress =>
+      (_toolMode != StudioToolMode.select && _toolMode != StudioToolMode.pan) &&
+      (_pendingBendStart != null || _pendingMultiPoints.isNotEmpty);
 
   String? _pendingDimensionEntityAId;
 
@@ -872,6 +881,10 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     if (cmsTemplate != null && cmsTemplate['canonicalDocument'] is Map) {
       try {
         baselineDoc = DsfDocument.fromJson(Map<String, dynamic>.from(cmsTemplate['canonicalDocument'] as Map));
+        // Preserve active parameters (such as flange_direction) from _document onto baselineDoc
+        baselineDoc = baselineDoc.copyWith(
+          parameters: Map<String, double>.from(baselineDoc.parameters)..addAll(_document.parameters),
+        );
       } catch (_) {
         baselineDoc = _document;
       }
@@ -929,7 +942,12 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   void applyCmsMorphParameter(String key, double value) {
     final updatedParams = Map<String, double>.from(_document.parameters);
     updatedParams[key] = value;
-    _document = _document.copyWith(parameters: updatedParams);
+    final updatedMetadata = Map<String, dynamic>.from(_document.metadata);
+    final cmsParams = Map<String, dynamic>.from(updatedMetadata['cmsParameters'] as Map? ?? {});
+    cmsParams[key] = value;
+    updatedMetadata['cmsParameters'] = cmsParams;
+    updatedMetadata['cms_param_$key'] = value;
+    _document = _document.copyWith(parameters: updatedParams, metadata: updatedMetadata);
 
     if (_scalingController == null) {
       startTeachScaling();
@@ -996,7 +1014,13 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
         _document = _document.copyWith(bends: updateBends(_document.bends));
         if (_scalingController != null) {
-          final updatedBase = _scalingController!.baselineDocument.copyWith(bends: updateBends(_scalingController!.baselineDocument.bends));
+          final updatedParams = Map<String, double>.from(_scalingController!.baselineDocument.parameters);
+          updatedParams['flange_direction'] = value;
+          final updatedBase = _scalingController!.baselineDocument.copyWith(
+            bends: updateBends(_scalingController!.baselineDocument.bends),
+            parameters: updatedParams,
+            metadata: Map<String, dynamic>.from(_scalingController!.baselineDocument.metadata)..addAll(_document.metadata),
+          );
           _scalingController!.updateBaselineDocument(updatedBase);
         }
         _previewDocWithCover = null;
@@ -1053,6 +1077,13 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       _document.metadata['cmsParameters'] = cmsParams;
       _document.metadata['cms_param_$key'] = value;
       _document.parameters[key] = value;
+      if (_previewDocWithCover != null) {
+        final previewParams = Map<String, dynamic>.from(_previewDocWithCover!.metadata['cmsParameters'] as Map? ?? {});
+        previewParams[key] = value;
+        _previewDocWithCover!.metadata['cmsParameters'] = previewParams;
+        _previewDocWithCover!.metadata['cms_param_$key'] = value;
+        _previewDocWithCover!.parameters[key] = value;
+      }
       notifyListeners();
     }
   }
@@ -1101,7 +1132,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       }
     }
 
-    final currentFlangeDepth = (curCover.properties['flangeDepthMm'] as num?)?.toDouble() ?? _coverFlangeDepth;
+    final currentFlangeDepth = _coverFlangeDepth;
     return TrunkingCoverGenerator.generateCover(
       targetBaseDoc,
       parameterOverrides: effectiveOverrides,
@@ -1181,8 +1212,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     if (_isTeachScalingActive && _scalingController?.currentPreview != null) {
       final scaled = _scalingController!.currentPreview!.scaledDocument;
       final previewDoc = scaled.copyWith(
-        parameters: Map<String, double>.from(_document.parameters)..addAll(scaled.parameters),
-        metadata: Map<String, dynamic>.from(_document.metadata)..addAll(scaled.metadata),
+        parameters: Map<String, double>.from(scaled.parameters)..addAll(_document.parameters),
+        metadata: Map<String, dynamic>.from(scaled.metadata)..addAll(_document.metadata),
       );
       if (_document.cover != null) {
         final syncedCover = _syncCoverForPreview(previewDoc);
@@ -1258,8 +1289,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       if (_previewDocWithCover != null) return _previewDocWithCover!;
       final scaled = _scalingController!.currentPreview!.scaledDocument;
       final previewDoc = scaled.copyWith(
-        parameters: Map<String, double>.from(_document.parameters)..addAll(scaled.parameters),
-        metadata: Map<String, dynamic>.from(_document.metadata)..addAll(scaled.metadata),
+        parameters: Map<String, double>.from(scaled.parameters)..addAll(_document.parameters),
+        metadata: Map<String, dynamic>.from(scaled.metadata)..addAll(_document.metadata),
       );
       if (_document.cover != null) {
         final syncedCover = _syncCoverForPreview(previewDoc);
@@ -1317,8 +1348,9 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   void setCoverFlangeDepth(double depth) {
     final clamped = depth.clamp(5.0, 50.0);
     _coverFlangeDepth = clamped;
-    if (_document.cover != null) {
-      final curCover = _document.cover!;
+    final hasCover = _document.cover != null || (_isTeachScalingActive && _previewDocWithCover?.cover != null);
+    if (hasCover) {
+      final curCover = _previewDocWithCover?.cover ?? _document.cover!;
       final effectiveOverrides = _scalingController != null
           ? Map<String, double>.fromEntries(_scalingController!.model.parameters.entries.map((e) => MapEntry(e.key, e.value.currentValue)))
           : null;
@@ -1335,10 +1367,18 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       );
       if (newCover != null) {
         _document = _document.copyWith(cover: newCover);
-        _recomputeMesh();
-        _recordHistory('Set Cover Flange Depth: ${clamped.toStringAsFixed(1)} mm');
-        notifyListeners();
       }
+      if (_isTeachScalingActive && _scalingController?.currentPreview != null) {
+        final previewBaseDoc = _previewDocWithCover ?? _scalingController!.currentPreview!.scaledDocument;
+        final syncedCover = _syncCoverForPreview(previewBaseDoc);
+        if (syncedCover != null) {
+          _previewDocWithCover = previewBaseDoc.copyWith(cover: syncedCover);
+          _previewCoverMesh = _buildCover3DMesh(syncedCover);
+        }
+      }
+      _recomputeMesh();
+      _recordHistory('Set Cover Flange Depth: ${clamped.toStringAsFixed(1)} mm');
+      notifyListeners();
     }
   }
 
@@ -1346,48 +1386,80 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     final effectiveOverrides = _scalingController != null
         ? Map<String, double>.fromEntries(_scalingController!.model.parameters.entries.map((e) => MapEntry(e.key, e.value.currentValue)))
         : null;
-    final newCover = TrunkingCoverGenerator.generateCover(_document, parameterOverrides: effectiveOverrides, flangeDepth: _coverFlangeDepth);
+    final targetDoc = _isTeachScalingActive && _scalingController?.currentPreview != null
+        ? (_previewDocWithCover ?? _scalingController!.currentPreview!.scaledDocument)
+        : _document;
+    final newCover = TrunkingCoverGenerator.generateCover(targetDoc, parameterOverrides: effectiveOverrides, flangeDepth: _coverFlangeDepth);
     if (newCover == null) return;
     _isCoverLocked = true;
     _document = _document.copyWith(cover: newCover);
+    if (_isTeachScalingActive && _scalingController?.currentPreview != null) {
+      final baseDoc = _previewDocWithCover ?? _scalingController!.currentPreview!.scaledDocument;
+      _previewDocWithCover = baseDoc.copyWith(cover: newCover);
+      _previewCoverMesh = _buildCover3DMesh(newCover);
+    }
     _recomputeMesh();
     _recordHistory('Create Trunking Cover');
     notifyListeners();
   }
 
   void removeCover() {
-    if (_document.cover == null) return;
-    _document = _document.copyWith(cover: null);
+    _document = _document.copyWith(clearCover: true);
+    if (_previewDocWithCover != null) {
+      _previewDocWithCover = _previewDocWithCover!.copyWith(clearCover: true);
+    }
+    _previewCoverMesh = null;
+    _cachedCoverMesh = null;
     _recomputeMesh();
     _recordHistory('Remove Trunking Cover');
     notifyListeners();
   }
 
+  void toggleCover() {
+    if (document.cover != null) {
+      removeCover();
+    } else {
+      createCoverForCurrentFitting();
+    }
+  }
+
   void snapCoverToBase() {
-    if (_document.cover == null) return;
-    final curCover = _document.cover!;
+    if (document.cover == null) return;
+    final curCover = document.cover!;
     final updated = curCover.copyWith(placementMode2D: CoverPlacementMode2D.snappedToBase, offset2D: const CadPoint2D(0, 0));
     _document = _document.copyWith(cover: updated);
+    if (_isTeachScalingActive && _previewDocWithCover != null) {
+      _previewDocWithCover = _previewDocWithCover!.copyWith(cover: updated);
+    }
     _recordHistory('Snap Cover to Base');
     notifyListeners();
   }
 
   void resetCoverBesideBase() {
-    if (_document.cover == null) return;
-    final curCover = _document.cover!;
-    final defaultOffset = TrunkingCoverGenerator.computeDefaultBesideOffset(_document, curCover.document);
+    if (document.cover == null) return;
+    final curCover = document.cover!;
+    final targetDoc = _isTeachScalingActive && _scalingController?.currentPreview != null
+        ? (_previewDocWithCover ?? _scalingController!.currentPreview!.scaledDocument)
+        : _document;
+    final defaultOffset = TrunkingCoverGenerator.computeDefaultBesideOffset(targetDoc, curCover.document);
     final updated = curCover.copyWith(placementMode2D: CoverPlacementMode2D.besideBase, offset2D: defaultOffset);
     _document = _document.copyWith(cover: updated);
+    if (_isTeachScalingActive && _previewDocWithCover != null) {
+      _previewDocWithCover = _previewDocWithCover!.copyWith(cover: updated);
+    }
     _recordHistory('Reset Cover Beside Base');
     notifyListeners();
   }
 
   void updateCoverOffset2D(Offset delta) {
-    if (_document.cover == null) return;
-    final curCover = _document.cover!;
+    if (document.cover == null) return;
+    final curCover = document.cover!;
     final newOffset = CadPoint2D(curCover.offset2D.x + delta.dx, curCover.offset2D.y + delta.dy);
     final updated = curCover.copyWith(placementMode2D: CoverPlacementMode2D.custom, offset2D: newOffset);
     _document = _document.copyWith(cover: updated);
+    if (_isTeachScalingActive && _previewDocWithCover != null) {
+      _previewDocWithCover = _previewDocWithCover!.copyWith(cover: updated);
+    }
     notifyListeners();
   }
 
@@ -1593,13 +1665,25 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   void setPendingBendStart(CadPoint2D? pt) {
     _pendingBendStart = pt;
     _rubberBandEndpoint = pt;
+    dynamicInputState.setAnchorPoint(pt);
+    if (pt == null) {
+      dynamicInputState.reset();
+    }
     notifyListeners();
   }
 
   CadPoint2D? get rubberBandEndpoint => _rubberBandEndpoint;
 
   void updateRubberBand(CadPoint2D? pt) {
-    _rubberBandEndpoint = pt;
+    dynamicInputState.setCursorPoint(pt);
+    if (dynamicInputState.hasValue && _pendingBendStart != null) {
+      _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(
+        toolMode: _toolMode,
+        toolConfig: toolConfig,
+      );
+    } else {
+      _rubberBandEndpoint = pt;
+    }
     notifyListeners();
   }
 
@@ -2044,9 +2128,12 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       meta['variantName'] = effectiveMeta.variantName;
     }
 
-    if (_persistentCmsPorts.isNotEmpty && _document.metadata['cmsTemplate'] is Map) {
+    if (meta['cmsTemplate'] is Map) {
       final cms = Map<String, dynamic>.from(meta['cmsTemplate'] as Map);
-      cms['ports'] = _persistentCmsPorts.map((p) => p.toJson()).toList();
+      if (_persistentCmsPorts.isNotEmpty) {
+        cms['ports'] = _persistentCmsPorts.map((p) => p.toJson()).toList();
+      }
+      cms['couplerSlotPunchIds'] = _document.punches.where((p) => p.role == CncPunchRole.coupler).map((p) => p.id).toList();
       if (effectiveMeta != null && effectiveMeta.category.isNotEmpty && effectiveMeta.category != FittingCategory.none) {
         cms['category'] = effectiveMeta.category;
         cms['productType'] = effectiveMeta.product;
@@ -2440,6 +2527,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     _activeSnap = null;
 
+    dynamicInputState.reset();
+
     if (mode != StudioToolMode.perforationPattern) {
       _previewPerforationPattern = null;
 
@@ -2759,7 +2848,16 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       _activeSnap = null;
     }
 
-    _rubberBandEndpoint = _activeSnap?.point ?? candidate;
+    dynamicInputState.setAnchorPoint(anchor);
+    dynamicInputState.setCursorPoint(_activeSnap?.point ?? candidate);
+    if (dynamicInputState.hasValue && anchor != null) {
+      _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(
+        toolMode: _toolMode,
+        toolConfig: toolConfig,
+      );
+    } else {
+      _rubberBandEndpoint = _activeSnap?.point ?? candidate;
+    }
 
     notifyListeners();
   }
@@ -2773,7 +2871,9 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   }
 
   void handleCanvasClick(CadPoint2D clickedPoint, {double snapRadiusMm = 8.0, bool autoPlace = false, bool multiSelect = false}) {
-    var effectivePoint = _activeSnap?.point ?? resolveEffectivePoint(clickedPoint, snapRadiusMm: snapRadiusMm);
+    var effectivePoint = (_toolMode == StudioToolMode.addDimension || _toolMode == StudioToolMode.dragDimension)
+        ? (_activeSnap?.point ?? clickedPoint)
+        : (_activeSnap?.point ?? resolveEffectivePoint(clickedPoint, snapRadiusMm: snapRadiusMm));
 
     if (_toolMode == StudioToolMode.addPunchRound || _toolMode == StudioToolMode.drawCircle) {
       final newId = 'P${_document.punches.length + 1}';
@@ -2896,11 +2996,15 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       } else {
         final p1 = _pendingBendStart!;
 
-        final p2 = effectivePoint;
+        final p2 = dynamicInputState.hasValue
+            ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig)
+            : effectivePoint;
 
         _pendingBendStart = null;
 
         _rubberBandEndpoint = null;
+
+        dynamicInputState.reset();
 
         if (p1.distanceTo(p2) > 1.0) {
           if (_toolMode == StudioToolMode.addFlange) {
@@ -2920,11 +3024,15 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       } else {
         final p1 = _pendingBendStart!;
 
-        final p2 = effectivePoint;
+        final p2 = dynamicInputState.hasValue
+            ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig)
+            : effectivePoint;
 
         _pendingBendStart = null;
 
         _rubberBandEndpoint = null;
+
+        dynamicInputState.reset();
 
         if (p1.distanceTo(p2) > 1.0) {
           addCutLine(p1, p2);
@@ -2940,11 +3048,15 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       } else {
         final c1 = _pendingBendStart!;
 
-        final c2 = effectivePoint;
+        final c2 = dynamicInputState.hasValue
+            ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig)
+            : effectivePoint;
 
         _pendingBendStart = null;
 
         _rubberBandEndpoint = null;
+
+        dynamicInputState.reset();
 
         if (c1.distanceTo(c2) > 1.0) {
           addCutRectangle(c1, c2);
@@ -2968,11 +3080,17 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       } else {
         final center = _pendingBendStart!;
 
-        final r = center.distanceTo(effectivePoint);
+        final effectiveEnd = dynamicInputState.hasValue
+            ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig)
+            : effectivePoint;
+
+        final r = dynamicInputState.primaryValue ?? center.distanceTo(effectiveEnd);
 
         _pendingBendStart = null;
 
         _rubberBandEndpoint = null;
+
+        dynamicInputState.reset();
 
         if (r > 0.5) {
           final newId = 'P${_document.punches.length + 1}';
@@ -3119,8 +3237,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         for (final punch in _document.allPunches) {
           if (!punch.isVisible) continue;
           final dist = clickedPoint.distanceTo(punch.center);
-          final effRadius = punch.isRound ? punch.diameterMm / 2.0 : math.max(punch.widthMm, punch.lengthMm) / 2.0;
-          if (dist <= math.min(10.0, effRadius + 2.0)) {
+          if (dist <= 3.0) {
             clickedPunchId = punch.id;
             clickedEntityId = punch.id;
             clickedAnchorType = CadAnchorType.center;
@@ -3131,11 +3248,17 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       }
 
       if (clickedEntityId == null) {
-        final anchor = AssociativeDimensionEngine.findAnchorAt(clickedPoint, _document, toleranceMm: math.max(snapRadiusMm, 8.0));
-        if (anchor != null) {
-          clickedEntityId = anchor.entityId;
-          clickedAnchorType = anchor.anchorType ?? CadAnchorType.endpoint;
-          effectivePoint = anchor.point;
+        if (_activeSnap != null) {
+          clickedEntityId = _activeSnap!.entityId;
+          clickedAnchorType = _mapSnapTypeToAnchorType(_activeSnap!.type, point: _activeSnap!.point, entityId: _activeSnap!.entityId);
+          effectivePoint = _activeSnap!.point;
+        } else {
+          final anchor = AssociativeDimensionEngine.findAnchorAt(clickedPoint, _document, toleranceMm: 2.5);
+          if (anchor != null) {
+            clickedEntityId = anchor.entityId;
+            clickedAnchorType = anchor.anchorType ?? CadAnchorType.endpoint;
+            effectivePoint = anchor.point;
+          }
         }
       }
 
@@ -3149,9 +3272,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
           (_activeSnap != null && _activeSnap!.type.isEndpoint);
 
       if (_pendingBendStart == null && clickedPunchId == null && !isEndpointClick) {
-        final hitSeg =
-            findSegmentAtPoint(clickedPoint, maxDistMm: math.max(snapRadiusMm * 2.0, 14.0)) ??
-            findSegmentAtPoint(effectivePoint, maxDistMm: math.max(snapRadiusMm * 2.0, 14.0));
+        final hitSeg = findSegmentAtPoint(clickedPoint, maxDistMm: 3.0);
 
         if (hitSeg != null) {
           final edgeP1 = hitSeg.p1;
@@ -3259,7 +3380,10 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       } else {
         // CLICK 2: Select Entity B & Place Dimension
         var pA = _pendingBendStart!;
-        var pB = effectivePoint;
+        var pB = dynamicInputState.hasValue
+            ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig)
+            : effectivePoint;
+        final customDimVal = dynamicInputState.primaryValue;
         final entityAId = _pendingDimensionEntityAId;
         final entityBId = clickedEntityId;
         final anchorTypeA = _pendingDimensionAnchorTypeA ?? CadAnchorType.endpoint;
@@ -3269,21 +3393,22 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         _rubberBandEndpoint = null;
         _pendingDimensionEntityAId = null;
         _pendingDimensionAnchorTypeA = null;
+        dynamicInputState.reset();
 
         // Auto-detect edge or entity if point is on or near an edge/bend/vertex
         var resolvedEntityAId = entityAId;
         var resolvedAnchorA = anchorTypeA;
         if (resolvedEntityAId == null) {
-          final aA = AssociativeDimensionEngine.findAnchorAt(pA, _document);
-          resolvedEntityAId = aA?.entityId ?? _findNearestEdgeOrBendId(pA);
+          final aA = AssociativeDimensionEngine.findAnchorAt(pA, _document, toleranceMm: 2.5);
+          resolvedEntityAId = aA?.entityId;
           if (aA?.anchorType != null) resolvedAnchorA = aA!.anchorType!;
         }
 
         var resolvedEntityBId = entityBId;
         var resolvedAnchorB = anchorTypeB;
         if (resolvedEntityBId == null) {
-          final aB = AssociativeDimensionEngine.findAnchorAt(pB, _document);
-          resolvedEntityBId = aB?.entityId ?? _findNearestEdgeOrBendId(pB);
+          final aB = AssociativeDimensionEngine.findAnchorAt(pB, _document, toleranceMm: 2.5);
+          resolvedEntityBId = aB?.entityId;
           if (aB?.anchorType != null) resolvedAnchorB = aB!.anchorType!;
         }
 
@@ -3300,13 +3425,19 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
             (resolvedEntityAId.startsWith('CONTOUR_EDGE_') ||
                 resolvedEntityAId.startsWith('FACE_') ||
                 _document.bends.any((b) => b.id == resolvedEntityAId) ||
-                _document.cutLines.any((c) => c.id == resolvedEntityAId));
+                _document.cutLines.any((c) => c.id == resolvedEntityAId) ||
+                _document.dimensions.any((d) => d.id == resolvedEntityAId) ||
+                resolvedEntityAId.startsWith('dim_') ||
+                resolvedEntityAId.startsWith('DIM_'));
         final isEdgeB =
             resolvedEntityBId != null &&
             (resolvedEntityBId.startsWith('CONTOUR_EDGE_') ||
                 resolvedEntityBId.startsWith('FACE_') ||
                 _document.bends.any((b) => b.id == resolvedEntityBId) ||
-                _document.cutLines.any((c) => c.id == resolvedEntityBId));
+                _document.cutLines.any((c) => c.id == resolvedEntityBId) ||
+                _document.dimensions.any((d) => d.id == resolvedEntityBId) ||
+                resolvedEntityBId.startsWith('dim_') ||
+                resolvedEntityBId.startsWith('DIM_'));
 
         if (isPunchA && isPunchB) {
           // Hole to Hole
@@ -3332,24 +3463,94 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
               pA = proj;
             }
           }
-        } else if (isEdgeA && isEdgeB) {
-          // Edge to Edge
-          categorizedType = CadDimensionType.edgeToEdge;
+        } else if (isEdgeA && resolvedEntityAId == resolvedEntityBId) {
+          // Clicked same edge twice -> measure distance between the two points along edge
+          categorizedType = CadDimensionType.aligned;
           allowedMotion = CadAllowedMotion.structuralParameter;
           refEntityId = resolvedEntityAId;
-          drivenEntityId = resolvedEntityBId;
-        } else if (isEdgeA && resolvedEntityAId == resolvedEntityBId) {
-          // Clicked same edge twice -> measure edge length
-          final edgeSeg = _resolveEdgeSegment(resolvedEntityAId);
+          drivenEntityId = null;
+          resolvedEntityBId = null;
+        } else if ((isEdgeA && resolvedEntityBId != null && (resolvedEntityBId.startsWith('CONTOUR_VERTEX_') || resolvedEntityBId.startsWith('contour_'))) ||
+                   (isEdgeB && resolvedEntityAId != null && (resolvedEntityAId.startsWith('CONTOUR_VERTEX_') || resolvedEntityAId.startsWith('contour_')))) {
+          final edgeId = isEdgeA ? resolvedEntityAId : resolvedEntityBId;
+          final edgeSeg = _resolveEdgeSegment(edgeId);
           if (edgeSeg != null) {
-            categorizedType = CadDimensionType.aligned;
+            final vPt = isEdgeA ? pB : pA;
+            final proj = _projectPointToSegmentLine(vPt, edgeSeg.$1, edgeSeg.$2);
+            if (vPt.distanceTo(proj) < 1.5) {
+              // The clicked vertex is on this edge! Measure distance between the two points
+              categorizedType = CadDimensionType.aligned;
+              allowedMotion = CadAllowedMotion.structuralParameter;
+              refEntityId = edgeId;
+              drivenEntityId = null;
+              resolvedEntityAId = edgeId;
+              resolvedEntityBId = null;
+            }
+          }
+        } else if (resolvedEntityAId != null && resolvedEntityAId == resolvedEntityBId && resolvedEntityAId.startsWith('CONTOUR_VERTEX_')) {
+          final vIdx = int.tryParse(resolvedEntityAId.replaceFirst('CONTOUR_VERTEX_', ''));
+          if (vIdx != null && _document.outerContour.length >= 2) {
+            final edgeId = 'CONTOUR_EDGE_$vIdx';
+            final edgeSeg = _resolveEdgeSegment(edgeId);
+            if (edgeSeg != null) {
+              categorizedType = CadDimensionType.aligned;
+              allowedMotion = CadAllowedMotion.structuralParameter;
+              pA = edgeSeg.$1;
+              pB = edgeSeg.$2;
+              refEntityId = edgeId;
+              drivenEntityId = edgeId;
+              resolvedEntityAId = edgeId;
+              resolvedEntityBId = edgeId;
+            }
+          }
+        } else if (isEdgeA && isEdgeB) {
+          // Check if segments form an angle or user requested angular
+          final segA = _resolveEdgeSegment(resolvedEntityAId);
+          final segB = _resolveEdgeSegment(resolvedEntityBId);
+          if (segA != null && segB != null) {
+            final angle = AssociativeDimensionEngine.calculateAngleBetweenSegments(
+              segA.$1, segA.$2, segB.$1, segB.$2,
+            );
+            final isSharingEndpoint = segA.$1.distanceTo(segB.$1) < 1.0 ||
+                segA.$1.distanceTo(segB.$2) < 1.0 ||
+                segA.$2.distanceTo(segB.$1) < 1.0 ||
+                segA.$2.distanceTo(segB.$2) < 1.0;
+            if (toolConfig.activeDimensionType == CadDimensionType.angular ||
+                (isSharingEndpoint && (angle - 0.0).abs() > 0.5 && (angle - 180.0).abs() > 0.5)) {
+              categorizedType = CadDimensionType.angular;
+              allowedMotion = CadAllowedMotion.structuralParameter;
+              refEntityId = resolvedEntityAId;
+              drivenEntityId = resolvedEntityBId;
+              pA = CadPoint2D((segA.$1.x + segA.$2.x) / 2.0, (segA.$1.y + segA.$2.y) / 2.0);
+              pB = CadPoint2D((segB.$1.x + segB.$2.x) / 2.0, (segB.$1.y + segB.$2.y) / 2.0);
+            } else {
+              categorizedType = CadDimensionType.edgeToEdge;
+              allowedMotion = CadAllowedMotion.structuralParameter;
+              refEntityId = resolvedEntityAId;
+              drivenEntityId = resolvedEntityBId;
+            }
+          } else {
+            categorizedType = CadDimensionType.edgeToEdge;
             allowedMotion = CadAllowedMotion.structuralParameter;
-            pA = edgeSeg.$1;
-            pB = edgeSeg.$2;
+            refEntityId = resolvedEntityAId;
+            drivenEntityId = resolvedEntityBId;
           }
         }
 
-        final dist = pA.distanceTo(pB);
+        final dist = categorizedType == CadDimensionType.angular
+            ? (AssociativeDimensionEngine.resolveAssociation(
+                CadDimension(
+                  id: '',
+                  type: CadDimensionType.angular,
+                  referenceAId: resolvedEntityAId,
+                  referenceBId: resolvedEntityBId,
+                  pointA: pA,
+                  pointB: pB,
+                  measuredValue: 0.0,
+                ),
+                _document,
+              ).value)
+            : pA.distanceTo(pB);
         if (dist > 0.5) {
           final dimId = 'dim_${DateTime.now().millisecondsSinceEpoch}_${_document.dimensions.length + 1}';
           final dim = CadDimension(
@@ -3370,6 +3571,9 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
             drivenEntityId: drivenEntityId,
           );
           addDimension(dim);
+          if (customDimVal != null && (customDimVal - dist).abs() > 1e-4) {
+            driveDimension(dimId, customDimVal);
+          }
           _pendingInPlaceEditDimId = dimId;
           // Tool remains active in StudioToolMode.addDimension for continuous dimensioning
         }
@@ -3383,16 +3587,23 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         }
       }
     } else if (_toolMode == StudioToolMode.select) {
+      final activeDoc = document;
       CncPunchPrimitive? bestPunch;
-      double bestPunchDist = double.infinity;
-      for (final p in _document.punches) {
-        final r = p.isRound ? (p.diameterMm / 2.0 + 3.0).clamp(10.0, 30.0) : (math.max(p.widthMm, p.lengthMm) / 2.0 + 3.0).clamp(10.0, 30.0);
-        final d1 = p.center.distanceTo(clickedPoint);
-        final d2 = p.center.distanceTo(effectivePoint);
-        final d = math.min(d1, d2);
-        if (d <= r && d < bestPunchDist) {
-          bestPunchDist = d;
-          bestPunch = p;
+      if (_hoveredPunchId != null) {
+        bestPunch = activeDoc.allPunches.where((p) => p.id == _hoveredPunchId).firstOrNull;
+      }
+      if (bestPunch == null) {
+        double bestPunchDist = double.infinity;
+        for (final p in activeDoc.allPunches) {
+          if (!p.isVisible) continue;
+          final r = p.isRound ? (p.diameterMm / 2.0 + 3.0).clamp(10.0, 30.0) : (math.max(p.widthMm, p.lengthMm) / 2.0 + 3.0).clamp(10.0, 30.0);
+          final d1 = p.center.distanceTo(clickedPoint);
+          final d2 = p.center.distanceTo(effectivePoint);
+          final d = math.min(d1, d2);
+          if (d <= r && d < bestPunchDist) {
+            bestPunchDist = d;
+            bestPunch = p;
+          }
         }
       }
 
@@ -3404,14 +3615,19 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         }
       } else {
         FoldBendLine? bestBend;
-        double bestBendDist = 15.0;
-        for (final bend in _document.bends) {
-          final d1 = _distToSegment(clickedPoint, bend.p1, bend.p2);
-          final d2 = _distToSegment(effectivePoint, bend.p1, bend.p2);
-          final dist = math.min(d1, d2);
-          if (dist <= bestBendDist) {
-            bestBendDist = dist;
-            bestBend = bend;
+        if (_hoveredBendId != null) {
+          bestBend = activeDoc.bends.where((b) => b.id == _hoveredBendId).firstOrNull;
+        }
+        if (bestBend == null) {
+          double bestBendDist = 15.0;
+          for (final bend in activeDoc.bends) {
+            final d1 = _distToSegment(clickedPoint, bend.p1, bend.p2);
+            final d2 = _distToSegment(effectivePoint, bend.p1, bend.p2);
+            final dist = math.min(d1, d2);
+            if (dist <= bestBendDist) {
+              bestBendDist = dist;
+              bestBend = bend;
+            }
           }
         }
 
@@ -3423,14 +3639,19 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
           }
         } else {
           CadLineSegment? bestCut;
-          double bestCutDist = 15.0;
-          for (final cut in _document.cutLines) {
-            final d1 = _distToSegment(clickedPoint, cut.p1, cut.p2);
-            final d2 = _distToSegment(effectivePoint, cut.p1, cut.p2);
-            final dist = math.min(d1, d2);
-            if (dist <= bestCutDist) {
-              bestCutDist = dist;
-              bestCut = cut;
+          if (_hoveredCutId != null) {
+            bestCut = activeDoc.cutLines.where((c) => c.id == _hoveredCutId).firstOrNull;
+          }
+          if (bestCut == null) {
+            double bestCutDist = 15.0;
+            for (final cut in activeDoc.cutLines) {
+              final d1 = _distToSegment(clickedPoint, cut.p1, cut.p2);
+              final d2 = _distToSegment(effectivePoint, cut.p1, cut.p2);
+              final dist = math.min(d1, d2);
+              if (dist <= bestCutDist) {
+                bestCutDist = dist;
+                bestCut = cut;
+              }
             }
           }
 
@@ -3442,14 +3663,19 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
             }
           } else {
             CadArc2D? bestArc;
-            double bestArcDist = 15.0;
-            for (final arc in _document.arcs) {
-              final d1 = arc.distanceTo(clickedPoint);
-              final d2 = arc.distanceTo(effectivePoint);
-              final dist = math.min(d1, d2);
-              if (dist <= bestArcDist) {
-                bestArcDist = dist;
-                bestArc = arc;
+            if (_hoveredArcId != null) {
+              bestArc = activeDoc.arcs.where((a) => a.id == _hoveredArcId).firstOrNull;
+            }
+            if (bestArc == null) {
+              double bestArcDist = 15.0;
+              for (final arc in activeDoc.arcs) {
+                final d1 = arc.distanceTo(clickedPoint);
+                final d2 = arc.distanceTo(effectivePoint);
+                final dist = math.min(d1, d2);
+                if (dist <= bestArcDist) {
+                  bestArcDist = dist;
+                  bestArc = arc;
+                }
               }
             }
 
@@ -3462,7 +3688,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
             } else {
               PerforationPattern? bestPattern;
               int? bestHoleIndex;
-              for (final pat in _document.perforationPatterns) {
+              for (final pat in activeDoc.perforationPatterns) {
                 final hIdx1 = pat.findHoleAt(clickedPoint, maxDistMm: 15.0);
                 final hIdx2 = pat.findHoleAt(effectivePoint, maxDistMm: 15.0);
                 final hIdx = hIdx1 ?? hIdx2;
@@ -3482,7 +3708,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
               } else {
                 // Check if clicked point hits a dimension line or reference
                 CadDimension? bestDim;
-                for (final d in _document.dimensions) {
+                for (final d in activeDoc.dimensions) {
                   if (d.pointA != null && d.pointB != null) {
                     if (_distToSegment(clickedPoint, d.pointA!, d.pointB!) <= 6.0 || _distToSegment(effectivePoint, d.pointA!, d.pointB!) <= 6.0) {
                       bestDim = d;
@@ -3493,8 +3719,23 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
                 if (bestDim != null) {
                   selectDimension(bestDim.id);
                 } else {
-                  if (!multiSelect) {
-                    clearSelection();
+                  PlanarSheetFace? bestFace;
+                  for (final face in activeDoc.faces) {
+                    if (_isPointInsidePolygon(clickedPoint, face.vertices) || _isPointInsidePolygon(effectivePoint, face.vertices)) {
+                      bestFace = face;
+                      break;
+                    }
+                  }
+                  if (bestFace != null) {
+                    if (multiSelect) {
+                      toggleEntitySelection(bestFace.id);
+                    } else {
+                      selectFace(bestFace.id);
+                    }
+                  } else {
+                    if (!multiSelect) {
+                      clearSelection();
+                    }
                   }
                 }
               }
@@ -3503,6 +3744,227 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         }
       }
     }
+  }
+
+  /// Cancels active drawing in progress and clears dynamic dimension input buffer.
+  void cancelActiveDrawing() {
+    _pendingBendStart = null;
+    _rubberBandEndpoint = null;
+    _pendingMultiPoints.clear();
+    _pendingDimensionEntityAId = null;
+    _pendingDimensionAnchorTypeA = null;
+    dynamicInputState.reset();
+    notifyListeners();
+  }
+
+  /// Commits current in-progress drawing (line, rectangle, circle, punch, dimension)
+  /// using either the user-typed dimension or current rubber-band dimension.
+  void commitCurrentDrawingWithDynamicInput() {
+    final anchor = _pendingBendStart ?? (_pendingMultiPoints.isNotEmpty ? _pendingMultiPoints.last : null);
+    if (anchor == null) return;
+
+    final effectiveEnd = dynamicInputState.computeEffectiveEndpoint(
+      toolMode: _toolMode,
+      toolConfig: toolConfig,
+    );
+
+    final primaryVal = dynamicInputState.primaryValue;
+    final secondaryVal = dynamicInputState.secondaryValue;
+
+    if (_toolMode == StudioToolMode.addCut) {
+      if (anchor.distanceTo(effectiveEnd) > 0.1) {
+        addCutLine(anchor, effectiveEnd);
+      }
+      _pendingBendStart = null;
+      _rubberBandEndpoint = null;
+      dynamicInputState.reset();
+      _toolMode = StudioToolMode.select;
+    } else if (_toolMode == StudioToolMode.addBend) {
+      if (anchor.distanceTo(effectiveEnd) > 0.1) {
+        addBendLine(anchor, effectiveEnd);
+      }
+      _pendingBendStart = null;
+      _rubberBandEndpoint = null;
+      dynamicInputState.reset();
+      _toolMode = StudioToolMode.select;
+    } else if (_toolMode == StudioToolMode.addFlange) {
+      if (anchor.distanceTo(effectiveEnd) > 0.1) {
+        addFlangeLine(anchor, effectiveEnd);
+      }
+      _pendingBendStart = null;
+      _rubberBandEndpoint = null;
+      dynamicInputState.reset();
+      _toolMode = StudioToolMode.select;
+    } else if (_toolMode == StudioToolMode.drawPolyline) {
+      if (_pendingMultiPoints.isEmpty) {
+        _pendingMultiPoints.add(anchor);
+      }
+      _pendingMultiPoints.add(effectiveEnd);
+      _pendingBendStart = effectiveEnd;
+      _rubberBandEndpoint = effectiveEnd;
+      dynamicInputState.reset();
+      dynamicInputState.setAnchorPoint(effectiveEnd);
+      dynamicInputState.setCursorPoint(effectiveEnd);
+    } else if (_toolMode == StudioToolMode.drawCircle || _toolMode == StudioToolMode.addPunchRound) {
+      final r = primaryVal ?? anchor.distanceTo(effectiveEnd);
+      final diam = (r > 0 ? r * 2.0 : (toolConfig.roundHoleDiameter > 0 ? toolConfig.roundHoleDiameter : 10.0));
+      final newId = 'P${_document.punches.length + 1}';
+      final p = CncTurretEngine.createRoundHole(id: newId, center: anchor, diameterMm: diam);
+      addPunch(p);
+      selectPunch(p.id);
+      _pendingBendStart = null;
+      _rubberBandEndpoint = null;
+      dynamicInputState.reset();
+      _toolMode = StudioToolMode.select;
+    } else if (_toolMode == StudioToolMode.drawRectangle || _toolMode == StudioToolMode.addPunchSquare) {
+      final w = (effectiveEnd.x - anchor.x).abs();
+      final h = (effectiveEnd.y - anchor.y).abs();
+      final effW = w > 0.1 ? w : (toolConfig.rectWidth > 0 ? toolConfig.rectWidth : 20.0);
+      final effH = h > 0.1 ? h : (toolConfig.rectHeight > 0 ? toolConfig.rectHeight : 20.0);
+      if (_toolMode == StudioToolMode.drawRectangle) {
+        addCutRectangle(anchor, effectiveEnd);
+      } else {
+        final center = CadPoint2D((anchor.x + effectiveEnd.x) / 2.0, (anchor.y + effectiveEnd.y) / 2.0);
+        final newId = 'P${_document.punches.length + 1}';
+        final p = CncTurretEngine.createRectangularPunch(id: newId, center: center, widthMm: effW, heightMm: effH);
+        addPunch(p);
+        selectPunch(p.id);
+      }
+      _pendingBendStart = null;
+      _rubberBandEndpoint = null;
+      dynamicInputState.reset();
+      _toolMode = StudioToolMode.select;
+    } else if (_toolMode == StudioToolMode.addPunchObround) {
+      final effL = primaryVal ?? (toolConfig.obroundLength > 0 ? toolConfig.obroundLength : 25.0);
+      final effW = secondaryVal ?? (toolConfig.obroundWidth > 0 ? toolConfig.obroundWidth : 10.0);
+      final newId = 'P${_document.punches.length + 1}';
+      final p = CncTurretEngine.createObroundSlot(id: newId, center: anchor, widthMm: effL, lengthMm: effW);
+      addPunch(p);
+      selectPunch(p.id);
+      _pendingBendStart = null;
+      _rubberBandEndpoint = null;
+      dynamicInputState.reset();
+      _toolMode = StudioToolMode.select;
+    } else if (_toolMode == StudioToolMode.addDimension || _toolMode == StudioToolMode.dragDimension) {
+      final dist = anchor.distanceTo(effectiveEnd);
+      if (dist > 0.1) {
+        final newDim = commitDragDimension(pA: anchor, pB: effectiveEnd);
+        if (newDim != null && primaryVal != null) {
+          driveDimension(newDim.id, primaryVal);
+        }
+      }
+      _pendingBendStart = null;
+      _rubberBandEndpoint = null;
+      dynamicInputState.reset();
+    }
+    notifyListeners();
+  }
+
+  /// Intercepts keyboard input when drawing is in progress for direct numeric dimension entry.
+  bool handleDynamicInputKey(KeyEvent event) {
+    if (!isDrawingInProgress) return false;
+    if (event is! KeyDownEvent) return false;
+
+    final anchor = _pendingBendStart ?? (_pendingMultiPoints.isNotEmpty ? _pendingMultiPoints.last : null);
+    if (anchor == null) return false;
+
+    // 1. Enter / NumpadEnter -> Commit with typed dimensions
+    if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      commitCurrentDrawingWithDynamicInput();
+      return true;
+    }
+
+    // 2. Escape -> Clear buffer or cancel drawing
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (dynamicInputState.hasValue) {
+        dynamicInputState.reset();
+        dynamicInputState.setAnchorPoint(anchor);
+        dynamicInputState.setCursorPoint(_currentCursorMm ?? anchor);
+        updateRubberBand(_currentCursorMm ?? anchor);
+        notifyListeners();
+        return true;
+      } else {
+        cancelActiveDrawing();
+        return true;
+      }
+    }
+
+    // 3. Backspace -> remove last character
+    if (event.logicalKey == LogicalKeyboardKey.backspace) {
+      if (dynamicInputState.hasValue) {
+        dynamicInputState.backspace();
+        if (dynamicInputState.hasValue) {
+          _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(
+            toolMode: _toolMode,
+            toolConfig: toolConfig,
+          );
+        } else {
+          _rubberBandEndpoint = _currentCursorMm ?? anchor;
+        }
+        notifyListeners();
+        return true;
+      }
+      return false;
+    }
+
+    // 4. Tab -> Switch between primary and secondary dimension (Width / Height)
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      dynamicInputState.toggleSecondary();
+      notifyListeners();
+      return true;
+    }
+
+    // 5. Direct numeric typing (0-9, decimal point, comma, minus, x)
+    String? charToAppend;
+    final char = event.character;
+    if (char != null && RegExp(r'^[0-9.,xX\-]$').hasMatch(char)) {
+      charToAppend = char;
+    } else {
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) {
+        charToAppend = '0';
+      } else if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) {
+        charToAppend = '1';
+      } else if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) {
+        charToAppend = '2';
+      } else if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3) {
+        charToAppend = '3';
+      } else if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4) {
+        charToAppend = '4';
+      } else if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5) {
+        charToAppend = '5';
+      } else if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6) {
+        charToAppend = '6';
+      } else if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7) {
+        charToAppend = '7';
+      } else if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8) {
+        charToAppend = '8';
+      } else if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) {
+        charToAppend = '9';
+      } else if (key == LogicalKeyboardKey.period || key == LogicalKeyboardKey.numpadDecimal) {
+        charToAppend = '.';
+      } else if (key == LogicalKeyboardKey.comma) {
+        charToAppend = ',';
+      } else if (key == LogicalKeyboardKey.keyX) {
+        charToAppend = 'x';
+      } else if (key == LogicalKeyboardKey.minus || key == LogicalKeyboardKey.numpadSubtract) {
+        charToAppend = '-';
+      }
+    }
+
+    if (charToAppend != null) {
+      dynamicInputState.setAnchorPoint(anchor);
+      dynamicInputState.setCursorPoint(_currentCursorMm ?? anchor);
+      dynamicInputState.appendChar(charToAppend);
+      _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(
+        toolMode: _toolMode,
+        toolConfig: toolConfig,
+      );
+      notifyListeners();
+      return true;
+    }
+
+    return false;
   }
 
   CadAnchorType _mapSnapTypeToAnchorType(SnapType? snapType, {CadPoint2D? point, String? entityId}) {
@@ -3552,25 +4014,6 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }
   }
 
-  String? _findNearestEdgeOrBendId(CadPoint2D pt, {double maxDistMm = 6.0}) {
-    final anchor = AssociativeDimensionEngine.findAnchorAt(pt, _document, toleranceMm: maxDistMm);
-    if (anchor != null) return anchor.entityId;
-
-    for (final bend in _document.bends) {
-      if (_distToSegment(pt, bend.p1, bend.p2) <= maxDistMm) return bend.id;
-    }
-    for (final cut in _document.cutLines) {
-      if (_distToSegment(pt, cut.p1, cut.p2) <= maxDistMm) return cut.id;
-    }
-    if (_document.outerContour.length >= 2) {
-      for (int i = 0; i < _document.outerContour.length; i++) {
-        final c1 = _document.outerContour[i];
-        final c2 = _document.outerContour[(i + 1) % _document.outerContour.length];
-        if (_distToSegment(pt, c1, c2) <= maxDistMm) return 'CONTOUR_EDGE_$i';
-      }
-    }
-    return null;
-  }
 
   (CadPoint2D, CadPoint2D)? _resolveEdgeSegment(String? edgeId) {
     return AssociativeDimensionEngine.resolveEdgeSegment(edgeId, _document);
@@ -5789,29 +6232,37 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     final dist = pA.distanceTo(pB);
     if (dist < 0.5) return null;
 
-    final anchorA = AssociativeDimensionEngine.findAnchorAt(pA, _document);
-    final anchorB = AssociativeDimensionEngine.findAnchorAt(pB, _document);
+    var anchorA = AssociativeDimensionEngine.findAnchorAt(pA, _document, toleranceMm: 2.5);
+    var anchorB = AssociativeDimensionEngine.findAnchorAt(pB, _document, toleranceMm: 2.5);
 
-    final effPA = anchorA?.point ?? pA;
-    final effPB = anchorB?.point ?? pB;
-    final measuredDist = effPA.distanceTo(effPB);
+    var effPA = anchorA?.point ?? pA;
+    var effPB = anchorB?.point ?? pB;
+    var measuredDist = effPA.distanceTo(effPB);
     if (measuredDist < 0.5) return null;
 
     CadDimensionType type = toolConfig.activeDimensionType;
     CadAllowedMotion motion = CadAllowedMotion.free;
 
-    final isPunchA = anchorA?.entityId != null && _document.allPunchesRaw.any((p) => p.id == anchorA!.entityId);
-    final isPunchB = anchorB?.entityId != null && _document.allPunchesRaw.any((p) => p.id == anchorB!.entityId);
+    final idA = anchorA?.entityId;
+    final idB = anchorB?.entityId;
+    final isPunchA = idA != null && _document.allPunchesRaw.any((p) => p.id == idA);
+    final isPunchB = idB != null && _document.allPunchesRaw.any((p) => p.id == idB);
     final isEdgeA =
-        anchorA?.entityId != null &&
-        (anchorA!.entityId!.startsWith('CONTOUR_EDGE_') ||
-            _document.bends.any((b) => b.id == anchorA.entityId) ||
-            _document.cutLines.any((c) => c.id == anchorA.entityId));
+        idA != null &&
+        (idA.startsWith('CONTOUR_EDGE_') ||
+            _document.bends.any((b) => b.id == idA) ||
+            _document.cutLines.any((c) => c.id == idA) ||
+            _document.dimensions.any((d) => d.id == idA) ||
+            idA.startsWith('dim_') ||
+            idA.startsWith('DIM_'));
     final isEdgeB =
-        anchorB?.entityId != null &&
-        (anchorB!.entityId!.startsWith('CONTOUR_EDGE_') ||
-            _document.bends.any((b) => b.id == anchorB.entityId) ||
-            _document.cutLines.any((c) => c.id == anchorB.entityId));
+        idB != null &&
+        (idB.startsWith('CONTOUR_EDGE_') ||
+            _document.bends.any((b) => b.id == idB) ||
+            _document.cutLines.any((c) => c.id == idB) ||
+            _document.dimensions.any((d) => d.id == idB) ||
+            idB.startsWith('dim_') ||
+            idB.startsWith('DIM_'));
 
     if (isPunchA && isPunchB) {
       type = CadDimensionType.holeToHole;
@@ -5820,8 +6271,39 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       type = CadDimensionType.holeToEdge;
       motion = CadAllowedMotion.edgeNormal;
     } else if (isEdgeA && isEdgeB) {
-      type = CadDimensionType.edgeToEdge;
-      motion = CadAllowedMotion.structuralParameter;
+      if (idA == idB) {
+        final edgeSeg = _resolveEdgeSegment(idA);
+        final spansFullEdge = edgeSeg != null &&
+            ((pA.distanceTo(edgeSeg.$1) < 0.5 && pB.distanceTo(edgeSeg.$2) < 0.5) ||
+             (pA.distanceTo(edgeSeg.$2) < 0.5 && pB.distanceTo(edgeSeg.$1) < 0.5));
+        if (spansFullEdge) {
+          type = CadDimensionType.aligned;
+          effPA = edgeSeg.$1;
+          effPB = edgeSeg.$2;
+          measuredDist = effPA.distanceTo(effPB);
+        } else {
+          type = CadDimensionType.aligned;
+          effPA = pA;
+          effPB = pB;
+          measuredDist = effPA.distanceTo(effPB);
+          anchorB = null;
+        }
+      } else {
+        type = CadDimensionType.edgeToEdge;
+        motion = CadAllowedMotion.structuralParameter;
+      }
+    } else if (isEdgeA && idB != null && (idB.startsWith('CONTOUR_VERTEX_') || idB.startsWith('contour_'))) {
+      type = CadDimensionType.aligned;
+      effPA = pA;
+      effPB = pB;
+      measuredDist = effPA.distanceTo(effPB);
+      anchorB = null;
+    } else if (isEdgeB && idA != null && (idA.startsWith('CONTOUR_VERTEX_') || idA.startsWith('contour_'))) {
+      type = CadDimensionType.aligned;
+      effPA = pA;
+      effPB = pB;
+      measuredDist = effPA.distanceTo(effPB);
+      anchorA = null;
     }
 
     final dimId = 'dim_${DateTime.now().millisecondsSinceEpoch}_${_document.dimensions.length + 1}';
@@ -6008,6 +6490,10 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         ids.add(_selectedPunchId!);
       }
 
+      if (_selectedDimensionId != null && !ids.contains(_selectedDimensionId)) {
+        ids.add(_selectedDimensionId!);
+      }
+
       for (final id in _selectedEntityIds) {
         if (!ids.contains(id)) ids.add(id);
       }
@@ -6016,6 +6502,11 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     if (ids.isEmpty) return false;
 
     if (type.requiresTwoEntities && ids.length < 2) return false;
+
+    if (type == CadConstraintType.angle && ids.length >= 2) {
+      addAngularDimension(referenceAId: ids[0], referenceBId: ids[1]);
+      return true;
+    }
 
     final constraint = ConstraintDefinition(
       id: 'CONST_${DateTime.now().millisecondsSinceEpoch}',
@@ -6028,6 +6519,55 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     addConstraintDefinition(constraint);
 
     return true;
+  }
+
+  /// Creates and adds an angular dimension between two reference entities (lines, bends, cuts, or dimensions).
+  CadDimension? addAngularDimension({
+    required String referenceAId,
+    required String referenceBId,
+    double? customAngle,
+  }) {
+    _recordHistory();
+
+    final segA = AssociativeDimensionEngine.resolveEdgeSegment(referenceAId, _document);
+    final segB = AssociativeDimensionEngine.resolveEdgeSegment(referenceBId, _document);
+
+    if (segA == null || segB == null) return null;
+
+    final calculatedAngle = AssociativeDimensionEngine.calculateAngleBetweenSegments(
+      segA.$1, segA.$2, segB.$1, segB.$2,
+    );
+
+    final angleVal = customAngle ?? calculatedAngle;
+    final dimId = 'dim_ang_${DateTime.now().millisecondsSinceEpoch}_${_document.dimensions.length + 1}';
+
+    final midA = CadPoint2D((segA.$1.x + segA.$2.x) / 2.0, (segA.$1.y + segA.$2.y) / 2.0);
+    final midB = CadPoint2D((segB.$1.x + segB.$2.x) / 2.0, (segB.$1.y + segB.$2.y) / 2.0);
+
+    final dim = CadDimension(
+      id: dimId,
+      type: CadDimensionType.angular,
+      referenceAId: referenceAId,
+      referenceBId: referenceBId,
+      anchorTypeA: CadAnchorType.endpoint,
+      anchorTypeB: CadAnchorType.endpoint,
+      pointA: midA,
+      pointB: midB,
+      measuredValue: angleVal,
+      dimensionLineOffset: 15.0,
+      isDriven: false,
+      isDriving: true,
+      allowedMotion: CadAllowedMotion.structuralParameter,
+      referenceEntityId: referenceAId,
+      drivenEntityId: referenceBId,
+    );
+
+    addDimension(dim);
+    _selectedDimensionId = dimId;
+    _pendingInPlaceEditDimId = dimId;
+    _syncAssociativeDimensions();
+    notifyListeners();
+    return dim;
   }
 
   ConstraintSolveResult solveConstraints() {
@@ -7491,9 +8031,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     final targetOffset =
         customOffset ??
         (isFlange
-            ? ((_detectedFittingMetadata != null && _detectedFittingMetadata!.category != FittingCategory.none)
-                  ? _detectedFittingMetadata!.flangeMm
-                  : toolConfig.flangeOffsetMm)
+            ? (toolConfig.flangeOffsetMm > 0 ? toolConfig.flangeOffsetMm : 13.0)
             : toolConfig.bendOffsetMm);
 
     // 1. Find closest edge segment on the outer contour
@@ -8010,7 +8548,18 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }).toList();
 
     _document = _document.copyWith(punches: updated);
+    _syncCouplerMetadataFromPunches();
     notifyListeners();
+  }
+
+  void _syncCouplerMetadataFromPunches() {
+    if (_document.metadata['cmsTemplate'] is Map) {
+      final meta = Map<String, dynamic>.from(_document.metadata);
+      final cms = Map<String, dynamic>.from(meta['cmsTemplate'] as Map);
+      cms['couplerSlotPunchIds'] = _document.punches.where((p) => p.role == CncPunchRole.coupler).map((p) => p.id).toList();
+      meta['cmsTemplate'] = cms;
+      _document = _document.copyWith(metadata: meta);
+    }
   }
 
   void markSelectedAsCouplerHoles() => markSelectedPunchesRole(CncPunchRole.coupler);
@@ -8028,6 +8577,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }).toList();
 
     _document = _document.copyWith(punches: updated);
+    _syncCouplerMetadataFromPunches();
     notifyListeners();
   }
 
@@ -8050,6 +8600,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }).toList();
 
     _document = _document.copyWith(punches: updated);
+    _syncCouplerMetadataFromPunches();
     notifyListeners();
   }
 
@@ -8071,6 +8622,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }).toList();
 
     _document = _document.copyWith(punches: updated);
+    _syncCouplerMetadataFromPunches();
     notifyListeners();
     return couplerIds.length;
   }

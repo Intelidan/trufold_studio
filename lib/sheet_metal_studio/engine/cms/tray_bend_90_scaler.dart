@@ -34,7 +34,7 @@ class TrayBend90ScaleParameters {
       (dH).abs() > 1e-4 ||
       (dR).abs() > 1e-4 ||
       includeCouplerFlaps ||
-      (couplerFlapLength - 30.0).abs() > 1e-4;
+      (couplerFlapLength - 90.0).abs() > 1e-4;
 
   const TrayBend90ScaleParameters({
     required this.targetWidth,
@@ -44,7 +44,7 @@ class TrayBend90ScaleParameters {
     this.baselineHeight = 50.0,
     this.baselineRadius = 180.0,
     this.includeCouplerFlaps = false,
-    this.couplerFlapLength = 30.0,
+    this.couplerFlapLength = 90.0,
   });
 }
 
@@ -83,7 +83,7 @@ class TrayBend90Scaler {
     required double targetHeight,
     double targetRadius = 180.0,
     bool includeCouplerFlaps = false,
-    double couplerFlapLength = 30.0,
+    double couplerFlapLength = 90.0,
   }) {
     final params = TrayBend90ScaleParameters(
       targetWidth: targetWidth,

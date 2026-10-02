@@ -310,6 +310,32 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
 
                                 bool found = false;
 
+                                final isDrawingTool =
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addBend ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addFlange ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addCut ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.drawRectangle ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.drawCircle ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.drawArc ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.drawPolyline ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addPunchRound ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addPunchObround ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addPunchSquare ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.dragDimension ||
+                                    viewModel.toolMode ==
+                                        StudioToolMode.addDimension;
+
                                 // 0a. Direct hit-test on ANY movable port badge
                                 for (final entry in _portBadgeRects.entries) {
                                   if (entry.value
@@ -328,7 +354,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                 }
 
                                 // 0b. Direct hit-test on ANY movable dimension badge
-                                if (!found) {
+                                if (!found && !isDrawingTool) {
                                   for (final entry
                                       in _dimensionBadgeRects.entries) {
                                     if (entry.value
@@ -365,7 +391,7 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                 }
 
                                 // 0b2. Direct hit-test on ANY movable dimension line segment
-                                if (!found) {
+                                if (!found && !isDrawingTool) {
                                   for (final entry
                                       in _dimensionLineSegments.entries) {
                                     if (_distToScreenSegment(
@@ -374,18 +400,25 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                           entry.value.pB,
                                         ) <=
                                         8.0) {
-                                      _activeDrag = _DragTarget.dimensionLine;
-                                      _draggedDimLineId = entry.key;
-                                      viewModel.selectDimension(entry.key);
-                                      _isInspectorCollapsed = false;
-                                      found = true;
+                                      if (isShiftHeld) {
+                                        viewModel.toggleEntitySelection(entry.key);
+                                        _shiftSelectionHandledInPan = true;
+                                        found = true;
+                                        _activeDrag = _DragTarget.none;
+                                      } else {
+                                        _activeDrag = _DragTarget.dimensionLine;
+                                        _draggedDimLineId = entry.key;
+                                        viewModel.selectDimension(entry.key);
+                                        _isInspectorCollapsed = false;
+                                        found = true;
+                                      }
                                       break;
                                     }
                                   }
                                 }
 
                                 // 0c. Direct hit-test on ANY interactive constraint badge
-                                if (!found) {
+                                if (!found && !isDrawingTool) {
                                   for (final entry
                                       in _constraintBadgeRects.entries) {
                                     if (entry.value
@@ -409,32 +442,6 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                     }
                                   }
                                 }
-
-                                final isDrawingTool =
-                                    viewModel.toolMode ==
-                                        StudioToolMode.addBend ||
-                                    viewModel.toolMode ==
-                                        StudioToolMode.addFlange ||
-                                    viewModel.toolMode ==
-                                        StudioToolMode.addCut ||
-                                    viewModel.toolMode ==
-                                        StudioToolMode.drawRectangle ||
-                                    viewModel.toolMode ==
-                                        StudioToolMode.drawCircle ||
-                                    viewModel.toolMode ==
-                                        StudioToolMode.drawArc ||
-                                    viewModel.toolMode ==
-                                        StudioToolMode.drawPolyline ||
-                                    viewModel.toolMode ==
-                                        StudioToolMode.addPunchRound ||
-                                    viewModel.toolMode ==
-                                        StudioToolMode.addPunchObround ||
-                                    viewModel.toolMode ==
-                                        StudioToolMode.addPunchSquare ||
-                                    viewModel.toolMode ==
-                                        StudioToolMode.dragDimension ||
-                                    viewModel.toolMode ==
-                                        StudioToolMode.addDimension;
 
                                 // 1. Direct hit-test on ANY bend line endpoint (P1 or P2)
                                 if (!found && !isDrawingTool) {
@@ -756,12 +763,21 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                         cadPt,
                                         snapRadiusMm: screenSnapMm,
                                       );
-                                      effectiveStart =
-                                          viewModel.activeSnap?.point ??
-                                          viewModel.resolveEffectivePoint(
-                                            cadPt,
-                                            snapRadiusMm: screenSnapMm,
-                                          );
+                                      if (viewModel.toolMode ==
+                                              StudioToolMode.addDimension ||
+                                          viewModel.toolMode ==
+                                              StudioToolMode.dragDimension) {
+                                        effectiveStart =
+                                            viewModel.activeSnap?.point ??
+                                            cadPt;
+                                      } else {
+                                        effectiveStart =
+                                            viewModel.activeSnap?.point ??
+                                            viewModel.resolveEffectivePoint(
+                                              cadPt,
+                                              snapRadiusMm: screenSnapMm,
+                                            );
+                                      }
                                     }
 
                                     _activeDrag = _DragTarget.drawEntity;
@@ -776,7 +792,9 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                         viewModel.toolMode !=
                                             StudioToolMode.drawPolyline &&
                                         viewModel.toolMode !=
-                                            StudioToolMode.addDimension) {
+                                            StudioToolMode.addDimension &&
+                                        viewModel.toolMode !=
+                                            StudioToolMode.dragDimension) {
                                       viewModel.setPendingBendStart(
                                         effectiveStart,
                                       );
@@ -935,6 +953,17 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                         effectivePt;
                                   }
 
+                                  if (viewModel.pendingBendStart == null &&
+                                      (viewModel.toolMode ==
+                                              StudioToolMode.addDimension ||
+                                          viewModel.toolMode ==
+                                              StudioToolMode.dragDimension) &&
+                                      _drawDragStartCad != null) {
+                                    viewModel.setPendingBendStart(
+                                      _drawDragStartCad,
+                                    );
+                                  }
+
                                   viewModel.updateRubberBand(effectivePt);
                                   setState(() {});
                                   return;
@@ -1032,17 +1061,21 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                   }
                                 }
 
-                                // Live magnetic snap update during dragging (lines snap, punches move smoothly)
+                                // Live magnetic snap update during dragging (lines snap, punches snap to dimension ends and targets)
                                 if (_activeDrag == _DragTarget.bendP1 ||
                                     _activeDrag == _DragTarget.bendP2 ||
                                     _activeDrag == _DragTarget.cutP1 ||
-                                    _activeDrag == _DragTarget.cutP2) {
+                                    _activeDrag == _DragTarget.cutP2 ||
+                                    _activeDrag == _DragTarget.punch) {
                                   final screenSnapMm = (8.0 / scale).clamp(
                                     1.5,
                                     8.0,
                                   );
+                                  final snapPt = _activeDrag == _DragTarget.punch
+                                      ? CadPoint2D(candidate.x + _dragPunchOffsetCad.x, candidate.y + _dragPunchOffsetCad.y)
+                                      : candidate;
                                   viewModel.updateCursorMm(
-                                    candidate,
+                                    snapPt,
                                     snapRadiusMm: screenSnapMm,
                                     isAlt: isAlt,
                                   );
@@ -1212,10 +1245,13 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                     break;
 
                                   case _DragTarget.punch:
-                                    final targetCenter = CadPoint2D(
+                                    final rawCenter = CadPoint2D(
                                       candidate.x + _dragPunchOffsetCad.x,
                                       candidate.y + _dragPunchOffsetCad.y,
                                     );
+                                    final targetCenter = (!isAlt && viewModel.activeSnap != null)
+                                        ? viewModel.activeSnap!.point
+                                        : rawCenter;
                                     viewModel.moveSelectedPunch(targetCenter);
                                     break;
 
@@ -1390,6 +1426,13 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                           effectiveEnd;
                                     }
 
+                                    if (viewModel.dynamicInputState.hasValue) {
+                                      effectiveEnd = viewModel.dynamicInputState.computeEffectiveEndpoint(
+                                        toolMode: viewModel.toolMode,
+                                        toolConfig: viewModel.toolConfig,
+                                      );
+                                    }
+
                                     if (viewModel.toolMode ==
                                             StudioToolMode.drawCircle ||
                                         viewModel.toolMode ==
@@ -1530,10 +1573,29 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                       final end = effectiveEnd;
                                       final dist = start.distanceTo(end);
                                       if (dist > 0.5) {
-                                        viewModel.commitDragDimension(
+                                        final newDim = viewModel.commitDragDimension(
                                           pA: start,
                                           pB: end,
                                         );
+                                        if (newDim != null) {
+                                          final badgePos = cadToScreen(
+                                            CadPoint2D((start.x + end.x) / 2.0, (start.y + end.y) / 2.0),
+                                          );
+                                          _startInPlaceDimensionEdit(
+                                            dimId: newDim.id,
+                                            badgeRect: Rect.fromCenter(
+                                              center: badgePos,
+                                              width: 60,
+                                              height: 22,
+                                            ),
+                                            initialValue: newDim.measuredValue,
+                                            pA: newDim.pointA,
+                                            pB: newDim.pointB,
+                                            referenceAId: newDim.referenceAId,
+                                            referenceBId: newDim.referenceBId,
+                                            offset: newDim.dimensionLineOffset,
+                                          );
+                                        }
                                       }
                                       viewModel.setPendingBendStart(null);
                                       // Keep dimension tool active unless user turns it off
@@ -1717,30 +1779,45 @@ mixin CanvasGestureHandlerMixin on State<UnfoldedCanvasWidget>, CanvasDimensionE
                                       );
                                       _drawDragCommitted = true;
                                     } else if (clickCad != null &&
-                                        viewModel.toolMode ==
-                                            StudioToolMode.dragDimension) {
+                                        (viewModel.toolMode ==
+                                                StudioToolMode.dragDimension ||
+                                            viewModel.toolMode ==
+                                                StudioToolMode.addDimension)) {
                                       if (viewModel.pendingBendStart == null) {
-                                        final seg = viewModel.findSegmentAtPoint(clickCad);
-                                        if (seg != null) {
-                                          viewModel.handleCanvasClick(
-                                            clickCad,
-                                            snapRadiusMm: screenSnapMm,
-                                            autoPlace: false,
-                                          );
-                                        } else {
-                                          viewModel.setPendingBendStart(clickCad);
-                                        }
+                                        viewModel.setPendingBendStart(clickCad);
+                                        viewModel.updateCursorMm(
+                                          clickCad,
+                                          snapRadiusMm: screenSnapMm,
+                                        );
                                       } else {
                                         final pA = viewModel.pendingBendStart!;
                                         final pB = clickCad;
                                         if (pA.distanceTo(pB) > 0.5) {
-                                          viewModel.commitDragDimension(
+                                          final newDim = viewModel.commitDragDimension(
                                             pA: pA,
                                             pB: pB,
                                           );
+                                          if (newDim != null) {
+                                            final badgePos = cadToScreen(
+                                              CadPoint2D((pA.x + pB.x) / 2.0, (pA.y + pB.y) / 2.0),
+                                            );
+                                            _startInPlaceDimensionEdit(
+                                              dimId: newDim.id,
+                                              badgeRect: Rect.fromCenter(
+                                                center: badgePos,
+                                                width: 60,
+                                                height: 22,
+                                              ),
+                                              initialValue: newDim.measuredValue,
+                                              pA: newDim.pointA,
+                                              pB: newDim.pointB,
+                                              referenceAId: newDim.referenceAId,
+                                              referenceBId: newDim.referenceBId,
+                                              offset: newDim.dimensionLineOffset,
+                                            );
+                                          }
                                         }
                                         viewModel.setPendingBendStart(null);
-                                        // Keep dimension tool active unless user turns it off
                                       }
                                       _drawDragCommitted = true;
                                     } else {

@@ -144,7 +144,36 @@ class AssociativeDimensionEngine {
         return (f.vertices[0], f.vertices[1]);
       }
     }
+
+    // Check dimensions
+    for (final d in doc.dimensions) {
+      if (d.id == edgeId && d.pointA != null && d.pointB != null) {
+        return (d.pointA!, d.pointB!);
+      }
+    }
+
     return null;
+  }
+
+  /// Calculates the acute/obtuse planar angle between two linear segments in degrees [0..180].
+  static double calculateAngleBetweenSegments(
+    CadPoint2D a1,
+    CadPoint2D a2,
+    CadPoint2D b1,
+    CadPoint2D b2,
+  ) {
+    final dxA = a2.x - a1.x;
+    final dyA = a2.y - a1.y;
+    final dxB = b2.x - b1.x;
+    final dyB = b2.y - b1.y;
+    final lenA = math.sqrt(dxA * dxA + dyA * dyA);
+    final lenB = math.sqrt(dxB * dxB + dyB * dyB);
+    if (lenA < 1e-4 || lenB < 1e-4) return 0.0;
+
+    final dot = (dxA * dxB + dyA * dyB) / (lenA * lenB);
+    final clampedDot = dot.clamp(-1.0, 1.0);
+    final angleRad = math.acos(clampedDot);
+    return double.parse((angleRad * 180.0 / math.pi).toStringAsFixed(2));
   }
 
   /// Resolves the actual 2D attachment point of an anchor from the live DsfDocument.
@@ -342,18 +371,24 @@ class AssociativeDimensionEngine {
     CadAnchorType? anchorB = dim.anchorTypeB;
 
     if (refA == null && dim.pointA != null) {
-      final foundA = findAnchorAt(dim.pointA!, doc, toleranceMm: 6.0);
+      final foundA = findAnchorAt(dim.pointA!, doc, toleranceMm: 2.5);
       if (foundA != null) {
-        refA = foundA.entityId;
-        anchorA = foundA.anchorType;
+        final isSameEdge = refB != null && foundA.entityId == refB;
+        if (!isSameEdge) {
+          refA = foundA.entityId;
+          anchorA = foundA.anchorType;
+        }
       }
     }
 
     if (refB == null && dim.pointB != null) {
-      final foundB = findAnchorAt(dim.pointB!, doc, toleranceMm: 6.0);
+      final foundB = findAnchorAt(dim.pointB!, doc, toleranceMm: 2.5);
       if (foundB != null) {
-        refB = foundB.entityId;
-        anchorB = foundB.anchorType;
+        final isSameEdge = refA != null && foundB.entityId == refA;
+        if (!isSameEdge) {
+          refB = foundB.entityId;
+          anchorB = foundB.anchorType;
+        }
       }
     }
 
@@ -378,15 +413,21 @@ class AssociativeDimensionEngine {
     // 1. Single edge / segment (e.g. 1-click segment dimension where referenceAId == referenceBId)
     final singleRefId = (dim.referenceAId != null && dim.referenceAId == dim.referenceBId)
         ? dim.referenceAId
-        : dim.referenceEntityId;
-    if (singleRefId != null && (dim.referenceAId == null || dim.referenceBId == null || dim.referenceAId == dim.referenceBId)) {
-      final edgeSeg = resolveEdgeSegment(singleRefId, doc);
+        : ((dim.referenceAId == null && dim.referenceBId == null) ? dim.referenceEntityId : null);
+    if (singleRefId != null) {
+      var edgeSeg = resolveEdgeSegment(singleRefId, doc);
+      if (edgeSeg == null && singleRefId.startsWith('CONTOUR_VERTEX_')) {
+        final vIdx = int.tryParse(singleRefId.replaceFirst('CONTOUR_VERTEX_', ''));
+        if (vIdx != null && doc.outerContour.length >= 2) {
+          edgeSeg = resolveEdgeSegment('CONTOUR_EDGE_$vIdx', doc);
+        }
+      }
       if (edgeSeg != null) {
         ptA = edgeSeg.$1;
         ptB = edgeSeg.$2;
         measured = ptA.distanceTo(ptB);
         return (pA: ptA, pB: ptB, value: measured);
-      } else if (dim.pointA != null && dim.pointB != null) {
+      } else if (dim.pointA != null && dim.pointB != null && dim.pointA!.distanceTo(dim.pointB!) > 0.1) {
         ptA = dim.pointA;
         ptB = dim.pointB;
         measured = ptA!.distanceTo(ptB!);
@@ -455,6 +496,21 @@ class AssociativeDimensionEngine {
 
       if (pointPt != null && edgeSeg != null) {
         final proj = projectPointToSegmentLine(pointPt, edgeSeg.$1, edgeSeg.$2);
+        final distToEdge = pointPt.distanceTo(proj);
+        // If the point is ON the edge (distance < 1.0mm, e.g. an endpoint/vertex of the edge):
+        // If explicit distinct points are provided, preserve them; otherwise measure edge length
+        if (distToEdge < 1.0) {
+          if (dim.pointA != null && dim.pointB != null && dim.pointA!.distanceTo(dim.pointB!) > 0.5) {
+            ptA = dim.pointA;
+            ptB = dim.pointB;
+            measured = ptA!.distanceTo(ptB!);
+            return (pA: ptA, pB: ptB, value: measured);
+          }
+          ptA = edgeSeg.$1;
+          ptB = edgeSeg.$2;
+          measured = ptA.distanceTo(ptB);
+          return (pA: ptA, pB: ptB, value: measured);
+        }
         if (isEdgeA) {
           ptA = proj;
           ptB = pointPt;
@@ -467,7 +523,7 @@ class AssociativeDimensionEngine {
         } else if (dim.type == CadDimensionType.vertical) {
           measured = (ptB.y - ptA.y).abs();
         } else {
-          measured = pointPt.distanceTo(proj);
+          measured = distToEdge;
         }
         return (pA: ptA, pB: ptB, value: measured);
       }
@@ -529,13 +585,26 @@ class AssociativeDimensionEngine {
       case CadDimensionType.bendToBend:
       case CadDimensionType.edgeToEdge:
         measured = math.sqrt(math.pow(ptB.x - ptA.x, 2) + math.pow(ptB.y - ptA.y, 2));
+        if (measured < 0.1 && dim.measuredValue > 0.1) {
+          measured = dim.measuredValue;
+        }
         break;
       case CadDimensionType.radius:
       case CadDimensionType.diameter:
-      case CadDimensionType.angular:
       case CadDimensionType.arcLength:
       case CadDimensionType.overall:
         measured = dim.measuredValue > 0 ? dim.measuredValue : (ptB.x - ptA.x).abs();
+        break;
+      case CadDimensionType.angular:
+        final segA = resolveEdgeSegment(dim.referenceAId, doc);
+        final segB = resolveEdgeSegment(dim.referenceBId, doc);
+        if (segA != null && segB != null) {
+          measured = calculateAngleBetweenSegments(segA.$1, segA.$2, segB.$1, segB.$2);
+          ptA = segA.$1;
+          ptB = segB.$1;
+        } else {
+          measured = dim.measuredValue > 0 ? dim.measuredValue : 45.0;
+        }
         break;
     }
 

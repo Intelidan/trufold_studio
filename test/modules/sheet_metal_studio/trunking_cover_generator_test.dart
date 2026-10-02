@@ -980,5 +980,47 @@ void main() {
       final zValues = mainPoly.vertices.map((v) => v.z).toList();
       expect(zValues.every((z) => (z - 105.0).abs() < 1.5), isTrue, reason: 'Cover plate sits at bodyHeight (100.0mm) + clearance (5mm) = 105.0mm');
     });
+
+    test('5. Cover add, toggle, remove, and flange depth updates propagate immediately', () async {
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final content = await file.readAsString();
+      final json = jsonDecode(content) as Map<String, dynamic>;
+      final docToFold = DsfDocument.fromJson(json);
+
+      final vm = SheetMetalStudioViewModel(initialDocument: docToFold);
+      await vm.continueCmsPortMapping();
+
+      // 1. Initial state: no cover
+      expect(vm.hasCover, isFalse);
+      expect(vm.document.cover, isNull);
+
+      // 2. Add cover via createCoverForCurrentFitting
+      vm.createCoverForCurrentFitting();
+      expect(vm.hasCover, isTrue);
+      expect(vm.document.cover, isNotNull);
+      expect(vm.coverMesh, isNotNull);
+
+      // 3. Update cover flange depth: immediately updates document and properties
+      vm.setCoverFlangeDepth(25.0);
+      expect(vm.coverFlangeDepth, equals(25.0));
+      expect(vm.document.cover!.properties['flangeDepthMm'], equals(25.0));
+
+      // 4. Remove cover via removeCover: immediately clears cover and mesh
+      vm.removeCover();
+      expect(vm.hasCover, isFalse);
+      expect(vm.document.cover, isNull);
+      expect(vm.coverMesh, isNull);
+
+      // 5. Toggle cover ON
+      vm.toggleCover();
+      expect(vm.hasCover, isTrue);
+      expect(vm.document.cover, isNotNull);
+
+      // 6. Toggle cover OFF
+      vm.toggleCover();
+      expect(vm.hasCover, isFalse);
+      expect(vm.document.cover, isNull);
+      expect(vm.coverMesh, isNull);
+    });
   });
 }

@@ -273,6 +273,26 @@ class MagneticSnapEngine {
       }
     }
 
+    // 4b. Dimensional line endpoints & midpoints
+    for (final dim in doc.dimensions) {
+      if (!dim.isVisible) continue;
+      final pA = dim.pointA;
+      final pB = dim.pointB;
+      if (pA != null && pB != null && pA.distanceTo(pB) > 0.1) {
+        segments.add((p1: pA, p2: pB, label: 'Dim ${dim.id}', entityId: dim.id));
+
+        if (settings.enableEndpoint) {
+          targets.add(SnapTarget(point: pA, type: SnapType.endpoint, label: '${dim.id} End', entityId: dim.id));
+          targets.add(SnapTarget(point: pB, type: SnapType.endpoint, label: '${dim.id} End', entityId: dim.id));
+        }
+
+        if (settings.enableMidpoint) {
+          final mid = CadPoint2D((pA.x + pB.x) / 2.0, (pA.y + pB.y) / 2.0);
+          targets.add(SnapTarget(point: mid, type: SnapType.midpoint, label: '${dim.id} Midpoint', entityId: dim.id, segmentStart: pA, segmentEnd: pB));
+        }
+      }
+    }
+
     // 5. Intersections between segments
     if (settings.enableIntersection && segments.length >= 2) {
       for (int i = 0; i < segments.length; i++) {

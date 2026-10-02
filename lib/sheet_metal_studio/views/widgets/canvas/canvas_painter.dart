@@ -1155,7 +1155,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
           // Calculate actual candidate feature dimension
           final candLen = autoCandidateLine!.p1.distanceTo(autoCandidateLine!.p2);
-          double effDist = isFlange ? 10.0 : candLen;
+          double effDist = isFlange ? (cfg.flangeOffsetMm > 0 ? cfg.flangeOffsetMm : 13.0) : candLen;
           if (doc.outerContour.isNotEmpty) {
             double? minD;
             final cMid = CadPoint2D((autoCandidateLine!.p1.x + autoCandidateLine!.p2.x) / 2.0, (autoCandidateLine!.p1.y + autoCandidateLine!.p2.y) / 2.0);
@@ -1205,8 +1205,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
             }
 
             if (minDist != null && edgeP1 != null && edgeP2 != null) {
-              final snapOffsets = isFlange ? [10.0, 12.0, 13.0, 14.0, 15.0, 20.0, 25.0] : [25.0, 50.0, 75.0, 100.0, 125.0, 150.0, 200.0];
-              double effectiveDist = minDist;
+              final primaryOffset = isFlange
+                  ? (cfg.flangeOffsetMm > 0 ? cfg.flangeOffsetMm : 13.0)
+                  : (cfg.bendOffsetMm > 0 ? cfg.bendOffsetMm : 50.0);
+              final snapOffsets = isFlange
+                  ? [primaryOffset, 10.0, 12.0, 14.0, 15.0, 20.0, 25.0]
+                  : [primaryOffset, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0, 200.0];
+              double effectiveDist = primaryOffset;
               for (final snapVal in snapOffsets) {
                 if ((minDist - snapVal).abs() <= 3.5) {
                   effectiveDist = snapVal;

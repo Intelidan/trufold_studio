@@ -56,6 +56,21 @@ class DdsInstanceEvaluator {
   static const double densityStainlessSteel = 8000.0;
   static const double densityAluminum = 2700.0;
 
+  /// Resolves the material density in kg/m³ based on material name or code.
+  static double resolveDensity(String materialName) {
+    final matLower = materialName.toLowerCase();
+    if (matLower.contains('alum') || matLower.contains('(al)') || matLower.contains('al ') || matLower.endsWith('al') || matLower.contains('5052')) {
+      return densityAluminum; // 2700.0
+    }
+    if (matLower.contains('stainless') || matLower.contains('304') || matLower.contains('316') || matLower.contains('ss')) {
+      return densityStainlessSteel; // 8000.0
+    }
+    if (matLower.contains('crca')) {
+      return 7870.0;
+    }
+    return densityMildSteel; // 7850.0 (MS, HR, GI, HDG, etc.)
+  }
+
   /// Evaluates [instance] against [baselineDoc] producing scaled 2D & 3D models.
   static EvaluatedDdsInstance evaluate({
     required DdsProductInstance instance,
@@ -68,10 +83,22 @@ class DdsInstanceEvaluator {
     // 2. Perform Parametric Scaling
     final controller = CmsScalingController(
       contract: contract,
-      baselineDocument: baselineDoc,
+      baselineDocument: baselineDoc.copyWith(
+        parameters: {
+          ...baselineDoc.parameters,
+          ...instance.instanceParameters,
+        },
+      ),
       baselinePorts: baselinePorts,
       currentParameterValues: instance.instanceParameters,
     );
+
+    if ((instance.instanceParameters['include_coupler_flaps'] ?? 0.0) > 0.5) {
+      controller.setIncludeCouplerFlaps(true);
+    }
+    if (instance.instanceParameters.containsKey('coupler_flap_length')) {
+      controller.setCouplerFlapLength(instance.instanceParameters['coupler_flap_length']!);
+    }
 
     // Apply instance parameter overrides
     for (final entry in instance.instanceParameters.entries) {
@@ -290,13 +317,7 @@ class DdsInstanceEvaluator {
     final totalAreaM2 = totalAreaMm2 / 1000000.0;
     final thicknessMm = baseDoc.material.thicknessMm > 0 ? baseDoc.material.thicknessMm : 1.5;
 
-    double density = densityMildSteel;
-    final matLower = materialName.toLowerCase();
-    if (matLower.contains('stainless')) {
-      density = densityStainlessSteel;
-    } else if (matLower.contains('alum')) {
-      density = densityAluminum;
-    }
+    final double density = resolveDensity(materialName);
 
     // Mass (kg) = Area (m²) * Thickness (m) * Density (kg/m³)
     final massKg = totalAreaM2 * (thicknessMm / 1000.0) * density;

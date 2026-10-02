@@ -12,6 +12,7 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import '../../models/cad_primitives.dart';
 import '../../models/dsf_document.dart';
 import '../../models/fold_bend_line.dart';
@@ -73,10 +74,11 @@ class TrunkingCoverGenerator {
     double reducerPort2Height = 0.0;
 
     if (profile == CmsScalingProfile.reducer || CmsScalingController.isReducerGeometry(baseDocument)) {
-      final cheekBends = baseDocument.bends
-          .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
-          .toList()
-        ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+      final cheekBends =
+          baseDocument.bends
+              .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
+              .toList()
+            ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
       final b1 = cheekBends.isNotEmpty ? cheekBends.first : null;
       final b2 = cheekBends.isNotEmpty ? cheekBends.last : null;
 
@@ -116,41 +118,28 @@ class TrunkingCoverGenerator {
       effectiveMinY = y1;
       effectiveMaxY = y1 + slantedCoverLength;
     } else if (profile == CmsScalingProfile.insideRiser) {
-      final bends45 = baseDocument.bends.where((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0).toList();
-      final is90InsideRiser = bends45.length >= 2;
+      final cheekBends = baseDocument.bends
+          .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
+          .toList();
+      final isHorizontal =
+          cheekBends.isNotEmpty && (cheekBends.first.p2.x - cheekBends.first.p1.x).abs() > (cheekBends.first.p2.y - cheekBends.first.p1.y).abs();
 
-      if (is90InsideRiser) {
-        // 90° Inside Riser:
-        // Top opening sits between Cheek 1 (B1) and Cheek 2 (B2) in X,
-        // and covers the return flanges FL1 and FL2 in Y.
-        // Official manufacturer specification (90_deg_inside_riser_100x100_cover.dxf):
-        // Cover plate length is 55.0mm, centered on the return flanges (yMid ~ 113.84mm).
-        // This extends ~0.68mm beyond the flanges at both ends, touching the cheek knee bend
-        // line without hanging over the flat face on the right hand side into empty space.
-        final cheekBends = baseDocument.bends
-            .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
-            .toList()
-          ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
-        final double cheekX1 = cheekBends.isNotEmpty ? math.min(cheekBends.first.p1.x, cheekBends.first.p2.x) : minX;
-        final double cheekX2 = cheekBends.isNotEmpty ? math.max(cheekBends.last.p1.x, cheekBends.last.p2.x) : maxX;
+      if (isHorizontal) {
+        // Tray Inside Riser: cheek bends run horizontally along X.
+        // Width is along Y (between cheek bends B1/B2 and B3/B4).
+        final cheekY1 = cheekBends.map((b) => (b.p1.y + b.p2.y) / 2.0).reduce(math.min);
+        final cheekY2 = cheekBends.map((b) => (b.p1.y + b.p2.y) / 2.0).reduce(math.max);
 
-        final returnFlanges = baseDocument.bends.where((b) =>
-          b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL')
-        ).toList();
-        double flangeMinY = minY;
-        double flangeMaxY = maxY;
-        if (returnFlanges.isNotEmpty) {
-          flangeMinY = returnFlanges.map((b) => math.min(b.p1.y, b.p2.y)).reduce(math.min);
-          flangeMaxY = returnFlanges.map((b) => math.max(b.p1.y, b.p2.y)).reduce(math.max);
-        }
-        final flangeLen = flangeMaxY - flangeMinY; // ~53.64mm
-        final yMid = (flangeMinY + flangeMaxY) / 2.0; // ~113.84mm
-        final coverLen = math.max(55.0, flangeLen + 1.36);
+        // Length is along X: horizontal flat opening spans from central bend B5 (or midX) to the straight port end.
+        final b45 = baseDocument.bends.firstWhere((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0, orElse: () => baseDocument.bends.first);
+        final has45 = (b45.targetAngleDeg.abs() - 45.0).abs() < 15.0;
+        final xBend45 = has45 ? (b45.p1.x + b45.p2.x) / 2.0 : (minX + maxX) / 2.0;
 
-        effectiveMinX = cheekX1;
-        effectiveMaxX = cheekX2;
-        effectiveMinY = yMid - coverLen / 2.0;
-        effectiveMaxY = yMid + coverLen / 2.0;
+        // In 45° tray inside riser, the horizontal flat arm is to the right of B5 (x from xBend45 to maxX)
+        effectiveMinX = xBend45;
+        effectiveMaxX = maxX;
+        effectiveMinY = cheekY1;
+        effectiveMaxY = cheekY2;
 
         coverFootprintVerts = [
           CadPoint2D(effectiveMinX, effectiveMinY),
@@ -159,41 +148,81 @@ class TrunkingCoverGenerator {
           CadPoint2D(effectiveMinX, effectiveMaxY),
         ];
       } else {
-        // SS2: For 45 deg inside riser, reduce length of cover so it does not extend
-        // beyond the top horizontal flat opening. The prongs inclined 45 deg upwards
-        // are coupler flaps for linking adjacent trunking and must remain unobstructed.
-        double? horizEnd;
-        final returnFlanges = baseDocument.bends.where((b) =>
-          b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL')
-        ).toList();
-        if (returnFlanges.isNotEmpty) {
-          final maxFlangeY = returnFlanges.map((b) => math.max(b.p1.y, b.p2.y)).reduce(math.max);
-          if (maxFlangeY > minY + 10.0 && maxFlangeY < maxY) {
-            horizEnd = maxFlangeY;
+        final bends45 = baseDocument.bends.where((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0).toList();
+        final is90InsideRiser = bends45.length >= 2;
+
+        if (is90InsideRiser) {
+          // 90° Inside Riser:
+          // Top opening sits between Cheek 1 (B1) and Cheek 2 (B2) in X,
+          // and covers the return flanges FL1 and FL2 in Y.
+          // Official manufacturer specification (90_deg_inside_riser_100x100_cover.dxf):
+          // Cover plate length is 55.0mm, centered on the return flanges (yMid ~ 113.84mm).
+          // This extends ~0.68mm beyond the flanges at both ends, touching the cheek knee bend
+          // line without hanging over the flat face on the right hand side into empty space.
+          final cheekBends =
+              baseDocument.bends
+                  .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
+                  .toList()
+                ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+          final double cheekX1 = cheekBends.isNotEmpty ? math.min(cheekBends.first.p1.x, cheekBends.first.p2.x) : minX;
+          final double cheekX2 = cheekBends.isNotEmpty ? math.max(cheekBends.last.p1.x, cheekBends.last.p2.x) : maxX;
+
+          final returnFlanges = baseDocument.bends
+              .where((b) => b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL'))
+              .toList();
+          double flangeMinY = minY;
+          double flangeMaxY = maxY;
+          if (returnFlanges.isNotEmpty) {
+            flangeMinY = returnFlanges.map((b) => math.min(b.p1.y, b.p2.y)).reduce(math.min);
+            flangeMaxY = returnFlanges.map((b) => math.max(b.p1.y, b.p2.y)).reduce(math.max);
           }
+          final flangeLen = flangeMaxY - flangeMinY; // ~53.64mm
+          final yMid = (flangeMinY + flangeMaxY) / 2.0; // ~113.84mm
+          final coverLen = math.max(55.0, flangeLen + 1.36);
+
+          effectiveMinX = cheekX1;
+          effectiveMaxX = cheekX2;
+          effectiveMinY = yMid - coverLen / 2.0;
+          effectiveMaxY = yMid + coverLen / 2.0;
+
+          coverFootprintVerts = [
+            CadPoint2D(effectiveMinX, effectiveMinY),
+            CadPoint2D(effectiveMaxX, effectiveMinY),
+            CadPoint2D(effectiveMaxX, effectiveMaxY),
+            CadPoint2D(effectiveMinX, effectiveMaxY),
+          ];
+        } else {
+          // SS2: For 45 deg inside riser, reduce length of cover so it does not extend
+          // beyond the top horizontal flat opening. The prongs inclined 45 deg upwards
+          // are coupler flaps for linking adjacent trunking and must remain unobstructed.
+          double? horizEnd;
+          final returnFlanges = baseDocument.bends
+              .where((b) => b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL'))
+              .toList();
+          if (returnFlanges.isNotEmpty) {
+            final maxFlangeY = returnFlanges.map((b) => math.max(b.p1.y, b.p2.y)).reduce(math.max);
+            if (maxFlangeY > minY + 10.0 && maxFlangeY < maxY) {
+              horizEnd = maxFlangeY;
+            }
+          }
+          horizEnd ??= minY + (maxY - minY) * 0.564;
+          effectiveMaxY = horizEnd;
+          coverFootprintVerts = [CadPoint2D(minX, minY), CadPoint2D(maxX, minY), CadPoint2D(maxX, effectiveMaxY), CadPoint2D(minX, effectiveMaxY)];
         }
-        horizEnd ??= minY + (maxY - minY) * 0.564;
-        effectiveMaxY = horizEnd;
-        coverFootprintVerts = [
-          CadPoint2D(minX, minY),
-          CadPoint2D(maxX, minY),
-          CadPoint2D(maxX, effectiveMaxY),
-          CadPoint2D(minX, effectiveMaxY),
-        ];
       }
     } else if (profile == CmsScalingProfile.outsideRiser) {
       final cheekBends = baseDocument.bends
           .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
           .toList();
-      final isHorizontal = cheekBends.isNotEmpty &&
-          (cheekBends.first.p2.x - cheekBends.first.p1.x).abs() > (cheekBends.first.p2.y - cheekBends.first.p1.y).abs();
+      final isHorizontal =
+          cheekBends.isNotEmpty && (cheekBends.first.p2.x - cheekBends.first.p1.x).abs() > (cheekBends.first.p2.y - cheekBends.first.p1.y).abs();
 
       if (isHorizontal) {
         // 90° Outside Riser: cover flanged area between FL1 and FL2 along X,
         // and between Cheek 1 (B1) and Cheek 2 (B2) along Y.
-        final returnFlanges = baseDocument.bends.where((b) =>
-          b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL')
-        ).toList();
+        final returnFlanges = baseDocument.bends
+            .where((b) => b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL'))
+            .toList();
         double flangeMinX = minX;
         double flangeMaxX = maxX;
         if (returnFlanges.isNotEmpty) {
@@ -219,9 +248,9 @@ class TrunkingCoverGenerator {
         // extending all the way to the knee where the top rim bends down 45 degrees
         // (the end marked with the red circle, at Y ~ 133.4mm / length ~ 103.4mm).
         double straightEnd = maxY;
-        final returnFlanges = baseDocument.bends.where((b) =>
-          b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL')
-        ).toList();
+        final returnFlanges = baseDocument.bends
+            .where((b) => b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL'))
+            .toList();
         if (returnFlanges.isNotEmpty) {
           final maxFlangeY = returnFlanges.map((b) => math.max(b.p1.y, b.p2.y)).reduce(math.max);
           if (maxFlangeY > straightEnd) {
@@ -244,12 +273,7 @@ class TrunkingCoverGenerator {
         }
 
         effectiveMaxY = straightEnd;
-        coverFootprintVerts = [
-          CadPoint2D(minX, minY),
-          CadPoint2D(maxX, minY),
-          CadPoint2D(maxX, effectiveMaxY),
-          CadPoint2D(minX, effectiveMaxY),
-        ];
+        coverFootprintVerts = [CadPoint2D(minX, minY), CadPoint2D(maxX, minY), CadPoint2D(maxX, effectiveMaxY), CadPoint2D(minX, effectiveMaxY)];
       }
     }
 
@@ -298,6 +322,13 @@ class TrunkingCoverGenerator {
         flangeDepth: flangeDepth,
         parameterOverrides: parameterOverrides,
       );
+    } else if (profile == CmsScalingProfile.insideRiser) {
+      coverDoc = _buildInsideRiserCoverDocument(
+        baseDocument: baseDocument,
+        bodyHeight: bodyHeight,
+        flangeDepth: flangeDepth,
+        parameterOverrides: parameterOverrides,
+      );
     } else {
       coverDoc = _buildCoverDocument(
         baseDocument: baseDocument,
@@ -318,27 +349,26 @@ class TrunkingCoverGenerator {
     // Compute automatic beside-base offset (placed cleanly to the right of the base part)
     final defaultOffset = computeDefaultBesideOffset(baseDocument, coverDoc);
 
-      final isTray = baseDocument.productType.toLowerCase().contains('tray') ||
-          baseDocument.itemName.toLowerCase().contains('tray') ||
-          baseDocument.bends.any((b) => b.role == BendLineRole.flange && (b.targetAngleDeg.abs() - 135.0).abs() < 10.0);
+    final isTray =
+        baseDocument.productType.toLowerCase().contains('tray') ||
+        baseDocument.itemName.toLowerCase().contains('tray') ||
+        baseDocument.bends.any((b) => b.role == BendLineRole.flange && (b.targetAngleDeg.abs() - 135.0).abs() < 10.0);
 
-      return TrunkingCoverData(
-        document: coverDoc,
-        isVisible2D: isVisible2D,
-        isVisible3D: isVisible3D,
-        placementMode2D: placementMode2D,
-        placementMode3D: placementMode3D,
-        offset2D: offset2D ?? (placementMode2D == CoverPlacementMode2D.snappedToBase
-            ? const CadPoint2D(0, 0)
-            : defaultOffset),
-        offset3D: offset3D ?? const CadPoint3D(0, 0, 0),
-        properties: {
-          'productType': '${baseDocument.productType} Cover',
-          'generatedBy': 'TruFold Studio Cover Engine',
-          'flangeDepthMm': flangeDepth,
-          'bodyHeightMm': bodyHeight,
-          'snappedClearanceZ': isTray ? 0.5 : defaultCoverClearanceZ,
-          'snugFitClearanceMm': defaultCoverClearanceOffset,
+    return TrunkingCoverData(
+      document: coverDoc,
+      isVisible2D: isVisible2D,
+      isVisible3D: isVisible3D,
+      placementMode2D: placementMode2D,
+      placementMode3D: placementMode3D,
+      offset2D: offset2D ?? (placementMode2D == CoverPlacementMode2D.snappedToBase ? const CadPoint2D(0, 0) : defaultOffset),
+      offset3D: offset3D ?? const CadPoint3D(0, 0, 0),
+      properties: {
+        'productType': '${baseDocument.productType} Cover',
+        'generatedBy': 'TruFold Studio Cover Engine',
+        'flangeDepthMm': flangeDepth,
+        'bodyHeightMm': bodyHeight,
+        'snappedClearanceZ': isTray ? 0.5 : defaultCoverClearanceZ,
+        'snugFitClearanceMm': defaultCoverClearanceOffset,
         if (profile == CmsScalingProfile.reducer || CmsScalingController.isReducerGeometry(baseDocument)) ...{
           'isReducerCover': true,
           'port1Height': reducerPort1Height,
@@ -357,24 +387,19 @@ class TrunkingCoverGenerator {
   static CadPoint2D computeDefaultBesideOffset(DsfDocument baseDocument, DsfDocument coverDocument) {
     final baseBbox = calculateDocumentBbox(baseDocument);
     final coverBbox = calculateDocumentBbox(coverDocument);
-    return CadPoint2D(
-      (baseBbox.maxX - coverBbox.minX) + 60.0,
-      baseBbox.minY - coverBbox.minY,
-    );
+    return CadPoint2D((baseBbox.maxX - coverBbox.minX) + 60.0, baseBbox.minY - coverBbox.minY);
   }
 
   /// Finds the primary floor face acting as base anchor in [doc].
   static PlanarSheetFace? _findBaseFloor(DsfDocument doc) {
     if (doc.faces.isEmpty) return null;
-    return doc.faces.firstWhere(
-      (f) => f.isBaseAnchor || f.role == FaceRole.baseFloor,
-      orElse: () => doc.faces.first,
-    );
+    return doc.faces.firstWhere((f) => f.isBaseAnchor || f.role == FaceRole.baseFloor, orElse: () => doc.faces.first);
   }
 
   /// Detects the fitting profile of [doc].
   static CmsScalingProfile _detectProfile(DsfDocument doc) {
-    final contract = CmsProductContract.lookup(doc.productType, doc.itemName) ??
+    final contract =
+        CmsProductContract.lookup(doc.productType, doc.itemName) ??
         CmsProductContract.lookup(null, doc.itemName) ??
         CmsProductContract.lookup(null, doc.productType);
     if (contract != null) return contract.scalingProfile;
@@ -393,14 +418,11 @@ class TrunkingCoverGenerator {
   }
 
   /// Extracts port heights mapped by port index (1-based: 1, 2, 3, 4).
-  static Map<int, double> _extractPortHeights(
-    DsfDocument doc,
-    CmsScalingProfile profile,
-    Map<String, double>? overrides,
-  ) {
+  static Map<int, double> _extractPortHeights(DsfDocument doc, CmsScalingProfile profile, Map<String, double>? overrides) {
     final heights = <int, double>{};
     for (int i = 1; i <= 4; i++) {
-      final val = overrides?['port${i}_height'] ??
+      final val =
+          overrides?['port${i}_height'] ??
           overrides?['port${i}Height'] ??
           overrides?['port$i'] ??
           overrides?['p${i}_height'] ??
@@ -431,7 +453,8 @@ class TrunkingCoverGenerator {
 
     // Baseline defaults for known unequal fittings
     if (profile == CmsScalingProfile.reducer || CmsScalingController.isReducerGeometry(doc)) {
-      final p1H = overrides?['port1_height'] ??
+      final p1H =
+          overrides?['port1_height'] ??
           overrides?['port1Height'] ??
           overrides?['port1'] ??
           overrides?['p1_height'] ??
@@ -441,7 +464,8 @@ class TrunkingCoverGenerator {
           (doc.parameters['height'] as num?)?.toDouble() ??
           heights[1] ??
           100.0;
-      final p2H = overrides?['port2_height'] ??
+      final p2H =
+          overrides?['port2_height'] ??
           overrides?['port2Height'] ??
           overrides?['port2'] ??
           overrides?['p2_height'] ??
@@ -457,19 +481,22 @@ class TrunkingCoverGenerator {
       // Port 1 (North/Branch): height 100mm
       // Port 2 (East/Right): height 50mm (smaller duct)
       // Port 3 (West/Left): height 100mm (main duct)
-      double p1 = overrides?['port1_height'] ??
+      double p1 =
+          overrides?['port1_height'] ??
           overrides?['port1Height'] ??
           (doc.parameters['port1_height'] as num?)?.toDouble() ??
           (doc.parameters['port1Height'] as num?)?.toDouble() ??
           100.0;
 
-      double p2 = overrides?['port2_height'] ??
+      double p2 =
+          overrides?['port2_height'] ??
           overrides?['port2Height'] ??
           (doc.parameters['port2_height'] as num?)?.toDouble() ??
           (doc.parameters['port2Height'] as num?)?.toDouble() ??
           50.0;
 
-      double p3 = overrides?['port3_height'] ??
+      double p3 =
+          overrides?['port3_height'] ??
           overrides?['port3Height'] ??
           (doc.parameters['port3_height'] as num?)?.toDouble() ??
           (doc.parameters['port3Height'] as num?)?.toDouble() ??
@@ -490,7 +517,8 @@ class TrunkingCoverGenerator {
       // In standard Unequal Cross:
       // Ports 1 & 3: height 50mm (West and East branches)
       // Ports 2 & 4: height 100mm (North and South main run)
-      final p1H = overrides?['port1_height'] ??
+      final p1H =
+          overrides?['port1_height'] ??
           overrides?['port1Height'] ??
           overrides?['port1'] ??
           overrides?['p1_height'] ??
@@ -501,7 +529,8 @@ class TrunkingCoverGenerator {
           heights[1];
       heights[1] = p1H ?? 50.0;
 
-      final p2H = overrides?['port2_height'] ??
+      final p2H =
+          overrides?['port2_height'] ??
           overrides?['port2Height'] ??
           overrides?['port2'] ??
           overrides?['p2_height'] ??
@@ -512,7 +541,8 @@ class TrunkingCoverGenerator {
           heights[2];
       heights[2] = p2H ?? 100.0;
 
-      final p3H = overrides?['port3_height'] ??
+      final p3H =
+          overrides?['port3_height'] ??
           overrides?['port3Height'] ??
           overrides?['port3'] ??
           overrides?['p3_height'] ??
@@ -523,7 +553,8 @@ class TrunkingCoverGenerator {
           heights[3];
       heights[3] = p3H ?? 50.0;
 
-      final p4H = overrides?['port4_height'] ??
+      final p4H =
+          overrides?['port4_height'] ??
           overrides?['port4Height'] ??
           overrides?['port4'] ??
           overrides?['p4_height'] ??
@@ -567,8 +598,7 @@ class TrunkingCoverGenerator {
     final cheekBends = baseDocument.bends
         .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
         .toList();
-    final isHorizontal = cheekBends.isNotEmpty &&
-        (cheekBends.first.p2.x - cheekBends.first.p1.x).abs() > (cheekBends.first.p2.y - cheekBends.first.p1.y).abs();
+    final isHorizontal = cheekBends.isNotEmpty && (cheekBends.first.p2.x - cheekBends.first.p1.x).abs() > (cheekBends.first.p2.y - cheekBends.first.p1.y).abs();
 
     const clearance = defaultCoverClearanceOffset;
     final d = flangeDepth;
@@ -587,9 +617,9 @@ class TrunkingCoverGenerator {
       final yMax = y2 + clearance;
 
       // 2. Flat top opening span in X:
-      final returnFlanges = baseDocument.bends.where((b) =>
-        b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL')
-      ).toList();
+      final returnFlanges = baseDocument.bends
+          .where((b) => b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL'))
+          .toList();
       double x1 = 42.3;
       double x2 = 185.5;
       if (returnFlanges.isNotEmpty) {
@@ -807,11 +837,7 @@ class TrunkingCoverGenerator {
         faces: [mainFace, ext1Face, ext2Face, cfMainBot, cfMainTop, cfExt1Bot, cfExt1Top, cfExt2Bot, cfExt2Top],
         punches: punches,
         baseFaceId: 'COVER_MAIN_FACE',
-        parameters: {
-          ...baseDocument.parameters,
-          'cover_flange_depth': flangeDepth,
-          'cover_body_height': bodyHeight,
-        },
+        parameters: {...baseDocument.parameters, 'cover_flange_depth': flangeDepth, 'cover_body_height': bodyHeight},
         metadata: {
           'isCover': true,
           'isTrunkingCover': true,
@@ -834,9 +860,9 @@ class TrunkingCoverGenerator {
       final xMax = x2 + clearance;
 
       // 2. Flat top opening span in Y:
-      final returnFlanges = baseDocument.bends.where((b) =>
-        b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL')
-      ).toList();
+      final returnFlanges = baseDocument.bends
+          .where((b) => b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL'))
+          .toList();
       double yStart = 30.0;
       double yKnee = 133.4;
       if (returnFlanges.isNotEmpty) {
@@ -1006,11 +1032,7 @@ class TrunkingCoverGenerator {
         faces: [mainFace, ext1Face, cfMainLeft, cfMainRight, cfExt1Left, cfExt1Right],
         punches: punches,
         baseFaceId: 'COVER_MAIN_FACE',
-        parameters: {
-          ...baseDocument.parameters,
-          'cover_flange_depth': flangeDepth,
-          'cover_body_height': bodyHeight,
-        },
+        parameters: {...baseDocument.parameters, 'cover_flange_depth': flangeDepth, 'cover_body_height': bodyHeight},
         metadata: {
           'isCover': true,
           'isTrunkingCover': true,
@@ -1019,6 +1041,309 @@ class TrunkingCoverGenerator {
           'generator': 'TruFold Studio Cover Engine',
         },
       );
+    }
+  }
+
+  /// Parametric generator for 45° and 90° Inside Riser covers:
+  /// - For 45° Inside Risers:
+  ///   Builds an authentic 2-plane angular cover fitting the exact angle of the body:
+  ///   - COVER_MAIN_FACE (horizontal flat arm roof at height = bodyHeight)
+  ///   - COVER_EXT_FACE_1 (45° rising arm roof following the inclined cheeks)
+  ///   - Transverse 45° upward roof bend line C_ROOF_B1 connecting the two planes at the knee
+  ///   - 90° down-folded side drop flanges along both edges with 22.5° miter relief notches at the knee
+  ///   - Terminal channel openings left unobstructed for cable pass-through and coupler flap links
+  /// - For 90° Inside Risers:
+  ///   Maintains manufacturer specification flat knee cover plate.
+  static DsfDocument _buildInsideRiserCoverDocument({
+    required DsfDocument baseDocument,
+    required double bodyHeight,
+    required double flangeDepth,
+    Map<String, double>? parameterOverrides,
+  }) {
+    final cheekBends = baseDocument.bends
+        .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
+        .toList();
+    final isHorizontal = cheekBends.isNotEmpty && (cheekBends.first.p2.x - cheekBends.first.p1.x).abs() > (cheekBends.first.p2.y - cheekBends.first.p1.y).abs();
+
+    const clearance = defaultCoverClearanceOffset;
+    final d = flangeDepth;
+    final miterSlope = math.sqrt(2.0) - 1.0;
+    final notchW = d * miterSlope;
+
+    if (isHorizontal) {
+      // -------------------------------------------------------------
+      // Cable Tray 45° Inside Riser (horizontal cheek bends along X)
+      // -------------------------------------------------------------
+      // 1. Channel width along Y:
+      cheekBends.sort((a, b) => ((a.p1.y + a.p2.y) / 2.0).compareTo((b.p1.y + b.p2.y) / 2.0));
+      final y1 = (cheekBends.first.p1.y + cheekBends.first.p2.y) / 2.0;
+      final y2 = (cheekBends.last.p1.y + cheekBends.last.p2.y) / 2.0;
+      final yMin = math.min(y1, y2) - clearance;
+      final yMax = math.max(y1, y2) + clearance;
+
+      // 2. Length along X:
+      final b45 = baseDocument.bends.firstWhere((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0, orElse: () => baseDocument.bends.first);
+      final xBend5 = (b45.p1.x + b45.p2.x) / 2.0;
+
+      // Cheek extents along X, excluding extending coupler flaps
+      final cheekMinX = cheekBends.map((b) => math.min(b.p1.x, b.p2.x)).reduce(math.min);
+      final cheekMaxX = cheekBends.map((b) => math.max(b.p1.x, b.p2.x)).reduce(math.max);
+
+      final xStart = cheekMinX;
+      final xMid = xBend5;
+      final xEnd = cheekMaxX;
+
+      // 3. Faces:
+      final mainFace = PlanarSheetFace(
+        id: 'COVER_MAIN_FACE',
+        label: 'Cover Flat Top Plate',
+        role: FaceRole.baseFloor,
+        isBaseAnchor: true,
+        vertices: [CadPoint2D(xMid, yMin), CadPoint2D(xEnd, yMin), CadPoint2D(xEnd, yMax), CadPoint2D(xMid, yMax)],
+      );
+
+      final ext1Face = PlanarSheetFace(
+        id: 'COVER_EXT_FACE_1',
+        label: 'Cover Angled Top Plate (45°)',
+        role: FaceRole.returnFlange,
+        vertices: [CadPoint2D(xStart, yMin), CadPoint2D(xMid, yMin), CadPoint2D(xMid, yMax), CadPoint2D(xStart, yMax)],
+      );
+
+      final cfMainBot = PlanarSheetFace(
+        id: 'CF_MAIN_BOT',
+        label: 'Cover Flat Bottom Flange',
+        role: FaceRole.returnFlange,
+        vertices: [CadPoint2D(xMid, yMin), CadPoint2D(xMid + notchW, yMin - d), CadPoint2D(xEnd, yMin - d), CadPoint2D(xEnd, yMin)],
+      );
+
+      final cfMainTop = PlanarSheetFace(
+        id: 'CF_MAIN_TOP',
+        label: 'Cover Flat Top Flange',
+        role: FaceRole.returnFlange,
+        vertices: [CadPoint2D(xEnd, yMax), CadPoint2D(xEnd, yMax + d), CadPoint2D(xMid + notchW, yMax + d), CadPoint2D(xMid, yMax)],
+      );
+
+      final cfExt1Bot = PlanarSheetFace(
+        id: 'CF_EXT1_BOT',
+        label: 'Cover Angled Bottom Flange',
+        role: FaceRole.returnFlange,
+        vertices: [CadPoint2D(xStart, yMin), CadPoint2D(xStart, yMin - d), CadPoint2D(xMid - notchW, yMin - d), CadPoint2D(xMid, yMin)],
+      );
+
+      final cfExt1Top = PlanarSheetFace(
+        id: 'CF_EXT1_TOP',
+        label: 'Cover Angled Top Flange',
+        role: FaceRole.returnFlange,
+        vertices: [CadPoint2D(xMid, yMax), CadPoint2D(xMid - notchW, yMax + d), CadPoint2D(xStart, yMax + d), CadPoint2D(xStart, yMax)],
+      );
+
+      // 4. Bends:
+      final bends = [
+        FoldBendLine(
+          id: 'C_ROOF_B1',
+          p1: CadPoint2D(xMid, yMin),
+          p2: CadPoint2D(xMid, yMax),
+          targetAngleDeg: 45.0,
+          direction: BendDirection.up,
+          radiusMm: 1.5,
+          layer: 'BEND_UP',
+          parentFaceId: 'COVER_MAIN_FACE',
+          childFaceId: 'COVER_EXT_FACE_1',
+        ),
+        FoldBendLine(
+          id: 'CF_B_MAIN_BOT',
+          p1: CadPoint2D(xMid, yMin),
+          p2: CadPoint2D(xEnd, yMin),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.down,
+          radiusMm: 1.5,
+          layer: 'BEND_DOWN',
+          parentFaceId: 'COVER_MAIN_FACE',
+          childFaceId: 'CF_MAIN_BOT',
+        ),
+        FoldBendLine(
+          id: 'CF_B_MAIN_TOP',
+          p1: CadPoint2D(xEnd, yMax),
+          p2: CadPoint2D(xMid, yMax),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.down,
+          radiusMm: 1.5,
+          layer: 'BEND_DOWN',
+          parentFaceId: 'COVER_MAIN_FACE',
+          childFaceId: 'CF_MAIN_TOP',
+        ),
+        FoldBendLine(
+          id: 'CF_B_EXT1_BOT',
+          p1: CadPoint2D(xStart, yMin),
+          p2: CadPoint2D(xMid, yMin),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.down,
+          radiusMm: 1.5,
+          layer: 'BEND_DOWN',
+          parentFaceId: 'COVER_EXT_FACE_1',
+          childFaceId: 'CF_EXT1_BOT',
+        ),
+        FoldBendLine(
+          id: 'CF_B_EXT1_TOP',
+          p1: CadPoint2D(xMid, yMax),
+          p2: CadPoint2D(xStart, yMax),
+          targetAngleDeg: 90.0,
+          direction: BendDirection.down,
+          radiusMm: 1.5,
+          layer: 'BEND_DOWN',
+          parentFaceId: 'COVER_EXT_FACE_1',
+          childFaceId: 'CF_EXT1_TOP',
+        ),
+      ];
+
+      // 5. Outer contour:
+      final outerContour = [
+        CadPoint2D(xStart, yMin),
+        CadPoint2D(xStart, yMin - d),
+        CadPoint2D(xMid - notchW, yMin - d),
+        CadPoint2D(xMid, yMin),
+        CadPoint2D(xMid + notchW, yMin - d),
+        CadPoint2D(xEnd, yMin - d),
+        CadPoint2D(xEnd, yMin),
+        CadPoint2D(xEnd, yMax),
+        CadPoint2D(xEnd, yMax + d),
+        CadPoint2D(xMid + notchW, yMax + d),
+        CadPoint2D(xMid, yMax),
+        CadPoint2D(xMid - notchW, yMax + d),
+        CadPoint2D(xStart, yMax + d),
+        CadPoint2D(xStart, yMax),
+      ];
+
+      // 6. Punches:
+      final punches = [
+        CncPunchPrimitive(
+          id: 'COVER_MOUNT_HOLE_1',
+          type: PunchType.roundHole,
+          center: CadPoint2D((xMid + xEnd) / 2.0, (yMin + yMax) / 2.0),
+          diameterMm: defaultMountHoleDiameter,
+          rotationDeg: 0.0,
+          role: CncPunchRole.general,
+          parentFaceId: 'COVER_MAIN_FACE',
+          showLabel: true,
+          isVisible: true,
+        ),
+        CncPunchPrimitive(
+          id: 'COVER_MOUNT_HOLE_2',
+          type: PunchType.roundHole,
+          center: CadPoint2D((xStart + xMid) / 2.0, (yMin + yMax) / 2.0),
+          diameterMm: defaultMountHoleDiameter,
+          rotationDeg: 0.0,
+          role: CncPunchRole.general,
+          parentFaceId: 'COVER_EXT_FACE_1',
+          showLabel: true,
+          isVisible: true,
+        ),
+      ];
+
+      return DsfDocument(
+        productType: '${baseDocument.productType} Cover',
+        itemName: '${baseDocument.itemName} Cover',
+        material: baseDocument.material,
+        outerContour: outerContour,
+        bends: bends,
+        faces: [mainFace, ext1Face, cfMainBot, cfMainTop, cfExt1Bot, cfExt1Top],
+        punches: punches,
+        baseFaceId: 'COVER_MAIN_FACE',
+        parameters: {...baseDocument.parameters, 'cover_flange_depth': flangeDepth, 'cover_body_height': bodyHeight},
+        metadata: {
+          'isCover': true,
+          'isTrunkingCover': true,
+          'parentProductType': baseDocument.productType,
+          'parentItemName': baseDocument.itemName,
+          'generator': 'TruFold Studio Cover Engine',
+        },
+      );
+    } else {
+      final bends45 = baseDocument.bends.where((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0).toList();
+      final is90InsideRiser = bends45.length >= 2;
+
+      final verts = baseDocument.faces.firstWhere((f) => f.isBaseAnchor || f.role == FaceRole.baseFloor).vertices;
+      final minX = verts.map((v) => v.x).reduce(math.min);
+      final maxX = verts.map((v) => v.x).reduce(math.max);
+      final minY = verts.map((v) => v.y).reduce(math.min);
+      final maxY = verts.map((v) => v.y).reduce(math.max);
+
+      if (is90InsideRiser) {
+        // 90° Inside Riser (Vertical): Flat manufacturer cover
+        cheekBends.sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+        final double cheekX1 = cheekBends.isNotEmpty ? math.min(cheekBends.first.p1.x, cheekBends.first.p2.x) : minX;
+        final double cheekX2 = cheekBends.isNotEmpty ? math.max(cheekBends.last.p1.x, cheekBends.last.p2.x) : maxX;
+
+        final returnFlanges = baseDocument.bends
+            .where((b) => b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL'))
+            .toList();
+        double flangeMinY = minY;
+        double flangeMaxY = maxY;
+        if (returnFlanges.isNotEmpty) {
+          flangeMinY = returnFlanges.map((b) => math.min(b.p1.y, b.p2.y)).reduce(math.min);
+          flangeMaxY = returnFlanges.map((b) => math.max(b.p1.y, b.p2.y)).reduce(math.max);
+        }
+        final flangeLen = flangeMaxY - flangeMinY;
+        final yMid = (flangeMinY + flangeMaxY) / 2.0;
+        final coverLen = math.max(55.0, flangeLen + 1.36);
+
+        final effMinX = cheekX1;
+        final effMaxX = cheekX2;
+        final effMinY = yMid - coverLen / 2.0;
+        final effMaxY = yMid + coverLen / 2.0;
+
+        final coverFootprintVerts = [CadPoint2D(effMinX, effMinY), CadPoint2D(effMaxX, effMinY), CadPoint2D(effMaxX, effMaxY), CadPoint2D(effMinX, effMaxY)];
+
+        return _buildCoverDocument(
+          baseDocument: baseDocument,
+          profile: CmsScalingProfile.insideRiser,
+          baseFloorVerts: coverFootprintVerts,
+          bodyHeight: bodyHeight,
+          portHeights: _extractPortHeights(baseDocument, CmsScalingProfile.insideRiser, parameterOverrides),
+          flangeDepth: flangeDepth,
+          midX: (effMinX + effMaxX) / 2.0,
+          midY: (effMinY + effMaxY) / 2.0,
+          minX: effMinX,
+          maxX: effMaxX,
+          minY: effMinY,
+          maxY: effMaxY,
+        );
+      } else {
+        // Trunking 45° Inside Riser (Vertical): Cover horizontal flat opening (~55.6mm)
+        // leaving the 45° inclined coupler prongs unobstructed (SS2).
+        double? horizEnd;
+        final returnFlanges = baseDocument.bends
+            .where((b) => b.role == BendLineRole.flange || b.layer == 'FLANGE' || b.id.toUpperCase().startsWith('FL'))
+            .toList();
+        if (returnFlanges.isNotEmpty) {
+          final maxFlangeY = returnFlanges.map((b) => math.max(b.p1.y, b.p2.y)).reduce(math.max);
+          if (maxFlangeY > minY + 10.0 && maxFlangeY < maxY) {
+            horizEnd = maxFlangeY;
+          }
+        }
+        horizEnd ??= minY + (maxY - minY) * 0.564;
+        final effMinX = minX;
+        final effMaxX = maxX;
+        final effMinY = minY;
+        final effMaxY = horizEnd;
+
+        final coverFootprintVerts = [CadPoint2D(effMinX, effMinY), CadPoint2D(effMaxX, effMinY), CadPoint2D(effMaxX, effMaxY), CadPoint2D(effMinX, effMaxY)];
+
+        return _buildCoverDocument(
+          baseDocument: baseDocument,
+          profile: CmsScalingProfile.insideRiser,
+          baseFloorVerts: coverFootprintVerts,
+          bodyHeight: bodyHeight,
+          portHeights: _extractPortHeights(baseDocument, CmsScalingProfile.insideRiser, parameterOverrides),
+          flangeDepth: flangeDepth,
+          midX: (effMinX + effMaxX) / 2.0,
+          midY: (effMinY + effMaxY) / 2.0,
+          minX: effMinX,
+          maxX: effMaxX,
+          minY: effMinY,
+          maxY: effMaxY,
+        );
+      }
     }
   }
 
@@ -1053,11 +1378,12 @@ class TrunkingCoverGenerator {
     int flangeCounter = 1;
     int dropFlapCounter = 1;
 
-    // Check if horizontal outside riser (cheek bends run horizontally along X)
+    // Check if horizontal riser (cheek bends run horizontally along X)
     final cheekBends = baseDocument.bends
         .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
         .toList();
-    final isHorizontalOutsideRiser = profile == CmsScalingProfile.outsideRiser &&
+    final isHorizontalRiser =
+        (profile == CmsScalingProfile.insideRiser || profile == CmsScalingProfile.outsideRiser) &&
         cheekBends.isNotEmpty &&
         (cheekBends.first.p2.x - cheekBends.first.p1.x).abs() > (cheekBends.first.p2.y - cheekBends.first.p1.y).abs();
 
@@ -1066,8 +1392,8 @@ class TrunkingCoverGenerator {
     if (profile == CmsScalingProfile.reducer || CmsScalingController.isReducerGeometry(baseDocument)) {
       coverPlateVerts = List<CadPoint2D>.from(baseFloorVerts);
     } else if (profile == CmsScalingProfile.insideRiser || profile == CmsScalingProfile.outsideRiser) {
-      if (isHorizontalOutsideRiser) {
-        // Horizontal Outside Riser: expand laterally in Y by defaultCoverClearanceOffset for snug fit over side walls,
+      if (isHorizontalRiser) {
+        // Horizontal Risers: expand laterally in Y by defaultCoverClearanceOffset for snug fit over side walls,
         // while keeping X boundaries precisely aligned to the flanged area (no elongation beyond flanges).
         coverPlateVerts = [
           CadPoint2D(minX, minY - defaultCoverClearanceOffset),
@@ -1086,11 +1412,7 @@ class TrunkingCoverGenerator {
         ];
       }
     } else {
-      coverPlateVerts = _expandFootprintForSnugFit(
-        baseFloorVerts,
-        isCcw,
-        defaultCoverClearanceOffset,
-      );
+      coverPlateVerts = _expandFootprintForSnugFit(baseFloorVerts, isCcw, defaultCoverClearanceOffset);
     }
 
     // Main top face vertices (expanded footprint for snug fit)
@@ -1116,7 +1438,7 @@ class TrunkingCoverGenerator {
       }
 
       // Check if this edge is a port mouth opening or a wall/cheek edge
-      final portIndex = _identifyPortIndex(p1, p2, midX, midY, profile, isHorizontal: isHorizontalOutsideRiser);
+      final portIndex = _identifyPortIndex(p1, p2, midX, midY, profile, isHorizontal: isHorizontalRiser);
       final isPortMouth = portIndex != null;
 
       if (!isPortMouth) {
@@ -1124,44 +1446,8 @@ class TrunkingCoverGenerator {
         final bendId = 'CB_$flangeCounter';
         final flangeFaceId = 'CF_$flangeCounter';
 
-        bends.add(FoldBendLine(
-          id: bendId,
-          p1: p1,
-          p2: p2,
-          targetAngleDeg: 90.0,
-          direction: BendDirection.down,
-          radiusMm: 1.5,
-          layer: 'BEND_DOWN',
-          parentFaceId: 'COVER_MAIN_FACE',
-          childFaceId: flangeFaceId,
-        ));
-
-        // Flange outer vertices extending along outward normal
-        final f1 = CadPoint2D(p1.x + nx * flangeDepth, p1.y + ny * flangeDepth);
-        final f2 = CadPoint2D(p2.x + nx * flangeDepth, p2.y + ny * flangeDepth);
-
-        faces.add(PlanarSheetFace(
-          id: flangeFaceId,
-          label: 'Cover Side Flange $flangeCounter',
-          role: FaceRole.returnFlange,
-          vertices: [p1, p2, f2, f1],
-        ));
-
-        outerContour.addAll([p1, f1, f2, p2]);
-        flangeCounter++;
-      } else {
-        // --- Port Mouth Edge: Check for negative/void area that must be covered ---
-        final bool allowDropFlap = profile == CmsScalingProfile.unequalTee ||
-            profile == CmsScalingProfile.unequalCross;
-        final portH = portHeights[portIndex] ?? bodyHeight;
-        final dropFlapLength = bodyHeight - portH;
-
-        if (allowDropFlap && dropFlapLength > 0.5) {
-          // Additional 90° downward flap covering the port void down to the lower port walls
-          final bendId = 'C_DROP_B_$dropFlapCounter';
-          final flapFaceId = 'C_DROP_F_$dropFlapCounter';
-
-          bends.add(FoldBendLine(
+        bends.add(
+          FoldBendLine(
             id: bendId,
             p1: p1,
             p2: p2,
@@ -1170,18 +1456,54 @@ class TrunkingCoverGenerator {
             radiusMm: 1.5,
             layer: 'BEND_DOWN',
             parentFaceId: 'COVER_MAIN_FACE',
-            childFaceId: flapFaceId,
-          ));
+            childFaceId: flangeFaceId,
+          ),
+        );
+
+        // Flange outer vertices extending along outward normal
+        final f1 = CadPoint2D(p1.x + nx * flangeDepth, p1.y + ny * flangeDepth);
+        final f2 = CadPoint2D(p2.x + nx * flangeDepth, p2.y + ny * flangeDepth);
+
+        faces.add(PlanarSheetFace(id: flangeFaceId, label: 'Cover Side Flange $flangeCounter', role: FaceRole.returnFlange, vertices: [p1, p2, f2, f1]));
+
+        outerContour.addAll([p1, f1, f2, p2]);
+        flangeCounter++;
+      } else {
+        // --- Port Mouth Edge: Check for negative/void area that must be covered ---
+        final bool allowDropFlap = profile == CmsScalingProfile.unequalTee || profile == CmsScalingProfile.unequalCross;
+        final portH = portHeights[portIndex] ?? bodyHeight;
+        final dropFlapLength = bodyHeight - portH;
+
+        if (allowDropFlap && dropFlapLength > 0.5) {
+          // Additional 90° downward flap covering the port void down to the lower port walls
+          final bendId = 'C_DROP_B_$dropFlapCounter';
+          final flapFaceId = 'C_DROP_F_$dropFlapCounter';
+
+          bends.add(
+            FoldBendLine(
+              id: bendId,
+              p1: p1,
+              p2: p2,
+              targetAngleDeg: 90.0,
+              direction: BendDirection.down,
+              radiusMm: 1.5,
+              layer: 'BEND_DOWN',
+              parentFaceId: 'COVER_MAIN_FACE',
+              childFaceId: flapFaceId,
+            ),
+          );
 
           final d1 = CadPoint2D(p1.x + nx * dropFlapLength, p1.y + ny * dropFlapLength);
           final d2 = CadPoint2D(p2.x + nx * dropFlapLength, p2.y + ny * dropFlapLength);
 
-          faces.add(PlanarSheetFace(
-            id: flapFaceId,
-            label: 'Port $portIndex Flap (${dropFlapLength.toStringAsFixed(1)}mm)',
-            role: FaceRole.returnFlange,
-            vertices: [p1, p2, d2, d1],
-          ));
+          faces.add(
+            PlanarSheetFace(
+              id: flapFaceId,
+              label: 'Port $portIndex Flap (${dropFlapLength.toStringAsFixed(1)}mm)',
+              role: FaceRole.returnFlange,
+              vertices: [p1, p2, d2, d1],
+            ),
+          );
 
           outerContour.addAll([p1, d1, d2, p2]);
           dropFlapCounter++;
@@ -1194,13 +1516,7 @@ class TrunkingCoverGenerator {
     }
 
     // Add main face
-    faces.insert(0, PlanarSheetFace(
-      id: 'COVER_MAIN_FACE',
-      label: 'Cover Top Plate',
-      role: FaceRole.baseFloor,
-      isBaseAnchor: true,
-      vertices: mainFaceVerts,
-    ));
+    faces.insert(0, PlanarSheetFace(id: 'COVER_MAIN_FACE', label: 'Cover Top Plate', role: FaceRole.baseFloor, isBaseAnchor: true, vertices: mainFaceVerts));
 
     // Fastener / mounting hole punch at center
     final punches = [
@@ -1229,11 +1545,7 @@ class TrunkingCoverGenerator {
       faces: faces,
       punches: punches,
       baseFaceId: 'COVER_MAIN_FACE',
-      parameters: {
-        ...baseDocument.parameters,
-        'cover_flange_depth': flangeDepth,
-        'cover_body_height': bodyHeight,
-      },
+      parameters: {...baseDocument.parameters, 'cover_flange_depth': flangeDepth, 'cover_body_height': bodyHeight},
       metadata: {
         'isCover': true,
         'isTrunkingCover': true,
@@ -1246,14 +1558,7 @@ class TrunkingCoverGenerator {
 
   /// Identifies whether the edge from [p1] to [p2] corresponds to a port mouth opening.
   /// Returns 1-based port index (1, 2, 3, 4) or null if it's a wall/cheek edge.
-  static int? _identifyPortIndex(
-    CadPoint2D p1,
-    CadPoint2D p2,
-    double midX,
-    double midY,
-    CmsScalingProfile profile, {
-    bool isHorizontal = false,
-  }) {
+  static int? _identifyPortIndex(CadPoint2D p1, CadPoint2D p2, double midX, double midY, CmsScalingProfile profile, {bool isHorizontal = false}) {
     final dx = (p2.x - p1.x).abs();
     final dy = (p2.y - p1.y).abs();
     final edgeMidX = (p1.x + p2.x) / 2.0;
@@ -1401,11 +1706,7 @@ class TrunkingCoverGenerator {
 
   /// Expands [verts] outward by [clearance] mm along outer face normals to ensure
   /// down-folding cover flanges have snug physical clearance over the body's sidewalls.
-  static List<CadPoint2D> _expandFootprintForSnugFit(
-    List<CadPoint2D> verts,
-    bool isCcw,
-    double clearance,
-  ) {
+  static List<CadPoint2D> _expandFootprintForSnugFit(List<CadPoint2D> verts, bool isCcw, double clearance) {
     final n = verts.length;
     if (n < 3 || clearance <= 0.0) return List<CadPoint2D>.from(verts);
 
@@ -1462,10 +1763,7 @@ class TrunkingCoverGenerator {
         expanded.add(CadPoint2D(ix, iy));
       } else {
         // Parallel or collinear consecutive edges
-        expanded.add(CadPoint2D(
-          verts[i].x + edgeNormals[i].x * clearance,
-          verts[i].y + edgeNormals[i].y * clearance,
-        ));
+        expanded.add(CadPoint2D(verts[i].x + edgeNormals[i].x * clearance, verts[i].y + edgeNormals[i].y * clearance));
       }
     }
     return expanded;
@@ -1484,4 +1782,3 @@ class TrunkingCoverGenerator {
     return math.min(maxX - minX, maxY - minY);
   }
 }
-

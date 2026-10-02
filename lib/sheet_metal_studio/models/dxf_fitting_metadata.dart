@@ -95,7 +95,7 @@ class FittingVariant {
     required this.category,
     required this.product,
     required this.parameters,
-    this.flangeMm = 10.0,
+    this.flangeMm = 13.0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -114,7 +114,7 @@ class FittingVariant {
         product: json['product'] as String? ?? FittingProductType.none,
         parameters: (json['parameters'] as Map<String, dynamic>? ?? {})
             .map((k, v) => MapEntry(k, (v as num).toDouble())),
-        flangeMm: (json['flangeMm'] as num?)?.toDouble() ?? 10.0,
+        flangeMm: (json['flangeMm'] as num?)?.toDouble() ?? 13.0,
       );
 }
 
@@ -135,7 +135,7 @@ class DxfFittingMetadata {
     this.category = FittingCategory.none,
     this.product = FittingProductType.none,
     this.variantName = 'None',
-    this.flangeMm = 10.0,
+    this.flangeMm = 13.0,
     this.parameters = const {},
     this.analyzedDimensions = const {},
     this.portAssignments,
@@ -385,7 +385,7 @@ class DxfFittingMetadata {
       category: json['category'] as String? ?? FittingCategory.none,
       product: json['product'] as String? ?? FittingProductType.none,
       variantName: json['variantName'] as String? ?? 'None',
-      flangeMm: (json['flangeMm'] as num?)?.toDouble() ?? 10.0,
+      flangeMm: (json['flangeMm'] as num?)?.toDouble() ?? 13.0,
       parameters: (json['parameters'] as Map<String, dynamic>? ?? {})
           .map((k, v) => MapEntry(k, (v as num).toDouble())),
       analyzedDimensions:
@@ -450,7 +450,7 @@ class DxfFittingMetadata {
         category: FittingCategory.none,
         product: FittingProductType.none,
         variantName: 'None',
-        flangeMm: 10.0,
+        flangeMm: 13.0,
       );
     }
 
@@ -755,7 +755,7 @@ class FittingCatalogRegistry {
         name: varName,
         category: category,
         product: product,
-        flangeMm: 10.0,
+        flangeMm: 13.0,
         parameters: params,
       );
     }).toList();

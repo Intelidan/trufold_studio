@@ -965,11 +965,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify the in-place entry point (TextField) appears
-      final inputFinder = find.byType(TextField);
-      expect(inputFinder, findsOneWidget);
+      Finder canvasInputFinder() => find.descendant(of: canvasFinder, matching: find.byType(TextField));
+      expect(canvasInputFinder(), findsOneWidget);
 
       // Verify initial text matches blank width (200.00)
-      final initialText = tester.widget<TextField>(inputFinder).controller!.text;
+      final initialText = tester.widget<TextField>(canvasInputFinder()).controller!.text;
       final initialW = vm.document.blankWidthMm;
       expect(double.tryParse(initialText), equals(initialW));
 
@@ -977,31 +977,31 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsNothing);
+      expect(canvasInputFinder(), findsNothing);
       expect(vm.document.blankWidthMm, equals(initialW));
 
       // 3. Edit value to 260, then press Enter -> Executes and drives dimension
       state.startInPlaceDimensionEditForTesting('dim_blank_w');
       await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsOneWidget);
-      await tester.enterText(find.byType(TextField), '260');
+      expect(canvasInputFinder(), findsOneWidget);
+      await tester.enterText(canvasInputFinder(), '260');
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsNothing);
+      expect(canvasInputFinder(), findsNothing);
       expect(vm.document.blankWidthMm, equals(260.0));
 
       // 4. Test Tab execution: enter 280, press Tab -> Executes and drives dimension
       state.startInPlaceDimensionEditForTesting('dim_blank_w');
       await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsOneWidget);
-      await tester.enterText(find.byType(TextField), '280');
+      expect(canvasInputFinder(), findsOneWidget);
+      await tester.enterText(canvasInputFinder(), '280');
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsNothing);
+      expect(canvasInputFinder(), findsNothing);
       expect(vm.document.blankWidthMm, equals(280.0));
     });
   });

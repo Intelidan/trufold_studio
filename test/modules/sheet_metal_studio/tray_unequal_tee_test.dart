@@ -370,9 +370,9 @@ void main() {
       expect(bf1P3.targetAngleDeg, closeTo(45.0, 0.1));
       expect(bf6P1.targetAngleDeg, closeTo(0.0, 0.1));
 
-      // Flap holes: at H=50, each flap has exactly 2 vertically aligned obround holes
-      // 6 flaps x 2 holes = 12 flap holes! Total punches = 23 (baseline) + 12 = 35 punches
-      expect(withFlapsDoc.punches.length, equals(35));
+      // Flap holes: at H=50, each flap has exactly 3 vertical obround holes side by side (30x8mm)
+      // 6 flaps x 3 holes = 18 flap holes! Total punches = 23 (baseline) + 18 = 41 punches
+      expect(withFlapsDoc.punches.length, equals(41));
 
       // 3. 3D Kinematics Fold Test:
       final fold3D = KinematicFoldEngine.foldDocument(withFlapsDoc);

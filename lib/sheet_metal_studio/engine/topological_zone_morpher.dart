@@ -648,7 +648,9 @@ class TopologicalZoneMorpher {
 
       // Universal 95mm Coupler Rule for 45° Flat Bend:
       final List<CncPunchPrimitive> morphedPunches = [];
-      bool isCouplerSlot(CncPunchPrimitive p) => p.type == PunchType.obroundSlot || p.role == CncPunchRole.coupler || p.isCoupler;
+      bool isCouplerSlot(CncPunchPrimitive p) =>
+          (p.role == CncPunchRole.coupler || p.isCoupler || p.id.toUpperCase().startsWith('SLOT_')) &&
+          p.role != CncPunchRole.perforation;
 
       final couplerSlots = baseline.punches.where(isCouplerSlot).toList();
       final nonCouplerPunches = baseline.punches.where((p) => !isCouplerSlot(p)).toList();
@@ -687,13 +689,13 @@ class TopologicalZoneMorpher {
         final handledIds = {'SLOT_1', 'SLOT_2', 'SLOT_3', 'SLOT_4', 'SLOT_5', 'SLOT_6', 'SLOT_7', 'SLOT_8'};
         for (final p in couplerSlots) {
           if (!handledIds.contains(p.id)) {
-            morphedPunches.add(p.copyWith(center: morphPoint(p.center), role: CncPunchRole.coupler));
+            morphedPunches.add(p.copyWith(center: morphPoint(p.center), role: p.role == CncPunchRole.general ? CncPunchRole.coupler : p.role));
           }
         }
       } else {
         // Height >= 95mm: 2 slots per region at 50mm pitch
         for (final p in couplerSlots) {
-          morphedPunches.add(p.copyWith(center: morphPoint(p.center), role: CncPunchRole.coupler));
+          morphedPunches.add(p.copyWith(center: morphPoint(p.center), role: p.role == CncPunchRole.general ? CncPunchRole.coupler : p.role));
         }
       }
 

@@ -183,7 +183,7 @@ class TrayBendGeometrySolver {
     required double p2InXBase,
     required double p2InYBase,
     bool includeCouplerFlaps = false,
-    double couplerFlapLength = 30.0,
+    double couplerFlapLength = 90.0,
   }) {
     final W = solution.width;
     final H = solution.height;
@@ -484,48 +484,42 @@ class TrayBendGeometrySolver {
         orElse: () => baseline.punches.first,
       );
       int flapSlotCounter = 100;
-      final slotLen = math.min(20.0, math.max(12.0, lf - 8.0));
+      // Coupler holes rule:
+      // - Placed vertically: slot length aligns with vDir
+      // - 30mm for 50mm port height, increasing with port height leaving 10mm top & bottom margins
+      // - Exactly 3 holes placed side by side along uDir
+      final slotLen = math.max(10.0, H - 20.0);
+      const slotWid = 8.0;
+      const slotPitch = 25.0;
+
       void addFlapSlot({
         required CadPoint2D origin,
         required CadPoint2D uDir,
         required CadPoint2D vDir,
         required double rotDeg,
       }) {
-        if (H <= 50.0) {
-          final u = lf / 2.0;
-          final vOffsets = [H * 0.3, H * 0.7];
-          for (final v in vOffsets) {
-            effectivePunches.add(sampleSlot.copyWith(
-              id: 'FLAP_SLOT_${flapSlotCounter++}',
-              center: CadPoint2D(origin.x + u * uDir.x + v * vDir.x, origin.y + u * uDir.y + v * vDir.y),
-              lengthMm: slotLen,
-              role: CncPunchRole.coupler,
-              rotationDeg: rotDeg,
-              isVisible: true,
-            ));
-          }
-        } else {
-          final uCols = [lf * 0.35, lf * 0.75];
-          final vOffsets = [H / 2.0 - 25.0, H / 2.0 + 25.0];
-          for (final u in uCols) {
-            for (final v in vOffsets) {
-              effectivePunches.add(sampleSlot.copyWith(
-                id: 'FLAP_SLOT_${flapSlotCounter++}',
-                center: CadPoint2D(origin.x + u * uDir.x + v * vDir.x, origin.y + u * uDir.y + v * vDir.y),
-                lengthMm: slotLen,
-                role: CncPunchRole.coupler,
-                rotationDeg: rotDeg,
-                isVisible: true,
-              ));
-            }
-          }
+        final uCenter = lf / 2.0;
+        final uOffsets = [uCenter - slotPitch, uCenter, uCenter + slotPitch];
+        final v = H / 2.0;
+        for (final u in uOffsets) {
+          effectivePunches.add(sampleSlot.copyWith(
+            id: 'FLAP_SLOT_${flapSlotCounter++}',
+            center: CadPoint2D(origin.x + u * uDir.x + v * vDir.x, origin.y + u * uDir.y + v * vDir.y),
+            lengthMm: slotLen,
+            widthMm: slotWid,
+            role: CncPunchRole.coupler,
+            rotationDeg: rotDeg,
+            isVisible: true,
+          ));
         }
       }
 
-      addFlapSlot(origin: solution.p1Out, uDir: const CadPoint2D(-1.0, 0.0), vDir: const CadPoint2D(0.0, -1.0), rotDeg: 0.0);
-      addFlapSlot(origin: solution.p1In, uDir: dirPort1, vDir: nWing1, rotDeg: (math.atan2(dirPort1.y, dirPort1.x) * 180.0 / math.pi) % 180.0);
-      addFlapSlot(origin: solution.p2Out, uDir: const CadPoint2D(1.0, 0.0), vDir: const CadPoint2D(0.0, -1.0), rotDeg: 0.0);
-      addFlapSlot(origin: solution.p2In, uDir: dirPort2, vDir: nWing2, rotDeg: (math.atan2(dirPort2.y, dirPort2.x) * 180.0 / math.pi) % 180.0);
+      final rotWing1 = ((math.atan2(nWing1.y, nWing1.x) * 180.0 / math.pi) % 180.0 + 180.0) % 180.0;
+      final rotWing2 = ((math.atan2(nWing2.y, nWing2.x) * 180.0 / math.pi) % 180.0 + 180.0) % 180.0;
+      addFlapSlot(origin: solution.p1Out, uDir: const CadPoint2D(-1.0, 0.0), vDir: const CadPoint2D(0.0, -1.0), rotDeg: 90.0);
+      addFlapSlot(origin: solution.p1In, uDir: dirPort1, vDir: nWing1, rotDeg: rotWing1);
+      addFlapSlot(origin: solution.p2Out, uDir: const CadPoint2D(1.0, 0.0), vDir: const CadPoint2D(0.0, -1.0), rotDeg: 90.0);
+      addFlapSlot(origin: solution.p2In, uDir: dirPort2, vDir: nWing2, rotDeg: rotWing2);
     } else {
       effectiveOuterContour = newOuterContour;
       effectiveBends = newBends;
@@ -598,6 +592,9 @@ class TrayBendGeometrySolver {
       orElse: () => baseline.punches.first,
     );
 
+    final slotLen = (baseline.parameters['coupler_slot_length'] ?? 20.0).clamp(10.0, 30.0);
+    final slotWid = (baseline.parameters['coupler_slot_width'] ?? 9.0).clamp(5.0, 16.0);
+
     int idCounter = 1;
     String nextSlotId() => 'SLOT_${idCounter++}';
 
@@ -631,12 +628,16 @@ class TrayBendGeometrySolver {
       punches.add(sampleSlot.copyWith(
         id: nextSlotId(),
         center: CadPoint2D(xCol1, ySlot),
+        lengthMm: slotLen,
+        widthMm: slotWid,
         role: CncPunchRole.coupler,
         rotationDeg: 90.0,
       ));
       punches.add(sampleSlot.copyWith(
         id: nextSlotId(),
         center: CadPoint2D(xCol2, ySlot),
+        lengthMm: slotLen,
+        widthMm: slotWid,
         role: CncPunchRole.coupler,
         rotationDeg: 90.0,
       ));
@@ -645,12 +646,16 @@ class TrayBendGeometrySolver {
       punches.add(sampleSlot.copyWith(
         id: nextSlotId(),
         center: CadPoint2D(xCol3, ySlot),
+        lengthMm: slotLen,
+        widthMm: slotWid,
         role: CncPunchRole.coupler,
         rotationDeg: 90.0,
       ));
       punches.add(sampleSlot.copyWith(
         id: nextSlotId(),
         center: CadPoint2D(xCol4, ySlot),
+        lengthMm: slotLen,
+        widthMm: slotWid,
         role: CncPunchRole.coupler,
         rotationDeg: 90.0,
       ));
@@ -671,6 +676,8 @@ class TrayBendGeometrySolver {
         punches.add(sampleSlot.copyWith(
           id: nextSlotId(),
           center: cp,
+          lengthMm: slotLen,
+          widthMm: slotWid,
           role: CncPunchRole.coupler,
           rotationDeg: wingRot1,
         ));
@@ -690,6 +697,8 @@ class TrayBendGeometrySolver {
         punches.add(sampleSlot.copyWith(
           id: nextSlotId(),
           center: cp,
+          lengthMm: slotLen,
+          widthMm: slotWid,
           role: CncPunchRole.coupler,
           rotationDeg: wingRot2,
         ));

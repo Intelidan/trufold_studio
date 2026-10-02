@@ -10,8 +10,10 @@ import 'dart:math' as math;
 import '../../models/cad_primitives.dart';
 import '../../models/cnc_punch_primitive.dart';
 import '../../models/dsf_document.dart';
+import '../../models/planar_sheet_face.dart';
 import '../../models/cms/cms_physical_port.dart';
 import '../../models/cms/cms_product_contract.dart';
+import '../planar_face_decomposer.dart';
 
 /// Semantic classification of a CNC punch.
 class CmsClassifiedPunch {
@@ -65,6 +67,12 @@ class CmsCouplerClassifier {
     final perfs = <CncPunchPrimitive>[];
     final byPort = <String, List<CncPunchPrimitive>>{};
 
+    final floorFace = document.faces.where((f) =>
+        f.id == document.baseFaceId ||
+        f.role == FaceRole.baseFloor ||
+        f.id.toUpperCase().contains('FLOOR') ||
+        f.id.toUpperCase().contains('BASE')).firstOrNull;
+
     for (final port in ports) {
       byPort[port.id] = [];
     }
@@ -73,8 +81,24 @@ class CmsCouplerClassifier {
       // 1. Explicit semantic role or COUPLER layer takes highest precedence
       final isExplicitCoupler = p.role == CncPunchRole.coupler ||
           p.layer.toUpperCase() == 'COUPLER';
+      final isExplicitPerforation = p.role == CncPunchRole.perforation;
 
-      // 2. Automatic candidate heuristic:
+      // Base floor web punches are perforations/ventilating holes, NEVER coupler slots
+      final isOnFloor = floorFace != null && PlanarFaceDecomposer.isPointInsidePolygon(p.center, floorFace.vertices);
+
+      if (isExplicitPerforation || (isOnFloor && !isExplicitCoupler)) {
+        final markedPerf = p.copyWith(role: CncPunchRole.perforation);
+        perfs.add(markedPerf);
+        classified.add(CmsClassifiedPunch(
+          punch: markedPerf,
+          isCouplerSlot: false,
+          isPerforation: true,
+          hostFaceId: floorFace?.id,
+        ));
+        continue;
+      }
+
+      // 2. Automatic candidate heuristic for sidewall / flap slots:
       // Standard cable tray / trunking obround slots typically have:
       // Width: 6 to 11 mm (nominally 8-9mm)
       // Length: 10 to 35 mm (nominally 12, 16, 20, 25, 30mm)

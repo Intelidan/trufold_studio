@@ -176,9 +176,12 @@ class FloatingSketchConstraintBar extends StatelessWidget {
     for (final id in selectedIds) {
       if (viewModel.document.cutLines.any((c) => c.id == id) ||
           viewModel.document.bends.any((b) => b.id == id) ||
+          viewModel.document.dimensions.any((d) => d.id == id) ||
           id.startsWith('EDGE_') ||
           id.startsWith('CUT_') ||
-          id.startsWith('BEND_')) {
+          id.startsWith('BEND_') ||
+          id.startsWith('dim_') ||
+          id.startsWith('DIM_')) {
         lineCount++;
       } else if (viewModel.document.punches.any((p) => p.id == id) ||
           id.startsWith('PUNCH_') ||
@@ -209,6 +212,7 @@ class FloatingSketchConstraintBar extends StatelessWidget {
     } else if (totalCount == 2) {
       if (lineCount == 2) {
         available.addAll([
+          CadConstraintType.angle,
           CadConstraintType.parallel,
           CadConstraintType.perpendicular,
           CadConstraintType.equal,

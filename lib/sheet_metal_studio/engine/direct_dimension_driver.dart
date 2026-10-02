@@ -72,6 +72,11 @@ class DirectDimensionDriver {
       );
     }
 
+    // Angular Dimension between two entities / lines
+    if (dimension.type == CadDimensionType.angular) {
+      return _driveAngularDimension(document, dimension, newValue);
+    }
+
     // 1. Overall Blank Dimension
     if (dimension.type == CadDimensionType.overall ||
         dimension.id == 'dim_blank_w' ||
@@ -510,6 +515,132 @@ class DirectDimensionDriver {
 
     return DirectDimensionDriveResult(
       updatedDocument: updatedDoc,
+      updatedDimension: updatedDim,
+      success: true,
+      modifiedEntityIds: [dim.id],
+    );
+  }
+
+  static CadPoint2D? _intersectLines(CadPoint2D a1, CadPoint2D a2, CadPoint2D b1, CadPoint2D b2) {
+    final dxA = a2.x - a1.x;
+    final dyA = a2.y - a1.y;
+    final dxB = b2.x - b1.x;
+    final dyB = b2.y - b1.y;
+    final denom = dxA * dyB - dyA * dxB;
+    if (denom.abs() < 1e-9) return null;
+    final t = ((b1.x - a1.x) * dyB - (b1.y - a1.y) * dxB) / denom;
+    return CadPoint2D(a1.x + t * dxA, a1.y + t * dyA);
+  }
+
+  static DirectDimensionDriveResult _driveAngularDimension(
+    DsfDocument doc,
+    CadDimension dim,
+    double newAngleDeg,
+  ) {
+    final refA = dim.referenceAId;
+    final refB = dim.referenceBId;
+
+    final segA = AssociativeDimensionEngine.resolveEdgeSegment(refA, doc);
+    final segB = AssociativeDimensionEngine.resolveEdgeSegment(refB, doc);
+
+    if (segA != null && segB != null) {
+      final pA1 = segA.$1;
+      final pA2 = segA.$2;
+      final pB1 = segB.$1;
+      final pB2 = segB.$2;
+
+      CadPoint2D pivot;
+      CadPoint2D movingPt;
+      bool pB1IsPivot = true;
+
+      if (pB1.distanceTo(pA1) < 2.0 || pB1.distanceTo(pA2) < 2.0) {
+        pivot = pB1;
+        movingPt = pB2;
+        pB1IsPivot = true;
+      } else if (pB2.distanceTo(pA1) < 2.0 || pB2.distanceTo(pA2) < 2.0) {
+        pivot = pB2;
+        movingPt = pB1;
+        pB1IsPivot = false;
+      } else {
+        final inter = _intersectLines(pA1, pA2, pB1, pB2);
+        if (inter != null && inter.distanceTo(pB1) < 2000.0) {
+          pivot = inter;
+          movingPt = pB2;
+          pB1IsPivot = false;
+        } else {
+          pivot = pB1;
+          movingPt = pB2;
+          pB1IsPivot = true;
+        }
+      }
+
+      final thetaA = math.atan2(pA2.y - pA1.y, pA2.x - pA1.x);
+      final currentThetaB = math.atan2(movingPt.y - pivot.y, movingPt.x - pivot.x);
+      final currentDelta = currentThetaB - thetaA;
+      final sign = (math.sin(currentDelta) >= 0) ? 1.0 : -1.0;
+      final targetThetaB = thetaA + sign * (newAngleDeg * math.pi / 180.0);
+      final armLen = pivot.distanceTo(movingPt);
+      final effectiveLen = armLen > 0.1 ? armLen : pB1.distanceTo(pB2);
+
+      final newMovingPt = CadPoint2D(
+        pivot.x + effectiveLen * math.cos(targetThetaB),
+        pivot.y + effectiveLen * math.sin(targetThetaB),
+      );
+
+      final newPB1 = pB1IsPivot ? pivot : newMovingPt;
+      final newPB2 = pB1IsPivot ? newMovingPt : pivot;
+
+      var updatedDoc = doc;
+      String modifiedId = refB ?? '';
+
+      if (refB != null && doc.cutLines.any((c) => c.id == refB)) {
+        updatedDoc = updatedDoc.copyWith(
+          cutLines: doc.cutLines.map((c) => c.id == refB ? c.copyWith(p1: newPB1, p2: newPB2) : c).toList(),
+        );
+      } else if (refB != null && doc.bends.any((b) => b.id == refB)) {
+        updatedDoc = updatedDoc.copyWith(
+          bends: doc.bends.map((b) => b.id == refB ? b.copyWith(p1: newPB1, p2: newPB2) : b).toList(),
+        );
+      } else if (refB != null && doc.dimensions.any((d) => d.id == refB)) {
+        updatedDoc = updatedDoc.copyWith(
+          dimensions: doc.dimensions.map((d) => d.id == refB ? d.copyWith(pointA: newPB1, pointB: newPB2) : d).toList(),
+        );
+      }
+
+      final decomp = PlanarFaceDecomposer.decompose(
+        outerContour: updatedDoc.outerContour,
+        bends: updatedDoc.bends,
+        cutLines: updatedDoc.cutLines,
+      );
+
+      final updatedDim = dim.copyWith(
+        measuredValue: newAngleDeg,
+        isDriven: false,
+      );
+
+      final updatedDims = updatedDoc.dimensions.map((d) => d.id == dim.id ? updatedDim : d).toList();
+
+      return DirectDimensionDriveResult(
+        updatedDocument: updatedDoc.copyWith(
+          faces: decomp.faces,
+          dimensions: updatedDims,
+        ),
+        updatedDimension: updatedDim,
+        success: true,
+        modifiedEntityIds: [modifiedId],
+      );
+    }
+
+    final bendMatch = doc.bends.where((b) => b.id == refA).firstOrNull;
+    if (bendMatch != null) {
+      return _driveBendDimension(doc, dim, bendMatch, newAngleDeg);
+    }
+
+    final updatedDim = dim.copyWith(measuredValue: newAngleDeg, isDriven: false);
+    return DirectDimensionDriveResult(
+      updatedDocument: doc.copyWith(
+        dimensions: doc.dimensions.map((d) => d.id == dim.id ? updatedDim : d).toList(),
+      ),
       updatedDimension: updatedDim,
       success: true,
       modifiedEntityIds: [dim.id],

@@ -1359,7 +1359,7 @@ class GeometricConstraintSolver {
           lengthMm: p.lengthMm,
           diameterMm: p.diameterMm,
           rotationDeg: p.rotationDeg,
-          role: p.type == PunchType.obroundSlot || p.isCoupler ? CncPunchRole.coupler : p.role,
+          role: p.role,
         );
       }
       return true;
@@ -1419,7 +1419,7 @@ class GeometricConstraintSolver {
         lengthMm: p.lengthMm,
         diameterMm: p.diameterMm,
         rotationDeg: p.rotationDeg,
-        role: p.type == PunchType.obroundSlot || p.isCoupler ? CncPunchRole.coupler : p.role,
+        role: p.role,
       );
     }
 

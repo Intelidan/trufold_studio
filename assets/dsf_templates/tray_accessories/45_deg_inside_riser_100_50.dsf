@@ -1,36 +1,36 @@
 {
-  "format": "DANISH_SHEET_FOLD",
-  "version": "2.0",
-  "productType": "45_deg_inside_riser_100_50",
-  "itemName": "45_deg_inside_riser_100_50.dxf",
+  "format": "DSF",
+  "version": "1.0",
+  "productType": "tray_accessory",
+  "itemName": "45 Deg Inside Riser",
   "material": {
     "thicknessMm": 1.5,
-    "materialGrade": "Pre-Galvanized Steel",
-    "materialType": "mildSteel",
-    "finish": "electroGalvanized",
-    "kFactor": 0.4,
-    "defaultBendRadius": 1.5,
-    "edgeChamferMm": 0.0
+    "name": "GI",
+    "kFactor": 0.33
   },
   "outerContour": [
     {
       "x": 0.0,
-      "y": 224.99999999999994
-    },
-    {
-      "x": 0.0,
       "y": 0.0
     },
     {
-      "x": 123.9045455704952,
+      "x": 123.9045,
       "y": 0.0
+    },
+    {
+      "x": 129.2893,
+      "y": 13.0
     },
     {
       "x": 150.0,
-      "y": 63.00000000000001
+      "y": 63.0
     },
     {
-      "x": 176.09545442950503,
+      "x": 170.7107,
+      "y": 13.0
+    },
+    {
+      "x": 176.0955,
       "y": 0.0
     },
     {
@@ -39,32 +39,64 @@
     },
     {
       "x": 300.0,
-      "y": 224.99999999999994
+      "y": 226.0
     },
     {
-      "x": 176.09545442950503,
-      "y": 224.99999999999994
+      "x": 176.0955,
+      "y": 226.0
+    },
+    {
+      "x": 170.7107,
+      "y": 213.0
     },
     {
       "x": 150.0,
-      "y": 162.0
+      "y": 163.0
     },
     {
-      "x": 123.9045455704952,
-      "y": 224.99999999999994
+      "x": 129.2893,
+      "y": 213.0
+    },
+    {
+      "x": 123.9045,
+      "y": 226.0
     },
     {
       "x": 0.0,
-      "y": 224.99999999999994
+      "y": 226.0
+    },
+    {
+      "x": 0.0,
+      "y": 0.0
     }
   ],
-  "outerContourLayer": "OUTLINE",
+  "outerContourLayer": "CUT",
   "bends": [
+    {
+      "id": "B5",
+      "p1": {
+        "x": 150.0,
+        "y": 63.0
+      },
+      "p2": {
+        "x": 150.0,
+        "y": 163.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 45.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_4",
+      "childFaceId": "F_9",
+      "showLabel": true,
+      "isVisible": true
+    },
     {
       "id": "B1",
       "p1": {
         "x": 150.0,
-        "y": 63.00000000000001
+        "y": 63.0
       },
       "p2": {
         "x": 0.0,
@@ -75,265 +107,383 @@
       "radiusMm": 1.5,
       "role": "bend",
       "layer": "BEND_UP",
-      "parentFaceId": "F_4",
-      "childFaceId": "F_0",
+      "parentFaceId": "F_9",
+      "childFaceId": "F_6",
       "showLabel": true,
-      "isVisible": true,
-      "reliefType": "rectangular"
-    },
-    {
-      "id": "B3",
-      "p1": {
-        "x": 150.0,
-        "y": 162.0
-      },
-      "p2": {
-        "x": 0.0,
-        "y": 162.0
-      },
-      "direction": "UP",
-      "targetAngleDeg": 90.0,
-      "radiusMm": 1.5,
-      "role": "bend",
-      "layer": "BEND_UP",
-      "parentFaceId": "F_4",
-      "childFaceId": "F_2",
-      "showLabel": true,
-      "isVisible": true,
-      "reliefType": "rectangular"
-    },
-    {
-      "id": "B5",
-      "p1": {
-        "x": 150.0,
-        "y": 63.00000000000001
-      },
-      "p2": {
-        "x": 150.0,
-        "y": 162.0
-      },
-      "direction": "DOWN",
-      "targetAngleDeg": 45.0,
-      "radiusMm": 1.5,
-      "role": "bend",
-      "layer": "BEND_DOWN",
-      "parentFaceId": "F_4",
-      "childFaceId": "F_5",
-      "showLabel": true,
-      "isVisible": true,
-      "reliefType": "rectangular"
+      "isVisible": true
     },
     {
       "id": "B2",
       "p1": {
         "x": 150.0,
-        "y": 63.00000000000001
+        "y": 63.0
       },
       "p2": {
         "x": 300.0,
-        "y": 63.000000000000014
+        "y": 63.0
       },
       "direction": "UP",
       "targetAngleDeg": 90.0,
       "radiusMm": 1.5,
       "role": "bend",
       "layer": "BEND_UP",
-      "parentFaceId": "F_5",
+      "parentFaceId": "F_4",
       "childFaceId": "F_1",
       "showLabel": true,
-      "isVisible": true,
-      "reliefType": "rectangular"
+      "isVisible": true
+    },
+    {
+      "id": "B3",
+      "p1": {
+        "x": 150.0,
+        "y": 163.0
+      },
+      "p2": {
+        "x": 0.0,
+        "y": 163.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_9",
+      "childFaceId": "F_8",
+      "showLabel": true,
+      "isVisible": true
     },
     {
       "id": "B4",
       "p1": {
         "x": 150.0,
-        "y": 162.0
+        "y": 163.0
       },
       "p2": {
         "x": 300.0,
-        "y": 162.00000000000003
+        "y": 163.0
       },
       "direction": "UP",
       "targetAngleDeg": 90.0,
       "radiusMm": 1.5,
       "role": "bend",
       "layer": "BEND_UP",
-      "parentFaceId": "F_5",
+      "parentFaceId": "F_4",
       "childFaceId": "F_3",
       "showLabel": true,
-      "isVisible": true,
-      "reliefType": "rectangular"
+      "isVisible": true
+    },
+    {
+      "id": "FL1",
+      "p1": {
+        "x": 0.0,
+        "y": 13.0
+      },
+      "p2": {
+        "x": 129.2893,
+        "y": 13.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 135.0,
+      "radiusMm": 1.5,
+      "role": "flange",
+      "layer": "FLANGE",
+      "parentFaceId": "F_6",
+      "childFaceId": "F_5",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "FL2",
+      "p1": {
+        "x": 170.7107,
+        "y": 13.0
+      },
+      "p2": {
+        "x": 300.0,
+        "y": 13.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 135.0,
+      "radiusMm": 1.5,
+      "role": "flange",
+      "layer": "FLANGE",
+      "parentFaceId": "F_1",
+      "childFaceId": "F_0",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "FL3",
+      "p1": {
+        "x": 0.0,
+        "y": 213.0
+      },
+      "p2": {
+        "x": 129.2893,
+        "y": 213.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 135.0,
+      "radiusMm": 1.5,
+      "role": "flange",
+      "layer": "FLANGE",
+      "parentFaceId": "F_8",
+      "childFaceId": "F_7",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "FL4",
+      "p1": {
+        "x": 170.7107,
+        "y": 213.0
+      },
+      "p2": {
+        "x": 300.0,
+        "y": 213.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 135.0,
+      "radiusMm": 1.5,
+      "role": "flange",
+      "layer": "FLANGE",
+      "parentFaceId": "F_3",
+      "childFaceId": "F_2",
+      "showLabel": true,
+      "isVisible": true
     }
   ],
   "faces": [
     {
       "id": "F_0",
-      "label": "Side Wall",
+      "role": "returnFlange",
+      "label": "Return Flange",
       "vertices": [
         {
-          "x": 0.0,
-          "y": 63.0
+          "x": 170.7107,
+          "y": 13.0
         },
         {
-          "x": 0.0,
+          "x": 300.0,
+          "y": 13.0
+        },
+        {
+          "x": 300.0,
           "y": 0.0
         },
         {
-          "x": 123.9045455704952,
+          "x": 176.0955,
           "y": 0.0
-        },
-        {
-          "x": 150.0,
-          "y": 63.00000000000001
         }
-      ],
-      "role": "sideWall",
-      "isBaseAnchor": false,
-      "holes": [],
-      "layer": "FACES",
-      "showLabel": true,
-      "isVisible": true
+      ]
     },
     {
       "id": "F_1",
-      "label": "Return Flange",
-      "vertices": [
-        {
-          "x": 150.0,
-          "y": 63.00000000000001
-        },
-        {
-          "x": 176.09545442950503,
-          "y": 0.0
-        },
-        {
-          "x": 300.0,
-          "y": 0.0
-        },
-        {
-          "x": 300.0,
-          "y": 63.000000000000014
-        }
-      ],
-      "role": "returnFlange",
-      "isBaseAnchor": false,
-      "holes": [],
-      "layer": "FACES",
-      "showLabel": true,
-      "isVisible": true
-    },
-    {
-      "id": "F_2",
+      "role": "sideWall",
       "label": "Side Wall",
       "vertices": [
         {
           "x": 150.0,
-          "y": 162.0
+          "y": 63.0
         },
         {
-          "x": 123.9045455704952,
-          "y": 224.99999999999994
+          "x": 300.0,
+          "y": 63.0
         },
         {
-          "x": 0.0,
-          "y": 224.99999999999994
+          "x": 300.0,
+          "y": 13.0
         },
         {
-          "x": 0.0,
-          "y": 162.0
+          "x": 170.7107,
+          "y": 13.0
         }
-      ],
-      "role": "sideWall",
-      "isBaseAnchor": false,
-      "holes": [],
-      "layer": "FACES",
-      "showLabel": true,
-      "isVisible": true
+      ]
     },
     {
-      "id": "F_3",
+      "id": "F_2",
+      "role": "returnFlange",
       "label": "Return Flange",
       "vertices": [
         {
-          "x": 300.0,
-          "y": 162.00000000000003
+          "x": 170.7107,
+          "y": 213.0
+        },
+        {
+          "x": 176.0955,
+          "y": 226.0
         },
         {
           "x": 300.0,
-          "y": 224.99999999999994
+          "y": 226.0
         },
         {
-          "x": 176.09545442950503,
-          "y": 224.99999999999994
-        },
-        {
-          "x": 150.0,
-          "y": 162.0
+          "x": 300.0,
+          "y": 213.0
         }
-      ],
-      "role": "returnFlange",
-      "isBaseAnchor": false,
-      "holes": [],
-      "layer": "FACES",
-      "showLabel": true,
-      "isVisible": true
+      ]
     },
     {
-      "id": "F_4",
-      "label": "Bottom Base Floor",
+      "id": "F_3",
+      "role": "sideWall",
+      "label": "Side Wall",
       "vertices": [
         {
           "x": 150.0,
-          "y": 162.0
+          "y": 163.0
+        },
+        {
+          "x": 170.7107,
+          "y": 213.0
+        },
+        {
+          "x": 300.0,
+          "y": 213.0
+        },
+        {
+          "x": 300.0,
+          "y": 163.0
+        }
+      ]
+    },
+    {
+      "id": "F_4",
+      "role": "baseFloor",
+      "label": "Bottom Base Floor",
+      "isBaseAnchor": true,
+      "vertices": [
+        {
+          "x": 150.0,
+          "y": 63.0
+        },
+        {
+          "x": 300.0,
+          "y": 63.0
+        },
+        {
+          "x": 300.0,
+          "y": 163.0
+        },
+        {
+          "x": 150.0,
+          "y": 163.0
+        }
+      ]
+    },
+    {
+      "id": "F_5",
+      "role": "returnFlange",
+      "label": "Return Flange",
+      "vertices": [
+        {
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "x": 123.9045,
+          "y": 0.0
+        },
+        {
+          "x": 129.2893,
+          "y": 13.0
         },
         {
           "x": 0.0,
-          "y": 162.0
+          "y": 13.0
+        }
+      ]
+    },
+    {
+      "id": "F_6",
+      "role": "sideWall",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 0.0,
+          "y": 13.0
         },
+        {
+          "x": 129.2893,
+          "y": 13.0
+        },
+        {
+          "x": 150.0,
+          "y": 63.0
+        },
+        {
+          "x": 0.0,
+          "y": 63.0
+        }
+      ]
+    },
+    {
+      "id": "F_7",
+      "role": "returnFlange",
+      "label": "Return Flange",
+      "vertices": [
+        {
+          "x": 0.0,
+          "y": 213.0
+        },
+        {
+          "x": 129.2893,
+          "y": 213.0
+        },
+        {
+          "x": 123.9045,
+          "y": 226.0
+        },
+        {
+          "x": 0.0,
+          "y": 226.0
+        }
+      ]
+    },
+    {
+      "id": "F_8",
+      "role": "sideWall",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 0.0,
+          "y": 163.0
+        },
+        {
+          "x": 150.0,
+          "y": 163.0
+        },
+        {
+          "x": 129.2893,
+          "y": 213.0
+        },
+        {
+          "x": 0.0,
+          "y": 213.0
+        }
+      ]
+    },
+    {
+      "id": "F_9",
+      "role": "baseFloor",
+      "label": "Angled Floor",
+      "vertices": [
         {
           "x": 0.0,
           "y": 63.0
         },
         {
           "x": 150.0,
-          "y": 63.00000000000001
-        }
-      ],
-      "role": "baseFloor",
-      "isBaseAnchor": true,
-      "holes": [],
-      "layer": "FACES",
-      "showLabel": true,
-      "isVisible": true
-    },
-    {
-      "id": "F_5",
-      "label": "Side Wall",
-      "vertices": [
-        {
-          "x": 150.0,
-          "y": 63.00000000000001
-        },
-        {
-          "x": 300.0,
-          "y": 63.000000000000014
-        },
-        {
-          "x": 300.0,
-          "y": 162.00000000000003
+          "y": 63.0
         },
         {
           "x": 150.0,
-          "y": 162.0
+          "y": 163.0
+        },
+        {
+          "x": 0.0,
+          "y": 163.0
         }
-      ],
-      "role": "sideWall",
-      "isBaseAnchor": false,
-      "holes": [],
-      "layer": "FACES",
-      "showLabel": true,
-      "isVisible": true
+      ]
     }
   ],
   "punches": [
@@ -342,160 +492,136 @@
       "type": "obroundSlot",
       "center": {
         "x": 280.0,
-        "y": 87.5
+        "y": 88.0
       },
-      "widthMm": 8.000000000000004,
+      "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "general"
+      "role": "general",
+      "parentFaceId": "F_4"
     },
     {
       "id": "SLOT_2",
       "type": "obroundSlot",
       "center": {
         "x": 280.0,
-        "y": 137.5
+        "y": 138.0
       },
-      "widthMm": 8.000000000000002,
+      "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "general"
+      "role": "general",
+      "parentFaceId": "F_4"
     },
     {
       "id": "SLOT_3",
       "type": "obroundSlot",
       "center": {
         "x": 20.0,
-        "y": 87.5
+        "y": 88.0
       },
       "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "general"
+      "role": "general",
+      "parentFaceId": "F_9"
     },
     {
       "id": "SLOT_4",
       "type": "obroundSlot",
       "center": {
         "x": 20.0,
-        "y": 137.5
+        "y": 138.0
       },
       "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "general"
+      "role": "general",
+      "parentFaceId": "F_9"
     },
     {
       "id": "SLOT_5",
       "type": "obroundSlot",
       "center": {
         "x": 230.0,
-        "y": 199.49999999999994
+        "y": 200.5
       },
-      "widthMm": 8.000000000000002,
+      "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_3"
     },
     {
       "id": "SLOT_6",
       "type": "obroundSlot",
       "center": {
         "x": 230.0,
-        "y": 174.5
+        "y": 175.5
       },
-      "widthMm": 8.000000000000002,
+      "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_3"
     },
     {
       "id": "SLOT_7",
       "type": "obroundSlot",
       "center": {
         "x": 280.0,
-        "y": 199.49999999999994
+        "y": 200.5
       },
-      "widthMm": 8.000000000000002,
+      "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_3"
     },
     {
       "id": "SLOT_8",
       "type": "obroundSlot",
       "center": {
         "x": 280.0,
-        "y": 174.5
+        "y": 175.5
       },
-      "widthMm": 8.000000000000002,
+      "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_3"
     },
     {
       "id": "SLOT_9",
@@ -505,17 +631,14 @@
         "y": 25.5
       },
       "widthMm": 8.0,
-      "lengthMm": 19.999999999999773,
+      "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_1"
     },
     {
       "id": "SLOT_10",
@@ -524,38 +647,32 @@
         "x": 230.0,
         "y": 50.5
       },
-      "widthMm": 8.000000000000005,
-      "lengthMm": 19.999999999999773,
+      "widthMm": 8.0,
+      "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_1"
     },
     {
       "id": "SLOT_11",
       "type": "obroundSlot",
       "center": {
         "x": 280.0,
-        "y": 25.50000000000002
+        "y": 25.5
       },
       "widthMm": 8.0,
-      "lengthMm": 19.999999999999773,
+      "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_1"
     },
     {
       "id": "SLOT_12",
@@ -564,118 +681,100 @@
         "x": 280.0,
         "y": 50.5
       },
-      "widthMm": 8.000000000000005,
+      "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_1"
     },
     {
       "id": "SLOT_13",
       "type": "obroundSlot",
       "center": {
         "x": 70.0,
-        "y": 199.49999999999994
+        "y": 200.5
       },
-      "widthMm": 8.000000000000009,
-      "lengthMm": 19.999999999999773,
+      "widthMm": 8.0,
+      "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_8"
     },
     {
       "id": "SLOT_14",
       "type": "obroundSlot",
       "center": {
         "x": 70.0,
-        "y": 174.5
+        "y": 175.5
       },
       "widthMm": 8.0,
-      "lengthMm": 19.999999999999773,
+      "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_8"
     },
     {
       "id": "SLOT_15",
       "type": "obroundSlot",
       "center": {
         "x": 20.0,
-        "y": 199.49999999999994
+        "y": 200.5
       },
       "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_8"
     },
     {
       "id": "SLOT_16",
       "type": "obroundSlot",
       "center": {
         "x": 20.0,
-        "y": 174.5
+        "y": 175.5
       },
       "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_8"
     },
     {
       "id": "SLOT_17",
       "type": "obroundSlot",
       "center": {
         "x": 70.0,
-        "y": 25.49999999999998
+        "y": 25.5
       },
-      "widthMm": 8.000000000000107,
+      "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_6"
     },
     {
       "id": "SLOT_18",
@@ -684,18 +783,15 @@
         "x": 70.0,
         "y": 50.5
       },
-      "widthMm": 8.000000000000004,
+      "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_6"
     },
     {
       "id": "SLOT_19",
@@ -708,14 +804,11 @@
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_6"
     },
     {
       "id": "SLOT_20",
@@ -724,18 +817,15 @@
         "x": 20.0,
         "y": 50.5
       },
-      "widthMm": 8.000000000000004,
+      "widthMm": 8.0,
       "lengthMm": 20.0,
       "diameterMm": 8.0,
       "rotationDeg": 0.0,
-      "spacingX": 0.0,
-      "spacingY": 0.0,
-      "countX": 1,
-      "countY": 1,
       "layer": "HOLES",
       "showLabel": true,
       "isVisible": true,
-      "role": "coupler"
+      "role": "coupler",
+      "parentFaceId": "F_6"
     }
   ],
   "perforationPatterns": [],
@@ -757,6 +847,14 @@
       "isLocked": false
     },
     {
+      "name": "0",
+      "colorHex": 4284773515,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
       "name": "HOLES",
       "colorHex": 4278556265,
       "lineType": "CONTINUOUS",
@@ -765,7 +863,23 @@
       "isLocked": false
     },
     {
-      "name": "0",
+      "name": "CUT",
+      "colorHex": 4279179050,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 2.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "BEND_UP",
+      "colorHex": 4284773515,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "FLANGE",
       "colorHex": 4284773515,
       "lineType": "CONTINUOUS",
       "strokeWidth": 1.0,
@@ -775,6015 +889,18 @@
   ],
   "baseFaceId": "F_4",
   "edgeChamfers": {},
-  "parameters": {},
+  "parameters": {
+    "width": 100.0,
+    "height": 50.0,
+    "port1Width": 100.0,
+    "port1Height": 50.0,
+    "port2Width": 100.0,
+    "port2Height": 50.0,
+    "angle": 45.0
+  },
   "metadata": {
-    "featureHistory": [
-      {
-        "step": 1,
-        "action": "add_bend",
-        "description": "Add bend line (B1)",
-        "timestamp": "2026-09-30T09:08:00.767841",
-        "targetId": "B1",
-        "delta": {
-          "description": "Add bend line (B1)",
-          "actionType": "add_bend",
-          "timestamp": "2026-09-30T09:08:00.767841",
-          "targetId": "B1",
-          "oldBends": [],
-          "newBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_1",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ],
-          "oldFaces": [
-            {
-              "id": "F_BASE",
-              "label": "Base Sheet",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 0.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 224.99999999999994
-                }
-              ],
-              "role": "baseFloor",
-              "isBaseAnchor": true,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            }
-          ],
-          "newFaces": [
-            {
-              "id": "F_0",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 0.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_1",
-              "label": "Bottom Base Floor",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                }
-              ],
-              "role": "baseFloor",
-              "isBaseAnchor": true,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            }
-          ],
-          "oldBaseFaceId": "F_BASE",
-          "newBaseFaceId": "F_1"
-        }
-      },
-      {
-        "step": 2,
-        "action": "add_bend",
-        "description": "Add bend line (B2)",
-        "timestamp": "2026-09-30T09:08:06.493071",
-        "targetId": "B1",
-        "delta": {
-          "description": "Add bend line (B2)",
-          "actionType": "add_bend",
-          "timestamp": "2026-09-30T09:08:06.493071",
-          "targetId": "B1",
-          "oldBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_1",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ],
-          "newBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_2",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B2",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_2",
-              "childFaceId": "F_1",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ],
-          "oldFaces": [
-            {
-              "id": "F_0",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 0.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_1",
-              "label": "Bottom Base Floor",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                }
-              ],
-              "role": "baseFloor",
-              "isBaseAnchor": true,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            }
-          ],
-          "newFaces": [
-            {
-              "id": "F_0",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 0.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_1",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_2",
-              "label": "Bottom Base Floor",
-              "vertices": [
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                },
-                {
-                  "x": 300.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "baseFloor",
-              "isBaseAnchor": true,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            }
-          ],
-          "oldBaseFaceId": "F_1",
-          "newBaseFaceId": "F_2"
-        }
-      },
-      {
-        "step": 3,
-        "action": "add_bend",
-        "description": "Add bend line (B3)",
-        "timestamp": "2026-09-30T09:08:24.888484",
-        "targetId": "B2",
-        "delta": {
-          "description": "Add bend line (B3)",
-          "actionType": "add_bend",
-          "timestamp": "2026-09-30T09:08:24.888484",
-          "targetId": "B2",
-          "oldBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_2",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B2",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_2",
-              "childFaceId": "F_1",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ],
-          "newBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_3",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B2",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_3",
-              "childFaceId": "F_1",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B3",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_3",
-              "childFaceId": "F_2",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ],
-          "oldFaces": [
-            {
-              "id": "F_0",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 0.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_1",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_2",
-              "label": "Bottom Base Floor",
-              "vertices": [
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                },
-                {
-                  "x": 300.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "baseFloor",
-              "isBaseAnchor": true,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            }
-          ],
-          "newFaces": [
-            {
-              "id": "F_0",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 0.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_1",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_2",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 162.0
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_3",
-              "label": "Bottom Base Floor",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                },
-                {
-                  "x": 300.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                }
-              ],
-              "role": "baseFloor",
-              "isBaseAnchor": true,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            }
-          ],
-          "oldBaseFaceId": "F_2",
-          "newBaseFaceId": "F_3"
-        }
-      },
-      {
-        "step": 4,
-        "action": "add_bend",
-        "description": "Add bend line (B4)",
-        "timestamp": "2026-09-30T09:08:28.252494",
-        "targetId": "B3",
-        "delta": {
-          "description": "Add bend line (B4)",
-          "actionType": "add_bend",
-          "timestamp": "2026-09-30T09:08:28.252494",
-          "targetId": "B3",
-          "oldBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_3",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B2",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_3",
-              "childFaceId": "F_1",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B3",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_3",
-              "childFaceId": "F_2",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ],
-          "newBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B2",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_1",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B3",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_2",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B4",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 162.00000000000003
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_3",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ],
-          "oldFaces": [
-            {
-              "id": "F_0",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 0.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_1",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_2",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 162.0
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_3",
-              "label": "Bottom Base Floor",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                },
-                {
-                  "x": 300.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                }
-              ],
-              "role": "baseFloor",
-              "isBaseAnchor": true,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            }
-          ],
-          "newFaces": [
-            {
-              "id": "F_0",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 0.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_1",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_2",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 162.0
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_3",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 300.0,
-                  "y": 162.00000000000003
-                },
-                {
-                  "x": 300.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_4",
-              "label": "Bottom Base Floor",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                },
-                {
-                  "x": 300.0,
-                  "y": 162.00000000000003
-                }
-              ],
-              "role": "baseFloor",
-              "isBaseAnchor": true,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            }
-          ],
-          "oldBaseFaceId": "F_3",
-          "newBaseFaceId": "F_4"
-        }
-      },
-      {
-        "step": 5,
-        "action": "add_bend",
-        "description": "Add bend line (B4)",
-        "timestamp": "2026-09-30T09:08:37.408589",
-        "targetId": "B4",
-        "delta": {
-          "description": "Add bend line (B4)",
-          "actionType": "add_bend",
-          "timestamp": "2026-09-30T09:08:37.408589",
-          "targetId": "B4",
-          "oldBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B2",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_1",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B3",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_2",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B4",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 162.00000000000003
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_3",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ],
-          "newBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B3",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_2",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B5",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_5",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B2",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_5",
-              "childFaceId": "F_1",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B4",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 162.00000000000003
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_5",
-              "childFaceId": "F_3",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ],
-          "oldFaces": [
-            {
-              "id": "F_0",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 0.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_1",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_2",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 162.0
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_3",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 300.0,
-                  "y": 162.00000000000003
-                },
-                {
-                  "x": 300.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_4",
-              "label": "Bottom Base Floor",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                },
-                {
-                  "x": 300.0,
-                  "y": 162.00000000000003
-                }
-              ],
-              "role": "baseFloor",
-              "isBaseAnchor": true,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            }
-          ],
-          "newFaces": [
-            {
-              "id": "F_0",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 0.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_1",
-              "label": "Return Flange",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 0.0
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                }
-              ],
-              "role": "returnFlange",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_2",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 123.9045455704952,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 0.0,
-                  "y": 162.0
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_3",
-              "label": "Return Flange",
-              "vertices": [
-                {
-                  "x": 300.0,
-                  "y": 162.00000000000003
-                },
-                {
-                  "x": 300.0,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 176.09545442950503,
-                  "y": 224.99999999999994
-                },
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                }
-              ],
-              "role": "returnFlange",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_4",
-              "label": "Bottom Base Floor",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 162.0
-                },
-                {
-                  "x": 0.0,
-                  "y": 63.0
-                },
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                }
-              ],
-              "role": "baseFloor",
-              "isBaseAnchor": true,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            },
-            {
-              "id": "F_5",
-              "label": "Side Wall",
-              "vertices": [
-                {
-                  "x": 150.0,
-                  "y": 63.00000000000001
-                },
-                {
-                  "x": 300.0,
-                  "y": 63.000000000000014
-                },
-                {
-                  "x": 300.0,
-                  "y": 162.00000000000003
-                },
-                {
-                  "x": 150.0,
-                  "y": 162.0
-                }
-              ],
-              "role": "sideWall",
-              "isBaseAnchor": false,
-              "holes": [],
-              "layer": "FACES",
-              "showLabel": true,
-              "isVisible": true
-            }
-          ]
-        }
-      },
-      {
-        "step": 6,
-        "action": "update_bend",
-        "description": "Update bend (B5)",
-        "timestamp": "2026-09-30T09:08:44.838741",
-        "targetId": "B5",
-        "delta": {
-          "description": "Update bend (B5)",
-          "actionType": "update_bend",
-          "timestamp": "2026-09-30T09:08:44.838741",
-          "targetId": "B5",
-          "oldBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B3",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_2",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B5",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_5",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B2",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_5",
-              "childFaceId": "F_1",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B4",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 162.00000000000003
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_5",
-              "childFaceId": "F_3",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ],
-          "newBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B3",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_2",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B5",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 45.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_5",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B2",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_5",
-              "childFaceId": "F_1",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B4",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 162.00000000000003
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_5",
-              "childFaceId": "F_3",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ]
-        }
-      },
-      {
-        "step": 7,
-        "action": "update_bend",
-        "description": "Update bend (B5)",
-        "timestamp": "2026-09-30T09:09:00.283551",
-        "targetId": "B5",
-        "delta": {
-          "description": "Update bend (B5)",
-          "actionType": "update_bend",
-          "timestamp": "2026-09-30T09:09:00.283551",
-          "targetId": "B5",
-          "oldBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B3",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_2",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B5",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 45.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_5",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B2",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_5",
-              "childFaceId": "F_1",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B4",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 162.00000000000003
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_5",
-              "childFaceId": "F_3",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ],
-          "newBends": [
-            {
-              "id": "B1",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 63.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_0",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B3",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 0.0,
-                "y": 162.0
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_2",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B5",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "direction": "DOWN",
-              "targetAngleDeg": 45.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_DOWN",
-              "parentFaceId": "F_4",
-              "childFaceId": "F_5",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B2",
-              "p1": {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_5",
-              "childFaceId": "F_1",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            },
-            {
-              "id": "B4",
-              "p1": {
-                "x": 150.0,
-                "y": 162.0
-              },
-              "p2": {
-                "x": 300.0,
-                "y": 162.00000000000003
-              },
-              "direction": "UP",
-              "targetAngleDeg": 90.0,
-              "radiusMm": 1.5,
-              "role": "bend",
-              "layer": "BEND_UP",
-              "parentFaceId": "F_5",
-              "childFaceId": "F_3",
-              "showLabel": true,
-              "isVisible": true,
-              "reliefType": "rectangular"
-            }
-          ]
-        }
-      },
-      {
-        "step": 8,
-        "action": "update_punch",
-        "description": "Marked 16 punch(es) as coupler",
-        "timestamp": "2026-09-30T09:12:34.775569",
-        "targetId": "SLOT_5",
-        "delta": {
-          "description": "Marked 16 punch(es) as coupler",
-          "actionType": "update_punch",
-          "timestamp": "2026-09-30T09:12:34.775569",
-          "targetId": "SLOT_5",
-          "oldPunches": [
-            {
-              "id": "SLOT_1",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 87.5
-              },
-              "widthMm": 8.000000000000004,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_2",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 137.5
-              },
-              "widthMm": 8.000000000000002,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_3",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 87.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_4",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 137.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_5",
-              "type": "obroundSlot",
-              "center": {
-                "x": 230.0,
-                "y": 199.49999999999994
-              },
-              "widthMm": 8.000000000000002,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_6",
-              "type": "obroundSlot",
-              "center": {
-                "x": 230.0,
-                "y": 174.5
-              },
-              "widthMm": 8.000000000000002,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_7",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 199.49999999999994
-              },
-              "widthMm": 8.000000000000002,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_8",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 174.5
-              },
-              "widthMm": 8.000000000000002,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_9",
-              "type": "obroundSlot",
-              "center": {
-                "x": 230.0,
-                "y": 25.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 19.999999999999773,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_10",
-              "type": "obroundSlot",
-              "center": {
-                "x": 230.0,
-                "y": 50.5
-              },
-              "widthMm": 8.000000000000005,
-              "lengthMm": 19.999999999999773,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_11",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 25.50000000000002
-              },
-              "widthMm": 8.0,
-              "lengthMm": 19.999999999999773,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_12",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 50.5
-              },
-              "widthMm": 8.000000000000005,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_13",
-              "type": "obroundSlot",
-              "center": {
-                "x": 70.0,
-                "y": 199.49999999999994
-              },
-              "widthMm": 8.000000000000009,
-              "lengthMm": 19.999999999999773,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_14",
-              "type": "obroundSlot",
-              "center": {
-                "x": 70.0,
-                "y": 174.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 19.999999999999773,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_15",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 199.49999999999994
-              },
-              "widthMm": 8.0,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_16",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 174.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_17",
-              "type": "obroundSlot",
-              "center": {
-                "x": 70.0,
-                "y": 25.49999999999998
-              },
-              "widthMm": 8.000000000000107,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_18",
-              "type": "obroundSlot",
-              "center": {
-                "x": 70.0,
-                "y": 50.5
-              },
-              "widthMm": 8.000000000000004,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_19",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 25.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_20",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 50.5
-              },
-              "widthMm": 8.000000000000004,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            }
-          ],
-          "newPunches": [
-            {
-              "id": "SLOT_1",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 87.5
-              },
-              "widthMm": 8.000000000000004,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_2",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 137.5
-              },
-              "widthMm": 8.000000000000002,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_3",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 87.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_4",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 137.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "general"
-            },
-            {
-              "id": "SLOT_5",
-              "type": "obroundSlot",
-              "center": {
-                "x": 230.0,
-                "y": 199.49999999999994
-              },
-              "widthMm": 8.000000000000002,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_6",
-              "type": "obroundSlot",
-              "center": {
-                "x": 230.0,
-                "y": 174.5
-              },
-              "widthMm": 8.000000000000002,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_7",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 199.49999999999994
-              },
-              "widthMm": 8.000000000000002,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_8",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 174.5
-              },
-              "widthMm": 8.000000000000002,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_9",
-              "type": "obroundSlot",
-              "center": {
-                "x": 230.0,
-                "y": 25.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 19.999999999999773,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_10",
-              "type": "obroundSlot",
-              "center": {
-                "x": 230.0,
-                "y": 50.5
-              },
-              "widthMm": 8.000000000000005,
-              "lengthMm": 19.999999999999773,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_11",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 25.50000000000002
-              },
-              "widthMm": 8.0,
-              "lengthMm": 19.999999999999773,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_12",
-              "type": "obroundSlot",
-              "center": {
-                "x": 280.0,
-                "y": 50.5
-              },
-              "widthMm": 8.000000000000005,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_13",
-              "type": "obroundSlot",
-              "center": {
-                "x": 70.0,
-                "y": 199.49999999999994
-              },
-              "widthMm": 8.000000000000009,
-              "lengthMm": 19.999999999999773,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_14",
-              "type": "obroundSlot",
-              "center": {
-                "x": 70.0,
-                "y": 174.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 19.999999999999773,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_15",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 199.49999999999994
-              },
-              "widthMm": 8.0,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_16",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 174.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_17",
-              "type": "obroundSlot",
-              "center": {
-                "x": 70.0,
-                "y": 25.49999999999998
-              },
-              "widthMm": 8.000000000000107,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_18",
-              "type": "obroundSlot",
-              "center": {
-                "x": 70.0,
-                "y": 50.5
-              },
-              "widthMm": 8.000000000000004,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_19",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 25.5
-              },
-              "widthMm": 8.0,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            },
-            {
-              "id": "SLOT_20",
-              "type": "obroundSlot",
-              "center": {
-                "x": 20.0,
-                "y": 50.5
-              },
-              "widthMm": 8.000000000000004,
-              "lengthMm": 20.0,
-              "diameterMm": 8.0,
-              "rotationDeg": 0.0,
-              "spacingX": 0.0,
-              "spacingY": 0.0,
-              "countX": 1,
-              "countY": 1,
-              "layer": "HOLES",
-              "showLabel": true,
-              "isVisible": true,
-              "role": "coupler"
-            }
-          ]
-        }
-      }
-    ],
-    "undoDeltas": [
-      {
-        "description": "Add bend line (B1)",
-        "actionType": "add_bend",
-        "timestamp": "2026-09-30T09:08:00.767841",
-        "targetId": "B1",
-        "oldBends": [],
-        "newBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_1",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ],
-        "oldFaces": [
-          {
-            "id": "F_BASE",
-            "label": "Base Sheet",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 0.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 0.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 224.99999999999994
-              }
-            ],
-            "role": "baseFloor",
-            "isBaseAnchor": true,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          }
-        ],
-        "newFaces": [
-          {
-            "id": "F_0",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 0.0,
-                "y": 0.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 0.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_1",
-            "label": "Bottom Base Floor",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 63.0
-              }
-            ],
-            "role": "baseFloor",
-            "isBaseAnchor": true,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          }
-        ],
-        "oldBaseFaceId": "F_BASE",
-        "newBaseFaceId": "F_1"
-      },
-      {
-        "description": "Add bend line (B2)",
-        "actionType": "add_bend",
-        "timestamp": "2026-09-30T09:08:06.493071",
-        "targetId": "B1",
-        "oldBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_1",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ],
-        "newBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_2",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B2",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 63.000000000000014
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_2",
-            "childFaceId": "F_1",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ],
-        "oldFaces": [
-          {
-            "id": "F_0",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 0.0,
-                "y": 0.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 0.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_1",
-            "label": "Bottom Base Floor",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 63.0
-              }
-            ],
-            "role": "baseFloor",
-            "isBaseAnchor": true,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          }
-        ],
-        "newFaces": [
-          {
-            "id": "F_0",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 0.0,
-                "y": 0.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 0.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_1",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_2",
-            "label": "Bottom Base Floor",
-            "vertices": [
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              {
-                "x": 300.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "baseFloor",
-            "isBaseAnchor": true,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          }
-        ],
-        "oldBaseFaceId": "F_1",
-        "newBaseFaceId": "F_2"
-      },
-      {
-        "description": "Add bend line (B3)",
-        "actionType": "add_bend",
-        "timestamp": "2026-09-30T09:08:24.888484",
-        "targetId": "B2",
-        "oldBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_2",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B2",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 63.000000000000014
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_2",
-            "childFaceId": "F_1",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ],
-        "newBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_3",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B2",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 63.000000000000014
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_3",
-            "childFaceId": "F_1",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B3",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_3",
-            "childFaceId": "F_2",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ],
-        "oldFaces": [
-          {
-            "id": "F_0",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 0.0,
-                "y": 0.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 0.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_1",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_2",
-            "label": "Bottom Base Floor",
-            "vertices": [
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              {
-                "x": 300.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "baseFloor",
-            "isBaseAnchor": true,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          }
-        ],
-        "newFaces": [
-          {
-            "id": "F_0",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 0.0,
-                "y": 0.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 0.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_1",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_2",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 162.0
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_3",
-            "label": "Bottom Base Floor",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 162.0
-              },
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              {
-                "x": 300.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 150.0,
-                "y": 162.0
-              }
-            ],
-            "role": "baseFloor",
-            "isBaseAnchor": true,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          }
-        ],
-        "oldBaseFaceId": "F_2",
-        "newBaseFaceId": "F_3"
-      },
-      {
-        "description": "Add bend line (B4)",
-        "actionType": "add_bend",
-        "timestamp": "2026-09-30T09:08:28.252494",
-        "targetId": "B3",
-        "oldBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_3",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B2",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 63.000000000000014
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_3",
-            "childFaceId": "F_1",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B3",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_3",
-            "childFaceId": "F_2",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ],
-        "newBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B2",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 63.000000000000014
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_1",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B3",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_2",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B4",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 162.00000000000003
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_3",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ],
-        "oldFaces": [
-          {
-            "id": "F_0",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 0.0,
-                "y": 0.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 0.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_1",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_2",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 162.0
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_3",
-            "label": "Bottom Base Floor",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 162.0
-              },
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              {
-                "x": 300.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 150.0,
-                "y": 162.0
-              }
-            ],
-            "role": "baseFloor",
-            "isBaseAnchor": true,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          }
-        ],
-        "newFaces": [
-          {
-            "id": "F_0",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 0.0,
-                "y": 0.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 0.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_1",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_2",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 162.0
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_3",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 300.0,
-                "y": 162.00000000000003
-              },
-              {
-                "x": 300.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 150.0,
-                "y": 162.0
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_4",
-            "label": "Bottom Base Floor",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 0.0,
-                "y": 162.0
-              },
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              {
-                "x": 300.0,
-                "y": 162.00000000000003
-              }
-            ],
-            "role": "baseFloor",
-            "isBaseAnchor": true,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          }
-        ],
-        "oldBaseFaceId": "F_3",
-        "newBaseFaceId": "F_4"
-      },
-      {
-        "description": "Add bend line (B4)",
-        "actionType": "add_bend",
-        "timestamp": "2026-09-30T09:08:37.408589",
-        "targetId": "B4",
-        "oldBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B2",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 63.000000000000014
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_1",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B3",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_2",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B4",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 162.00000000000003
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_3",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ],
-        "newBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B3",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_2",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B5",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_5",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B2",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 63.000000000000014
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_5",
-            "childFaceId": "F_1",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B4",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 162.00000000000003
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_5",
-            "childFaceId": "F_3",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ],
-        "oldFaces": [
-          {
-            "id": "F_0",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 0.0,
-                "y": 0.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 0.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_1",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_2",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 162.0
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_3",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 300.0,
-                "y": 162.00000000000003
-              },
-              {
-                "x": 300.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 150.0,
-                "y": 162.0
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_4",
-            "label": "Bottom Base Floor",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 0.0,
-                "y": 162.0
-              },
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              {
-                "x": 300.0,
-                "y": 162.00000000000003
-              }
-            ],
-            "role": "baseFloor",
-            "isBaseAnchor": true,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          }
-        ],
-        "newFaces": [
-          {
-            "id": "F_0",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 0.0,
-                "y": 0.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 0.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_1",
-            "label": "Return Flange",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 0.0
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              }
-            ],
-            "role": "returnFlange",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_2",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 123.9045455704952,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 0.0,
-                "y": 162.0
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_3",
-            "label": "Return Flange",
-            "vertices": [
-              {
-                "x": 300.0,
-                "y": 162.00000000000003
-              },
-              {
-                "x": 300.0,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 176.09545442950503,
-                "y": 224.99999999999994
-              },
-              {
-                "x": 150.0,
-                "y": 162.0
-              }
-            ],
-            "role": "returnFlange",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_4",
-            "label": "Bottom Base Floor",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 162.0
-              },
-              {
-                "x": 0.0,
-                "y": 162.0
-              },
-              {
-                "x": 0.0,
-                "y": 63.0
-              },
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              }
-            ],
-            "role": "baseFloor",
-            "isBaseAnchor": true,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          },
-          {
-            "id": "F_5",
-            "label": "Side Wall",
-            "vertices": [
-              {
-                "x": 150.0,
-                "y": 63.00000000000001
-              },
-              {
-                "x": 300.0,
-                "y": 63.000000000000014
-              },
-              {
-                "x": 300.0,
-                "y": 162.00000000000003
-              },
-              {
-                "x": 150.0,
-                "y": 162.0
-              }
-            ],
-            "role": "sideWall",
-            "isBaseAnchor": false,
-            "holes": [],
-            "layer": "FACES",
-            "showLabel": true,
-            "isVisible": true
-          }
-        ]
-      },
-      {
-        "description": "Update bend (B5)",
-        "actionType": "update_bend",
-        "timestamp": "2026-09-30T09:08:44.838741",
-        "targetId": "B5",
-        "oldBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B3",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_2",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B5",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_5",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B2",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 63.000000000000014
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_5",
-            "childFaceId": "F_1",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B4",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 162.00000000000003
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_5",
-            "childFaceId": "F_3",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ],
-        "newBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B3",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_2",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B5",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 45.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_5",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B2",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 63.000000000000014
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_5",
-            "childFaceId": "F_1",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B4",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 162.00000000000003
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_5",
-            "childFaceId": "F_3",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ]
-      },
-      {
-        "description": "Update bend (B5)",
-        "actionType": "update_bend",
-        "timestamp": "2026-09-30T09:09:00.283551",
-        "targetId": "B5",
-        "oldBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B3",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_2",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B5",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 45.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_5",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B2",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 63.000000000000014
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_5",
-            "childFaceId": "F_1",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B4",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 162.00000000000003
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_5",
-            "childFaceId": "F_3",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ],
-        "newBends": [
-          {
-            "id": "B1",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 63.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_0",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B3",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 0.0,
-              "y": 162.0
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_2",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B5",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "direction": "DOWN",
-            "targetAngleDeg": 45.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_DOWN",
-            "parentFaceId": "F_4",
-            "childFaceId": "F_5",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B2",
-            "p1": {
-              "x": 150.0,
-              "y": 63.00000000000001
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 63.000000000000014
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_5",
-            "childFaceId": "F_1",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          },
-          {
-            "id": "B4",
-            "p1": {
-              "x": 150.0,
-              "y": 162.0
-            },
-            "p2": {
-              "x": 300.0,
-              "y": 162.00000000000003
-            },
-            "direction": "UP",
-            "targetAngleDeg": 90.0,
-            "radiusMm": 1.5,
-            "role": "bend",
-            "layer": "BEND_UP",
-            "parentFaceId": "F_5",
-            "childFaceId": "F_3",
-            "showLabel": true,
-            "isVisible": true,
-            "reliefType": "rectangular"
-          }
-        ]
-      },
-      {
-        "description": "Marked 16 punch(es) as coupler",
-        "actionType": "update_punch",
-        "timestamp": "2026-09-30T09:12:34.775569",
-        "targetId": "SLOT_5",
-        "oldPunches": [
-          {
-            "id": "SLOT_1",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 87.5
-            },
-            "widthMm": 8.000000000000004,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_2",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 137.5
-            },
-            "widthMm": 8.000000000000002,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_3",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 87.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_4",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 137.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_5",
-            "type": "obroundSlot",
-            "center": {
-              "x": 230.0,
-              "y": 199.49999999999994
-            },
-            "widthMm": 8.000000000000002,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_6",
-            "type": "obroundSlot",
-            "center": {
-              "x": 230.0,
-              "y": 174.5
-            },
-            "widthMm": 8.000000000000002,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_7",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 199.49999999999994
-            },
-            "widthMm": 8.000000000000002,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_8",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 174.5
-            },
-            "widthMm": 8.000000000000002,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_9",
-            "type": "obroundSlot",
-            "center": {
-              "x": 230.0,
-              "y": 25.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 19.999999999999773,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_10",
-            "type": "obroundSlot",
-            "center": {
-              "x": 230.0,
-              "y": 50.5
-            },
-            "widthMm": 8.000000000000005,
-            "lengthMm": 19.999999999999773,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_11",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 25.50000000000002
-            },
-            "widthMm": 8.0,
-            "lengthMm": 19.999999999999773,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_12",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 50.5
-            },
-            "widthMm": 8.000000000000005,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_13",
-            "type": "obroundSlot",
-            "center": {
-              "x": 70.0,
-              "y": 199.49999999999994
-            },
-            "widthMm": 8.000000000000009,
-            "lengthMm": 19.999999999999773,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_14",
-            "type": "obroundSlot",
-            "center": {
-              "x": 70.0,
-              "y": 174.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 19.999999999999773,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_15",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 199.49999999999994
-            },
-            "widthMm": 8.0,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_16",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 174.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_17",
-            "type": "obroundSlot",
-            "center": {
-              "x": 70.0,
-              "y": 25.49999999999998
-            },
-            "widthMm": 8.000000000000107,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_18",
-            "type": "obroundSlot",
-            "center": {
-              "x": 70.0,
-              "y": 50.5
-            },
-            "widthMm": 8.000000000000004,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_19",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 25.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_20",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 50.5
-            },
-            "widthMm": 8.000000000000004,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          }
-        ],
-        "newPunches": [
-          {
-            "id": "SLOT_1",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 87.5
-            },
-            "widthMm": 8.000000000000004,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_2",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 137.5
-            },
-            "widthMm": 8.000000000000002,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_3",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 87.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_4",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 137.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "general"
-          },
-          {
-            "id": "SLOT_5",
-            "type": "obroundSlot",
-            "center": {
-              "x": 230.0,
-              "y": 199.49999999999994
-            },
-            "widthMm": 8.000000000000002,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_6",
-            "type": "obroundSlot",
-            "center": {
-              "x": 230.0,
-              "y": 174.5
-            },
-            "widthMm": 8.000000000000002,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_7",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 199.49999999999994
-            },
-            "widthMm": 8.000000000000002,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_8",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 174.5
-            },
-            "widthMm": 8.000000000000002,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_9",
-            "type": "obroundSlot",
-            "center": {
-              "x": 230.0,
-              "y": 25.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 19.999999999999773,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_10",
-            "type": "obroundSlot",
-            "center": {
-              "x": 230.0,
-              "y": 50.5
-            },
-            "widthMm": 8.000000000000005,
-            "lengthMm": 19.999999999999773,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_11",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 25.50000000000002
-            },
-            "widthMm": 8.0,
-            "lengthMm": 19.999999999999773,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_12",
-            "type": "obroundSlot",
-            "center": {
-              "x": 280.0,
-              "y": 50.5
-            },
-            "widthMm": 8.000000000000005,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_13",
-            "type": "obroundSlot",
-            "center": {
-              "x": 70.0,
-              "y": 199.49999999999994
-            },
-            "widthMm": 8.000000000000009,
-            "lengthMm": 19.999999999999773,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_14",
-            "type": "obroundSlot",
-            "center": {
-              "x": 70.0,
-              "y": 174.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 19.999999999999773,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_15",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 199.49999999999994
-            },
-            "widthMm": 8.0,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_16",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 174.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_17",
-            "type": "obroundSlot",
-            "center": {
-              "x": 70.0,
-              "y": 25.49999999999998
-            },
-            "widthMm": 8.000000000000107,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_18",
-            "type": "obroundSlot",
-            "center": {
-              "x": 70.0,
-              "y": 50.5
-            },
-            "widthMm": 8.000000000000004,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_19",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 25.5
-            },
-            "widthMm": 8.0,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          },
-          {
-            "id": "SLOT_20",
-            "type": "obroundSlot",
-            "center": {
-              "x": 20.0,
-              "y": 50.5
-            },
-            "widthMm": 8.000000000000004,
-            "lengthMm": 20.0,
-            "diameterMm": 8.0,
-            "rotationDeg": 0.0,
-            "spacingX": 0.0,
-            "spacingY": 0.0,
-            "countX": 1,
-            "countY": 1,
-            "layer": "HOLES",
-            "showLabel": true,
-            "isVisible": true,
-            "role": "coupler"
-          }
-        ]
-      }
-    ],
-    "cmsWorkflow": {
-      "stage": "manufacturing_defined",
-      "stageIndex": 1
-    }
+    "category": "Tray Accessories",
+    "product": "Inside Riser",
+    "variantName": "45 Deg Inside Riser"
   }
 }

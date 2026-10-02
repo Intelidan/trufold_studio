@@ -297,6 +297,11 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                               return KeyEventResult.handled;
                             }
                           }
+                          if (viewModel.isDrawingInProgress && !_isEditingText()) {
+                            if (viewModel.handleDynamicInputKey(event)) {
+                              return KeyEventResult.handled;
+                            }
+                          }
                           if (event.logicalKey == LogicalKeyboardKey.escape) {
                             if (_boxSelectStart != null) {
                               _boxSelectStart = null;

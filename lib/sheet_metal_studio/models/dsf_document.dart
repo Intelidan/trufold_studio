@@ -23,6 +23,7 @@ import 'constraints/reference_geometry.dart';
 import 'template_parameter_definition.dart';
 import 'cms/cms_product_contract.dart';
 import 'trunking_cover_data.dart';
+import '../engine/planar_face_decomposer.dart';
 
 class DsfDocument {
   static const String currentFormat = 'DANISH_SHEET_FOLD';
@@ -397,8 +398,24 @@ class DsfDocument {
       final cmsTemplate = meta['cmsTemplate'] as Map<String, dynamic>?;
       final couplerSlotIds = (cmsTemplate?['couplerSlotPunchIds'] as List?)?.map((e) => e.toString()).toSet() ?? {};
       final raw = (json['punches'] as List? ?? []).map((e) => CncPunchPrimitive.fromJson(e as Map<String, dynamic>)).toList();
+      final baseFaceId = json['baseFaceId'] as String? ?? '';
+      final facesList = (json['faces'] as List? ?? []).map((e) => PlanarSheetFace.fromJson(e as Map<String, dynamic>)).toList();
+      final floorFace = facesList.where((f) =>
+          f.id == baseFaceId ||
+          f.role == FaceRole.baseFloor ||
+          f.id.toUpperCase().contains('FLOOR') ||
+          f.id.toUpperCase().contains('BASE')).firstOrNull;
+
       return raw.map((p) {
-        if (couplerSlotIds.contains(p.id) && p.role != CncPunchRole.coupler) {
+        final isOnFloor = floorFace != null && PlanarFaceDecomposer.isPointInsidePolygon(p.center, floorFace.vertices);
+        if (isOnFloor && p.layer.toUpperCase() != 'COUPLER') {
+          // Punches located on the bottom base floor are perforations / ventilation, never couplers
+          if (p.role == CncPunchRole.coupler) {
+            return p.copyWith(role: CncPunchRole.perforation);
+          }
+          return p;
+        }
+        if (p.role == CncPunchRole.general && couplerSlotIds.contains(p.id)) {
           return p.copyWith(role: CncPunchRole.coupler);
         }
         return p;

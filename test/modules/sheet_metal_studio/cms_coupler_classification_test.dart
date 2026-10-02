@@ -8,6 +8,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dsf_document.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cnc_punch_primitive.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_product_contract.dart';
@@ -63,6 +64,51 @@ void main() {
       // 4 slots per port (2 per sidewall)
       expect(classification.couplerSlotsByPort['PORT_1']?.length, equals(4));
       expect(classification.couplerSlotsByPort['PORT_2']?.length, equals(4));
+    });
+
+    test('2. Floor perforations are never classified as coupler slots and survive round-trip reopening', () {
+      final file = File('assets/dsf_templates/trunking_accessories/45_deg_bend_100x100.dsf');
+      final content = file.readAsStringSync();
+      final json = jsonDecode(content) as Map<String, dynamic>;
+      final baseDoc = DsfDocument.fromJson(json);
+
+      // Add a base floor perforation slot (7x25mm) right in the middle of base floor
+      final floorPunch = CncPunchPrimitive(
+        id: 'FLOOR_PERF_1',
+        type: PunchType.obroundSlot,
+        center: const CadPoint2D(150, 150),
+        widthMm: 7.0,
+        lengthMm: 25.0,
+        role: CncPunchRole.perforation,
+      );
+
+      final docWithFloor = baseDoc.copyWith(
+        punches: [...baseDoc.punches, floorPunch],
+      );
+
+      // Classify
+      final res = CmsCouplerClassifier.classify(
+        document: docWithFloor,
+        contract: CmsProductContract.bend45,
+      );
+
+      // Coupler slots should still be only the 8 sidewall slots
+      expect(res.couplerSlots.length, equals(8));
+      expect(res.perforations.any((p) => p.id == 'FLOOR_PERF_1'), isTrue);
+
+      // Simulate saving with corrupt couplerSlotPunchIds containing all punch IDs
+      final docMap = docWithFloor.toJson();
+      final meta = Map<String, dynamic>.from(docMap['metadata'] as Map);
+      final cms = Map<String, dynamic>.from(meta['cmsTemplate'] as Map? ?? {});
+      cms['couplerSlotPunchIds'] = docWithFloor.punches.map((p) => p.id).toList(); // includes FLOOR_PERF_1!
+      meta['cmsTemplate'] = cms;
+      docMap['metadata'] = meta;
+
+      // Reopen document from JSON
+      final reopened = DsfDocument.fromJson(docMap);
+      final reopenedFloorPunch = reopened.punches.firstWhere((p) => p.id == 'FLOOR_PERF_1');
+      expect(reopenedFloorPunch.role, equals(CncPunchRole.perforation));
+      expect(reopenedFloorPunch.isCoupler, isFalse);
     });
   });
 }

@@ -22,8 +22,11 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+
+import '../../../engine/dds/dds_instance_evaluator.dart';
 import '../../../models/cms/cms_product_contract.dart';
 import '../../../models/dds/dds_product_instance.dart';
+import '../../../models/sheet_metal_definition.dart';
 import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../bend_radius_dialog.dart';
 import '../cms_perforation_dialog.dart';
@@ -64,6 +67,71 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   bool _isFolded = false;
   final Map<String, double> _localParams = {};
   bool? _localCoverIncluded;
+  String? _localMaterial;
+
+  String get _currentMaterial => _localMaterial ?? widget.instance?.material ?? widget.viewModel?.document.material.materialGrade ?? 'Pre-Galv DX51D (GI)';
+
+  static const List<_MaterialOption> _availableMaterials = [
+    _MaterialOption('GI', 'Pre-Galv DX51D (GI)'),
+    _MaterialOption('MS', 'Mild Steel CR4 (MS)'),
+    _MaterialOption('HR', 'Hot Rolled Steel (HR)'),
+    _MaterialOption('CRCA', 'Cold Rolled (CRCA)'),
+    _MaterialOption('AL', 'Aluminium 5052 (AL)', isAluminium: true),
+    _MaterialOption('SS304', 'Stainless Steel 304 (SS304)', isStainless: true),
+    _MaterialOption('SS316', 'Stainless Steel 316 (SS316)', isStainless: true),
+    _MaterialOption('HDG', 'Hot Dip Galvanized (HDG)'),
+  ];
+
+  void _updateMaterial(String val) {
+    setState(() {
+      _localMaterial = val;
+    });
+
+    final density = DdsInstanceEvaluator.resolveDensity(val);
+    final thk =
+        ((_currentParams['thickness'] ?? widget.instance?.instanceParameters['thickness'] ?? widget.viewModel?.document.material.thicknessMm ?? 1.5) as num)
+            .toDouble();
+
+    if (widget.instance != null && widget.onInstanceChanged != null) {
+      final oldTakeoff = widget.instance!.calculatedTakeoff;
+      DdsCalculatedTakeoff? updatedTakeoff;
+      if (oldTakeoff != null && oldTakeoff.blankSurfaceAreaM2 > 0) {
+        final newWeight = oldTakeoff.blankSurfaceAreaM2 * (thk / 1000.0) * density;
+        updatedTakeoff = oldTakeoff.copyWith(estimatedNetWeightKg: double.parse(newWeight.toStringAsFixed(2)));
+      }
+      widget.onInstanceChanged!(widget.instance!.copyWith(material: val, calculatedTakeoff: updatedTakeoff ?? oldTakeoff));
+    }
+
+    if (widget.viewModel != null) {
+      final vm = widget.viewModel!;
+      SheetMetalMaterialGrade? grade;
+      CoatingFinish coating = CoatingFinish.none;
+
+      if (val.contains('304')) {
+        grade = SheetMetalMaterialGrade.ss304;
+      } else if (val.contains('316')) {
+        grade = SheetMetalMaterialGrade.ss316;
+      } else if (val.contains('AL') || val.contains('Alum') || val.contains('5052')) {
+        grade = SheetMetalMaterialGrade.aluminium;
+      } else if (val.contains('HR')) {
+        grade = SheetMetalMaterialGrade.hr;
+      } else if (val.contains('CRCA')) {
+        grade = SheetMetalMaterialGrade.crca;
+      } else if (val.contains('MS') || val.contains('Mild')) {
+        grade = SheetMetalMaterialGrade.ms;
+      } else if (val.contains('HDG')) {
+        grade = SheetMetalMaterialGrade.gi;
+        coating = CoatingFinish.hdg;
+      } else if (val.contains('GI') || val.contains('Galv')) {
+        grade = SheetMetalMaterialGrade.gi;
+      }
+
+      if (grade != null) {
+        vm.setMaterialDefinition(grade: grade, finish: coating);
+      }
+      vm.setMaterialGrade(val);
+    }
+  }
 
   @override
   void initState() {
@@ -153,7 +221,11 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       final doc = widget.viewModel!.document;
       final item = doc.itemName.toLowerCase();
       final pType = doc.productType.toLowerCase();
-      if ((item.contains('trunk') || pType.contains('trunk')) && !item.contains('tray') && !pType.contains('tray') && !item.contains('ladder') && !pType.contains('ladder')) {
+      if ((item.contains('trunk') || pType.contains('trunk')) &&
+          !item.contains('tray') &&
+          !pType.contains('tray') &&
+          !item.contains('ladder') &&
+          !pType.contains('ladder')) {
         return true;
       }
     }
@@ -223,7 +295,8 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       // Check physical ports from verifiedCmsPorts
       final ports = vm.verifiedCmsPorts;
       if (ports.length == 3) {
-        final isUnequal = (ports[0].width - ports[1].width).abs() > 2 ||
+        final isUnequal =
+            (ports[0].width - ports[1].width).abs() > 2 ||
             (ports[0].width - ports[2].width).abs() > 2 ||
             (ports[0].height - ports[1].height).abs() > 2 ||
             (ports[0].height - ports[2].height).abs() > 2;
@@ -241,7 +314,8 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         final c = CmsProductContract.lookup(detected.product, detected.variantName);
         if (c != null) return c;
       }
-      final lookupDoc = CmsProductContract.lookup(vm.document.productType, vm.document.itemName) ??
+      final lookupDoc =
+          CmsProductContract.lookup(vm.document.productType, vm.document.itemName) ??
           CmsProductContract.lookup(null, vm.document.itemName) ??
           CmsProductContract.lookup(null, vm.document.productType);
       if (lookupDoc != null) return lookupDoc;
@@ -313,7 +387,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       result['coupler_slot_width'] = 9.0;
       result['coupler_slot_pitch'] = 25.0;
       result['include_coupler_flaps'] = 0.0;
-      result['coupler_flap_length'] = 30.0;
+      result['coupler_flap_length'] = 90.0;
       result['bend_angle'] = 90.0;
       result['radius'] = 180.0;
       result['has_perforations'] = 1.0;
@@ -375,8 +449,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       result['cover_flange_size'] ??= ((vm.document.cover?.properties['flangeDepthMm'] as num?)?.toDouble() ?? vm.coverFlangeDepth);
 
       // Coupler flaps & slots
-      result['include_coupler_flaps'] ??= ((vm.scalingController?.includeCouplerFlaps ?? ((vm.document.parameters['include_coupler_flaps'] ?? 0.0) > 0.5)) ? 1.0 : 0.0);
-      result['coupler_flap_length'] ??= (vm.scalingController?.couplerFlapLength ?? vm.document.parameters['coupler_flap_length'] ?? 30.0);
+      result['include_coupler_flaps'] ??= ((vm.scalingController?.includeCouplerFlaps ?? ((vm.document.parameters['include_coupler_flaps'] ?? 0.0) > 0.5))
+          ? 1.0
+          : 0.0);
+      result['coupler_flap_length'] ??= (vm.scalingController?.couplerFlapLength ?? vm.document.parameters['coupler_flap_length'] ?? 90.0);
       result['coupler_slot_length'] ??= (vm.document.parameters['coupler_slot_length'] ?? 20.0);
       result['coupler_slot_width'] ??= (vm.document.parameters['coupler_slot_width'] ?? 9.0);
       result['coupler_slot_pitch'] ??= (vm.document.parameters['coupler_slot_pitch'] ?? 25.0);
@@ -438,7 +514,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   }
 
   void _setControllerText(String key, double val) {
-    final text = val % 1 == 0 ? val.toInt().toString() : val.toStringAsFixed(1);
+    final text = key == 'thickness' ? val.toStringAsFixed(2) : (val % 1 == 0 ? val.toInt().toString() : val.toStringAsFixed(1));
     if (_controllers.containsKey(key)) {
       if (_controllers[key]!.text != text) {
         _controllers[key]!.text = text;
@@ -472,15 +548,9 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     }
 
     if (widget.instance != null && widget.onInstanceChanged != null) {
-      var updatedInst = widget.instance!.copyWith(
-        instanceParameters: updated,
-      );
+      var updatedInst = widget.instance!.copyWith(instanceParameters: updated);
       if (key == 'cover_flange_size') {
-        updatedInst = updatedInst.copyWith(
-          coverConfiguration: updatedInst.coverConfiguration.copyWith(
-            flangeDepthMm: value,
-          ),
-        );
+        updatedInst = updatedInst.copyWith(coverConfiguration: updatedInst.coverConfiguration.copyWith(flangeDepthMm: value));
       }
       if (key == 'bend_angle') {
         updated['angle'] = value;
@@ -532,10 +602,8 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     if (vm != null) {
       if (vm.scalingController != null) {
         final ctrl = vm.scalingController!;
-        baseW = ctrl.model.parameters['width']?.baselineValue ??
-            (ctrl.baselinePorts.isNotEmpty ? ctrl.baselinePorts.first.nominalWidth : 100.0);
-        baseH = ctrl.model.parameters['height']?.baselineValue ??
-            (ctrl.baselinePorts.isNotEmpty ? ctrl.baselinePorts.first.nominalHeight : 50.0);
+        baseW = ctrl.model.parameters['width']?.baselineValue ?? (ctrl.baselinePorts.isNotEmpty ? ctrl.baselinePorts.first.nominalWidth : 100.0);
+        baseH = ctrl.model.parameters['height']?.baselineValue ?? (ctrl.baselinePorts.isNotEmpty ? ctrl.baselinePorts.first.nominalHeight : 50.0);
 
         for (int i = 0; i < ctrl.baselinePorts.length; i++) {
           final port = ctrl.baselinePorts[i];
@@ -647,10 +715,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
               ),
               icon: const Icon(Icons.sync, size: 16),
-              label: const Text(
-                'Bake & Sync Dimensions',
-                style: TextStyle(fontSize: 13.0, fontWeight: FontWeight.bold, letterSpacing: 0.4),
-              ),
+              label: const Text('Bake & Sync Dimensions', style: TextStyle(fontSize: 13.0, fontWeight: FontWeight.bold, letterSpacing: 0.4)),
               onPressed: () {
                 if (widget.instance != null && widget.onInstanceChanged != null) {
                   widget.onInstanceChanged!(widget.instance!.copyWith(instanceParameters: _currentParams));
@@ -675,9 +740,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       builder: (context, constraints) {
         final hasFiniteWidth = constraints.maxWidth.isFinite;
         final hasFiniteHeight = constraints.maxHeight.isFinite;
-        final panelWidth = widget.isDetached
-            ? 400.0
-            : (hasFiniteWidth ? double.infinity : 395.0);
+        final panelWidth = widget.isDetached ? 400.0 : (hasFiniteWidth ? double.infinity : 395.0);
 
         return Container(
           width: panelWidth,
@@ -712,9 +775,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                     borderRadius: widget.isDetached
                         ? (_isFolded ? BorderRadius.circular(9) : const BorderRadius.vertical(top: Radius.circular(9)))
                         : BorderRadius.zero,
-                    border: Border(
-                      bottom: BorderSide(color: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155), width: 1.0),
-                    ),
+                    border: Border(bottom: BorderSide(color: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155), width: 1.0)),
                   ),
                   child: Row(
                     children: [
@@ -736,21 +797,12 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                           children: [
                             const Text(
                               'CMS PARAMETER INSPECTOR',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 13.0,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.8,
-                              ),
+                              style: TextStyle(color: Colors.white, fontSize: 13.0, fontWeight: FontWeight.bold, letterSpacing: 0.8),
                             ),
                             const SizedBox(height: 1),
                             Text(
                               '${_formatProductTitle(pType)} • Live Morph Engine',
-                              style: const TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 11.0,
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11.0, fontWeight: FontWeight.w500),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -759,11 +811,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                       ),
                       if (widget.isDetached) ...[
                         IconButton(
-                          icon: Icon(
-                            _isFolded ? Icons.unfold_more : Icons.unfold_less,
-                            size: 18,
-                            color: Colors.white70,
-                          ),
+                          icon: Icon(_isFolded ? Icons.unfold_more : Icons.unfold_less, size: 18, color: Colors.white70),
                           tooltip: _isFolded ? 'Expand Inspector' : 'Fold to Header Bar',
                           padding: const EdgeInsets.all(4),
                           constraints: const BoxConstraints(),
@@ -780,15 +828,8 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                             borderRadius: BorderRadius.circular(4),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Icon(
-                                Icons.chevron_right,
-                                size: 18,
-                                color: Colors.white,
-                              ),
+                              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                              child: const Icon(Icons.chevron_right, size: 18, color: Colors.white),
                             ),
                           ),
                         ),
@@ -796,11 +837,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                       ],
                       if (widget.onDetach != null)
                         IconButton(
-                          icon: Icon(
-                            widget.isDetached ? Icons.vertical_align_bottom : Icons.open_in_new,
-                            size: 17,
-                            color: Colors.white70,
-                          ),
+                          icon: Icon(widget.isDetached ? Icons.vertical_align_bottom : Icons.open_in_new, size: 17, color: Colors.white70),
                           tooltip: widget.isDetached ? 'Dock to 2D View' : 'Detach to Floating Window',
                           padding: const EdgeInsets.all(4),
                           constraints: const BoxConstraints(),
@@ -826,15 +863,11 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               if (!_isFolded) ...[
                 if (widget.isDetached || !hasFiniteHeight)
                   ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: (MediaQuery.of(context).size.height - 120).clamp(300.0, 720.0),
-                    ),
+                    constraints: BoxConstraints(maxHeight: (MediaQuery.of(context).size.height - 120).clamp(300.0, 720.0)),
                     child: scrollBody,
                   )
                 else
-                  Expanded(
-                    child: scrollBody,
-                  ),
+                  Expanded(child: scrollBody),
               ],
             ],
           ),
@@ -888,11 +921,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                     SizedBox(width: 3),
                     Text(
                       'RESET',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0284C7),
-                      ),
+                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
                     ),
                   ],
                 ),
@@ -978,7 +1007,8 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       );
     } else {
       // Bends, Risers, Straight
-      final isBend = pType == 'flatBend45' ||
+      final isBend =
+          pType == 'flatBend45' ||
           pType == 'flatBend90' ||
           pType == 'insideRiser' ||
           pType == 'outsideRiser' ||
@@ -996,10 +1026,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
             'height',
             const Color(0xFF0284C7),
           ),
-          if (isBend) ...[
-            const SizedBox(height: 8),
-            _buildBendAngleAndRadiusSection(isRiser: isRiser),
-          ],
+          if (isBend) ...[const SizedBox(height: 8), _buildBendAngleAndRadiusSection(isRiser: isRiser)],
         ],
       );
     }
@@ -1008,8 +1035,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   Widget _buildBendAngleAndRadiusSection({bool isRiser = false}) {
     final isLight = widget.isLightTheme;
     final curRadius = _currentParams['radius'] ?? 180.0;
-    final curAngle = _currentParams['bend_angle'] ??
-        (_currentParams['angle'] ?? (_productType == 'flatBend45' ? 45.0 : 90.0));
+    final curAngle = _currentParams['bend_angle'] ?? (_currentParams['angle'] ?? (_productType == 'flatBend45' ? 45.0 : 90.0));
     final showBendRadius = !_isTrunking;
 
     return Container(
@@ -1037,22 +1063,14 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               Expanded(
                 child: Text(
                   isRiser ? 'Riser Elevation Angle (θ)' : 'Bend Sweep Angle (θ)',
-                  style: TextStyle(
-                    fontSize: 12.0,
-                    fontWeight: FontWeight.bold,
-                    color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-                  ),
+                  style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               Text(
                 '${curAngle.toStringAsFixed(0)}°',
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF7C3AED),
-                ),
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Color(0xFF7C3AED)),
               ),
             ],
           ),
@@ -1121,22 +1139,14 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                 Expanded(
                   child: Text(
                     isRiser ? 'Riser Inside Arc Radius (R)' : 'Inside Throat Bend Radius (R)',
-                    style: TextStyle(
-                      fontSize: 12.0,
-                      fontWeight: FontWeight.bold,
-                      color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-                    ),
+                    style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Text(
                   '${curRadius.toStringAsFixed(0)} mm',
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0284C7),
-                  ),
+                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
                 ),
                 const SizedBox(width: 6),
                 // Prominent Bend Radius Dialog / Fine-Tune Button
@@ -1173,7 +1183,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
             const SizedBox(height: 6),
             Row(
               children: [
-                Text('100', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
+                Text(
+                  '100',
+                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                ),
                 Expanded(
                   child: SliderTheme(
                     data: SliderTheme.of(context).copyWith(
@@ -1194,7 +1207,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                     ),
                   ),
                 ),
-                Text('900', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
+                Text(
+                  '900',
+                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                ),
               ],
             ),
             const SizedBox(height: 4),
@@ -1215,9 +1231,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                             : (isLight ? Colors.white : const Color(0xFF1E293B)),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
-                          color: (curRadius - preset).abs() < 1e-3
-                              ? const Color(0xFF0284C7)
-                              : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                          color: (curRadius - preset).abs() < 1e-3 ? const Color(0xFF0284C7) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
                           width: (curRadius - preset).abs() < 1e-3 ? 1.2 : 0.6,
                         ),
                       ),
@@ -1226,9 +1240,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: (curRadius - preset).abs() < 1e-3 ? FontWeight.bold : FontWeight.w500,
-                          color: (curRadius - preset).abs() < 1e-3
-                              ? const Color(0xFF0284C7)
-                              : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                          color: (curRadius - preset).abs() < 1e-3 ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
                         ),
                       ),
                     ),
@@ -1268,11 +1280,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(
-                    fontSize: 12.0,
-                    fontWeight: FontWeight.bold,
-                    color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-                  ),
+                  style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1306,16 +1314,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               ),
               const SizedBox(width: 8),
               // Height field with standard height presets
-              Expanded(
-                child: _buildStepperField(
-                  'H (mm)',
-                  heightKey,
-                  25.0,
-                  250.0,
-                  step: 25.0,
-                  presetSizes: const [25, 38, 50, 75, 100, 150, 200, 250],
-                ),
-              ),
+              Expanded(child: _buildStepperField('H (mm)', heightKey, 25.0, 250.0, step: 25.0, presetSizes: const [25, 38, 50, 75, 100, 150, 200, 250])),
             ],
           ),
         ],
@@ -1323,68 +1322,64 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     );
   }
 
-  Widget _buildStepperField(
-    String label,
-    String key,
-    double min,
-    double max, {
-    double step = 10.0,
-    int decimals = 0,
-    List<double>? presetSizes,
-  }) {
+  Widget _buildStepperField(String label, String key, double min, double max, {double step = 10.0, int decimals = 0, List<double>? presetSizes}) {
     final isLight = widget.isLightTheme;
     final ctrl = _controllers[key] ?? TextEditingController(text: '100');
 
-    return Row(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12.0,
-            fontWeight: FontWeight.bold,
-            color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+    // Clean, compact badge text
+    String badgeText = label;
+    if (label.contains('(')) {
+      badgeText = label.split('(').first.trim();
+    }
+    if (badgeText.toLowerCase() == 'thickness') badgeText = 'THK';
+    if (badgeText.toLowerCase() == 'cover flange') badgeText = 'FLG';
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showSteppers = constraints.maxWidth >= 135;
+        final showPresets = constraints.maxWidth >= 105 && presetSizes != null && presetSizes.isNotEmpty;
+
+        return Container(
+          height: 34,
+          decoration: BoxDecoration(
+            color: isLight ? Colors.white : const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.9),
           ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Container(
-            height: 34,
-            decoration: BoxDecoration(
-              color: isLight ? Colors.white : const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.9),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: ctrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.bold,
-                      color: isLight ? const Color(0xFF0F172A) : Colors.white,
-                    ),
-                    textAlign: TextAlign.center,
-                    decoration: const InputDecoration(
-                      contentPadding: EdgeInsets.zero,
-                      isDense: true,
-                      border: InputBorder.none,
-                    ),
-                    onChanged: (val) {
-                      final parsed = double.tryParse(val);
-                      if (parsed != null && parsed >= min && parsed <= max) {
-                        _updateParam(key, parsed);
-                      }
-                    },
-                    onSubmitted: (val) {
-                      final parsed = double.tryParse(val);
-                      if (parsed != null && parsed >= min && parsed <= max) {
-                        _updateParam(key, parsed);
-                      }
-                    },
-                  ),
+          child: Row(
+            children: [
+              // Integrated prefix badge inside container
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+                decoration: BoxDecoration(color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF334155), borderRadius: BorderRadius.circular(3)),
+                child: Text(
+                  badgeText,
+                  style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
                 ),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: ctrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF0F172A) : Colors.white),
+                  textAlign: TextAlign.center,
+                  decoration: const InputDecoration(contentPadding: EdgeInsets.zero, isDense: true, border: InputBorder.none),
+                  onChanged: (val) {
+                    final parsed = double.tryParse(val);
+                    if (parsed != null && parsed >= min && parsed <= max) {
+                      _updateParam(key, parsed);
+                    }
+                  },
+                  onSubmitted: (val) {
+                    final parsed = double.tryParse(val);
+                    if (parsed != null && parsed >= min && parsed <= max) {
+                      _updateParam(key, parsed);
+                    }
+                  },
+                ),
+              ),
+              if (showSteppers) ...[
                 // Stepper -
                 InkWell(
                   onTap: () {
@@ -1394,10 +1389,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                     _updateParam(key, next);
                   },
                   child: Container(
-                    width: 26,
-                    height: 34,
+                    width: 18,
+                    height: 32,
                     alignment: Alignment.center,
-                    child: Icon(Icons.remove, size: 16, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                    child: Icon(Icons.remove, size: 13, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
                   ),
                 ),
                 // Stepper +
@@ -1409,41 +1404,45 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                     _updateParam(key, next);
                   },
                   child: Container(
-                    width: 26,
-                    height: 34,
+                    width: 18,
+                    height: 32,
                     alignment: Alignment.center,
-                    child: Icon(Icons.add, size: 16, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                    child: Icon(Icons.add, size: 13, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
                   ),
                 ),
-                // Compact Dropdown for standard common sizes
-                if (presetSizes != null && presetSizes.isNotEmpty)
-                  PopupMenuButton<double>(
-                    tooltip: 'Common standard sizes',
-                    padding: EdgeInsets.zero,
-                    iconSize: 18,
-                    icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF0284C7)),
-                    onSelected: (selectedVal) {
-                      ctrl.text = decimals == 0 ? selectedVal.toStringAsFixed(0) : selectedVal.toStringAsFixed(decimals);
-                      _updateParam(key, selectedVal);
-                    },
-                    itemBuilder: (ctx) {
-                      return presetSizes.map((sz) {
-                        return PopupMenuItem<double>(
-                          value: sz,
-                          height: 32,
-                          child: Text(
-                            decimals == 0 ? '${sz.toStringAsFixed(0)} mm' : '${sz.toStringAsFixed(decimals)} mm',
-                            style: const TextStyle(fontSize: 12.0, fontWeight: FontWeight.w600),
-                          ),
-                        );
-                      }).toList();
-                    },
-                  ),
               ],
-            ),
+              // Compact Dropdown for standard common sizes
+              if (showPresets)
+                PopupMenuButton<double>(
+                  tooltip: 'Common standard sizes',
+                  padding: EdgeInsets.zero,
+                  child: Container(
+                    width: 16,
+                    height: 32,
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.arrow_drop_down, size: 15, color: Color(0xFF0284C7)),
+                  ),
+                  onSelected: (selectedVal) {
+                    ctrl.text = decimals == 0 ? selectedVal.toStringAsFixed(0) : selectedVal.toStringAsFixed(decimals);
+                    _updateParam(key, selectedVal);
+                  },
+                  itemBuilder: (ctx) {
+                    return presetSizes.map((sz) {
+                      return PopupMenuItem<double>(
+                        value: sz,
+                        height: 32,
+                        child: Text(
+                          decimals == 0 ? '${sz.toStringAsFixed(0)} mm' : '${sz.toStringAsFixed(decimals)} mm',
+                          style: const TextStyle(fontSize: 12.0, fontWeight: FontWeight.w600),
+                        ),
+                      );
+                    }).toList();
+                  },
+                ),
+            ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -1465,42 +1464,15 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         children: [
           Row(
             children: [
-              Expanded(
-                child: _buildStepperField(
-                  'Slot L',
-                  'coupler_slot_length',
-                  10.0,
-                  40.0,
-                  step: 5.0,
-                  presetSizes: const [15, 20, 25, 30],
-                ),
-              ),
+              Expanded(child: _buildStepperField('Slot L', 'coupler_slot_length', 10.0, 40.0, step: 5.0, presetSizes: const [15, 20, 25, 30])),
               const SizedBox(width: 8),
-              Expanded(
-                child: _buildStepperField(
-                  'Slot W',
-                  'coupler_slot_width',
-                  5.0,
-                  16.0,
-                  step: 1.0,
-                  presetSizes: const [7, 9, 11, 13],
-                ),
-              ),
+              Expanded(child: _buildStepperField('Slot W', 'coupler_slot_width', 5.0, 16.0, step: 1.0, presetSizes: const [7, 9, 11, 13])),
             ],
           ),
           const SizedBox(height: 6),
           Row(
             children: [
-              Expanded(
-                child: _buildStepperField(
-                  'Pitch',
-                  'coupler_slot_pitch',
-                  15.0,
-                  50.0,
-                  step: 5.0,
-                  presetSizes: const [20, 25, 30, 35, 40],
-                ),
-              ),
+              Expanded(child: _buildStepperField('Pitch', 'coupler_slot_pitch', 15.0, 50.0, step: 5.0, presetSizes: const [20, 25, 30, 35, 40])),
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -1510,7 +1482,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                   border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.4), width: 0.8),
                 ),
                 child: const Text(
-                  '4 SLOTS / PORT (M6)',
+                  '3 VERTICAL SLOTS (30×8mm)',
                   style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
                 ),
               ),
@@ -1529,31 +1501,17 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               duration: const Duration(milliseconds: 150),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: hasFlaps
-                    ? const Color(0xFF4F46E5).withValues(alpha: 0.18)
-                    : (isLight ? Colors.white : const Color(0xFF1E293B)),
+                color: hasFlaps ? const Color(0xFF4F46E5).withValues(alpha: 0.18) : (isLight ? Colors.white : const Color(0xFF1E293B)),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
                   color: hasFlaps ? const Color(0xFF6366F1) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
                   width: hasFlaps ? 1.5 : 1.0,
                 ),
-                boxShadow: hasFlaps
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.25),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ]
-                    : null,
+                boxShadow: hasFlaps ? [BoxShadow(color: const Color(0xFF6366F1).withValues(alpha: 0.25), blurRadius: 6, offset: const Offset(0, 2))] : null,
               ),
               child: Row(
                 children: [
-                  Icon(
-                    hasFlaps ? Icons.check_circle : Icons.add_circle_outline,
-                    size: 20,
-                    color: hasFlaps ? const Color(0xFF818CF8) : const Color(0xFF6366F1),
-                  ),
+                  Icon(hasFlaps ? Icons.check_circle : Icons.add_circle_outline, size: 20, color: hasFlaps ? const Color(0xFF818CF8) : const Color(0xFF6366F1)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
@@ -1571,12 +1529,9 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                         ),
                         Text(
                           hasFlaps
-                              ? 'Integrated cheek tabs with 4× M6 slots • ${flapLen.toStringAsFixed(0)} mm'
+                              ? 'Integrated cheek tabs with 3× vertical slots • ${flapLen.toStringAsFixed(0)} mm'
                               : 'Add integrated folding connection flaps to port cheek walls',
-                          style: TextStyle(
-                            fontSize: 10.0,
-                            color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                          ),
+                          style: TextStyle(fontSize: 10.0, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
                         ),
                       ],
                     ),
@@ -1589,11 +1544,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                     ),
                     child: Text(
                       hasFlaps ? 'ACTIVE' : '+ ADD',
-                      style: TextStyle(
-                        fontSize: 10.0,
-                        fontWeight: FontWeight.bold,
-                        color: hasFlaps ? Colors.white : const Color(0xFF6366F1),
-                      ),
+                      style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: hasFlaps ? Colors.white : const Color(0xFF6366F1)),
                     ),
                   ),
                 ],
@@ -1603,19 +1554,12 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
 
           if (hasFlaps) ...[
             const SizedBox(height: 8),
-            _buildStepperField(
-              'Flap Length (mm)',
-              'coupler_flap_length',
-              20.0,
-              60.0,
-              step: 5.0,
-              presetSizes: const [25, 30, 35, 40, 50],
-            ),
+            _buildStepperField('Flap Length (mm)', 'coupler_flap_length', 20.0, 150.0, step: 5.0, presetSizes: const [60, 75, 90, 100, 120]),
             const SizedBox(height: 6),
             Wrap(
               spacing: 4,
               runSpacing: 4,
-              children: [25.0, 30.0, 35.0, 40.0, 50.0].map((preset) {
+              children: [60.0, 75.0, 90.0, 100.0, 120.0].map((preset) {
                 final isCur = (flapLen - preset).abs() < 1e-3;
                 return InkWell(
                   onTap: () => _updateParam('coupler_flap_length', preset),
@@ -1623,14 +1567,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                     decoration: BoxDecoration(
-                      color: isCur
-                          ? const Color(0xFF6366F1).withValues(alpha: 0.2)
-                          : (isLight ? Colors.white : const Color(0xFF1E293B)),
+                      color: isCur ? const Color(0xFF6366F1).withValues(alpha: 0.2) : (isLight ? Colors.white : const Color(0xFF1E293B)),
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
-                        color: isCur
-                            ? const Color(0xFF6366F1)
-                            : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                        color: isCur ? const Color(0xFF6366F1) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
                         width: isCur ? 1.0 : 0.6,
                       ),
                     ),
@@ -1639,9 +1579,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: isCur ? FontWeight.bold : FontWeight.w500,
-                        color: isCur
-                            ? const Color(0xFF6366F1)
-                            : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                        color: isCur ? const Color(0xFF6366F1) : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
                       ),
                     ),
                   ),
@@ -1676,10 +1614,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: hasPerf ? const Color(0xFF059669) : const Color(0xFF64748B),
-                  borderRadius: BorderRadius.circular(4),
-                ),
+                decoration: BoxDecoration(color: hasPerf ? const Color(0xFF059669) : const Color(0xFF64748B), borderRadius: BorderRadius.circular(4)),
                 child: Text(
                   hasPerf ? 'ACTIVE' : 'SOLID',
                   style: const TextStyle(color: Colors.white, fontSize: 10.0, fontWeight: FontWeight.bold),
@@ -1689,11 +1624,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               Expanded(
                 child: Text(
                   'Floor Bed Perforations',
-                  style: TextStyle(
-                    fontSize: 12.0,
-                    fontWeight: FontWeight.bold,
-                    color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-                  ),
+                  style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
                 ),
               ),
               Switch(
@@ -1714,11 +1645,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                 Expanded(
                   child: Text(
                     'Pitch (Center-to-Center)',
-                    style: TextStyle(
-                      fontSize: 11.0,
-                      fontWeight: FontWeight.w600,
-                      color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
-                    ),
+                    style: TextStyle(fontSize: 11.0, fontWeight: FontWeight.w600, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
                   ),
                 ),
                 Text(
@@ -1774,27 +1701,9 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
             // Row 3: Slot Length and Slot Width steppers
             Row(
               children: [
-                Expanded(
-                  child: _buildStepperField(
-                    'Slot L',
-                    'perforation_slot_length',
-                    15.0,
-                    50.0,
-                    step: 5.0,
-                    decimals: 0,
-                  ),
-                ),
+                Expanded(child: _buildStepperField('Slot L', 'perforation_slot_length', 15.0, 50.0, step: 5.0, decimals: 0)),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: _buildStepperField(
-                    'Slot W',
-                    'perforation_slot_width',
-                    5.0,
-                    15.0,
-                    step: 1.0,
-                    decimals: 0,
-                  ),
-                ),
+                Expanded(child: _buildStepperField('Slot W', 'perforation_slot_width', 5.0, 15.0, step: 1.0, decimals: 0)),
               ],
             ),
             const SizedBox(height: 8),
@@ -1811,14 +1720,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                         padding: const EdgeInsets.symmetric(vertical: 7),
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: isStaggered
-                              ? const Color(0xFF0284C7).withValues(alpha: 0.18)
-                              : (isLight ? Colors.white : const Color(0xFF1E293B)),
+                          color: isStaggered ? const Color(0xFF0284C7).withValues(alpha: 0.18) : (isLight ? Colors.white : const Color(0xFF1E293B)),
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: isStaggered
-                                ? const Color(0xFF0284C7)
-                                : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                            color: isStaggered ? const Color(0xFF0284C7) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
                             width: isStaggered ? 1.2 : 0.7,
                           ),
                         ),
@@ -1827,12 +1732,15 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                           children: [
                             Icon(Icons.grain, size: 14, color: isStaggered ? const Color(0xFF0284C7) : Colors.grey),
                             const SizedBox(width: 5),
-                            Text(
-                              'Staggered (Zig-Zag)',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: isStaggered ? FontWeight.bold : FontWeight.w500,
-                                color: isStaggered ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                            Flexible(
+                              child: Text(
+                                'Staggered (Zig-Zag)',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: isStaggered ? FontWeight.bold : FontWeight.w500,
+                                  color: isStaggered ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                                ),
                               ),
                             ),
                           ],
@@ -1852,14 +1760,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                         padding: const EdgeInsets.symmetric(vertical: 7),
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: !isStaggered
-                              ? const Color(0xFF0284C7).withValues(alpha: 0.18)
-                              : (isLight ? Colors.white : const Color(0xFF1E293B)),
+                          color: !isStaggered ? const Color(0xFF0284C7).withValues(alpha: 0.18) : (isLight ? Colors.white : const Color(0xFF1E293B)),
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: !isStaggered
-                                ? const Color(0xFF0284C7)
-                                : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                            color: !isStaggered ? const Color(0xFF0284C7) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
                             width: !isStaggered ? 1.2 : 0.7,
                           ),
                         ),
@@ -1868,12 +1772,15 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                           children: [
                             Icon(Icons.view_comfy, size: 14, color: !isStaggered ? const Color(0xFF0284C7) : Colors.grey),
                             const SizedBox(width: 5),
-                            Text(
-                              'Inline (Uniform Grid)',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: !isStaggered ? FontWeight.bold : FontWeight.w500,
-                                color: !isStaggered ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                            Flexible(
+                              child: Text(
+                                'Inline (Uniform Grid)',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: !isStaggered ? FontWeight.bold : FontWeight.w500,
+                                  color: !isStaggered ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                                ),
                               ),
                             ),
                           ],
@@ -1904,12 +1811,11 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                       children: [
                         Icon(Icons.tune, size: 15, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
                         const SizedBox(width: 5),
-                        Text(
-                          'Open Pattern Stamping Tool...',
-                          style: TextStyle(
-                            fontSize: 11.0,
-                            fontWeight: FontWeight.bold,
-                            color: isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                        Flexible(
+                          child: Text(
+                            'Open Pattern Stamping Tool...',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 11.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
                           ),
                         ),
                       ],
@@ -1923,11 +1829,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 'Perforation stamping disabled. Blank plate floor will be cut as a solid flat face.',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontStyle: FontStyle.italic,
-                  color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                ),
+                style: TextStyle(fontSize: 10.5, fontStyle: FontStyle.italic, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
               ),
             ),
           ],
@@ -1992,42 +1894,22 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             gradient: isSelected
-                ? const LinearGradient(
-                    colors: [Color(0xFF0284C7), Color(0xFF0369A1)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  )
+                ? const LinearGradient(colors: [Color(0xFF0284C7), Color(0xFF0369A1)], begin: Alignment.topLeft, end: Alignment.bottomRight)
                 : null,
-            color: isSelected
-                ? null
-                : (isLight ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B)),
+            color: isSelected ? null : (isLight ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B)),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
-              color: isSelected
-                  ? const Color(0xFF38BDF8)
-                  : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF334155)),
+              color: isSelected ? const Color(0xFF38BDF8) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF334155)),
               width: isSelected ? 1.5 : 1.0,
             ),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: const Color(0xFF0284C7).withValues(alpha: 0.35),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : null,
+            boxShadow: isSelected ? [BoxShadow(color: const Color(0xFF0284C7).withValues(alpha: 0.35), blurRadius: 6, offset: const Offset(0, 2))] : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(
-                    icon,
-                    size: 16,
-                    color: isSelected ? Colors.white : const Color(0xFF0284C7),
-                  ),
+                  Icon(icon, size: 16, color: isSelected ? Colors.white : const Color(0xFF0284C7)),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -2035,16 +1917,13 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                       style: TextStyle(
                         fontSize: 12.0,
                         fontWeight: FontWeight.bold,
-                        color: isSelected
-                            ? Colors.white
-                            : (isLight ? const Color(0xFF0F172A) : Colors.white),
+                        color: isSelected ? Colors.white : (isLight ? const Color(0xFF0F172A) : Colors.white),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (isSelected)
-                    const Icon(Icons.check_circle, size: 14, color: Colors.white),
+                  if (isSelected) const Icon(Icons.check_circle, size: 14, color: Colors.white),
                 ],
               ),
               const SizedBox(height: 3),
@@ -2053,9 +1932,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                 style: TextStyle(
                   fontSize: 9.5,
                   fontWeight: FontWeight.w500,
-                  color: isSelected
-                      ? Colors.white.withValues(alpha: 0.85)
-                      : (isLight ? const Color(0xFF64748B) : Colors.white60),
+                  color: isSelected ? Colors.white.withValues(alpha: 0.85) : (isLight ? const Color(0xFF64748B) : Colors.white60),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -2070,9 +1947,25 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   // --- Section 5: Parametric Cover & Cover Flange ---
   Widget _buildFlangeSizesSection() {
     final isLight = widget.isLightTheme;
-    final coverIncluded = _localCoverIncluded ?? (widget.instance != null
-        ? widget.instance!.coverConfiguration.included
-        : (widget.viewModel?.document.cover != null));
+    final coverIncluded = widget.instance != null
+        ? (_localCoverIncluded ?? widget.instance!.coverConfiguration.included)
+        : (widget.viewModel?.document.cover != null);
+
+    void toggleCoverState(bool newIncluded) {
+      setState(() {
+        _localCoverIncluded = newIncluded;
+      });
+      if (widget.instance != null && widget.onInstanceChanged != null) {
+        final updated = widget.instance!.copyWith(coverConfiguration: widget.instance!.coverConfiguration.copyWith(included: newIncluded));
+        widget.onInstanceChanged!(updated);
+      } else if (widget.viewModel != null) {
+        if (newIncluded) {
+          widget.viewModel!.createCoverForCurrentFitting();
+        } else {
+          widget.viewModel!.removeCover();
+        }
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.all(8),
@@ -2080,96 +1973,72 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         color: isLight ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A).withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: coverIncluded
-              ? const Color(0xFF0284C7).withValues(alpha: 0.5)
-              : (isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
+          color: coverIncluded ? const Color(0xFF0284C7).withValues(alpha: 0.5) : (isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
           width: 1.0,
         ),
       ),
       child: Column(
         children: [
-          // Clickable Row / Card for Include Parametric Cover
+          // Clickable Toggle Button Row for Parametric Cover
           Material(
             color: Colors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(5),
-              onTap: () {
-                final newIncluded = !coverIncluded;
-                setState(() {
-                  _localCoverIncluded = newIncluded;
-                });
-                if (widget.instance != null && widget.onInstanceChanged != null) {
-                  final updated = widget.instance!.copyWith(
-                    coverConfiguration: widget.instance!.coverConfiguration.copyWith(
-                      included: newIncluded,
-                    ),
-                  );
-                  widget.onInstanceChanged!(updated);
-                } else if (widget.viewModel != null) {
-                  if (newIncluded) {
-                    widget.viewModel!.createCoverForCurrentFitting();
-                  } else {
-                    widget.viewModel!.removeCover();
-                  }
-                }
-              },
+              onTap: () => toggleCoverState(!coverIncluded),
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       children: [
-                        Checkbox(
-                          value: coverIncluded,
-                          activeColor: const Color(0xFF0284C7),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          onChanged: (val) {
-                            final included = val ?? false;
-                            setState(() {
-                              _localCoverIncluded = included;
-                            });
-                            if (widget.instance != null && widget.onInstanceChanged != null) {
-                              final updated = widget.instance!.copyWith(
-                                coverConfiguration: widget.instance!.coverConfiguration.copyWith(
-                                  included: included,
-                                ),
-                              );
-                              widget.onInstanceChanged!(updated);
-                            } else if (widget.viewModel != null) {
-                              if (included) {
-                                widget.viewModel!.createCoverForCurrentFitting();
-                              } else {
-                                widget.viewModel!.removeCover();
-                              }
-                            }
-                          },
+                        Icon(
+                          coverIncluded ? Icons.shield : Icons.shield_outlined,
+                          size: 16,
+                          color: coverIncluded ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 8),
                         Text(
-                          'Include Parametric Cover',
-                          style: TextStyle(
-                            fontSize: 12.0,
-                            fontWeight: FontWeight.bold,
-                            color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                          'Parametric Cover',
+                          style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        if (coverIncluded) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.5), width: 0.8),
+                            ),
+                            child: Text(
+                              widget.instance?.coverConfiguration.placementMode3D.toUpperCase() ?? 'EXPLODED',
+                              style: const TextStyle(fontSize: 9.0, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
+                            ),
+                          ),
+                        ],
+                        // Interactive Capsule Toggle Button
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: coverIncluded ? const Color(0xFF0284C7) : (isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            coverIncluded ? 'ON' : 'OFF',
+                            style: TextStyle(
+                              fontSize: 10.0,
+                              fontWeight: FontWeight.bold,
+                              color: coverIncluded ? Colors.white : (isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    if (coverIncluded)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.5), width: 0.8),
-                        ),
-                        child: Text(
-                          widget.instance?.coverConfiguration.placementMode3D.toUpperCase() ?? 'EXPLODED',
-                          style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -2182,15 +2051,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
             Row(
               children: [
                 Expanded(
-                  child: _buildStepperField(
-                    'Cover Flange',
-                    'cover_flange_size',
-                    6.0,
-                    45.0,
-                    step: 1.0,
-                    decimals: 0,
-                    presetSizes: const [10, 12, 15, 20, 25],
-                  ),
+                  child: _buildStepperField('Cover Flange', 'cover_flange_size', 6.0, 45.0, step: 1.0, decimals: 0, presetSizes: const [10, 12, 15, 20, 25]),
                 ),
               ],
             ),
@@ -2200,11 +2061,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               children: [
                 Text(
                   'Presets:',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.bold,
-                    color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                  ),
+                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
                 ),
                 const SizedBox(width: 6),
                 for (final sz in [10.0, 12.0, 15.0, 20.0, 25.0]) ...[
@@ -2268,93 +2125,111 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
             children: [
               Expanded(
                 flex: 6,
-                child: _buildStepperField(
-                  'Thickness',
-                  'thickness',
-                  0.6,
-                  5.0,
-                  step: 0.1,
-                  decimals: 1,
-                  presetSizes: const [0.8, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0],
-                ),
+                child: _buildStepperField('Thickness', 'thickness', 0.6, 5.0, step: 0.1, decimals: 2, presetSizes: const [0.8, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0]),
               ),
               const SizedBox(width: 10),
               Expanded(
                 flex: 5,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.shield_outlined, size: 15, color: Color(0xFF0284C7)),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          widget.instance?.material ?? 'Pre-Galv DX51D',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            color: isLight ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                child: PopupMenuButton<String>(
+                  tooltip: 'Select Material',
+                  initialValue: _currentMaterial,
+                  onSelected: (val) {
+                    _updateMaterial(val);
+                  },
+                  itemBuilder: (ctx) => [
+                    for (final mat in _availableMaterials)
+                      PopupMenuItem(
+                        value: mat.name,
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: mat.isStainless
+                                    ? Colors.amber.withValues(alpha: 0.15)
+                                    : (mat.isAluminium ? Colors.purple.withValues(alpha: 0.15) : Colors.blue.withValues(alpha: 0.15)),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Text(
+                                mat.shortCode,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: mat.isStainless ? Colors.amber[800] : (mat.isAluminium ? Colors.purple[700] : const Color(0xFF0284C7)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(mat.name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.shield_outlined, size: 15, color: Color(0xFF0284C7)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            _currentMaterial,
+                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down, size: 16, color: Color(0xFF94A3B8)),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 7),
-          // Quick gauge chips
-          Row(
+          // Quick gauge chips (wrap to prevent pixel overflow)
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
                 'Gauge:',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.bold,
-                  color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                ),
+                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
               ),
-              const SizedBox(width: 6),
               for (final th in [0.8, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0]) ...[
-                Padding(
-                  padding: const EdgeInsets.only(right: 3),
-                  child: InkWell(
-                    onTap: () {
-                      _updateParam('thickness', th);
-                    },
-                    borderRadius: BorderRadius.circular(3),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
-                      decoration: BoxDecoration(
-                        color: (curThick - th).abs() < 0.05
-                            ? const Color(0xFF0284C7).withValues(alpha: 0.2)
-                            : (isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B)),
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(
-                          color: (curThick - th).abs() < 0.05
-                              ? const Color(0xFF0284C7)
-                              : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
-                          width: 0.8,
-                        ),
+                InkWell(
+                  onTap: () {
+                    _updateParam('thickness', th);
+                  },
+                  borderRadius: BorderRadius.circular(3),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: (curThick - th).abs() < 0.05
+                          ? const Color(0xFF0284C7).withValues(alpha: 0.2)
+                          : (isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B)),
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(
+                        color: (curThick - th).abs() < 0.05 ? const Color(0xFF0284C7) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                        width: 0.8,
                       ),
-                      child: Text(
-                        '${th.toStringAsFixed(1)}mm',
-                        style: TextStyle(
-                          fontSize: 10.0,
-                          fontWeight: (curThick - th).abs() < 0.05 ? FontWeight.bold : FontWeight.w500,
-                          color: (curThick - th).abs() < 0.05
-                              ? const Color(0xFF0284C7)
-                              : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
-                        ),
+                    ),
+                    child: Text(
+                      '${th.toStringAsFixed(2)} mm',
+                      style: TextStyle(
+                        fontSize: 10.0,
+                        fontWeight: (curThick - th).abs() < 0.05 ? FontWeight.bold : FontWeight.w500,
+                        color: (curThick - th).abs() < 0.05 ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
                       ),
                     ),
                   ),
@@ -2423,14 +2298,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                 duration: const Duration(milliseconds: 150),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
                 decoration: BoxDecoration(
-                  color: isMatch
-                      ? const Color(0xFF0284C7).withValues(alpha: 0.2)
-                      : (isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B)),
+                  color: isMatch ? const Color(0xFF0284C7).withValues(alpha: 0.2) : (isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B)),
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(
-                    color: isMatch
-                        ? const Color(0xFF0284C7)
-                        : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                    color: isMatch ? const Color(0xFF0284C7) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
                     width: isMatch ? 1.2 : 0.8,
                   ),
                 ),
@@ -2439,9 +2310,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                   style: TextStyle(
                     fontSize: 11.0,
                     fontWeight: isMatch ? FontWeight.bold : FontWeight.w600,
-                    color: isMatch
-                        ? const Color(0xFF0284C7)
-                        : (isLight ? const Color(0xFF1E293B) : Colors.white),
+                    color: isMatch ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF1E293B) : Colors.white),
                   ),
                 ),
               ),
@@ -2455,6 +2324,45 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   // --- Section 8: Physical Takeoff HUD ---
   Widget _buildTakeoffHUD() {
     final takeoff = widget.instance?.calculatedTakeoff;
+    final currentMat = _currentMaterial;
+    final density = DdsInstanceEvaluator.resolveDensity(currentMat);
+    final thickness =
+        ((_currentParams["thickness"] ?? widget.instance?.instanceParameters['thickness'] ?? widget.viewModel?.document.material.thicknessMm ?? 1.5) as num)
+            .toDouble();
+
+    // 1. Determine surface area (m²)
+    double blankAreaM2 = 0.0;
+    if (takeoff != null && takeoff.blankSurfaceAreaM2 > 0) {
+      blankAreaM2 = takeoff.blankSurfaceAreaM2;
+    } else if (widget.viewModel != null) {
+      final doc = widget.viewModel!.document;
+      double totalAreaMm2 = 0;
+      if (doc.faces.isNotEmpty) {
+        for (final face in doc.faces) {
+          totalAreaMm2 += face.areaMm2.abs();
+        }
+      }
+      if (totalAreaMm2 <= 0 && doc.outerContour.length >= 3) {
+        for (int i = 0; i < doc.outerContour.length; i++) {
+          final j = (i + 1) % doc.outerContour.length;
+          totalAreaMm2 += doc.outerContour[i].x * doc.outerContour[j].y - doc.outerContour[j].x * doc.outerContour[i].y;
+        }
+        totalAreaMm2 = (totalAreaMm2 / 2.0).abs();
+      }
+      if (totalAreaMm2 <= 0) {
+        totalAreaMm2 = doc.blankAreaMm2;
+      }
+      if (totalAreaMm2 > 0) {
+        blankAreaM2 = totalAreaMm2 / 1000000.0;
+      }
+    }
+
+    if (blankAreaM2 <= 0) {
+      blankAreaM2 = 0.185;
+    }
+
+    // 2. ALWAYS calculate live net weight dynamically from active area, active thickness, and active material density!
+    final netWeightKg = blankAreaM2 * (thickness / 1000.0) * density;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -2462,22 +2370,16 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         color: const Color(0xFF0A0F1D),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: const Color(0xFF1E293B), width: 1.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 2))],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildTakeoffItem('BLANK AREA', takeoff != null ? '${takeoff.blankSurfaceAreaM2} m²' : '0.185 m²'),
+          _buildTakeoffItem('BLANK AREA', '${blankAreaM2.toStringAsFixed(3)} m²'),
           Container(width: 1, height: 26, color: const Color(0xFF1E293B)),
-          _buildTakeoffItem('NET WEIGHT', takeoff != null ? '${takeoff.estimatedNetWeightKg} kg' : '1.45 kg'),
+          _buildTakeoffItem('NET WEIGHT', '${netWeightKg.toStringAsFixed(2)} kg'),
           Container(width: 1, height: 26, color: const Color(0xFF1E293B)),
-          _buildTakeoffItem('GAUGE', '${_currentParams["thickness"] ?? 1.5} mm'),
+          _buildTakeoffItem('GAUGE', '${thickness.toStringAsFixed(2)} mm'),
         ],
       ),
     );
@@ -2489,22 +2391,12 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 9.5,
-            color: Color(0xFF94A3B8),
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.5,
-          ),
+          style: const TextStyle(fontSize: 9.5, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold, letterSpacing: 0.5),
         ),
         const SizedBox(height: 2),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 13.0,
-            color: Color(0xFF00E5FF),
-            fontWeight: FontWeight.bold,
-            fontFamily: 'monospace',
-          ),
+          style: const TextStyle(fontSize: 13.0, color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontFamily: 'monospace'),
         ),
       ],
     );
@@ -2534,4 +2426,12 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         return 'Straight Cable Management Fitting';
     }
   }
+}
+
+class _MaterialOption {
+  final String shortCode;
+  final String name;
+  final bool isStainless;
+  final bool isAluminium;
+  const _MaterialOption(this.shortCode, this.name, {this.isStainless = false, this.isAluminium = false});
 }

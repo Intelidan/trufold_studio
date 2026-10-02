@@ -82,7 +82,7 @@ class TrayUnequalTeeScaleParameters {
     double? baselineHeight,
     this.baselineRadius = 180.0,
     this.includeCouplerFlaps = false,
-    this.couplerFlapLength = 30.0,
+    this.couplerFlapLength = 90.0,
     this.perforationPitch = 100.0,
   })  : port1Height = port1Height ?? targetHeight ?? 50.0,
         port2Height = port2Height ?? targetHeight ?? 50.0,
@@ -101,7 +101,7 @@ class TrayUnequalTeeScaleParameters {
     final effectiveIncludeFlaps =
         includeCouplerFlaps ?? ((parameters['include_coupler_flaps']?.currentValue ?? 0.0) > 0.5);
     final effectiveFlapLen =
-        couplerFlapLength ?? (parameters['coupler_flap_length']?.currentValue ?? 30.0);
+        couplerFlapLength ?? (parameters['coupler_flap_length']?.currentValue ?? 90.0);
     final effectivePerfPitch =
         perforationPitch ?? (parameters['perforation_pitch']?.currentValue ?? 100.0);
 
@@ -687,7 +687,7 @@ class TrayUnequalTeeScaler {
     required CadPoint2D u2,
     double perforationPitch = 100.0,
     bool includeCouplerFlaps = false,
-    double couplerFlapLength = 30.0,
+    double couplerFlapLength = 90.0,
   }) {
     final punches = <CncPunchPrimitive>[];
     final sampleSlot = baseline.punches.firstWhere(
@@ -950,64 +950,47 @@ class TrayUnequalTeeScaler {
         required double rotDeg,
         required double hPort,
       }) {
-        final slotLen = math.min(20.0, math.max(12.0, couplerFlapLength - 8.0));
-        if (hPort <= 50.0) {
-          // 2 vertically aligned obround holes for <= 50mm height
-          final u = couplerFlapLength / 2.0;
-          final vOffsets = hPort <= 35.0 ? [hPort * 0.3, hPort * 0.7] : [15.0, 35.0];
-          for (final v in vOffsets) {
-            punches.add(
-              sampleSlot.copyWith(
-                id: nextSlotId(),
-                center: CadPoint2D(
-                  origin.x + u * uDir.x + v * vDir.x,
-                  origin.y + u * uDir.y + v * vDir.y,
-                ),
-                lengthMm: slotLen,
-                role: CncPunchRole.coupler,
-                rotationDeg: rotDeg,
-                isVisible: true,
+        final slotLen = math.max(10.0, hPort - 20.0);
+        const slotWid = 8.0;
+        const slotPitch = 25.0;
+
+        final uCenter = couplerFlapLength / 2.0;
+        final uOffsets = [uCenter - slotPitch, uCenter, uCenter + slotPitch];
+        final v = hPort / 2.0;
+        for (final u in uOffsets) {
+          punches.add(
+            sampleSlot.copyWith(
+              id: nextSlotId(),
+              center: CadPoint2D(
+                origin.x + u * uDir.x + v * vDir.x,
+                origin.y + u * uDir.y + v * vDir.y,
               ),
-            );
-          }
-        } else {
-          // 2 rows of 2 vertically aligned coupler holes for > 50mm height (2 cols x 2 rows)
-          final uCols = [couplerFlapLength * 0.35, couplerFlapLength * 0.75];
-          final vPitch = math.min(50.0, hPort - 30.0);
-          final vOffsets = [hPort / 2.0 - vPitch / 2.0, hPort / 2.0 + vPitch / 2.0];
-          for (final u in uCols) {
-            for (final v in vOffsets) {
-              punches.add(
-                sampleSlot.copyWith(
-                  id: nextSlotId(),
-                  center: CadPoint2D(
-                    origin.x + u * uDir.x + v * vDir.x,
-                    origin.y + u * uDir.y + v * vDir.y,
-                  ),
-                  lengthMm: slotLen,
-                  role: CncPunchRole.coupler,
-                  rotationDeg: rotDeg,
-                  isVisible: true,
-                ),
-              );
-            }
-          }
+              lengthMm: slotLen,
+              widthMm: slotWid,
+              role: CncPunchRole.coupler,
+              rotationDeg: rotDeg,
+              isVisible: true,
+            ),
+          );
         }
       }
+
+      final rotCheek1 = ((math.atan2(n1.y, n1.x) * 180.0 / math.pi) % 180.0 + 180.0) % 180.0;
+      final rotCheek2 = ((math.atan2(n2.y, n2.x) * 180.0 / math.pi) % 180.0 + 180.0) % 180.0;
 
       // Cheek 1 Flaps (Port 1 and Port 3)
       addFlapPunches(
         origin: pB1Top,
         uDir: CadPoint2D(-u1.x, -u1.y),
         vDir: n1,
-        rotDeg: (math.atan2(-u1.y, -u1.x) * 180.0 / math.pi) % 180.0,
+        rotDeg: rotCheek1,
         hPort: h1,
       );
       addFlapPunches(
         origin: pBranchLeft,
         uDir: u1,
         vDir: n1,
-        rotDeg: (math.atan2(u1.y, u1.x) * 180.0 / math.pi) % 180.0,
+        rotDeg: rotCheek1,
         hPort: h3,
       );
 
@@ -1016,14 +999,14 @@ class TrayUnequalTeeScaler {
         origin: pB2Top,
         uDir: CadPoint2D(-u2.x, -u2.y),
         vDir: n2,
-        rotDeg: (math.atan2(-u2.y, -u2.x) * 180.0 / math.pi) % 180.0,
+        rotDeg: rotCheek2,
         hPort: h2,
       );
       addFlapPunches(
         origin: pBranchRight,
         uDir: u2,
         vDir: n2,
-        rotDeg: (math.atan2(u2.y, u2.x) * 180.0 / math.pi) % 180.0,
+        rotDeg: rotCheek2,
         hPort: h3,
       );
 
@@ -1032,14 +1015,14 @@ class TrayUnequalTeeScaler {
         origin: b3P1,
         uDir: const CadPoint2D(-1.0, 0.0),
         vDir: const CadPoint2D(0.0, -1.0),
-        rotDeg: 0.0,
+        rotDeg: 90.0,
         hPort: h1,
       );
       addFlapPunches(
         origin: b3P2,
         uDir: const CadPoint2D(1.0, 0.0),
         vDir: const CadPoint2D(0.0, -1.0),
-        rotDeg: 0.0,
+        rotDeg: 90.0,
         hPort: h2,
       );
     }

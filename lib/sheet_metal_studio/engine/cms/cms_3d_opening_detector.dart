@@ -144,6 +144,7 @@ class Cms3DOpeningDetector {
             final yMid = (b1Y + b2Y) / 2.0;
 
             final portPunches = document.punches.where((p) {
+              if (p.id.startsWith('FLAP_SLOT') || p.id.contains('FLAP')) return false;
               final isMatchingSide = isPort1 ? (p.center.x < floorCenter.x) : (p.center.x > floorCenter.x);
               return isMatchingSide && (p.isSlot || p.type == PunchType.obroundSlot || p.role == CncPunchRole.coupler);
             }).toList();
@@ -208,6 +209,7 @@ class Cms3DOpeningDetector {
 
             final isStraightPort = (p1_3d.y + p2_3d.y) / 2.0 < floorCenter.y;
             final portPunches = document.punches.where((p) {
+              if (p.id.startsWith('FLAP_SLOT') || p.id.contains('FLAP')) return false;
               final isMatchingSide = isStraightPort ? (p.center.y < 60.0) : (p.center.y > 60.0);
               return isMatchingSide && (p.isSlot || p.type == PunchType.obroundSlot || p.role == CncPunchRole.coupler);
             }).toList();
@@ -260,84 +262,130 @@ class Cms3DOpeningDetector {
         } else if (isInsideRiser) {
           final cheekBends = document.bends
               .where((b) => (b.targetAngleDeg.abs() - 90.0).abs() < 15.0 && b.role != BendLineRole.flange && !b.id.toUpperCase().startsWith('FL'))
-              .toList()
-            ..sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+              .toList();
+          final isHorizontal = cheekBends.isNotEmpty &&
+              (cheekBends.first.p2.x - cheekBends.first.p1.x).abs() > (cheekBends.first.p2.y - cheekBends.first.p1.y).abs();
 
-          final xMid = cheekBends.isNotEmpty ? (cheekBends.first.p1.x + cheekBends.last.p1.x) / 2.0 : floorCenter.x;
-
-          final bends45 = document.bends.where((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0).toList()
-            ..sort((a, b) => ((a.p1.y + a.p2.y) / 2.0).compareTo((b.p1.y + b.p2.y) / 2.0));
-          final is90InsideRiser = bends45.length >= 2;
-
-          final yMid = is90InsideRiser
-              ? (bends45.first.p1.y + bends45.last.p1.y) / 2.0
-              : (bends45.isNotEmpty ? bends45.first.p1.y - 15.0 : floorCenter.y);
-
-          final nominalH = (document.parameters['height'] as num?)?.toDouble() ?? 100.0;
+          final nominalH = (document.parameters['height'] as num?)?.toDouble() ?? 50.0;
           final halfH = nominalH / 2.0;
 
-          final isPort1 = (p1Flat.y + p2Flat.y) / 2.0 > yMid;
+          if (isHorizontal) {
+            // Cable Tray 45° Inside Riser: cheek bends run horizontally along X.
+            // Port 1 (left) and Port 2 (right) are separated by floorCenter.x.
+            final isPort1 = (p1Flat.x + p2Flat.x) / 2.0 < floorCenter.x;
 
-          final portPunches = document.punches.where((p) {
-            final isMatchingSide = isPort1 ? (p.center.y > yMid) : (p.center.y < yMid);
-            return isMatchingSide && (p.isSlot || p.type == PunchType.obroundSlot || p.role == CncPunchRole.coupler);
-          }).toList();
+            cheekBends.sort((a, b) => ((a.p1.y + a.p2.y) / 2.0).compareTo((b.p1.y + b.p2.y) / 2.0));
+            final b1Y = (cheekBends.first.p1.y + cheekBends.first.p2.y) / 2.0;
+            final b2Y = (cheekBends.last.p1.y + cheekBends.last.p2.y) / 2.0;
+            final yMid = (b1Y + b2Y) / 2.0;
 
-          final cheek1Punches = portPunches.where((p) => p.center.x < xMid).toList();
-          final cheek2Punches = portPunches.where((p) => p.center.x > xMid).toList();
+            final portPunches = document.punches.where((p) {
+              if (p.id.startsWith('FLAP_SLOT') || p.id.contains('FLAP')) return false;
+              final isMatchingSide = isPort1 ? (p.center.x < floorCenter.x) : (p.center.x > floorCenter.x);
+              return isMatchingSide && (p.isSlot || p.type == PunchType.obroundSlot || p.role == CncPunchRole.coupler);
+            }).toList();
 
-          CadPoint3D? m1_3d;
-          CadPoint3D? m2_3d;
+            final cheek1Punches = portPunches.where((p) => p.center.y < yMid).toList();
+            final cheek2Punches = portPunches.where((p) => p.center.y > yMid).toList();
 
-          if (cheek1Punches.isNotEmpty) {
-            double sx = 0, sy = 0, sz = 0;
-            for (final p in cheek1Punches) {
-              final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
-              sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
-            }
-            m1_3d = CadPoint3D(sx / cheek1Punches.length, sy / cheek1Punches.length, sz / cheek1Punches.length);
-          }
-
-          if (cheek2Punches.isNotEmpty) {
-            double sx = 0, sy = 0, sz = 0;
-            for (final p in cheek2Punches) {
-              final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
-              sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
-            }
-            m2_3d = CadPoint3D(sx / cheek2Punches.length, sy / cheek2Punches.length, sz / cheek2Punches.length);
-          }
-
-          if (m1_3d != null && m2_3d != null) {
             if (isPort1) {
-              // Port 1 (Top Port): floor flap tilted 45° UP along +Y
-              finalNormal = const CadPoint3D(0.0, 0.7071067811865475, 0.7071067811865475);
-              const vHy = -0.7071067811865475;
-              const vHz = 0.7071067811865475;
-              finalP1_3d = CadPoint3D(m1_3d.x, m1_3d.y - halfH * vHy, m1_3d.z - halfH * vHz);
-              finalP2_3d = CadPoint3D(m2_3d.x, m2_3d.y - halfH * vHy, m2_3d.z - halfH * vHz);
+              // Left Port: tilted 45° UP along -X
+              finalNormal = CadPoint3D(-1.0 / math.sqrt(2), 0.0, 1.0 / math.sqrt(2));
             } else {
-              // Port 2 (Bottom Port):
-              if (is90InsideRiser) {
-                // 90° Inside Riser: floor flap tilted 45° UP along -Y
-                finalNormal = const CadPoint3D(0.0, -0.7071067811865475, 0.7071067811865475);
-                const vHy = 0.7071067811865475;
+              // Right Port: horizontal straight run along +X
+              finalNormal = const CadPoint3D(1.0, 0.0, 0.0);
+            }
+
+            double portX = isPort1 ? p1Flat.x : p2Flat.x;
+            if (cheek1Punches.isNotEmpty && cheek2Punches.isNotEmpty) {
+              // Outer column of coupler punches
+              final c1X = isPort1
+                  ? cheek1Punches.map((p) => p.center.x).reduce(math.min)
+                  : cheek1Punches.map((p) => p.center.x).reduce(math.max);
+              final c2X = isPort1
+                  ? cheek2Punches.map((p) => p.center.x).reduce(math.min)
+                  : cheek2Punches.map((p) => p.center.x).reduce(math.max);
+              portX = (c1X + c2X) / 2.0;
+            }
+
+            p1Flat = CadPoint2D(portX, b1Y);
+            p2Flat = CadPoint2D(portX, b2Y);
+          } else {
+            cheekBends.sort((a, b) => ((a.p1.x + a.p2.x) / 2.0).compareTo((b.p1.x + b.p2.x) / 2.0));
+            final xMid = cheekBends.isNotEmpty ? (cheekBends.first.p1.x + cheekBends.last.p1.x) / 2.0 : floorCenter.x;
+
+            final bends45 = document.bends.where((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0).toList()
+              ..sort((a, b) => ((a.p1.y + a.p2.y) / 2.0).compareTo((b.p1.y + b.p2.y) / 2.0));
+            final is90InsideRiser = bends45.length >= 2;
+
+            final yMid = is90InsideRiser
+                ? (bends45.first.p1.y + bends45.last.p1.y) / 2.0
+                : (bends45.isNotEmpty ? bends45.first.p1.y - 15.0 : floorCenter.y);
+
+            final isPort1 = (p1Flat.y + p2Flat.y) / 2.0 > yMid;
+
+            final portPunches = document.punches.where((p) {
+              if (p.id.startsWith('FLAP_SLOT') || p.id.contains('FLAP')) return false;
+              final isMatchingSide = isPort1 ? (p.center.y > yMid) : (p.center.y < yMid);
+              return isMatchingSide && (p.isSlot || p.type == PunchType.obroundSlot || p.role == CncPunchRole.coupler);
+            }).toList();
+
+            final cheek1Punches = portPunches.where((p) => p.center.x < xMid).toList();
+            final cheek2Punches = portPunches.where((p) => p.center.x > xMid).toList();
+
+            CadPoint3D? m1_3d;
+            CadPoint3D? m2_3d;
+
+            if (cheek1Punches.isNotEmpty) {
+              double sx = 0, sy = 0, sz = 0;
+              for (final p in cheek1Punches) {
+                final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+                sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
+              }
+              m1_3d = CadPoint3D(sx / cheek1Punches.length, sy / cheek1Punches.length, sz / cheek1Punches.length);
+            }
+
+            if (cheek2Punches.isNotEmpty) {
+              double sx = 0, sy = 0, sz = 0;
+              for (final p in cheek2Punches) {
+                final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
+                sx += pt3d.x; sy += pt3d.y; sz += pt3d.z;
+              }
+              m2_3d = CadPoint3D(sx / cheek2Punches.length, sy / cheek2Punches.length, sz / cheek2Punches.length);
+            }
+
+            if (m1_3d != null && m2_3d != null) {
+              if (isPort1) {
+                // Port 1 (Top Port): floor flap tilted 45° UP along +Y
+                finalNormal = const CadPoint3D(0.0, 0.7071067811865475, 0.7071067811865475);
+                const vHy = -0.7071067811865475;
                 const vHz = 0.7071067811865475;
                 finalP1_3d = CadPoint3D(m1_3d.x, m1_3d.y - halfH * vHy, m1_3d.z - halfH * vHz);
                 finalP2_3d = CadPoint3D(m2_3d.x, m2_3d.y - halfH * vHy, m2_3d.z - halfH * vHz);
               } else {
-                // 45° Inside Riser: bottom port is straight (horizontal floor)
-                finalNormal = const CadPoint3D(0.0, -1.0, 0.0);
-                finalP1_3d = CadPoint3D(m1_3d.x, p1_3d.y, p1_3d.z);
-                finalP2_3d = CadPoint3D(m2_3d.x, p2_3d.y, p2_3d.z);
+                // Port 2 (Bottom Port):
+                if (is90InsideRiser) {
+                  // 90° Inside Riser: floor flap tilted 45° UP along -Y
+                  finalNormal = const CadPoint3D(0.0, -0.7071067811865475, 0.7071067811865475);
+                  const vHy = 0.7071067811865475;
+                  const vHz = 0.7071067811865475;
+                  finalP1_3d = CadPoint3D(m1_3d.x, m1_3d.y - halfH * vHy, m1_3d.z - halfH * vHz);
+                  finalP2_3d = CadPoint3D(m2_3d.x, m2_3d.y - halfH * vHy, m2_3d.z - halfH * vHz);
+                } else {
+                  // 45° Inside Riser: bottom port is straight (horizontal floor)
+                  finalNormal = const CadPoint3D(0.0, -1.0, 0.0);
+                  finalP1_3d = CadPoint3D(m1_3d.x, p1_3d.y, p1_3d.z);
+                  finalP2_3d = CadPoint3D(m2_3d.x, p2_3d.y, p2_3d.z);
+                }
               }
-            }
 
-            final c1FlatX = cheek1Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek1Punches.length;
-            final c1FlatY = cheek1Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek1Punches.length;
-            final c2FlatX = cheek2Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek2Punches.length;
-            final c2FlatY = cheek2Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek2Punches.length;
-            p1Flat = CadPoint2D(c1FlatX, c1FlatY);
-            p2Flat = CadPoint2D(c2FlatX, c2FlatY);
+              final c1FlatX = cheek1Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek1Punches.length;
+              final c1FlatY = cheek1Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek1Punches.length;
+              final c2FlatX = cheek2Punches.map((p) => p.center.x).reduce((a, b) => a + b) / cheek2Punches.length;
+              final c2FlatY = cheek2Punches.map((p) => p.center.y).reduce((a, b) => a + b) / cheek2Punches.length;
+              p1Flat = CadPoint2D(c1FlatX, c1FlatY);
+              p2Flat = CadPoint2D(c2FlatX, c2FlatY);
+            }
           }
         } else if (isReducer) {
           final cheekBends = document.bends
@@ -368,6 +416,7 @@ class Cms3DOpeningDetector {
           final halfH = nominalH / 2.0;
 
           final portPunches = document.punches.where((p) {
+            if (p.id.startsWith('FLAP_SLOT') || p.id.contains('FLAP')) return false;
             final isMatchingSide = isPort1 ? (p.center.y < yMid) : (p.center.y > yMid);
             return isMatchingSide && (p.isSlot || p.type == PunchType.obroundSlot || p.role == CncPunchRole.coupler);
           }).toList();
@@ -417,7 +466,9 @@ class Cms3DOpeningDetector {
           // If there are explicit coupler holes marked on the sidewalls of this opening,
           // the opening mouth plane and border MUST pass directly through the center
           // of the coupler holes, provided the cheek vector is aligned with the opening!
-          final couplerPunches = document.punches.where((p) => p.role == CncPunchRole.coupler).toList();
+          final couplerPunches = document.punches
+              .where((p) => p.role == CncPunchRole.coupler && !p.id.startsWith('FLAP_SLOT') && !p.id.contains('FLAP'))
+              .toList();
           if (couplerPunches.isNotEmpty) {
             final portCouplers = couplerPunches.where((p) {
               final pt3d = foldResult.punchCenters3D[p.id] ?? _mapFlatTo3D(p.center, floorFace.vertices, floor3DPoly.vertices);
@@ -526,6 +577,9 @@ class Cms3DOpeningDetector {
     double bestScore = -1.0;
 
     for (final face in doc.faces) {
+      if (face.id.startsWith('F_FLAP') || face.label.toLowerCase().contains('coupler flap')) {
+        continue;
+      }
       int structuralBends = 0;
       for (final b in doc.bends) {
         if (b.role != BendLineRole.flange && (b.parentFaceId == face.id || b.childFaceId == face.id) && (b.targetAngleDeg.abs() - 90.0).abs() < 15.0) {
@@ -582,7 +636,16 @@ class Cms3DOpeningDetector {
         );
         if (otherFace.vertices.isEmpty) continue;
 
-        // Ensure this face is not a sidewall or flange
+        // Ensure this face is not a coupler flap, sidewall, or flange.
+        // Angled floor bends (|angle - 90| > 15) connect floor segments, even if legacy role was mislabeled.
+        final isAngledFloorBend = (b.targetAngleDeg.abs() - 90.0).abs() > 15.0 && b.role != BendLineRole.flange;
+        if (otherFace.id.startsWith('F_FLAP') ||
+            otherFace.label.toLowerCase().contains('coupler flap') ||
+            (!isAngledFloorBend && otherFace.role == FaceRole.sideWall) ||
+            otherFace.role == FaceRole.returnFlange) {
+          continue;
+        }
+
         // Sidewalls have 90° bends to base and stand vertical (|normal.z| < 0.3)
         final polyMatches = mesh.polygons.where((p) => p.faceId == otherId);
         final isVerticalWall = polyMatches.isNotEmpty && polyMatches.first.normal.z.abs() < 0.3;

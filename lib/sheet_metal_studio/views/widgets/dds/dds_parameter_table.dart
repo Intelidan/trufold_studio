@@ -17,6 +17,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../engine/dds/dds_instance_evaluator.dart';
 import '../../../models/dds/dds_product_instance.dart';
 
 enum ParameterSource {
@@ -286,6 +287,11 @@ class _DdsParameterTableState extends State<DdsParameterTable> {
   Widget build(BuildContext context) {
     final items = _buildParameterList();
     final takeoff = widget.instance.calculatedTakeoff;
+    final density = DdsInstanceEvaluator.resolveDensity(widget.instance.material);
+    final thk = ((widget.instance.instanceParameters['thickness'] ?? 1.5) as num).toDouble();
+    final double? netMass = takeoff != null && takeoff.blankSurfaceAreaM2 > 0
+        ? (takeoff.blankSurfaceAreaM2 * (thk / 1000.0) * density)
+        : takeoff?.estimatedNetWeightKg;
 
     return Container(
       decoration: BoxDecoration(
@@ -333,7 +339,7 @@ class _DdsParameterTableState extends State<DdsParameterTable> {
                 ),
                 _buildTakeoffRow(
                   label: 'Estimated Net Mass',
-                  value: takeoff != null ? '${takeoff.estimatedNetWeightKg.toStringAsFixed(2)} kg' : '—',
+                  value: netMass != null ? '${netMass.toStringAsFixed(2)} kg' : '—',
                 ),
               ],
             ),

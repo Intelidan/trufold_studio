@@ -220,6 +220,16 @@ class DdsCalculatedTakeoff {
       estimatedNetWeightKg: (json['estimatedNetWeightKg'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  DdsCalculatedTakeoff copyWith({
+    double? blankSurfaceAreaM2,
+    double? estimatedNetWeightKg,
+  }) {
+    return DdsCalculatedTakeoff(
+      blankSurfaceAreaM2: blankSurfaceAreaM2 ?? this.blankSurfaceAreaM2,
+      estimatedNetWeightKg: estimatedNetWeightKg ?? this.estimatedNetWeightKg,
+    );
+  }
 }
 
 /// Authoritative product instance storing parameters, template references, and order info.

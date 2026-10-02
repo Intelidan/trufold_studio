@@ -219,6 +219,36 @@ mixin CanvasOverlayStackMixin on State<UnfoldedCanvasWidget>, CanvasLegendMixin,
                         ),
                       ),
                     ),
+                    const SizedBox(width: 6),
+                    Container(width: 1, height: 14, color: const Color(0xFF475569)),
+                    const SizedBox(width: 6),
+                    // Remove Cover Toggle Button
+                    Tooltip(
+                      message: 'Remove Cover',
+                      child: InkWell(
+                        onTap: viewModel.removeCover,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.close_rounded, size: 12, color: Color(0xFFF87171)),
+                              SizedBox(width: 3),
+                              Text(
+                                'Remove',
+                                style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: Color(0xFFF87171)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               )
@@ -987,6 +1017,14 @@ mixin CanvasOverlayStackMixin on State<UnfoldedCanvasWidget>, CanvasLegendMixin,
           ),
         ),
 
+      // Dynamic Direct Numeric Dimension Input HUD (Follows cursor/rubberband on canvas)
+      if (viewModel.isDrawingInProgress)
+        _buildDynamicDimensionInputHUD(
+          viewModel: viewModel,
+          cadToScreen: cadToScreen,
+          constraints: constraints,
+        ),
+
       // 5. Studio Bottom Bar (Floating Navigation Toolstrip & TEXT COMMANDS Prompt)
       Positioned(bottom: 0, left: 0, right: 0, child: StudioBottomBar(viewModel: viewModel)),
 
@@ -994,4 +1032,263 @@ mixin CanvasOverlayStackMixin on State<UnfoldedCanvasWidget>, CanvasLegendMixin,
       Positioned(bottom: 36, right: 12, child: _buildCompactLegend()),
     ];
   }
+
+  // ---------------------------------------------------------------------------
+  // Dynamic Direct Numeric Dimension Input HUD (AutoCAD / SolidWorks Style)
+  // ---------------------------------------------------------------------------
+  Widget _buildDynamicDimensionInputHUD({
+    required SheetMetalStudioViewModel viewModel,
+    required Offset Function(CadPoint2D) cadToScreen,
+    required BoxConstraints constraints,
+  }) {
+    final anchor = viewModel.pendingBendStart ??
+        (viewModel.pendingMultiPoints.isNotEmpty ? viewModel.pendingMultiPoints.last : null);
+    final endpoint = viewModel.rubberBandEndpoint ?? anchor;
+    if (anchor == null || endpoint == null) return const SizedBox.shrink();
+
+    final screenPt = cadToScreen(endpoint);
+    final hudLeft = (screenPt.dx + 16.0).clamp(16.0, math.max(16.0, constraints.maxWidth - 340.0)).toDouble();
+    final hudTop = (screenPt.dy + 16.0).clamp(48.0, math.max(48.0, constraints.maxHeight - 110.0)).toDouble();
+
+    final state = viewModel.dynamicInputState;
+    final mode = viewModel.toolMode;
+    final primaryLabel = state.getPrimaryLabel(mode);
+    final secondaryLabel = state.getSecondaryLabel(mode);
+    final hasSecondary = secondaryLabel != null;
+
+    final primaryStr = state.primaryBuffer.isNotEmpty
+        ? state.primaryBuffer
+        : (state.currentDistance > 0 ? state.currentDistance.toStringAsFixed(1) : '0.0');
+
+    final secondaryStr = state.secondaryBuffer.isNotEmpty
+        ? state.secondaryBuffer
+        : (state.currentDeltaY > 0 ? state.currentDeltaY.toStringAsFixed(1) : primaryStr);
+
+    IconData toolIcon = Icons.straighten;
+    if (mode == StudioToolMode.addCut) {
+      toolIcon = Icons.content_cut;
+    } else if (mode == StudioToolMode.addBend) {
+      toolIcon = Icons.linear_scale;
+    } else if (mode == StudioToolMode.addFlange) {
+      toolIcon = Icons.turn_right;
+    } else if (mode == StudioToolMode.drawCircle || mode == StudioToolMode.addPunchRound) {
+      toolIcon = Icons.radio_button_unchecked;
+    } else if (mode == StudioToolMode.drawRectangle || mode == StudioToolMode.addPunchSquare) {
+      toolIcon = Icons.crop_square;
+    } else if (mode == StudioToolMode.drawPolyline) {
+      toolIcon = Icons.polyline;
+    }
+
+    return Positioned(
+      left: hudLeft,
+      top: hudTop,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: state.hasValue ? const Color(0xFF38BDF8) : const Color(0xFF0284C7).withValues(alpha: 0.75),
+              width: state.hasValue ? 1.5 : 1.1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (state.hasValue ? const Color(0xFF38BDF8) : const Color(0xFF0284C7)).withValues(alpha: 0.28),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(toolIcon, size: 14, color: const Color(0xFF38BDF8)),
+              const SizedBox(width: 6),
+              Text(
+                '$primaryLabel: ',
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: !state.isEditingSecondary ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: !state.isEditingSecondary ? const Color(0xFF38BDF8) : const Color(0xFF334155),
+                    width: !state.isEditingSecondary ? 1.2 : 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      primaryStr,
+                      style: TextStyle(
+                        fontFamily: 'Consolas',
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: state.primaryBuffer.isNotEmpty ? Colors.white : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                    if (!state.isEditingSecondary && state.primaryBuffer.isNotEmpty)
+                      const Text(
+                        '|',
+                        style: TextStyle(
+                          color: Color(0xFF38BDF8),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Text(
+                ' mm',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+              if (hasSecondary) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '$secondaryLabel: ',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF94A3B8),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: state.isEditingSecondary ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: state.isEditingSecondary ? const Color(0xFF38BDF8) : const Color(0xFF334155),
+                      width: state.isEditingSecondary ? 1.2 : 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        secondaryStr,
+                        style: TextStyle(
+                          fontFamily: 'Consolas',
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: state.secondaryBuffer.isNotEmpty ? Colors.white : const Color(0xFF94A3B8),
+                        ),
+                      ),
+                      if (state.isEditingSecondary && state.secondaryBuffer.isNotEmpty)
+                        const Text(
+                          '|',
+                          style: TextStyle(
+                            color: Color(0xFF38BDF8),
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const Text(
+                  ' mm',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF94A3B8),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF334155),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: const Text(
+                    'Tab ⇄',
+                    style: TextStyle(fontSize: 8.5, color: Color(0xFFCBD5E1), fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+              if (!hasSecondary && state.currentAngleDeg > 0) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: const Color(0xFF334155), width: 0.8),
+                  ),
+                  child: Text(
+                    '∠ ${state.currentAngleDeg.round()}°',
+                    style: const TextStyle(fontSize: 9.5, color: Color(0xFF38BDF8), fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 8),
+              // Commit Chip
+              InkWell(
+                onTap: viewModel.commitCurrentDrawingWithDynamicInput,
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0284C7).withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check, size: 11, color: Colors.white),
+                      SizedBox(width: 2),
+                      Text(
+                        '↵ Enter',
+                        style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // Cancel Chip
+              InkWell(
+                onTap: () {
+                  if (state.hasValue) {
+                    state.reset();
+                    viewModel.updateRubberBand(viewModel.currentCursorMm ?? anchor);
+                  } else {
+                    viewModel.cancelActiveDrawing();
+                  }
+                },
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF334155),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Esc',
+                    style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
+

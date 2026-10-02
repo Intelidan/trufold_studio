@@ -378,10 +378,11 @@ class StructuralTopologyAnalyzer {
       // 2. Classify role
       CncPunchRole role = punch.role;
       if (role == CncPunchRole.general) {
-        if (matchedPortId != null && minPortDist < 160.0) {
-          role = CncPunchRole.coupler;
-        } else if (floorFace != null && isPointInsidePolygon(punch.center, floorFace.vertices)) {
+        // Base floor web perforations take priority: any punch on the bottom floor is perforation, NEVER coupler
+        if (floorFace != null && isPointInsidePolygon(punch.center, floorFace.vertices)) {
           role = CncPunchRole.perforation;
+        } else if (matchedPortId != null && minPortDist < 160.0) {
+          role = CncPunchRole.coupler;
         } else {
           // Slots or clearance holes on sidewall/tab/flange faces are coupler fastener features
           if (punch.isSlot || punch.diameterMm <= 12.0) {
