@@ -70,8 +70,8 @@ class StudioTabBar extends StatelessWidget {
               itemBuilder: (context, index) {
                 final tab = tabs[index];
                 final isActive = index == activeIndex;
-                final fileIcon = _iconForFileName(tab.title);
-                final fileColor = _colorForFileName(tab.title);
+                final fileIcon = _iconForFileName(tab.displayTitle);
+                final fileColor = _colorForFileName(tab.displayTitle);
 
                 return InkWell(
                   onTap: () => onSelectTab(index),
@@ -125,7 +125,7 @@ class StudioTabBar extends StatelessWidget {
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  tab.title,
+                                  tab.displayTitle,
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: isActive ? FontWeight.bold : FontWeight.w500,

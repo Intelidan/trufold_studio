@@ -84,6 +84,10 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     _selectedCategory = meta.category;
     _selectedProduct = meta.product;
     _selectedVariantName = meta.variantName;
+    if (_selectedProduct.toLowerCase() == 'reducer' &&
+        (_selectedVariantName == 'Left Reducer' || _selectedVariantName == 'Right Reducer')) {
+      _selectedVariantName = 'Reducer (straight)';
+    }
     _flangeMm = meta.flangeMm;
     _currentParams = Map<String, double>.from(meta.parameters);
     _analyzed = Map<String, double>.from(meta.analyzedDimensions);
@@ -384,6 +388,18 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     }
     widget.viewModel.setFittingInspectorOpen(false);
 
+    if (_isLadder) {
+      widget.viewModel.applyCmsMorphParameter('width', meta.parameters['width'] ?? 500.0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✓ Cable Ladder Assembly updated & synchronized with 3D model.'),
+          backgroundColor: Color(0xFF0284C7),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     // Launch clean autonomous CMS discovery pipeline
     widget.viewModel.startCleanCmsDiscovery(contract: contract);
 
@@ -460,6 +476,13 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     ];
     final availableVariants = FittingCatalogRegistry.getVariantsForProduct(_selectedCategory, _selectedProduct);
     final variantNames = ['None', ...availableVariants.map((v) => v.name)];
+    if (_selectedProduct.toLowerCase() == 'reducer') {
+      variantNames.remove('Left Reducer');
+      variantNames.remove('Right Reducer');
+      if (_selectedVariantName == 'Left Reducer' || _selectedVariantName == 'Right Reducer') {
+        _selectedVariantName = 'Reducer (straight)';
+      }
+    }
     if (!variantNames.contains(_selectedVariantName)) {
       variantNames.add(_selectedVariantName);
     }
@@ -784,7 +807,9 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                                   const SizedBox(height: 2),
                                   Text(
                                     _isDeclaredCms
-                                        ? 'Declared as CMS ${_selectedProduct != 'None' ? _selectedProduct : 'Fitting'}. Enables 3D kinematic channel folding, port discovery, and template scaling.'
+                                        ? (_isLadder
+                                            ? 'Declared as Cable Ladder Assembly. Enables 3D multi-body assembly visualization, live rung welding pitch resolution, and parametric takeoff.'
+                                            : 'Declared as CMS ${_selectedProduct != 'None' ? _selectedProduct : 'Fitting'}. Enables 3D kinematic channel folding, port discovery, and template scaling.')
                                         : 'Currently opened as general CAD. Toggle ON or click Declare below to enable automatic 3D folding and template scaling.',
                                     style: TextStyle(
                                       fontSize: 10,
@@ -912,9 +937,11 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
                       elevation: 1,
                     ),
                     icon: const Icon(Icons.auto_awesome, size: 15),
-                    label: const Text(
-                      'Declare as CMS Product & Discover 3D →',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    label: Text(
+                      _isLadder
+                          ? (_isDeclaredCms ? 'Update Ladder Assembly & Sync 3D →' : 'Declare as Cable Ladder & Sync 3D →')
+                          : 'Declare as CMS Product & Discover 3D →',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ElevatedButton.icon(
@@ -1347,6 +1374,20 @@ class _DxfFittingParameterDialogState extends State<DxfFittingParameterDialog> {
     final full = '$cat $prod $variant $item $docType';
     if (full.contains('trunk') || full.contains('trunking')) return false;
     return full.contains('tray') || full.contains('ladder');
+  }
+
+  bool get _isLadder {
+    final cat = _selectedCategory.toLowerCase();
+    final prod = _selectedProduct.toLowerCase();
+    final variant = _selectedVariantName.toLowerCase();
+    final item = (_itemNameController.text.isNotEmpty ? _itemNameController.text : widget.viewModel.document.itemName).toLowerCase();
+    final docType = (widget.viewModel.detectedFittingMetadata?.product ?? widget.viewModel.document.productType).toLowerCase();
+    final full = '$cat $prod $variant $item $docType';
+    return full.contains('ladder') ||
+        (widget.viewModel.detectedFittingMetadata?.isLadder == true) ||
+        widget.viewModel.isLadderAssembly ||
+        (widget.viewModel.document.metadata['is_ladder_assembly'] == true) ||
+        (widget.viewModel.document.metadata['ladder_accessory_type'] != null);
   }
 
   Widget _buildBendRadiusInfoCard() {

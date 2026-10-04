@@ -774,8 +774,21 @@ class TemplateParameterDefinition {
           allowedValues: [25, 50, 75, 100, 125, 150, 200, 250],
         ),
         CadParameter(id: 'length', name: 'Transition Length', value: length, unit: 'mm', minValue: 100.0, maxValue: 500.0, step: 25.0),
+        CadParameter(
+          id: 'reducer_alignment',
+          name: 'Reducer Alignment (0: Straight, 1: Left, 2: Right)',
+          value: 0.0,
+          unit: '',
+          category: CadParameterCategory.user,
+          type: CadParameterType.count,
+          minValue: 0.0,
+          maxValue: 2.0,
+          step: 1.0,
+          allowedValues: [0.0, 1.0, 2.0],
+          description: '0 = Concentric / Straight Center, 1 = Left Reducer (0° Left), 2 = Right Reducer (0° Right)',
+        ),
       ],
-      baselineParameters: {'widthIn': widthIn, 'widthOut': widthOut, 'height': height, 'length': length},
+      baselineParameters: {'widthIn': widthIn, 'widthOut': widthOut, 'height': height, 'length': length, 'reducer_alignment': 0.0},
     );
   }
 

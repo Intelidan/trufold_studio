@@ -1,0 +1,5911 @@
+{
+  "format": "DANISH_SHEET_FOLD",
+  "version": "2.0",
+  "productType": "reducer",
+  "itemName": "reducer_100x50x50.dxf",
+  "material": {
+    "thicknessMm": 1.5,
+    "materialGrade": "Pre-Galvanized Steel",
+    "materialType": "mildSteel",
+    "finish": "electroGalvanized",
+    "kFactor": 0.4,
+    "defaultBendRadius": 1.5,
+    "edgeChamferMm": 0.0
+  },
+  "outerContour": [
+    {
+      "x": 62.687342983227836,
+      "y": 0.0
+    },
+    {
+      "x": 162.68734298322897,
+      "y": 0.0
+    },
+    {
+      "x": 225.37468596645795,
+      "y": 6.268734298323125
+    },
+    {
+      "x": 200.37468596645795,
+      "y": 256.2687342983229
+    },
+    {
+      "x": 137.68734298322897,
+      "y": 250.0
+    },
+    {
+      "x": 87.68734298322897,
+      "y": 250.0
+    },
+    {
+      "x": 25.0,
+      "y": 256.2687342983229
+    },
+    {
+      "x": 0.0,
+      "y": 6.268734298323125
+    },
+    {
+      "x": 62.687342983227836,
+      "y": 0.0
+    }
+  ],
+  "outerContourLayer": "OUTLINE",
+  "bends": [
+    {
+      "id": "B1",
+      "p1": {
+        "x": 87.68734298322897,
+        "y": 250.0
+      },
+      "p2": {
+        "x": 62.687342983227836,
+        "y": 0.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_2",
+      "childFaceId": "F_4",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "B2",
+      "p1": {
+        "x": 137.68734298322897,
+        "y": 250.0
+      },
+      "p2": {
+        "x": 162.68734298322897,
+        "y": 0.0
+      },
+      "direction": "UP",
+      "targetAngleDeg": 90.0,
+      "radiusMm": 1.5,
+      "role": "bend",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_2",
+      "childFaceId": "F_1",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "FL1",
+      "p1": {
+        "x": 37.93548347272986,
+        "y": 254.97518595104992
+      },
+      "p2": {
+        "x": 12.93548347272985,
+        "y": 4.975185951050079
+      },
+      "direction": "UP",
+      "targetAngleDeg": 135.0,
+      "radiusMm": 0.5,
+      "role": "flange",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_4",
+      "childFaceId": "F_3",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    },
+    {
+      "id": "FL2",
+      "p1": {
+        "x": 212.4392024937281,
+        "y": 4.9751859510500935
+      },
+      "p2": {
+        "x": 187.4392024937281,
+        "y": 254.97518595104992
+      },
+      "direction": "UP",
+      "targetAngleDeg": 135.0,
+      "radiusMm": 0.5,
+      "role": "flange",
+      "layer": "BEND_UP",
+      "parentFaceId": "F_1",
+      "childFaceId": "F_0",
+      "showLabel": true,
+      "isVisible": true,
+      "reliefType": "rectangular"
+    }
+  ],
+  "faces": [
+    {
+      "id": "F_0",
+      "label": "Return Flange",
+      "vertices": [
+        {
+          "x": 212.4392024937281,
+          "y": 4.975185951050093
+        },
+        {
+          "x": 225.37468596645795,
+          "y": 6.268734298323125
+        },
+        {
+          "x": 200.37468596645795,
+          "y": 256.2687342983229
+        },
+        {
+          "x": 187.4392024937281,
+          "y": 254.97518595104992
+        }
+      ],
+      "role": "returnFlange",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_1",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 187.4392024937281,
+          "y": 254.97518595104992
+        },
+        {
+          "x": 137.68734298322897,
+          "y": 250.0
+        },
+        {
+          "x": 162.68734298322897,
+          "y": 0.0
+        },
+        {
+          "x": 212.4392024937281,
+          "y": 4.975185951050093
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_2",
+      "label": "Bottom Base Floor",
+      "vertices": [
+        {
+          "x": 137.68734298322897,
+          "y": 250.0
+        },
+        {
+          "x": 87.68734298322897,
+          "y": 250.0
+        },
+        {
+          "x": 62.687342983227836,
+          "y": 0.0
+        },
+        {
+          "x": 162.68734298322897,
+          "y": 0.0
+        }
+      ],
+      "role": "baseFloor",
+      "isBaseAnchor": true,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_3",
+      "label": "Return Flange",
+      "vertices": [
+        {
+          "x": 37.93548347272986,
+          "y": 254.97518595104992
+        },
+        {
+          "x": 25.0,
+          "y": 256.2687342983229
+        },
+        {
+          "x": 0.0,
+          "y": 6.268734298323125
+        },
+        {
+          "x": 12.935483472729846,
+          "y": 4.9751859510500696
+        }
+      ],
+      "role": "returnFlange",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    },
+    {
+      "id": "F_4",
+      "label": "Side Wall",
+      "vertices": [
+        {
+          "x": 12.935483472729846,
+          "y": 4.9751859510500696
+        },
+        {
+          "x": 62.687342983227836,
+          "y": 0.0
+        },
+        {
+          "x": 87.68734298322897,
+          "y": 250.0
+        },
+        {
+          "x": 37.93548347272986,
+          "y": 254.97518595104992
+        }
+      ],
+      "role": "sideWall",
+      "isBaseAnchor": false,
+      "holes": [],
+      "layer": "FACES",
+      "showLabel": true,
+      "isVisible": true
+    }
+  ],
+  "punches": [
+    {
+      "id": "SLOT_1",
+      "type": "obroundSlot",
+      "center": {
+        "x": 112.68734298323102,
+        "y": 229.99999999999818
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.000000000001478,
+      "diameterMm": 8.0,
+      "rotationDeg": 90.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "general"
+    },
+    {
+      "id": "SLOT_2",
+      "type": "obroundSlot",
+      "center": {
+        "x": 138.16799564077587,
+        "y": 20.00000000000091
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.000000000002046,
+      "diameterMm": 8.0,
+      "rotationDeg": 90.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "general"
+    },
+    {
+      "id": "SLOT_3",
+      "type": "obroundSlot",
+      "center": {
+        "x": 88.16799564077292,
+        "y": 20.00000000000091
+      },
+      "widthMm": 8.0,
+      "lengthMm": 20.000000000002046,
+      "diameterMm": 8.0,
+      "rotationDeg": 90.0,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "general"
+    },
+    {
+      "id": "SLOT_4",
+      "type": "obroundSlot",
+      "center": {
+        "x": 198.01116323568294,
+        "y": 23.632133267487916
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 19.999999999999897,
+      "diameterMm": 8.0,
+      "rotationDeg": 95.71059313749953,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_5",
+      "type": "obroundSlot",
+      "center": {
+        "x": 173.13523348043327,
+        "y": 21.14454029196304
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.000000000000234,
+      "diameterMm": 8.0,
+      "rotationDeg": 95.71059313750483,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_6",
+      "type": "obroundSlot",
+      "center": {
+        "x": 193.03597728463296,
+        "y": 73.38399277798715
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.00000000000012,
+      "diameterMm": 8.0,
+      "rotationDeg": 95.71059313749942,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_7",
+      "type": "obroundSlot",
+      "center": {
+        "x": 168.16004752938352,
+        "y": 70.89639980246216
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.000000000000234,
+      "diameterMm": 8.0,
+      "rotationDeg": 95.71059313750483,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_8",
+      "type": "obroundSlot",
+      "center": {
+        "x": 176.99131199652288,
+        "y": 233.83064565908774
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.000000000000576,
+      "diameterMm": 8.0,
+      "rotationDeg": 95.7105931374992,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_9",
+      "type": "obroundSlot",
+      "center": {
+        "x": 152.11538224127298,
+        "y": 231.34305268356252
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.00000000000012,
+      "diameterMm": 8.0,
+      "rotationDeg": 95.71059313749942,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_10",
+      "type": "obroundSlot",
+      "center": {
+        "x": 181.96649794757286,
+        "y": 184.07878614858816
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.00000000000012,
+      "diameterMm": 8.0,
+      "rotationDeg": 95.71059313749942,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_11",
+      "type": "obroundSlot",
+      "center": {
+        "x": 157.09056819232342,
+        "y": 181.59119317306306
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.00000000000026,
+      "diameterMm": 8.0,
+      "rotationDeg": 95.71059313749501,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_12",
+      "type": "obroundSlot",
+      "center": {
+        "x": 27.363522730773866,
+        "y": 23.632133267487916
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 19.999999999999897,
+      "diameterMm": 8.0,
+      "rotationDeg": 84.28940686250046,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_13",
+      "type": "obroundSlot",
+      "center": {
+        "x": 52.23945248602399,
+        "y": 21.14454029196304
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.00000000000012,
+      "diameterMm": 8.0,
+      "rotationDeg": 84.28940686250057,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_14",
+      "type": "obroundSlot",
+      "center": {
+        "x": 32.338708681823846,
+        "y": 73.38399277798715
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.00000000000012,
+      "diameterMm": 8.0,
+      "rotationDeg": 84.28940686250057,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_15",
+      "type": "obroundSlot",
+      "center": {
+        "x": 57.21463843707352,
+        "y": 70.89639980246216
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.000000000000234,
+      "diameterMm": 8.0,
+      "rotationDeg": 84.28940686249516,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_16",
+      "type": "obroundSlot",
+      "center": {
+        "x": 48.38337396993438,
+        "y": 233.83064565908774
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.000000000000483,
+      "diameterMm": 8.0,
+      "rotationDeg": 84.2894068625051,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_17",
+      "type": "obroundSlot",
+      "center": {
+        "x": 73.25930372518405,
+        "y": 231.34305268356252
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.000000000000146,
+      "diameterMm": 8.0,
+      "rotationDeg": 84.2894068624995,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_18",
+      "type": "obroundSlot",
+      "center": {
+        "x": 43.40818801888395,
+        "y": 184.07878614858816
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.00000000000012,
+      "diameterMm": 8.0,
+      "rotationDeg": 84.28940686250057,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    },
+    {
+      "id": "SLOT_19",
+      "type": "obroundSlot",
+      "center": {
+        "x": 68.28411777413339,
+        "y": 181.59119317306306
+      },
+      "widthMm": 7.999999999999954,
+      "lengthMm": 20.00000000000026,
+      "diameterMm": 8.0,
+      "rotationDeg": 84.28940686250502,
+      "spacingX": 0.0,
+      "spacingY": 0.0,
+      "countX": 1,
+      "countY": 1,
+      "layer": "HOLES",
+      "showLabel": true,
+      "isVisible": true,
+      "role": "coupler"
+    }
+  ],
+  "perforationPatterns": [],
+  "corners": [],
+  "cutLines": [],
+  "arcs": [],
+  "dimensions": [],
+  "constraints": [],
+  "constraintDefinitions": [],
+  "referenceGeometries": [],
+  "templateParameters": [],
+  "layers": [
+    {
+      "name": "OUTLINE",
+      "colorHex": 4279179050,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 2.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "HOLES",
+      "colorHex": 4278556265,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    },
+    {
+      "name": "0",
+      "colorHex": 4284773515,
+      "lineType": "CONTINUOUS",
+      "strokeWidth": 1.0,
+      "isVisible": true,
+      "isLocked": false
+    }
+  ],
+  "baseFaceId": "F_2",
+  "edgeChamfers": {},
+  "parameters": {
+    "widthIn": 100.0,
+    "widthOut": 50.0,
+    "height": 50.0,
+    "port1Width": 100.0,
+    "port1Height": 50.0,
+    "port2Width": 50.0,
+    "port2Height": 50.0,
+    "thickness": 1.5,
+    "flange": 10.0,
+    "length": 150.0,
+    "reducer_alignment": 0.0
+  },
+  "metadata": {
+    "featureHistory": [
+      {
+        "step": 1,
+        "action": "add_bend",
+        "description": "Add bend line (B1)",
+        "timestamp": "2026-10-03T19:27:32.447794",
+        "targetId": "B1",
+        "delta": {
+          "description": "Add bend line (B1)",
+          "actionType": "add_bend",
+          "timestamp": "2026-10-03T19:27:32.447794",
+          "targetId": "B1",
+          "oldBends": [],
+          "newBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_0",
+              "childFaceId": "F_1",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ],
+          "oldFaces": [
+            {
+              "id": "F_BASE",
+              "label": "Base Sheet",
+              "vertices": [
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                },
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                },
+                {
+                  "x": 225.37468596645795,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 200.37468596645795,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 25.0,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 0.0,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                }
+              ],
+              "role": "baseFloor",
+              "isBaseAnchor": true,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            }
+          ],
+          "newFaces": [
+            {
+              "id": "F_0",
+              "label": "Bottom Base Floor",
+              "vertices": [
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                },
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                },
+                {
+                  "x": 225.37468596645795,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 200.37468596645795,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                }
+              ],
+              "role": "baseFloor",
+              "isBaseAnchor": true,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_1",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 25.0,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 0.0,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            }
+          ],
+          "oldBaseFaceId": "F_BASE",
+          "newBaseFaceId": "F_0"
+        }
+      },
+      {
+        "step": 2,
+        "action": "add_bend",
+        "description": "Add bend line (B2)",
+        "timestamp": "2026-10-03T19:27:36.642721",
+        "targetId": "B1",
+        "delta": {
+          "description": "Add bend line (B2)",
+          "actionType": "add_bend",
+          "timestamp": "2026-10-03T19:27:36.642721",
+          "targetId": "B1",
+          "oldBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_0",
+              "childFaceId": "F_1",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ],
+          "newBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_2",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ],
+          "oldFaces": [
+            {
+              "id": "F_0",
+              "label": "Bottom Base Floor",
+              "vertices": [
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                },
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                },
+                {
+                  "x": 225.37468596645795,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 200.37468596645795,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                }
+              ],
+              "role": "baseFloor",
+              "isBaseAnchor": true,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_1",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 25.0,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 0.0,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            }
+          ],
+          "newFaces": [
+            {
+              "id": "F_0",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                },
+                {
+                  "x": 225.37468596645795,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 200.37468596645795,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_1",
+              "label": "Bottom Base Floor",
+              "vertices": [
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                },
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                }
+              ],
+              "role": "baseFloor",
+              "isBaseAnchor": true,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_2",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 25.0,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 0.0,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            }
+          ],
+          "oldBaseFaceId": "F_0",
+          "newBaseFaceId": "F_1"
+        }
+      },
+      {
+        "step": 3,
+        "action": "add_bend",
+        "description": "Add bend line (FL1)",
+        "timestamp": "2026-10-03T19:27:42.006762",
+        "targetId": "B2",
+        "delta": {
+          "description": "Add bend line (FL1)",
+          "actionType": "add_bend",
+          "timestamp": "2026-10-03T19:27:42.006762",
+          "targetId": "B2",
+          "oldBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_2",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ],
+          "newBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_3",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL1",
+              "p1": {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              "p2": {
+                "x": 12.93548347272985,
+                "y": 4.975185951050079
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_3",
+              "childFaceId": "F_2",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ],
+          "oldFaces": [
+            {
+              "id": "F_0",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                },
+                {
+                  "x": 225.37468596645795,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 200.37468596645795,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_1",
+              "label": "Bottom Base Floor",
+              "vertices": [
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                },
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                }
+              ],
+              "role": "baseFloor",
+              "isBaseAnchor": true,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_2",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 25.0,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 0.0,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            }
+          ],
+          "newFaces": [
+            {
+              "id": "F_0",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                },
+                {
+                  "x": 225.37468596645795,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 200.37468596645795,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_1",
+              "label": "Bottom Base Floor",
+              "vertices": [
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                },
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                }
+              ],
+              "role": "baseFloor",
+              "isBaseAnchor": true,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_2",
+              "label": "Return Flange",
+              "vertices": [
+                {
+                  "x": 37.93548347272986,
+                  "y": 254.97518595104992
+                },
+                {
+                  "x": 25.0,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 0.0,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 12.935483472729846,
+                  "y": 4.9751859510500696
+                }
+              ],
+              "role": "returnFlange",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_3",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 12.935483472729846,
+                  "y": 4.9751859510500696
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                },
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 37.93548347272986,
+                  "y": 254.97518595104992
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            }
+          ]
+        }
+      },
+      {
+        "step": 4,
+        "action": "update_bend",
+        "description": "Update bend (FL1)",
+        "timestamp": "2026-10-03T19:27:49.356057",
+        "targetId": "FL1",
+        "delta": {
+          "description": "Update bend (FL1)",
+          "actionType": "update_bend",
+          "timestamp": "2026-10-03T19:27:49.356057",
+          "targetId": "FL1",
+          "oldBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_3",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL1",
+              "p1": {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              "p2": {
+                "x": 12.93548347272985,
+                "y": 4.975185951050079
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_3",
+              "childFaceId": "F_2",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ],
+          "newBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_3",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL1",
+              "p1": {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              "p2": {
+                "x": 12.93548347272985,
+                "y": 4.975185951050079
+              },
+              "direction": "DOWN",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_DOWN",
+              "parentFaceId": "F_3",
+              "childFaceId": "F_2",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "action": "update_bend",
+        "description": "Update bend (FL1)",
+        "timestamp": "2026-10-03T19:27:49.957129",
+        "targetId": "FL1",
+        "delta": {
+          "description": "Update bend (FL1)",
+          "actionType": "update_bend",
+          "timestamp": "2026-10-03T19:27:49.957129",
+          "targetId": "FL1",
+          "oldBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_3",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL1",
+              "p1": {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              "p2": {
+                "x": 12.93548347272985,
+                "y": 4.975185951050079
+              },
+              "direction": "DOWN",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_DOWN",
+              "parentFaceId": "F_3",
+              "childFaceId": "F_2",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ],
+          "newBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_3",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL1",
+              "p1": {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              "p2": {
+                "x": 12.93548347272985,
+                "y": 4.975185951050079
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_3",
+              "childFaceId": "F_2",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ]
+        }
+      },
+      {
+        "step": 6,
+        "action": "update_bend",
+        "description": "Update bend (FL1)",
+        "timestamp": "2026-10-03T19:27:52.673367",
+        "targetId": "FL1",
+        "delta": {
+          "description": "Update bend (FL1)",
+          "actionType": "update_bend",
+          "timestamp": "2026-10-03T19:27:52.673367",
+          "targetId": "FL1",
+          "oldBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_3",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL1",
+              "p1": {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              "p2": {
+                "x": 12.93548347272985,
+                "y": 4.975185951050079
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_3",
+              "childFaceId": "F_2",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ],
+          "newBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_3",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL1",
+              "p1": {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              "p2": {
+                "x": 12.93548347272985,
+                "y": 4.975185951050079
+              },
+              "direction": "UP",
+              "targetAngleDeg": 135.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_3",
+              "childFaceId": "F_2",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ]
+        }
+      },
+      {
+        "step": 7,
+        "action": "add_bend",
+        "description": "Add bend line (FL2)",
+        "timestamp": "2026-10-03T19:27:53.915166",
+        "targetId": "FL1",
+        "delta": {
+          "description": "Add bend line (FL2)",
+          "actionType": "add_bend",
+          "timestamp": "2026-10-03T19:27:53.915166",
+          "targetId": "FL1",
+          "oldBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_3",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL1",
+              "p1": {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              "p2": {
+                "x": 12.93548347272985,
+                "y": 4.975185951050079
+              },
+              "direction": "UP",
+              "targetAngleDeg": 135.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_3",
+              "childFaceId": "F_2",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ],
+          "newBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_2",
+              "childFaceId": "F_4",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_2",
+              "childFaceId": "F_1",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL1",
+              "p1": {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              "p2": {
+                "x": 12.93548347272985,
+                "y": 4.975185951050079
+              },
+              "direction": "UP",
+              "targetAngleDeg": 135.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_4",
+              "childFaceId": "F_3",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL2",
+              "p1": {
+                "x": 212.4392024937281,
+                "y": 4.9751859510500935
+              },
+              "p2": {
+                "x": 187.4392024937281,
+                "y": 254.97518595104992
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ],
+          "oldFaces": [
+            {
+              "id": "F_0",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                },
+                {
+                  "x": 225.37468596645795,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 200.37468596645795,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_1",
+              "label": "Bottom Base Floor",
+              "vertices": [
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                },
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                }
+              ],
+              "role": "baseFloor",
+              "isBaseAnchor": true,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_2",
+              "label": "Return Flange",
+              "vertices": [
+                {
+                  "x": 37.93548347272986,
+                  "y": 254.97518595104992
+                },
+                {
+                  "x": 25.0,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 0.0,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 12.935483472729846,
+                  "y": 4.9751859510500696
+                }
+              ],
+              "role": "returnFlange",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_3",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 12.935483472729846,
+                  "y": 4.9751859510500696
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                },
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 37.93548347272986,
+                  "y": 254.97518595104992
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            }
+          ],
+          "newFaces": [
+            {
+              "id": "F_0",
+              "label": "Return Flange",
+              "vertices": [
+                {
+                  "x": 212.4392024937281,
+                  "y": 4.975185951050093
+                },
+                {
+                  "x": 225.37468596645795,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 200.37468596645795,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 187.4392024937281,
+                  "y": 254.97518595104992
+                }
+              ],
+              "role": "returnFlange",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_1",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 187.4392024937281,
+                  "y": 254.97518595104992
+                },
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                },
+                {
+                  "x": 212.4392024937281,
+                  "y": 4.975185951050093
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_2",
+              "label": "Bottom Base Floor",
+              "vertices": [
+                {
+                  "x": 137.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                },
+                {
+                  "x": 162.68734298322897,
+                  "y": 0.0
+                }
+              ],
+              "role": "baseFloor",
+              "isBaseAnchor": true,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_3",
+              "label": "Return Flange",
+              "vertices": [
+                {
+                  "x": 37.93548347272986,
+                  "y": 254.97518595104992
+                },
+                {
+                  "x": 25.0,
+                  "y": 256.2687342983229
+                },
+                {
+                  "x": 0.0,
+                  "y": 6.268734298323125
+                },
+                {
+                  "x": 12.935483472729846,
+                  "y": 4.9751859510500696
+                }
+              ],
+              "role": "returnFlange",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            },
+            {
+              "id": "F_4",
+              "label": "Side Wall",
+              "vertices": [
+                {
+                  "x": 12.935483472729846,
+                  "y": 4.9751859510500696
+                },
+                {
+                  "x": 62.687342983227836,
+                  "y": 0.0
+                },
+                {
+                  "x": 87.68734298322897,
+                  "y": 250.0
+                },
+                {
+                  "x": 37.93548347272986,
+                  "y": 254.97518595104992
+                }
+              ],
+              "role": "sideWall",
+              "isBaseAnchor": false,
+              "holes": [],
+              "layer": "FACES",
+              "showLabel": true,
+              "isVisible": true
+            }
+          ],
+          "oldBaseFaceId": "F_1",
+          "newBaseFaceId": "F_2"
+        }
+      },
+      {
+        "step": 8,
+        "action": "update_bend",
+        "description": "Update bend (FL2)",
+        "timestamp": "2026-10-03T19:27:55.017329",
+        "targetId": "FL2",
+        "delta": {
+          "description": "Update bend (FL2)",
+          "actionType": "update_bend",
+          "timestamp": "2026-10-03T19:27:55.017329",
+          "targetId": "FL2",
+          "oldBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_2",
+              "childFaceId": "F_4",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_2",
+              "childFaceId": "F_1",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL1",
+              "p1": {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              "p2": {
+                "x": 12.93548347272985,
+                "y": 4.975185951050079
+              },
+              "direction": "UP",
+              "targetAngleDeg": 135.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_4",
+              "childFaceId": "F_3",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL2",
+              "p1": {
+                "x": 212.4392024937281,
+                "y": 4.9751859510500935
+              },
+              "p2": {
+                "x": 187.4392024937281,
+                "y": 254.97518595104992
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ],
+          "newBends": [
+            {
+              "id": "B1",
+              "p1": {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_2",
+              "childFaceId": "F_4",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "B2",
+              "p1": {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              "p2": {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              "direction": "UP",
+              "targetAngleDeg": 90.0,
+              "radiusMm": 1.5,
+              "role": "bend",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_2",
+              "childFaceId": "F_1",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL1",
+              "p1": {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              "p2": {
+                "x": 12.93548347272985,
+                "y": 4.975185951050079
+              },
+              "direction": "UP",
+              "targetAngleDeg": 135.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_4",
+              "childFaceId": "F_3",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            },
+            {
+              "id": "FL2",
+              "p1": {
+                "x": 212.4392024937281,
+                "y": 4.9751859510500935
+              },
+              "p2": {
+                "x": 187.4392024937281,
+                "y": 254.97518595104992
+              },
+              "direction": "UP",
+              "targetAngleDeg": 135.0,
+              "radiusMm": 0.5,
+              "role": "flange",
+              "layer": "BEND_UP",
+              "parentFaceId": "F_1",
+              "childFaceId": "F_0",
+              "showLabel": true,
+              "isVisible": true,
+              "reliefType": "rectangular"
+            }
+          ]
+        }
+      },
+      {
+        "step": 9,
+        "action": "update_punch",
+        "description": "Marked 16 punch(es) as coupler",
+        "timestamp": "2026-10-03T19:28:13.355828",
+        "targetId": "SLOT_4",
+        "delta": {
+          "description": "Marked 16 punch(es) as coupler",
+          "actionType": "update_punch",
+          "timestamp": "2026-10-03T19:28:13.355828",
+          "targetId": "SLOT_4",
+          "oldPunches": [
+            {
+              "id": "SLOT_1",
+              "type": "obroundSlot",
+              "center": {
+                "x": 112.68734298323102,
+                "y": 229.99999999999818
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000000001478,
+              "diameterMm": 8.0,
+              "rotationDeg": 90.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_2",
+              "type": "obroundSlot",
+              "center": {
+                "x": 138.16799564077587,
+                "y": 20.00000000000091
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000000002046,
+              "diameterMm": 8.0,
+              "rotationDeg": 90.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_3",
+              "type": "obroundSlot",
+              "center": {
+                "x": 88.16799564077292,
+                "y": 20.00000000000091
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000000002046,
+              "diameterMm": 8.0,
+              "rotationDeg": 90.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_4",
+              "type": "obroundSlot",
+              "center": {
+                "x": 198.01116323568294,
+                "y": 23.632133267487916
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 19.999999999999897,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313749953,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_5",
+              "type": "obroundSlot",
+              "center": {
+                "x": 173.13523348043327,
+                "y": 21.14454029196304
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000234,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313750483,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_6",
+              "type": "obroundSlot",
+              "center": {
+                "x": 193.03597728463296,
+                "y": 73.38399277798715
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313749942,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_7",
+              "type": "obroundSlot",
+              "center": {
+                "x": 168.16004752938352,
+                "y": 70.89639980246216
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000234,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313750483,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_8",
+              "type": "obroundSlot",
+              "center": {
+                "x": 176.99131199652288,
+                "y": 233.83064565908774
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000576,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.7105931374992,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_9",
+              "type": "obroundSlot",
+              "center": {
+                "x": 152.11538224127298,
+                "y": 231.34305268356252
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313749942,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_10",
+              "type": "obroundSlot",
+              "center": {
+                "x": 181.96649794757286,
+                "y": 184.07878614858816
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313749942,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_11",
+              "type": "obroundSlot",
+              "center": {
+                "x": 157.09056819232342,
+                "y": 181.59119317306306
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000026,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313749501,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_12",
+              "type": "obroundSlot",
+              "center": {
+                "x": 27.363522730773866,
+                "y": 23.632133267487916
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 19.999999999999897,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686250046,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_13",
+              "type": "obroundSlot",
+              "center": {
+                "x": 52.23945248602399,
+                "y": 21.14454029196304
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686250057,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_14",
+              "type": "obroundSlot",
+              "center": {
+                "x": 32.338708681823846,
+                "y": 73.38399277798715
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686250057,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_15",
+              "type": "obroundSlot",
+              "center": {
+                "x": 57.21463843707352,
+                "y": 70.89639980246216
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000234,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686249516,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_16",
+              "type": "obroundSlot",
+              "center": {
+                "x": 48.38337396993438,
+                "y": 233.83064565908774
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000483,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.2894068625051,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_17",
+              "type": "obroundSlot",
+              "center": {
+                "x": 73.25930372518405,
+                "y": 231.34305268356252
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000146,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.2894068624995,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_18",
+              "type": "obroundSlot",
+              "center": {
+                "x": 43.40818801888395,
+                "y": 184.07878614858816
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686250057,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_19",
+              "type": "obroundSlot",
+              "center": {
+                "x": 68.28411777413339,
+                "y": 181.59119317306306
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000026,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686250502,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            }
+          ],
+          "newPunches": [
+            {
+              "id": "SLOT_1",
+              "type": "obroundSlot",
+              "center": {
+                "x": 112.68734298323102,
+                "y": 229.99999999999818
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000000001478,
+              "diameterMm": 8.0,
+              "rotationDeg": 90.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_2",
+              "type": "obroundSlot",
+              "center": {
+                "x": 138.16799564077587,
+                "y": 20.00000000000091
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000000002046,
+              "diameterMm": 8.0,
+              "rotationDeg": 90.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_3",
+              "type": "obroundSlot",
+              "center": {
+                "x": 88.16799564077292,
+                "y": 20.00000000000091
+              },
+              "widthMm": 8.0,
+              "lengthMm": 20.000000000002046,
+              "diameterMm": 8.0,
+              "rotationDeg": 90.0,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "general"
+            },
+            {
+              "id": "SLOT_4",
+              "type": "obroundSlot",
+              "center": {
+                "x": 198.01116323568294,
+                "y": 23.632133267487916
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 19.999999999999897,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313749953,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_5",
+              "type": "obroundSlot",
+              "center": {
+                "x": 173.13523348043327,
+                "y": 21.14454029196304
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000234,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313750483,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_6",
+              "type": "obroundSlot",
+              "center": {
+                "x": 193.03597728463296,
+                "y": 73.38399277798715
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313749942,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_7",
+              "type": "obroundSlot",
+              "center": {
+                "x": 168.16004752938352,
+                "y": 70.89639980246216
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000234,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313750483,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_8",
+              "type": "obroundSlot",
+              "center": {
+                "x": 176.99131199652288,
+                "y": 233.83064565908774
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000576,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.7105931374992,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_9",
+              "type": "obroundSlot",
+              "center": {
+                "x": 152.11538224127298,
+                "y": 231.34305268356252
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313749942,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_10",
+              "type": "obroundSlot",
+              "center": {
+                "x": 181.96649794757286,
+                "y": 184.07878614858816
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313749942,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_11",
+              "type": "obroundSlot",
+              "center": {
+                "x": 157.09056819232342,
+                "y": 181.59119317306306
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000026,
+              "diameterMm": 8.0,
+              "rotationDeg": 95.71059313749501,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_12",
+              "type": "obroundSlot",
+              "center": {
+                "x": 27.363522730773866,
+                "y": 23.632133267487916
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 19.999999999999897,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686250046,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_13",
+              "type": "obroundSlot",
+              "center": {
+                "x": 52.23945248602399,
+                "y": 21.14454029196304
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686250057,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_14",
+              "type": "obroundSlot",
+              "center": {
+                "x": 32.338708681823846,
+                "y": 73.38399277798715
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686250057,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_15",
+              "type": "obroundSlot",
+              "center": {
+                "x": 57.21463843707352,
+                "y": 70.89639980246216
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000234,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686249516,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_16",
+              "type": "obroundSlot",
+              "center": {
+                "x": 48.38337396993438,
+                "y": 233.83064565908774
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000483,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.2894068625051,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_17",
+              "type": "obroundSlot",
+              "center": {
+                "x": 73.25930372518405,
+                "y": 231.34305268356252
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.000000000000146,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.2894068624995,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_18",
+              "type": "obroundSlot",
+              "center": {
+                "x": 43.40818801888395,
+                "y": 184.07878614858816
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000012,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686250057,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            },
+            {
+              "id": "SLOT_19",
+              "type": "obroundSlot",
+              "center": {
+                "x": 68.28411777413339,
+                "y": 181.59119317306306
+              },
+              "widthMm": 7.999999999999954,
+              "lengthMm": 20.00000000000026,
+              "diameterMm": 8.0,
+              "rotationDeg": 84.28940686250502,
+              "spacingX": 0.0,
+              "spacingY": 0.0,
+              "countX": 1,
+              "countY": 1,
+              "layer": "HOLES",
+              "showLabel": true,
+              "isVisible": true,
+              "role": "coupler"
+            }
+          ]
+        }
+      },
+      {
+        "step": 10,
+        "action": "modify",
+        "description": "Model Modification",
+        "timestamp": "2026-10-03T19:28:49.805736",
+        "delta": {
+          "description": "Model Modification",
+          "actionType": "modify",
+          "timestamp": "2026-10-03T19:28:49.805736",
+          "oldMaterial": {
+            "thicknessMm": 1.5,
+            "materialGrade": "Pre-Galvanized Steel",
+            "materialType": "mildSteel",
+            "finish": "electroGalvanized",
+            "kFactor": 0.4,
+            "defaultBendRadius": 1.5,
+            "edgeChamferMm": 0.0
+          },
+          "newMaterial": {
+            "thicknessMm": 1.5,
+            "materialGrade": "Pre-Galvanized Steel",
+            "materialType": "mildSteel",
+            "finish": "electroGalvanized",
+            "kFactor": 0.4,
+            "defaultBendRadius": 1.5,
+            "edgeChamferMm": 0.0
+          }
+        }
+      },
+      {
+        "step": 11,
+        "action": "drive_dimension",
+        "description": "Update Fitting Metadata",
+        "timestamp": "2026-10-03T19:28:49.806743",
+        "delta": {
+          "description": "Update Fitting Metadata",
+          "actionType": "drive_dimension",
+          "timestamp": "2026-10-03T19:28:49.806743",
+          "oldParameters": {},
+          "newParameters": {
+            "widthIn": 100.0,
+            "widthOut": 50.0,
+            "height": 50.0,
+            "port1Width": 100.0,
+            "port1Height": 50.0,
+            "port2Width": 50.0,
+            "port2Height": 50.0,
+            "thickness": 1.5,
+            "flange": 10.0
+          }
+        }
+      },
+      {
+        "step": 12,
+        "action": "modify",
+        "description": "Model Modification",
+        "timestamp": "2026-10-03T19:28:49.808901",
+        "delta": {
+          "description": "Model Modification",
+          "actionType": "modify",
+          "timestamp": "2026-10-03T19:28:49.808901",
+          "oldProductType": "reducer_100x50x50",
+          "newProductType": "reducer"
+        }
+      }
+    ],
+    "undoDeltas": [
+      {
+        "description": "Add bend line (B1)",
+        "actionType": "add_bend",
+        "timestamp": "2026-10-03T19:27:32.447794",
+        "targetId": "B1",
+        "oldBends": [],
+        "newBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_0",
+            "childFaceId": "F_1",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "oldFaces": [
+          {
+            "id": "F_BASE",
+            "label": "Base Sheet",
+            "vertices": [
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              {
+                "x": 225.37468596645795,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 200.37468596645795,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 25.0,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 0.0,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              }
+            ],
+            "role": "baseFloor",
+            "isBaseAnchor": true,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          }
+        ],
+        "newFaces": [
+          {
+            "id": "F_0",
+            "label": "Bottom Base Floor",
+            "vertices": [
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              {
+                "x": 225.37468596645795,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 200.37468596645795,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              }
+            ],
+            "role": "baseFloor",
+            "isBaseAnchor": true,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_1",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 25.0,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 0.0,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          }
+        ],
+        "oldBaseFaceId": "F_BASE",
+        "newBaseFaceId": "F_0"
+      },
+      {
+        "description": "Add bend line (B2)",
+        "actionType": "add_bend",
+        "timestamp": "2026-10-03T19:27:36.642721",
+        "targetId": "B1",
+        "oldBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_0",
+            "childFaceId": "F_1",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "newBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "oldFaces": [
+          {
+            "id": "F_0",
+            "label": "Bottom Base Floor",
+            "vertices": [
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              {
+                "x": 225.37468596645795,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 200.37468596645795,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              }
+            ],
+            "role": "baseFloor",
+            "isBaseAnchor": true,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_1",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 25.0,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 0.0,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          }
+        ],
+        "newFaces": [
+          {
+            "id": "F_0",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              {
+                "x": 225.37468596645795,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 200.37468596645795,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_1",
+            "label": "Bottom Base Floor",
+            "vertices": [
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              }
+            ],
+            "role": "baseFloor",
+            "isBaseAnchor": true,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_2",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 25.0,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 0.0,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          }
+        ],
+        "oldBaseFaceId": "F_0",
+        "newBaseFaceId": "F_1"
+      },
+      {
+        "description": "Add bend line (FL1)",
+        "actionType": "add_bend",
+        "timestamp": "2026-10-03T19:27:42.006762",
+        "targetId": "B2",
+        "oldBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "newBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 37.93548347272986,
+              "y": 254.97518595104992
+            },
+            "p2": {
+              "x": 12.93548347272985,
+              "y": 4.975185951050079
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "oldFaces": [
+          {
+            "id": "F_0",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              {
+                "x": 225.37468596645795,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 200.37468596645795,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_1",
+            "label": "Bottom Base Floor",
+            "vertices": [
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              }
+            ],
+            "role": "baseFloor",
+            "isBaseAnchor": true,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_2",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 25.0,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 0.0,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          }
+        ],
+        "newFaces": [
+          {
+            "id": "F_0",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              {
+                "x": 225.37468596645795,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 200.37468596645795,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_1",
+            "label": "Bottom Base Floor",
+            "vertices": [
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              }
+            ],
+            "role": "baseFloor",
+            "isBaseAnchor": true,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_2",
+            "label": "Return Flange",
+            "vertices": [
+              {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              {
+                "x": 25.0,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 0.0,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 12.935483472729846,
+                "y": 4.9751859510500696
+              }
+            ],
+            "role": "returnFlange",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_3",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 12.935483472729846,
+                "y": 4.9751859510500696
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          }
+        ]
+      },
+      {
+        "description": "Update bend (FL1)",
+        "actionType": "update_bend",
+        "timestamp": "2026-10-03T19:27:49.356057",
+        "targetId": "FL1",
+        "oldBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 37.93548347272986,
+              "y": 254.97518595104992
+            },
+            "p2": {
+              "x": 12.93548347272985,
+              "y": 4.975185951050079
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "newBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 37.93548347272986,
+              "y": 254.97518595104992
+            },
+            "p2": {
+              "x": 12.93548347272985,
+              "y": 4.975185951050079
+            },
+            "direction": "DOWN",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_DOWN",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ]
+      },
+      {
+        "description": "Update bend (FL1)",
+        "actionType": "update_bend",
+        "timestamp": "2026-10-03T19:27:49.957129",
+        "targetId": "FL1",
+        "oldBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 37.93548347272986,
+              "y": 254.97518595104992
+            },
+            "p2": {
+              "x": 12.93548347272985,
+              "y": 4.975185951050079
+            },
+            "direction": "DOWN",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_DOWN",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "newBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 37.93548347272986,
+              "y": 254.97518595104992
+            },
+            "p2": {
+              "x": 12.93548347272985,
+              "y": 4.975185951050079
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ]
+      },
+      {
+        "description": "Update bend (FL1)",
+        "actionType": "update_bend",
+        "timestamp": "2026-10-03T19:27:52.673367",
+        "targetId": "FL1",
+        "oldBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 37.93548347272986,
+              "y": 254.97518595104992
+            },
+            "p2": {
+              "x": 12.93548347272985,
+              "y": 4.975185951050079
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "newBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 37.93548347272986,
+              "y": 254.97518595104992
+            },
+            "p2": {
+              "x": 12.93548347272985,
+              "y": 4.975185951050079
+            },
+            "direction": "UP",
+            "targetAngleDeg": 135.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ]
+      },
+      {
+        "description": "Add bend line (FL2)",
+        "actionType": "add_bend",
+        "timestamp": "2026-10-03T19:27:53.915166",
+        "targetId": "FL1",
+        "oldBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 37.93548347272986,
+              "y": 254.97518595104992
+            },
+            "p2": {
+              "x": 12.93548347272985,
+              "y": 4.975185951050079
+            },
+            "direction": "UP",
+            "targetAngleDeg": 135.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_3",
+            "childFaceId": "F_2",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "newBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_2",
+            "childFaceId": "F_4",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_2",
+            "childFaceId": "F_1",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 37.93548347272986,
+              "y": 254.97518595104992
+            },
+            "p2": {
+              "x": 12.93548347272985,
+              "y": 4.975185951050079
+            },
+            "direction": "UP",
+            "targetAngleDeg": 135.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_4",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL2",
+            "p1": {
+              "x": 212.4392024937281,
+              "y": 4.9751859510500935
+            },
+            "p2": {
+              "x": 187.4392024937281,
+              "y": 254.97518595104992
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "oldFaces": [
+          {
+            "id": "F_0",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              {
+                "x": 225.37468596645795,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 200.37468596645795,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_1",
+            "label": "Bottom Base Floor",
+            "vertices": [
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              }
+            ],
+            "role": "baseFloor",
+            "isBaseAnchor": true,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_2",
+            "label": "Return Flange",
+            "vertices": [
+              {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              {
+                "x": 25.0,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 0.0,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 12.935483472729846,
+                "y": 4.9751859510500696
+              }
+            ],
+            "role": "returnFlange",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_3",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 12.935483472729846,
+                "y": 4.9751859510500696
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          }
+        ],
+        "newFaces": [
+          {
+            "id": "F_0",
+            "label": "Return Flange",
+            "vertices": [
+              {
+                "x": 212.4392024937281,
+                "y": 4.975185951050093
+              },
+              {
+                "x": 225.37468596645795,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 200.37468596645795,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 187.4392024937281,
+                "y": 254.97518595104992
+              }
+            ],
+            "role": "returnFlange",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_1",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 187.4392024937281,
+                "y": 254.97518595104992
+              },
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              },
+              {
+                "x": 212.4392024937281,
+                "y": 4.975185951050093
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_2",
+            "label": "Bottom Base Floor",
+            "vertices": [
+              {
+                "x": 137.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              {
+                "x": 162.68734298322897,
+                "y": 0.0
+              }
+            ],
+            "role": "baseFloor",
+            "isBaseAnchor": true,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_3",
+            "label": "Return Flange",
+            "vertices": [
+              {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              },
+              {
+                "x": 25.0,
+                "y": 256.2687342983229
+              },
+              {
+                "x": 0.0,
+                "y": 6.268734298323125
+              },
+              {
+                "x": 12.935483472729846,
+                "y": 4.9751859510500696
+              }
+            ],
+            "role": "returnFlange",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          },
+          {
+            "id": "F_4",
+            "label": "Side Wall",
+            "vertices": [
+              {
+                "x": 12.935483472729846,
+                "y": 4.9751859510500696
+              },
+              {
+                "x": 62.687342983227836,
+                "y": 0.0
+              },
+              {
+                "x": 87.68734298322897,
+                "y": 250.0
+              },
+              {
+                "x": 37.93548347272986,
+                "y": 254.97518595104992
+              }
+            ],
+            "role": "sideWall",
+            "isBaseAnchor": false,
+            "holes": [],
+            "layer": "FACES",
+            "showLabel": true,
+            "isVisible": true
+          }
+        ],
+        "oldBaseFaceId": "F_1",
+        "newBaseFaceId": "F_2"
+      },
+      {
+        "description": "Update bend (FL2)",
+        "actionType": "update_bend",
+        "timestamp": "2026-10-03T19:27:55.017329",
+        "targetId": "FL2",
+        "oldBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_2",
+            "childFaceId": "F_4",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_2",
+            "childFaceId": "F_1",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 37.93548347272986,
+              "y": 254.97518595104992
+            },
+            "p2": {
+              "x": 12.93548347272985,
+              "y": 4.975185951050079
+            },
+            "direction": "UP",
+            "targetAngleDeg": 135.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_4",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL2",
+            "p1": {
+              "x": 212.4392024937281,
+              "y": 4.9751859510500935
+            },
+            "p2": {
+              "x": 187.4392024937281,
+              "y": 254.97518595104992
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ],
+        "newBends": [
+          {
+            "id": "B1",
+            "p1": {
+              "x": 87.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 62.687342983227836,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_2",
+            "childFaceId": "F_4",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "B2",
+            "p1": {
+              "x": 137.68734298322897,
+              "y": 250.0
+            },
+            "p2": {
+              "x": 162.68734298322897,
+              "y": 0.0
+            },
+            "direction": "UP",
+            "targetAngleDeg": 90.0,
+            "radiusMm": 1.5,
+            "role": "bend",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_2",
+            "childFaceId": "F_1",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL1",
+            "p1": {
+              "x": 37.93548347272986,
+              "y": 254.97518595104992
+            },
+            "p2": {
+              "x": 12.93548347272985,
+              "y": 4.975185951050079
+            },
+            "direction": "UP",
+            "targetAngleDeg": 135.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_4",
+            "childFaceId": "F_3",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          },
+          {
+            "id": "FL2",
+            "p1": {
+              "x": 212.4392024937281,
+              "y": 4.9751859510500935
+            },
+            "p2": {
+              "x": 187.4392024937281,
+              "y": 254.97518595104992
+            },
+            "direction": "UP",
+            "targetAngleDeg": 135.0,
+            "radiusMm": 0.5,
+            "role": "flange",
+            "layer": "BEND_UP",
+            "parentFaceId": "F_1",
+            "childFaceId": "F_0",
+            "showLabel": true,
+            "isVisible": true,
+            "reliefType": "rectangular"
+          }
+        ]
+      },
+      {
+        "description": "Marked 16 punch(es) as coupler",
+        "actionType": "update_punch",
+        "timestamp": "2026-10-03T19:28:13.355828",
+        "targetId": "SLOT_4",
+        "oldPunches": [
+          {
+            "id": "SLOT_1",
+            "type": "obroundSlot",
+            "center": {
+              "x": 112.68734298323102,
+              "y": 229.99999999999818
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000000001478,
+            "diameterMm": 8.0,
+            "rotationDeg": 90.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_2",
+            "type": "obroundSlot",
+            "center": {
+              "x": 138.16799564077587,
+              "y": 20.00000000000091
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000000002046,
+            "diameterMm": 8.0,
+            "rotationDeg": 90.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_3",
+            "type": "obroundSlot",
+            "center": {
+              "x": 88.16799564077292,
+              "y": 20.00000000000091
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000000002046,
+            "diameterMm": 8.0,
+            "rotationDeg": 90.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_4",
+            "type": "obroundSlot",
+            "center": {
+              "x": 198.01116323568294,
+              "y": 23.632133267487916
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 19.999999999999897,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313749953,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_5",
+            "type": "obroundSlot",
+            "center": {
+              "x": 173.13523348043327,
+              "y": 21.14454029196304
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000234,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313750483,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_6",
+            "type": "obroundSlot",
+            "center": {
+              "x": 193.03597728463296,
+              "y": 73.38399277798715
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313749942,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_7",
+            "type": "obroundSlot",
+            "center": {
+              "x": 168.16004752938352,
+              "y": 70.89639980246216
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000234,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313750483,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_8",
+            "type": "obroundSlot",
+            "center": {
+              "x": 176.99131199652288,
+              "y": 233.83064565908774
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000576,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.7105931374992,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_9",
+            "type": "obroundSlot",
+            "center": {
+              "x": 152.11538224127298,
+              "y": 231.34305268356252
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313749942,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_10",
+            "type": "obroundSlot",
+            "center": {
+              "x": 181.96649794757286,
+              "y": 184.07878614858816
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313749942,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_11",
+            "type": "obroundSlot",
+            "center": {
+              "x": 157.09056819232342,
+              "y": 181.59119317306306
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000026,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313749501,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_12",
+            "type": "obroundSlot",
+            "center": {
+              "x": 27.363522730773866,
+              "y": 23.632133267487916
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 19.999999999999897,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686250046,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_13",
+            "type": "obroundSlot",
+            "center": {
+              "x": 52.23945248602399,
+              "y": 21.14454029196304
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686250057,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_14",
+            "type": "obroundSlot",
+            "center": {
+              "x": 32.338708681823846,
+              "y": 73.38399277798715
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686250057,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_15",
+            "type": "obroundSlot",
+            "center": {
+              "x": 57.21463843707352,
+              "y": 70.89639980246216
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000234,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686249516,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_16",
+            "type": "obroundSlot",
+            "center": {
+              "x": 48.38337396993438,
+              "y": 233.83064565908774
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000483,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.2894068625051,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_17",
+            "type": "obroundSlot",
+            "center": {
+              "x": 73.25930372518405,
+              "y": 231.34305268356252
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000146,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.2894068624995,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_18",
+            "type": "obroundSlot",
+            "center": {
+              "x": 43.40818801888395,
+              "y": 184.07878614858816
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686250057,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_19",
+            "type": "obroundSlot",
+            "center": {
+              "x": 68.28411777413339,
+              "y": 181.59119317306306
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000026,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686250502,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          }
+        ],
+        "newPunches": [
+          {
+            "id": "SLOT_1",
+            "type": "obroundSlot",
+            "center": {
+              "x": 112.68734298323102,
+              "y": 229.99999999999818
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000000001478,
+            "diameterMm": 8.0,
+            "rotationDeg": 90.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_2",
+            "type": "obroundSlot",
+            "center": {
+              "x": 138.16799564077587,
+              "y": 20.00000000000091
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000000002046,
+            "diameterMm": 8.0,
+            "rotationDeg": 90.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_3",
+            "type": "obroundSlot",
+            "center": {
+              "x": 88.16799564077292,
+              "y": 20.00000000000091
+            },
+            "widthMm": 8.0,
+            "lengthMm": 20.000000000002046,
+            "diameterMm": 8.0,
+            "rotationDeg": 90.0,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "general"
+          },
+          {
+            "id": "SLOT_4",
+            "type": "obroundSlot",
+            "center": {
+              "x": 198.01116323568294,
+              "y": 23.632133267487916
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 19.999999999999897,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313749953,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_5",
+            "type": "obroundSlot",
+            "center": {
+              "x": 173.13523348043327,
+              "y": 21.14454029196304
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000234,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313750483,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_6",
+            "type": "obroundSlot",
+            "center": {
+              "x": 193.03597728463296,
+              "y": 73.38399277798715
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313749942,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_7",
+            "type": "obroundSlot",
+            "center": {
+              "x": 168.16004752938352,
+              "y": 70.89639980246216
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000234,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313750483,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_8",
+            "type": "obroundSlot",
+            "center": {
+              "x": 176.99131199652288,
+              "y": 233.83064565908774
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000576,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.7105931374992,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_9",
+            "type": "obroundSlot",
+            "center": {
+              "x": 152.11538224127298,
+              "y": 231.34305268356252
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313749942,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_10",
+            "type": "obroundSlot",
+            "center": {
+              "x": 181.96649794757286,
+              "y": 184.07878614858816
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313749942,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_11",
+            "type": "obroundSlot",
+            "center": {
+              "x": 157.09056819232342,
+              "y": 181.59119317306306
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000026,
+            "diameterMm": 8.0,
+            "rotationDeg": 95.71059313749501,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_12",
+            "type": "obroundSlot",
+            "center": {
+              "x": 27.363522730773866,
+              "y": 23.632133267487916
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 19.999999999999897,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686250046,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_13",
+            "type": "obroundSlot",
+            "center": {
+              "x": 52.23945248602399,
+              "y": 21.14454029196304
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686250057,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_14",
+            "type": "obroundSlot",
+            "center": {
+              "x": 32.338708681823846,
+              "y": 73.38399277798715
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686250057,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_15",
+            "type": "obroundSlot",
+            "center": {
+              "x": 57.21463843707352,
+              "y": 70.89639980246216
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000234,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686249516,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_16",
+            "type": "obroundSlot",
+            "center": {
+              "x": 48.38337396993438,
+              "y": 233.83064565908774
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000483,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.2894068625051,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_17",
+            "type": "obroundSlot",
+            "center": {
+              "x": 73.25930372518405,
+              "y": 231.34305268356252
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.000000000000146,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.2894068624995,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_18",
+            "type": "obroundSlot",
+            "center": {
+              "x": 43.40818801888395,
+              "y": 184.07878614858816
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000012,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686250057,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          },
+          {
+            "id": "SLOT_19",
+            "type": "obroundSlot",
+            "center": {
+              "x": 68.28411777413339,
+              "y": 181.59119317306306
+            },
+            "widthMm": 7.999999999999954,
+            "lengthMm": 20.00000000000026,
+            "diameterMm": 8.0,
+            "rotationDeg": 84.28940686250502,
+            "spacingX": 0.0,
+            "spacingY": 0.0,
+            "countX": 1,
+            "countY": 1,
+            "layer": "HOLES",
+            "showLabel": true,
+            "isVisible": true,
+            "role": "coupler"
+          }
+        ]
+      },
+      {
+        "description": "Model Modification",
+        "actionType": "modify",
+        "timestamp": "2026-10-03T19:28:49.805736",
+        "oldMaterial": {
+          "thicknessMm": 1.5,
+          "materialGrade": "Pre-Galvanized Steel",
+          "materialType": "mildSteel",
+          "finish": "electroGalvanized",
+          "kFactor": 0.4,
+          "defaultBendRadius": 1.5,
+          "edgeChamferMm": 0.0
+        },
+        "newMaterial": {
+          "thicknessMm": 1.5,
+          "materialGrade": "Pre-Galvanized Steel",
+          "materialType": "mildSteel",
+          "finish": "electroGalvanized",
+          "kFactor": 0.4,
+          "defaultBendRadius": 1.5,
+          "edgeChamferMm": 0.0
+        }
+      },
+      {
+        "description": "Update Fitting Metadata",
+        "actionType": "drive_dimension",
+        "timestamp": "2026-10-03T19:28:49.806743",
+        "oldParameters": {},
+        "newParameters": {
+          "widthIn": 100.0,
+          "widthOut": 50.0,
+          "height": 50.0,
+          "port1Width": 100.0,
+          "port1Height": 50.0,
+          "port2Width": 50.0,
+          "port2Height": 50.0,
+          "thickness": 1.5,
+          "flange": 10.0
+        }
+      },
+      {
+        "description": "Model Modification",
+        "actionType": "modify",
+        "timestamp": "2026-10-03T19:28:49.808901",
+        "oldProductType": "reducer_100x50x50",
+        "newProductType": "reducer"
+      }
+    ],
+    "fittingMetadata": {
+      "category": "Tray Accessories",
+      "product": "Reducer",
+      "variantName": "Reducer (straight)",
+      "flangeMm": 10.0,
+      "parameters": {
+        "widthIn": 100.0,
+        "widthOut": 50.0,
+        "height": 50.0,
+        "port1Width": 100.0,
+        "port1Height": 50.0,
+        "port2Width": 50.0,
+        "port2Height": 50.0,
+        "thickness": 1.5,
+        "length": 150.0,
+        "reducer_alignment": 0.0
+      },
+      "analyzedDimensions": {
+        "overallWidth": 225.37468596645795,
+        "overallHeight": 256.2687342983229
+      },
+      "portAssignments": {
+        "entry": "south",
+        "exit": "south"
+      }
+    },
+    "fittingCategory": "Tray Accessories",
+    "category": "Tray Accessories",
+    "fittingProduct": "Reducer",
+    "product": "Reducer",
+    "fittingVariant": "Reducer (straight)",
+    "variantName": "Reducer (straight)",
+    "cmsWorkflow": {
+      "stage": "manufacturing_defined",
+      "stageIndex": 1
+    },
+    "fittingFlangeMm": 10.0,
+    "ports": [
+      {
+        "id": "entry",
+        "label": "ENTRY (IN)",
+        "side": "south",
+        "width": 100.0,
+        "height": 50.0,
+        "measuredLength": 100.00000000000114,
+        "edgeP1": [
+          62.687342983227836,
+          0.0
+        ],
+        "edgeP2": [
+          162.68734298322897,
+          0.0
+        ],
+        "center": [
+          112.6873429832284,
+          0.0
+        ],
+        "normal": [
+          0.0,
+          -1.0
+        ]
+      },
+      {
+        "id": "exit",
+        "label": "EXIT (OUT)",
+        "side": "south",
+        "width": 50.0,
+        "height": 50.0,
+        "measuredLength": 62.99999999999968,
+        "edgeP1": [
+          162.68734298322897,
+          0.0
+        ],
+        "edgeP2": [
+          225.37468596645795,
+          6.268734298323125
+        ],
+        "center": [
+          194.03101447484346,
+          3.1343671491615623
+        ],
+        "normal": [
+          0.09950371902100248,
+          -0.9950371902099887
+        ]
+      }
+    ],
+    "isCmsProduct": true,
+    "cms_product_contract": {
+      "productType": "reducer",
+      "variationName": "straight_reducer",
+      "displayName": "Straight Reducer"
+    },
+    "reducer_alignment": "straight"
+  }
+}

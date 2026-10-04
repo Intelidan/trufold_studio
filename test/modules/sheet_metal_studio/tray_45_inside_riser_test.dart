@@ -12,6 +12,8 @@ import 'package:trufold_studio/sheet_metal_studio/engine/cms/cms_port_matcher.da
 import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_product_contract.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/cms/cms_scaling_controller.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_physical_port.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/planar_sheet_face.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/planar_face_decomposer.dart';
 
 void main() {
   group('Cable Tray 45° Inside Riser Port Detection, Cover & Scaling Tests', () {
@@ -332,5 +334,155 @@ void main() {
       expect(p2.flatP1!.x, closeTo(280.0, 1.0), reason: 'Port 2 border must pass across x=280 coupler holes, not on flaps');
       expect(p2.flatP2!.x, closeTo(280.0, 1.0));
     });
+
+    test('7. PlanarFaceDecomposer correctly preserves baseFloor on angled floor and generates 2 sidewall flaps per port (4 total, 0 on floor)', () async {
+      final file = File('assets/dsf_templates/tray_accessories/45_deg_inside_riser_100_50.dsf');
+      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final rawDoc = DsfDocument.fromJson(json);
+
+      // Decompose faces as the app does upon loading / editing
+      final decomp = PlanarFaceDecomposer.decompose(
+        outerContour: rawDoc.outerContour,
+        bends: rawDoc.bends,
+        cutLines: rawDoc.cutLines,
+        preferredBaseFaceId: rawDoc.baseFaceId,
+      );
+      final doc = rawDoc.copyWith(
+        faces: decomp.faces,
+        bends: decomp.connectedBends,
+        baseFaceId: decomp.baseFaceId,
+      );
+
+      // Verify face classifications
+      final f4 = doc.faces.firstWhere((f) => f.id == 'F_4');
+      final f9 = doc.faces.firstWhere((f) => f.id == 'F_9');
+      final f6 = doc.faces.firstWhere((f) => f.id == 'F_6');
+      final f8 = doc.faces.firstWhere((f) => f.id == 'F_8');
+      final f1 = doc.faces.firstWhere((f) => f.id == 'F_1');
+      final f3 = doc.faces.firstWhere((f) => f.id == 'F_3');
+
+      expect(f4.role, equals(FaceRole.baseFloor));
+      expect(f9.role, equals(FaceRole.baseFloor), reason: 'Angled floor must be baseFloor, never sideWall');
+      expect(f6.role, equals(FaceRole.sideWall), reason: 'Left top cheek must be sideWall');
+      expect(f8.role, equals(FaceRole.sideWall), reason: 'Left bottom cheek must be sideWall');
+      expect(f1.role, equals(FaceRole.sideWall), reason: 'Right top cheek must be sideWall');
+      expect(f3.role, equals(FaceRole.sideWall), reason: 'Right bottom cheek must be sideWall');
+
+      const riserPorts = [
+        CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 50.0),
+        CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 50.0),
+      ];
+
+      final controller = CmsScalingController(
+        baselineDocument: doc,
+        contract: CmsProductContract.insideRiser45,
+        baselinePorts: riserPorts,
+      );
+
+      controller.setIncludeCouplerFlaps(true);
+      final withFlapsDoc = controller.previewDocument;
+
+      // Exactly 4 flaps
+      final flaps = withFlapsDoc.faces.where((f) => f.id.startsWith('F_FLAP_RISER_')).toList();
+      expect(flaps.length, equals(4));
+      expect(
+        flaps.map((f) => f.id).toSet(),
+        equals({'F_FLAP_RISER_P1_L', 'F_FLAP_RISER_P1_R', 'F_FLAP_RISER_P2_L', 'F_FLAP_RISER_P2_R'}),
+      );
+
+      // Verify no flap is parented to F_9 or F_4
+      final flapBends = withFlapsDoc.bends.where((b) => b.id.startsWith('BF_RISER_')).toList();
+      expect(flapBends.length, equals(4));
+      for (final b in flapBends) {
+        expect(b.parentFaceId, isNot(equals('F_9')), reason: 'No flap must attach to angled floor F_9');
+        expect(b.parentFaceId, isNot(equals('F_4')), reason: 'No flap must attach to base floor F_4');
+      }
+
+      final bP1L = flapBends.firstWhere((b) => b.id == 'BF_RISER_P1_L');
+      final bP1R = flapBends.firstWhere((b) => b.id == 'BF_RISER_P1_R');
+      final bP2L = flapBends.firstWhere((b) => b.id == 'BF_RISER_P2_L');
+      final bP2R = flapBends.firstWhere((b) => b.id == 'BF_RISER_P2_R');
+
+      expect(bP1L.parentFaceId, equals('F_6'));
+      expect(bP1R.parentFaceId, equals('F_8'));
+      expect(bP2L.parentFaceId, equals('F_1'));
+      expect(bP2R.parentFaceId, equals('F_3'));
+
+      // Check 3D upright folding
+      final foldResult = KinematicFoldEngine.foldDocument(withFlapsDoc, foldProgress: 1.0);
+      for (final flap in flaps) {
+        final polys = foldResult.polygons.where((p) => p.faceId == flap.id).toList();
+        expect(polys, isNotEmpty);
+        for (final p in polys) {
+          expect(p.normal.z.abs(), lessThan(0.15), reason: 'Flap ${flap.id} must fold vertical with cheek in 3D');
+        }
+      }
+    });
+
+    test('8. Coupler flaps when height is scaled above 75mm (e.g. 100mm, 150mm): flaps remain strictly on horizontal side height walls, never on top flanged area', () async {
+      final file = File('assets/dsf_templates/tray_accessories/45_deg_inside_riser_100_50.dsf');
+      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final rawDoc = DsfDocument.fromJson(json);
+
+      const riserPorts = [
+        CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 50.0),
+        CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 50.0),
+      ];
+
+      final controller = CmsScalingController(
+        baselineDocument: rawDoc,
+        contract: CmsProductContract.insideRiser45,
+        baselinePorts: riserPorts,
+      );
+
+      // Scale height to 100mm (height > 75mm where flat blank Y span exceeds X length)
+      controller.setIncludeCouplerFlaps(true);
+      controller.selectParameter('height');
+      controller.evaluateMorph(100.0);
+      final scaledDoc100 = controller.previewDocument;
+
+      // 1. Verify 4 flaps exist
+      final flaps100 = scaledDoc100.faces.where((f) => f.id.startsWith('F_FLAP_RISER_')).toList();
+      expect(flaps100.length, equals(4));
+      expect(
+        flaps100.map((f) => f.id).toSet(),
+        equals({'F_FLAP_RISER_P1_L', 'F_FLAP_RISER_P1_R', 'F_FLAP_RISER_P2_L', 'F_FLAP_RISER_P2_R'}),
+      );
+
+      // 2. Verify all 4 flaps are attached strictly to the sidewall cheeks F_6, F_8, F_1, F_3
+      final flapBends100 = scaledDoc100.bends.where((b) => b.id.startsWith('BF_RISER_')).toList();
+      expect(flapBends100.length, equals(4));
+
+      final bP1L = flapBends100.firstWhere((b) => b.id == 'BF_RISER_P1_L');
+      final bP1R = flapBends100.firstWhere((b) => b.id == 'BF_RISER_P1_R');
+      final bP2L = flapBends100.firstWhere((b) => b.id == 'BF_RISER_P2_L');
+      final bP2R = flapBends100.firstWhere((b) => b.id == 'BF_RISER_P2_R');
+
+      expect(bP1L.parentFaceId, equals('F_6'), reason: 'Port 1 Left flap must attach to sidewall F_6, not return flange');
+      expect(bP1R.parentFaceId, equals('F_8'), reason: 'Port 1 Right flap must attach to sidewall F_8, not return flange');
+      expect(bP2L.parentFaceId, equals('F_1'), reason: 'Port 2 Left flap must attach to sidewall F_1, not return flange');
+      expect(bP2R.parentFaceId, equals('F_3'), reason: 'Port 2 Right flap must attach to sidewall F_3, not return flange');
+
+      // 3. Verify bend lines are strictly vertical at x = 0 (P1) and x = 300 (P2), spanning H = 100mm
+      expect(bP1L.p1.x, closeTo(0.0, 1.0));
+      expect(bP1L.p2.x, closeTo(0.0, 1.0));
+      expect((bP1L.p1.y - bP1L.p2.y).abs(), closeTo(100.0, 1.0), reason: 'Flap bend span must match scaled height 100mm');
+
+      expect(bP2L.p1.x, closeTo(300.0, 1.0));
+      expect(bP2L.p2.x, closeTo(300.0, 1.0));
+      expect((bP2L.p1.y - bP2L.p2.y).abs(), closeTo(100.0, 1.0), reason: 'Flap bend span must match scaled height 100mm');
+
+      // 4. Verify 3D folding: All 4 flaps fold vertically upright with sidewalls (|normal.z| < 0.15)
+      final foldResult100 = KinematicFoldEngine.foldDocument(scaledDoc100, foldProgress: 1.0);
+      for (final flap in flaps100) {
+        final polys = foldResult100.polygons.where((p) => p.faceId == flap.id).toList();
+        expect(polys, isNotEmpty);
+        for (final p in polys) {
+          expect(p.normal.z.abs(), lessThan(0.15), reason: 'Flap ${flap.id} must fold vertically with sidewall in 3D');
+        }
+      }
+    });
   });
 }
+
+

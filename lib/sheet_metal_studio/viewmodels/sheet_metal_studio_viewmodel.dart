@@ -63,6 +63,11 @@ import '../engine/cms/cms_3d_opening_detector.dart';
 import '../engine/cms/cms_opening_plane_analyzer.dart';
 import '../engine/cms/cms_port_reconciler.dart';
 import '../engine/cms/cms_coupler_classifier.dart';
+import '../engine/cms/tray_equal_cross_scaler.dart';
+import '../engine/cms/tray_unequal_cross_scaler.dart';
+import '../engine/cms/tray_equal_tee_scaler.dart';
+import '../engine/cms/tray_unequal_tee_scaler.dart';
+import '../engine/cms/tray_reducer_scaler.dart';
 
 import '../engine/planar_face_decomposer.dart';
 
@@ -128,6 +133,8 @@ import '../models/canvas_display_settings.dart';
 import '../models/trunking_cover_data.dart';
 import '../engine/covers/trunking_cover_generator.dart';
 import '../models/dynamic_dimension_input_state.dart';
+import '../engine/ladder/ladder_assembly_generator.dart';
+import '../models/ladder/ladder_assembly_models.dart';
 
 enum StudioToolMode {
   select, // Click on bend line, face, cut, or punch to inspect/drag
@@ -466,6 +473,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   bool _isGlassMode = false;
 
+  bool _isOrthoProjection = false;
+
   bool _showDimensions = true;
 
   CanvasDisplaySettings _canvasDisplaySettings = const CanvasDisplaySettings();
@@ -575,6 +584,15 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   // Cached Manufacturing Flat Pattern Developed Blank
 
   FlatPatternResult? _cachedFlatPattern;
+
+  // Ladder Assembly State
+  DsfLadderAssembly? _activeLadderAssembly;
+  DsfLadderAssembly? get activeLadderAssembly => _activeLadderAssembly;
+  bool get isLadderAssembly =>
+      _activeLadderAssembly != null ||
+      (_document.metadata['isLadderAssembly'] == true) ||
+      (_document.productType == 'cable_ladder') ||
+      (_document.itemName.toLowerCase().contains('ladder'));
 
   // Topological Zone Morphing Template State
 
@@ -829,10 +847,11 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   /// Launches Phase 2: Teach Scaling. Automatically finalizes Phase 1 baseline if needed.
   void startTeachScaling() {
+    if (isLadderAssembly) return;
     final cmsTemplate = _document.metadata['cmsTemplate'] as Map<String, dynamic>?;
     final int portCount = _persistentCmsPorts.isNotEmpty ? _persistentCmsPorts.length : cmsGuidedController.state.discoveredPorts.length;
 
-    final docTypeLower = '${_document.productType} ${_document.itemName} ${_document.metadata['appliedTemplate']} ${cmsTemplate?['variation']}'.toLowerCase();
+    final docTypeLower = '${_document.productType} ${_document.itemName} ${_document.metadata['appliedTemplate']} ${_document.metadata['fittingVariant']} ${_document.metadata['variantName']} ${cmsTemplate?['variation']}'.toLowerCase();
     final hasUnequalFlag = docTypeLower.contains('unequal');
     bool portsAreUnequal = false;
     if (_persistentCmsPorts.length >= 2) {
@@ -847,6 +866,15 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }
 
     final contract =
+        (TrayUnequalCrossScaler.isTrayUnequalCross(_document)
+            ? CmsProductContract.unequalCross
+            : TrayEqualCrossScaler.isTrayEqualCross(_document)
+                ? CmsProductContract.equalCross
+                : TrayUnequalTeeScaler.isTrayUnequalTee(_document)
+                    ? CmsProductContract.unequalTee
+                    : TrayEqualTeeScaler.isTrayEqualTee(_document)
+                        ? CmsProductContract.equalTee
+                        : null) ??
         (cmsTemplate != null
             ? CmsProductContract.lookup(cmsTemplate['productType'] as String?, cmsTemplate['variation'] as String? ?? cmsTemplate['variationName'] as String?)
             : null) ??
@@ -866,8 +894,15 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         CmsProductContract.lookup(_document.metadata['fittingProduct'] as String?, _document.metadata['fittingVariant'] as String?) ??
         CmsProductContract.lookup(_document.productType, _document.itemName) ??
         CmsProductContract.lookup(null, _document.itemName) ??
-        CmsProductContract.lookup(null, _document.productType) ??
-        (CmsScalingController.isInsideRiserGeometry(_document) ? CmsProductContract.insideRiser45 : CmsProductContract.bend45);
+        (CmsScalingController.isInsideRiserGeometry(_document)
+            ? (docTypeLower.contains('90') || _document.bends.where((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0).length >= 2
+                ? CmsProductContract.insideRiser90
+                : CmsProductContract.insideRiser45)
+            : CmsScalingController.isOutsideRiserGeometry(_document)
+                ? (docTypeLower.contains('90') || _document.bends.where((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0).length >= 2
+                    ? CmsProductContract.outsideRiser90
+                    : CmsProductContract.outsideRiser45)
+                : CmsProductContract.bend45);
 
     if ((cmsGuidedController.state.phase == CmsUxPhase.complete || cmsGuidedController.state.discoveredPorts.isNotEmpty) &&
         !_document.metadata.containsKey('cmsTemplate')) {
@@ -881,9 +916,14 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     if (cmsTemplate != null && cmsTemplate['canonicalDocument'] is Map) {
       try {
         baselineDoc = DsfDocument.fromJson(Map<String, dynamic>.from(cmsTemplate['canonicalDocument'] as Map));
-        // Preserve active parameters (such as flange_direction) from _document onto baselineDoc
+        // Preserve active non-geometric parameters (such as flange_direction) from _document onto baselineDoc
+        // Never overwrite canonical baseline dimensions with scaled parameters!
+        final nonGeometricParams = Map<String, double>.from(_document.parameters)
+          ..remove('width')
+          ..remove('height')
+          ..removeWhere((k, _) => k.startsWith('port'));
         baselineDoc = baselineDoc.copyWith(
-          parameters: Map<String, double>.from(baselineDoc.parameters)..addAll(_document.parameters),
+          parameters: Map<String, double>.from(baselineDoc.parameters)..addAll(nonGeometricParams),
         );
       } catch (_) {
         baselineDoc = _document;
@@ -940,6 +980,53 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   /// Seamlessly activates the scaling engine if inactive, selects the target parameter,
   /// triggers 2D contour morphing and 3D folding in real time, and broadcasts to CAD & TDS.
   void applyCmsMorphParameter(String key, double value) {
+    if (isLadderAssembly) {
+      _isTeachScalingActive = false;
+      _scalingController = null;
+      final updatedParams = Map<String, double>.from(_document.parameters);
+      updatedParams[key] = value;
+      if (key == 'port1_width' || key == 'port2_width' || key == 'width') {
+        updatedParams['width'] = value;
+        updatedParams['port1_width'] = value;
+        updatedParams['port2_width'] = value;
+      }
+      if (key == 'port1_height' || key == 'port2_height' || key == 'height') {
+        updatedParams['height'] = value;
+        updatedParams['port1_height'] = value;
+        updatedParams['port2_height'] = value;
+      }
+      if (key == 'port3_width') updatedParams['branch_width'] = value;
+      if (key == 'length' || key == 'straight_length') updatedParams['length'] = value;
+      if (key == 'radius') updatedParams['radius'] = value;
+      if (key == 'bend_angle' || key == 'angle') {
+        updatedParams['angle'] = value;
+        updatedParams['bend_angle'] = value;
+      }
+
+      final updatedMetadata = Map<String, dynamic>.from(_document.metadata);
+      final ladderMetaParams = Map<String, dynamic>.from(updatedMetadata['ladderParameters'] as Map? ?? {});
+      for (final e in updatedParams.entries) {
+        ladderMetaParams[e.key] = e.value;
+      }
+      if (key == 'accessory_style') {
+        ladderMetaParams['accessoryStyle'] = value == 1.0 ? 'segmented' : 'curved';
+      }
+      updatedMetadata['ladderParameters'] = ladderMetaParams;
+
+      _document = _document.copyWith(parameters: updatedParams, metadata: updatedMetadata);
+      _activeLadderAssembly = LadderAssemblyGenerator.generateFromDocument(_document);
+      final newDoc = LadderAssemblyGenerator.createAssemblyDsfDocument(_activeLadderAssembly!);
+      _document = newDoc;
+      _cachedMesh = _activeLadderAssembly!.assembledMesh3D;
+      _cachedCoverMesh = _activeLadderAssembly!.coverMesh3D;
+      _detectedFittingMetadata = DxfFittingMetadata.fromDocument(_document);
+      notifyListeners();
+      return;
+    }
+
+    if (_scalingController == null) {
+      startTeachScaling();
+    }
     final updatedParams = Map<String, double>.from(_document.parameters);
     updatedParams[key] = value;
     final updatedMetadata = Map<String, dynamic>.from(_document.metadata);
@@ -948,16 +1035,10 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     updatedMetadata['cmsParameters'] = cmsParams;
     updatedMetadata['cms_param_$key'] = value;
     _document = _document.copyWith(parameters: updatedParams, metadata: updatedMetadata);
-
-    if (_scalingController == null) {
-      startTeachScaling();
-    }
     if (_scalingController != null) {
-      // If a port-specific parameter is changed, make sure ports are unlinked only if the model actually defines distinct port parameters
-      if (key.startsWith('port') && _scalingController!.model.isLinkedPorts && _scalingController!.baselinePorts.isNotEmpty) {
-        if (_scalingController!.model.parameters.containsKey(key)) {
-          _scalingController!.togglePortLinking(false);
-        }
+      // If a port-specific parameter is changed, make sure ports are unlinked
+      if (key.startsWith('port') && _scalingController!.model.isLinkedPorts) {
+        _scalingController!.togglePortLinking(false);
       }
 
       if (_scalingController!.model.parameters.containsKey(key)) {
@@ -991,6 +1072,38 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         _recomputeMesh();
       }
 
+      // Handle reducer alignment live update and sync metadata variantName
+      if (key == 'reducer_alignment') {
+        final align = value == 1.0
+            ? ReducerAlignment.left
+            : (value == 2.0 ? ReducerAlignment.right : ReducerAlignment.straight);
+        _scalingController?.setReducerAlignment(align);
+
+        final variantName = value == 1.0
+            ? 'Left Reducer'
+            : (value == 2.0 ? 'Right Reducer' : 'Reducer (straight)');
+        if (_detectedFittingMetadata != null) {
+          _detectedFittingMetadata = _detectedFittingMetadata!.copyWith(variantName: variantName);
+          final metaMap = Map<String, dynamic>.from(_document.metadata);
+          metaMap['fittingMetadata'] = _detectedFittingMetadata!.toJson();
+          _document = _document.copyWith(metadata: metaMap);
+        }
+        _document.metadata['variantName'] = variantName;
+        _document.metadata['fittingVariant'] = variantName;
+        if (_scalingController != null) {
+          final updatedBaseMeta = Map<String, dynamic>.from(_scalingController!.baselineDocument.metadata)
+            ..['variantName'] = variantName
+            ..['fittingVariant'] = variantName;
+          if (_detectedFittingMetadata != null) {
+            updatedBaseMeta['fittingMetadata'] = _detectedFittingMetadata!.toJson();
+          }
+          final updatedBase = _scalingController!.baselineDocument.copyWith(
+            metadata: updatedBaseMeta,
+          );
+          _scalingController!.updateBaselineDocument(updatedBase);
+        }
+      }
+
       // Handle base flange direction live update (0.0 = Inside Flange, 1.0 = Outside Return Lip)
       if (key == 'flange_direction') {
         final isInside = value == 0.0;
@@ -1016,6 +1129,38 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         if (_scalingController != null) {
           final updatedParams = Map<String, double>.from(_scalingController!.baselineDocument.parameters);
           updatedParams['flange_direction'] = value;
+          final updatedBase = _scalingController!.baselineDocument.copyWith(
+            bends: updateBends(_scalingController!.baselineDocument.bends),
+            parameters: updatedParams,
+            metadata: Map<String, dynamic>.from(_scalingController!.baselineDocument.metadata)..addAll(_document.metadata),
+          );
+          _scalingController!.updateBaselineDocument(updatedBase);
+        }
+        _previewDocWithCover = null;
+        _recomputeMesh();
+      }
+
+      // Handle base flange angle live update (e.g. 90° or 135°)
+      if (key == 'flange_angle') {
+        List<FoldBendLine> updateBends(List<FoldBendLine> bends) {
+          return bends.map((b) {
+            final isFlange =
+                b.role == BendLineRole.flange ||
+                b.layer.toUpperCase().contains('FLANGE') ||
+                b.id.toUpperCase().startsWith('FL') ||
+                b.parentFaceId.toUpperCase().contains('FLANGE') ||
+                b.childFaceId.toUpperCase().contains('FLANGE');
+            if (isFlange) {
+              return b.copyWith(targetAngleDeg: value);
+            }
+            return b;
+          }).toList();
+        }
+
+        _document = _document.copyWith(bends: updateBends(_document.bends));
+        if (_scalingController != null) {
+          final updatedParams = Map<String, double>.from(_scalingController!.baselineDocument.parameters);
+          updatedParams['flange_angle'] = value;
           final updatedBase = _scalingController!.baselineDocument.copyWith(
             bends: updateBends(_scalingController!.baselineDocument.bends),
             parameters: updatedParams,
@@ -1633,8 +1778,10 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   bool get showPortOpeningBadges => _showPortOpeningBadges;
 
-  FoldedMeshResult? get cachedMesh =>
-      (_isTeachScalingActive && _scalingController?.currentPreview != null) ? _scalingController!.currentPreview!.foldedMesh : _cachedMesh;
+  FoldedMeshResult? get cachedMesh {
+    if (isLadderAssembly) return _cachedMesh;
+    return (_isTeachScalingActive && _scalingController?.currentPreview != null) ? _scalingController!.currentPreview!.foldedMesh : _cachedMesh;
+  }
 
   FlatPatternResult? get flatPattern => _cachedFlatPattern;
 
@@ -1720,6 +1867,18 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   bool get showWireframe => _showWireframe;
 
   bool get isGlassMode => _isGlassMode;
+
+  bool get isOrthoProjection => _isOrthoProjection;
+  set isOrthoProjection(bool val) {
+    if (_isOrthoProjection == val) return;
+    _isOrthoProjection = val;
+    notifyListeners();
+  }
+
+  void toggleOrthoProjection() {
+    _isOrthoProjection = !_isOrthoProjection;
+    notifyListeners();
+  }
 
   bool get showDimensions => _showDimensions;
 
@@ -9203,26 +9362,85 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   void updateBend(FoldBendLine updated) {
     _recordHistory();
 
-    // Replace only the FIRST bend that matches both id AND geometry.
-    // This guards against duplicate bend IDs in the document (e.g. two bends
-    // both named "B7") where a naïve id-only match would overwrite all of
-    // them with the same updated value, corrupting the topology of the
-    // unrelated bend that shares the id.
+    final isFlange = updated.role == BendLineRole.flange ||
+        updated.layer.toUpperCase().contains('FLANGE') ||
+        updated.id.toUpperCase().startsWith('FL') ||
+        updated.parentFaceId.toUpperCase().contains('FLANGE') ||
+        updated.childFaceId.toUpperCase().contains('FLANGE');
+
+    // Replace matching bend. If scaling/teach mode is active, the bend geometry in updated
+    // comes from the scaled preview, so match by ID; otherwise check ID and geometry.
     bool replaced = false;
     final newBends = _document.bends.map((b) {
-      if (!replaced && b.id == updated.id && b.p1 == updated.p1 && b.p2 == updated.p2) {
+      final isTarget = (!replaced && b.id == updated.id && (b.p1 == updated.p1 && b.p2 == updated.p2 || _isTeachScalingActive || _document.bends.where((x) => x.id == updated.id).length == 1));
+      if (isTarget) {
         replaced = true;
-        return updated;
+        return b.copyWith(
+          direction: updated.direction,
+          targetAngleDeg: updated.targetAngleDeg,
+          radiusMm: updated.radiusMm,
+          role: updated.role,
+          layer: updated.layer,
+          kFactor: updated.kFactor,
+          reliefType: updated.reliefType,
+          reliefWidthMm: updated.reliefWidthMm,
+          reliefDepthMm: updated.reliefDepthMm,
+          allowanceOverride: updated.allowanceOverride,
+          deductionOverride: updated.deductionOverride,
+          showLabel: updated.showLabel,
+          isVisible: updated.isVisible,
+        );
+      } else if (isFlange && (b.role == BendLineRole.flange || b.id.toUpperCase().startsWith('FL'))) {
+        return b.copyWith(targetAngleDeg: updated.targetAngleDeg);
       }
       return b;
     }).toList();
 
-    _document = _document.copyWith(bends: newBends);
+    _document = _document.copyWith(
+      bends: newBends,
+      parameters: {
+        ..._document.parameters,
+        if (isFlange) 'flange_angle': updated.targetAngleDeg,
+      },
+    );
 
+    if (_scalingController != null) {
+      final updatedParams = Map<String, double>.from(_scalingController!.baselineDocument.parameters);
+      if (isFlange) {
+        updatedParams['flange_angle'] = updated.targetAngleDeg;
+      }
+      final updatedBaseBends = _scalingController!.baselineDocument.bends.map((b) {
+        if (b.id == updated.id || (isFlange && (b.role == BendLineRole.flange || b.id.toUpperCase().startsWith('FL')))) {
+          return b.copyWith(
+            direction: updated.direction,
+            targetAngleDeg: updated.targetAngleDeg,
+            radiusMm: updated.radiusMm,
+            role: updated.role,
+            layer: updated.layer,
+            kFactor: updated.kFactor,
+            reliefType: updated.reliefType,
+            reliefWidthMm: updated.reliefWidthMm,
+            reliefDepthMm: updated.reliefDepthMm,
+            allowanceOverride: updated.allowanceOverride,
+            deductionOverride: updated.deductionOverride,
+            showLabel: updated.showLabel,
+            isVisible: updated.isVisible,
+          );
+        }
+        return b;
+      }).toList();
+
+      final updatedBase = _scalingController!.baselineDocument.copyWith(
+        bends: updatedBaseBends,
+        parameters: updatedParams,
+        metadata: Map<String, dynamic>.from(_scalingController!.baselineDocument.metadata)..addAll(_document.metadata),
+      );
+      _scalingController!.updateBaselineDocument(updatedBase);
+    }
+
+    _previewDocWithCover = null;
     _syncAssociativeDimensions();
-
     _recomputeMesh();
-
     notifyListeners();
   }
 
@@ -9515,6 +9733,14 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }
 
     _initCmsStateFromDocument();
+
+    if (doc.metadata['isLadderAssembly'] == true ||
+        doc.productType == 'cable_ladder' ||
+        doc.itemName.toLowerCase().contains('ladder')) {
+      _activeLadderAssembly = LadderAssemblyGenerator.generateFromDocument(doc);
+    } else {
+      _activeLadderAssembly = null;
+    }
 
     _undoStack.clear();
     _redoStack.clear();
@@ -9880,6 +10106,15 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   }
 
   void _recomputeMesh() {
+    if (isLadderAssembly) {
+      _activeLadderAssembly = LadderAssemblyGenerator.generateFromDocument(_document);
+      if (_activeLadderAssembly != null) {
+        _cachedMesh = _activeLadderAssembly!.assembledMesh3D;
+        _cachedCoverMesh = _activeLadderAssembly!.coverMesh3D;
+        _cachedFlatPattern = FlatPatternEngine.computeFlatPattern(_document);
+        return;
+      }
+    }
     _cachedMesh = KinematicFoldEngine.foldDocument(_document, foldProgress: _foldProgress, curveResolution3D: _curveResolution3D);
     _cachedCoverMesh = _buildCover3DMesh(_document.cover);
     _cachedFlatPattern = FlatPatternEngine.computeFlatPattern(_document);

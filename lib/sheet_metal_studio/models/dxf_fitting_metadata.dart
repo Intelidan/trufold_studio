@@ -174,6 +174,11 @@ class DxfFittingMetadata {
   bool get isReducer =>
       product.toLowerCase().contains('reducer');
 
+  bool get isLadder =>
+      category.toLowerCase().contains('ladder') ||
+      product.toLowerCase().contains('ladder') ||
+      variantName.toLowerCase().contains('ladder');
+
   /// Detects all channel port openings on the outer contour and maps dimensions.
   /// If [onlyAssigned] is true, returns only openings that have been assigned by the user in [manualPortEdges].
   List<ProductPortOpening> getPortOpenings(DsfDocument doc, {bool onlyAssigned = false}) {
@@ -415,6 +420,18 @@ class DxfFittingMetadata {
       if ((result.category == FittingCategory.none || result.category.isEmpty) && docCat.isNotEmpty) {
         result = result.copyWith(category: docCat);
       }
+      if (result.product == FittingProductType.reducer) {
+        final alignVal = doc.parameters['reducer_alignment'] ??
+            (doc.metadata['reducer_alignment'] as num?)?.toDouble() ??
+            (doc.metadata['cms_param_reducer_alignment'] as num?)?.toDouble();
+        if (alignVal == 1.0) {
+          result = result.copyWith(variantName: 'Left Reducer');
+        } else if (alignVal == 2.0) {
+          result = result.copyWith(variantName: 'Right Reducer');
+        } else if (alignVal == 0.0) {
+          result = result.copyWith(variantName: 'Reducer (straight)');
+        }
+      }
       return result;
     }
 
@@ -456,15 +473,26 @@ class DxfFittingMetadata {
 
     String category = FittingCategory.trayAccessories;
     final docCat = doc.category;
+    final isLadder = name.contains('ladder') ||
+        doc.productType == 'cable_ladder' ||
+        (doc.metadata['isLadderAssembly'] == true);
+
     if (docCat.isNotEmpty && docCat != FittingCategory.none) {
       category = docCat;
+    } else if (isLadder) {
+      final isStraight = name.contains('straight') ||
+          name.contains('length') ||
+          (!name.contains('bend') &&
+              !name.contains('riser') &&
+              !name.contains('tee') &&
+              !name.contains('cross') &&
+              !name.contains('reducer'));
+      category = isStraight ? FittingCategory.length : FittingCategory.ladderAccessories;
     } else if (name.contains('trunking')) {
       category = FittingCategory.trunkingAccessories;
-    } else if (name.contains('ladder')) {
-      category = FittingCategory.ladderAccessories;
     } else if (name.contains('channel')) {
       category = FittingCategory.channel;
-    } else if (name.contains('length')) {
+    } else if (name.contains('length') || name.contains('straight')) {
       category = FittingCategory.length;
     } else if (name.contains('coupler')) {
       category = FittingCategory.coupler;
@@ -477,7 +505,17 @@ class DxfFittingMetadata {
     String product = FittingProductType.bend;
     String variantName = '90 Deg Bend';
 
-    if (name.contains('bend') && name.contains('cover')) {
+    if (isLadder &&
+        (name.contains('straight') ||
+            name.contains('length') ||
+            (!name.contains('bend') &&
+                !name.contains('riser') &&
+                !name.contains('tee') &&
+                !name.contains('cross') &&
+                !name.contains('reducer')))) {
+      product = 'Ladder';
+      variantName = doc.metadata['fittingVariant'] as String? ?? 'Cable Ladder Straight Length';
+    } else if (name.contains('bend') && name.contains('cover')) {
       product = FittingProductType.bendCover;
       variantName = name.contains('45') ? '45 Deg Bend Cover' : '90 Deg Bend Cover';
     } else if (name.contains('bend')) {
@@ -509,15 +547,25 @@ class DxfFittingMetadata {
       variantName = name.contains('unequal') ? 'Unequal Tee' : 'Equal Tee';
     } else if (name.contains('reducer')) {
       product = FittingProductType.reducer;
-      variantName = name.contains('left')
-          ? 'Left Reducer'
-          : (name.contains('right') ? 'Right Reducer' : 'Reducer (straight)');
+      final alignVal = doc.parameters['reducer_alignment'] ??
+          (doc.metadata['reducer_alignment'] as num?)?.toDouble() ??
+          (doc.metadata['cms_param_reducer_alignment'] as num?)?.toDouble();
+      if (alignVal == 1.0 || name.contains('left')) {
+        variantName = 'Left Reducer';
+      } else if (alignVal == 2.0 || name.contains('right')) {
+        variantName = 'Right Reducer';
+      } else {
+        variantName = 'Reducer (straight)';
+      }
     } else if (name.contains('channel')) {
       product = 'Channel';
       variantName = name.contains('slotted') ? 'Slotted Channel' : 'Plain Channel';
+    } else if (name.contains('length') || name.contains('straight')) {
+      product = 'Length';
+      variantName = 'Straight Length';
     } else {
-      product = FittingProductType.bend;
-      variantName = name.contains('45') ? '45 Deg Bend' : '90 Deg Bend';
+      product = FittingProductType.genericFitting;
+      variantName = doc.itemName.isNotEmpty ? doc.itemName : 'Sheet Metal Part';
     }
 
     // Extract numerical dimensions from filename if present (e.g. 100x50 or 45_deg_bend_100x50)

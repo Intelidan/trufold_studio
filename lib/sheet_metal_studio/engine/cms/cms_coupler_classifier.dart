@@ -7,6 +7,7 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import '../../models/cad_primitives.dart';
 import '../../models/cnc_punch_primitive.dart';
 import '../../models/dsf_document.dart';
@@ -67,11 +68,11 @@ class CmsCouplerClassifier {
     final perfs = <CncPunchPrimitive>[];
     final byPort = <String, List<CncPunchPrimitive>>{};
 
-    final floorFace = document.faces.where((f) =>
-        f.id == document.baseFaceId ||
-        f.role == FaceRole.baseFloor ||
-        f.id.toUpperCase().contains('FLOOR') ||
-        f.id.toUpperCase().contains('BASE')).firstOrNull;
+    final floorFace = document.faces
+        .where(
+          (f) => f.id == document.baseFaceId || f.role == FaceRole.baseFloor || f.id.toUpperCase().contains('FLOOR') || f.id.toUpperCase().contains('BASE'),
+        )
+        .firstOrNull;
 
     for (final port in ports) {
       byPort[port.id] = [];
@@ -79,8 +80,7 @@ class CmsCouplerClassifier {
 
     for (final p in allPunches) {
       // 1. Explicit semantic role or COUPLER layer takes highest precedence
-      final isExplicitCoupler = p.role == CncPunchRole.coupler ||
-          p.layer.toUpperCase() == 'COUPLER';
+      final isExplicitCoupler = p.role == CncPunchRole.coupler || p.layer.toUpperCase() == 'COUPLER';
       final isExplicitPerforation = p.role == CncPunchRole.perforation;
 
       // Base floor web punches are perforations/ventilating holes, NEVER coupler slots
@@ -89,12 +89,7 @@ class CmsCouplerClassifier {
       if (isExplicitPerforation || (isOnFloor && !isExplicitCoupler)) {
         final markedPerf = p.copyWith(role: CncPunchRole.perforation);
         perfs.add(markedPerf);
-        classified.add(CmsClassifiedPunch(
-          punch: markedPerf,
-          isCouplerSlot: false,
-          isPerforation: true,
-          hostFaceId: floorFace?.id,
-        ));
+        classified.add(CmsClassifiedPunch(punch: markedPerf, isCouplerSlot: false, isPerforation: true, hostFaceId: floorFace?.id));
         continue;
       }
 
@@ -102,13 +97,8 @@ class CmsCouplerClassifier {
       // Standard cable tray / trunking obround slots typically have:
       // Width: 6 to 11 mm (nominally 8-9mm)
       // Length: 10 to 35 mm (nominally 12, 16, 20, 25, 30mm)
-      final isSlotShape = p.isSlot ||
-          p.type == PunchType.obroundSlot ||
-          p.type == PunchType.rectangle;
-      final isStandardSlotDim = p.widthMm >= 5.5 &&
-          p.widthMm <= 11.5 &&
-          p.lengthMm >= 9.5 &&
-          p.lengthMm <= 36.0;
+      final isSlotShape = p.isSlot || p.type == PunchType.obroundSlot || p.type == PunchType.rectangle;
+      final isStandardSlotDim = p.widthMm >= 5.5 && p.widthMm <= 11.5 && p.lengthMm >= 9.5 && p.lengthMm <= 36.0;
 
       final isCouplerCandidate = isExplicitCoupler || (isSlotShape && isStandardSlotDim);
 
@@ -128,22 +118,13 @@ class CmsCouplerClassifier {
         // Must be within reasonable distance (e.g. 180mm) to opening mouth
         final isValidCoupler = minDist < 180.0 || ports.isEmpty;
         if (isValidCoupler) {
-          final markedCoupler = p.copyWith(
-            role: CncPunchRole.coupler,
-            associatedPortId: closestPortId,
-          );
+          final markedCoupler = p.copyWith(role: CncPunchRole.coupler, associatedPortId: closestPortId);
           couplers.add(markedCoupler);
           if (closestPortId != null) {
             byPort[closestPortId]?.add(markedCoupler);
           }
 
-
-          classified.add(CmsClassifiedPunch(
-            punch: markedCoupler,
-            isCouplerSlot: true,
-            isPerforation: false,
-            associatedPortId: closestPortId,
-          ));
+          classified.add(CmsClassifiedPunch(punch: markedCoupler, isCouplerSlot: true, isPerforation: false, associatedPortId: closestPortId));
           continue;
         }
       }
@@ -151,11 +132,7 @@ class CmsCouplerClassifier {
       // Otherwise treat as perforation / general punch
       final markedPerf = p.copyWith(role: CncPunchRole.perforation);
       perfs.add(markedPerf);
-      classified.add(CmsClassifiedPunch(
-        punch: markedPerf,
-        isCouplerSlot: false,
-        isPerforation: true,
-      ));
+      classified.add(CmsClassifiedPunch(punch: markedPerf, isCouplerSlot: false, isPerforation: true));
     }
 
     final expectedTotal = contract.totalExpectedCouplerSlots;
@@ -178,4 +155,3 @@ class CmsCouplerClassifier {
     return math.sqrt(dx * dx + dy * dy);
   }
 }
-

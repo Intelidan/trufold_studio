@@ -27,6 +27,19 @@ class StudioTab {
     this.isModified = false,
   });
 
+  String get displayTitle {
+    if (filePath != null && filePath!.isNotEmpty) {
+      return filePath!.replaceAll('\\', '/').split('/').last;
+    }
+    if ((title.startsWith('Part_') || title == 'Untitled Part' || title == 'New Blank Part') &&
+        viewModel.document.itemName.isNotEmpty &&
+        !viewModel.document.itemName.startsWith('Part_')) {
+      final name = viewModel.document.itemName;
+      return name.endsWith('.dsf') ? name : '$name.dsf';
+    }
+    return title.endsWith('.dsf') || title.endsWith('.dxf') || title.endsWith('.dds') ? title : '$title.dsf';
+  }
+
   factory StudioTab.fromDocument(
     DsfDocument doc, {
     String? title,

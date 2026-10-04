@@ -7,6 +7,7 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import '../kinematic_fold_engine.dart';
 import '../../models/cad_primitives.dart';
 import '../../models/dsf_document.dart';
@@ -82,8 +83,9 @@ class CmsOpeningPlaneAnalyzer {
     final docType = '${document.productType} ${document.itemName}'.toLowerCase();
     final isReducer = docType.contains('reducer') || CmsScalingController.isReducerGeometry(document);
     final isOutsideRiser = !isReducer && docType.contains('outside') && (docType.contains('riser') || docType.contains('rise'));
-    final isInsideRiser = !isReducer && ((docType.contains('inside') && (docType.contains('riser') || docType.contains('rise'))) ||
-        CmsScalingController.isInsideRiserGeometry(document));
+    final isInsideRiser =
+        !isReducer &&
+        ((docType.contains('inside') && (docType.contains('riser') || docType.contains('rise'))) || CmsScalingController.isInsideRiserGeometry(document));
     final isTee = docType.contains('tee');
 
     // 1. Measure opening width directly from floor edge length
@@ -119,10 +121,9 @@ class CmsOpeningPlaneAnalyzer {
       for (final poly in foldResult.polygons) {
         if (raw.sidewallFaceIds.contains(poly.faceId)) {
           for (final v in poly.vertices) {
-            final distNormal = ((v.x - p1.x) * normal.x +
-                                (v.y - p1.y) * normal.y +
-                                (v.z - p1.z) * normal.z).abs();
-            if (distNormal > 10.0) continue;
+            final distNormal = ((v.x - p1.x) * normal.x + (v.y - p1.y) * normal.y + (v.z - p1.z) * normal.z).abs();
+            final distToEdge = math.min(v.distanceTo(p1), v.distanceTo(p2));
+            if (distNormal > 35.0 && distToEdge > 50.0) continue;
             final proj = (v.x - p1.x) * hx + (v.y - p1.y) * hy + (v.z - p1.z) * hz;
             if (proj.abs() > 2.0) {
               dotSum += proj;
@@ -168,27 +169,38 @@ class CmsOpeningPlaneAnalyzer {
 
     // 5. Measure height and find top lip from 3D folded mesh
     // Determine nominal height from parameters or file name if available
-    double? nominalH = fallbackHeight ?? (document.parameters['height'] as num?)?.toDouble();
+    final fittingParams = document.metadata['fittingMetadata']?['parameters'];
+    final fittingH = (fittingParams is Map && fittingParams['height'] is num) ? (fittingParams['height'] as num).toDouble() : null;
+    double? nominalH = fallbackHeight ?? (document.parameters['height'] as num?)?.toDouble() ?? fittingH;
     if (isReducer) {
       final floorFace = document.faces.firstWhere((f) => f.id == raw.floorFaceId, orElse: () => document.faces.first);
       final yMid = (floorFace.vertices.map((v) => v.y).reduce(math.min) + floorFace.vertices.map((v) => v.y).reduce(math.max)) / 2.0;
       final isPort1 = (raw.flatFloorEdgeP1.y + raw.flatFloorEdgeP2.y) / 2.0 < yMid;
       nominalH = isPort1
-          ? ((document.parameters['port1_height'] as num?)?.toDouble() ?? (document.parameters['height'] as num?)?.toDouble())
-          : ((document.parameters['port2_height'] as num?)?.toDouble());
+          ? ((document.parameters['port1_height'] as num?)?.toDouble() ??
+              (document.parameters['port1Height'] as num?)?.toDouble() ??
+              (document.parameters['height'] as num?)?.toDouble())
+          : ((document.parameters['port2_height'] as num?)?.toDouble() ??
+              (document.parameters['port2Height'] as num?)?.toDouble() ??
+              (document.parameters['height'] as num?)?.toDouble());
 
       if (nominalH == null || nominalH <= 15.0) {
         final fullMatch = RegExp(r'(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
         if (fullMatch != null) {
           nominalH = isPort1 ? double.tryParse(fullMatch.group(2)!) : double.tryParse(fullMatch.group(4)!);
         } else {
-          final simpleMatch = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
-          if (simpleMatch != null) {
-            nominalH = isPort1 ? double.tryParse(simpleMatch.group(2)!) : (double.tryParse(simpleMatch.group(2)!) ?? 100.0) / 2.0;
+          final threeMatch = RegExp(r'(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
+          if (threeMatch != null) {
+            nominalH = double.tryParse(threeMatch.group(3)!);
+          } else {
+            final simpleMatch = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
+            if (simpleMatch != null) {
+              nominalH = double.tryParse(simpleMatch.group(2)!);
+            }
           }
         }
       }
-      nominalH ??= isPort1 ? 100.0 : 50.0;
+      nominalH ??= 50.0;
     } else if (isTee) {
       if (normal.x < -0.5) {
         nominalH = (document.parameters['port1_height'] as num?)?.toDouble();
@@ -199,7 +211,7 @@ class CmsOpeningPlaneAnalyzer {
       }
       nominalH ??= (document.parameters['height'] as num?)?.toDouble();
     } else if (nominalH == null || nominalH <= 15.0) {
-      final match = RegExp(r'(\d+)\s*[xX]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
+      final match = RegExp(r'(\d+)\s*[xX_]\s*(\d+)').firstMatch('${document.itemName} ${document.productType}');
       if (match != null) {
         nominalH = double.tryParse(match.group(2)!);
       }
@@ -214,21 +226,15 @@ class CmsOpeningPlaneAnalyzer {
         if (raw.sidewallFaceIds.contains(poly.faceId)) {
           for (final v in poly.vertices) {
             // Distance perpendicular to the mouth plane
-            final distNormal = ((v.x - p1.x) * normal.x +
-                                (v.y - p1.y) * normal.y +
-                                (v.z - p1.z) * normal.z).abs();
+            final distNormal = ((v.x - p1.x) * normal.x + (v.y - p1.y) * normal.y + (v.z - p1.z) * normal.z).abs();
             if (distNormal > 5.5) continue; // Must be on or near the mouth plane
 
             // Distance along the width axis (must be within the mouth span)
-            final t = (v.x - p1.x) * widthDirection.x +
-                      (v.y - p1.y) * widthDirection.y +
-                      (v.z - p1.z) * widthDirection.z;
+            final t = (v.x - p1.x) * widthDirection.x + (v.y - p1.y) * widthDirection.y + (v.z - p1.z) * widthDirection.z;
             if (t < -5.0 || t > measuredWidth + 5.0) continue;
 
             // Projection along height direction
-            final projH = (v.x - p1.x) * heightDirection.x +
-                          (v.y - p1.y) * heightDirection.y +
-                          (v.z - p1.z) * heightDirection.z;
+            final projH = (v.x - p1.x) * heightDirection.x + (v.y - p1.y) * heightDirection.y + (v.z - p1.z) * heightDirection.z;
 
             if (projH > 15.0) {
               candidateHeights.add(projH);
@@ -273,10 +279,7 @@ class CmsOpeningPlaneAnalyzer {
       if (raw.sidewallFaceIds.isNotEmpty) {
         double maxWallH = 0.0;
         for (final faceId in raw.sidewallFaceIds) {
-          final face = document.faces.firstWhere(
-            (f) => f.id == faceId,
-            orElse: () => document.faces.first,
-          );
+          final face = document.faces.firstWhere((f) => f.id == faceId, orElse: () => document.faces.first);
           final h = _estimateFaceHeight(face.vertices);
           if (h > maxWallH) maxWallH = h;
         }
@@ -296,11 +299,8 @@ class CmsOpeningPlaneAnalyzer {
       }
       if (maxZ.isFinite && minZ.isFinite) {
         // Check +Z protrusion
-        if (!isOutsideRiser && !isInsideRiser && heightDirection.z > 1e-4) {
-          final currentMaxZ = math.max(
-            p1.z + measuredHeight * heightDirection.z,
-            p2.z + measuredHeight * heightDirection.z,
-          );
+        if (!isOutsideRiser && !isInsideRiser && !isReducer && heightDirection.z > 1e-4) {
+          final currentMaxZ = math.max(p1.z + measuredHeight * heightDirection.z, p2.z + measuredHeight * heightDirection.z);
           if (currentMaxZ > maxZ + 1.5) {
             final excessZ = currentMaxZ - maxZ;
             final clampedHeight = measuredHeight - excessZ / heightDirection.z;
@@ -310,10 +310,7 @@ class CmsOpeningPlaneAnalyzer {
           }
         } else if (heightDirection.z < -1e-4) {
           // Check -Z protrusion
-          final currentMinZ = math.min(
-            p1.z + measuredHeight * heightDirection.z,
-            p2.z + measuredHeight * heightDirection.z,
-          );
+          final currentMinZ = math.min(p1.z + measuredHeight * heightDirection.z, p2.z + measuredHeight * heightDirection.z);
           if (currentMinZ < minZ - 1.5) {
             final excessZ = minZ - currentMinZ;
             final clampedHeight = measuredHeight - excessZ / (-heightDirection.z);
@@ -326,16 +323,8 @@ class CmsOpeningPlaneAnalyzer {
     }
 
     // 6. Derived 4 corners of the channel mouth [P1 (floor), P3 (lip), P4 (lip), P2 (floor)]
-    final p3 = CadPoint3D(
-      p1.x + measuredHeight * heightDirection.x,
-      p1.y + measuredHeight * heightDirection.y,
-      p1.z + measuredHeight * heightDirection.z,
-    );
-    final p4 = CadPoint3D(
-      p2.x + measuredHeight * heightDirection.x,
-      p2.y + measuredHeight * heightDirection.y,
-      p2.z + measuredHeight * heightDirection.z,
-    );
+    final p3 = CadPoint3D(p1.x + measuredHeight * heightDirection.x, p1.y + measuredHeight * heightDirection.y, p1.z + measuredHeight * heightDirection.z);
+    final p4 = CadPoint3D(p2.x + measuredHeight * heightDirection.x, p2.y + measuredHeight * heightDirection.y, p2.z + measuredHeight * heightDirection.z);
     final derivedMouthCorners = [p1, p3, p4, p2];
 
     // 7. True mouth centroid (midpoint of floor & top lip)

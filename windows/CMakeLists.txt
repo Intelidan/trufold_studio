@@ -111,3 +111,18 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../assets"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
+
+# Install ANGLE OpenGL libraries next to executable for hardware 3D rendering
+set(ANGLE_SYM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter/ephemeral/.plugin_symlinks/flutter_angle/windows/angle/x64")
+if(EXISTS "${ANGLE_SYM_DIR}")
+  file(GLOB ANGLE_DEBUG_FILES "${ANGLE_SYM_DIR}/debug/*.dll")
+  install(FILES ${ANGLE_DEBUG_FILES}
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    CONFIGURATIONS Debug
+    COMPONENT Runtime)
+  file(GLOB ANGLE_RELEASE_FILES "${ANGLE_SYM_DIR}/release/*.dll")
+  install(FILES ${ANGLE_RELEASE_FILES}
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    CONFIGURATIONS Release;Profile
+    COMPONENT Runtime)
+endif()

@@ -14,7 +14,7 @@ import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../../../services/studio_clipboard_service.dart';
 import '../press_brake_machine_dialog.dart';
 import '../punch_tooling_selector_dialog.dart';
-import '../template_library_gallery_dialog.dart';
+import '../dds/dds_template_library_dialog.dart';
 import '../template_authoring_wizard_dialog.dart';
 import '../branding/trufold_app_icon_painter.dart';
 import '../canvas/canvas_display_settings_dialog.dart';
@@ -737,9 +737,10 @@ class StudioMenuBar extends StatelessWidget {
           if (onOpenTemplateLibrary != null) {
             onOpenTemplateLibrary!.call();
           } else {
-            showDialog(
-              context: context,
-              builder: (ctx) => TemplateLibraryGalleryDialog(viewModel: vm),
+            DdsTemplateLibraryDialog.show(
+              context,
+              viewModel: vm,
+              onOpenInEditor: (dsfDoc) => vm.loadDocument(dsfDoc),
             );
           }
         },

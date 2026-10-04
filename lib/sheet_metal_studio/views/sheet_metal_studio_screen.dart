@@ -22,6 +22,7 @@ import 'widgets/viewport_3d_widget.dart';
 import 'widgets/split_pane_divider.dart';
 import 'widgets/fold_progress_slider.dart';
 import 'widgets/studio/studio_ribbon_toolbar.dart';
+import 'widgets/dds/dds_template_library_dialog.dart';
 import 'widgets/studio/studio_browser_panel.dart';
 import '../models/studio_tab_model.dart';
 import '../services/studio_file_service.dart';
@@ -165,6 +166,38 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
           onPressed: () => setState(() => _isTdsWindowMinimized = false),
         ),
       ),
+    );
+  }
+
+  void _openDocumentInNewTab(DsfDocument dsfDoc) {
+    final title = dsfDoc.itemName.isNotEmpty ? '${dsfDoc.itemName}.dsf' : 'Part_${_tabs.length + 1}.dsf';
+    final vm = SheetMetalStudioViewModel(initialDocument: dsfDoc);
+
+    final tab = StudioTab(
+      id: 'TAB_${DateTime.now().microsecondsSinceEpoch}',
+      title: title,
+      viewModel: vm,
+    );
+
+    setState(() {
+      _tabs.add(tab);
+      _activeTabIndex = _tabs.length - 1;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Opened "$title" in new tab.'),
+        backgroundColor: const Color(0xFF0284C7),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _openTemplateLibrary() {
+    DdsTemplateLibraryDialog.show(
+      context,
+      viewModel: _viewModel,
+      onOpenInEditor: (dsfDoc) => _openDocumentInNewTab(dsfDoc),
     );
   }
 
@@ -1010,6 +1043,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                           _isTdsWindowOpen = true;
                           _isTdsWindowMinimized = false;
                         }),
+                        onOpenTemplateLibrary: _openTemplateLibrary,
                         onOpenCmsInspector: _toggleCmsInspector,
                         onFinishSketch: () {
                           _viewModel.setToolMode(StudioToolMode.select);
@@ -1128,6 +1162,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                                         ),
                                                       ),
                                                       child: DdsCmsParameterInspector(
+                                                        key: ValueKey('CMS_INSP_DOCKED_${_tabs[_activeTabIndex].id}'),
                                                         viewModel: _viewModel,
                                                         isLightTheme: true,
                                                         isDetached: false,
@@ -1393,6 +1428,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                     left: _cmsInspectorPosition.dx.clamp(8.0, math.max(8.0, totalW - 390.0)),
                                     top: _cmsInspectorPosition.dy.clamp(8.0, math.max(8.0, totalH - 420.0)),
                                     child: DdsCmsParameterInspector(
+                                      key: ValueKey('CMS_INSP_FLOAT_${_tabs[_activeTabIndex].id}'),
                                       viewModel: _viewModel,
                                       isLightTheme: true,
                                       isDetached: true,

@@ -22,6 +22,20 @@ class DdsTemplateResolver {
 
   /// Standard template registry mapping logical templateIds to baseline DSF filenames.
   static const Map<String, String> standardTemplates = {
+    // Cable Tray Accessories
+    'tray_bend_90': '90_deg_bend_100x50.dsf',
+    'tray_bend_45': '45_deg_bend_100x50.dsf',
+    'tray_inside_riser_90': '90_deg_inside_riser_100x50.dsf',
+    'tray_outside_riser_90': '90_deg_outside_riser_100X50.dsf',
+    'tray_inside_riser_45': '45_deg_inside_riser_100_50.dsf',
+    'tray_outside_riser_45': '45_deg_outside_riser_100_50.dsf',
+    'tray_equal_tee': 'equal_tee_100x50.dsf',
+    'tray_unequal_tee': 'unequal_tee_100x50x100x50.dsf',
+    'tray_equal_cross': 'equal_cross_100x50.dsf',
+    'tray_unequal_cross': 'unequal_cross_100x50x100x50.dsf',
+    'tray_reducer': 'reducer_100x50x50.dsf',
+
+    // Cable Trunking Accessories
     'trunking_reducer': 'reducer_100x100x50x50.dsf',
     'trunking_equal_tee': 'equal_tee_100x100.dsf',
     'trunking_unequal_tee': 'unequal_tee_100x100x50x100x100x50x50.dsf',
@@ -37,23 +51,43 @@ class DdsTemplateResolver {
 
   /// Template display names for user-friendly UI listings.
   static const Map<String, String> templateDisplayNames = {
-    'trunking_reducer': 'Straight Reducer',
-    'trunking_equal_tee': 'Equal Tee',
-    'trunking_unequal_tee': 'Unequal Tee',
-    'trunking_equal_cross': 'Equal Cross',
-    'trunking_unequal_cross': 'Unequal Cross',
-    'trunking_bend_90': '90° Flat Bend',
-    'trunking_bend_45': '45° Flat Bend',
-    'trunking_inside_riser_90': '90° Inside Riser',
-    'trunking_outside_riser_90': '90° Outside Riser',
-    'trunking_inside_riser_45': '45° Inside Riser',
-    'trunking_outside_riser_45': '45° Outside Riser',
+    // Cable Tray Accessories
+    'tray_bend_90': 'Cable Tray 90° Flat Bend',
+    'tray_bend_45': 'Cable Tray 45° Flat Bend',
+    'tray_inside_riser_90': 'Cable Tray 90° Inside Riser',
+    'tray_outside_riser_90': 'Cable Tray 90° Outside Riser',
+    'tray_inside_riser_45': 'Cable Tray 45° Inside Riser',
+    'tray_outside_riser_45': 'Cable Tray 45° Outside Riser',
+    'tray_equal_tee': 'Cable Tray Equal Tee',
+    'tray_unequal_tee': 'Cable Tray Unequal Tee',
+    'tray_equal_cross': 'Cable Tray Equal Cross',
+    'tray_unequal_cross': 'Cable Tray Unequal Cross',
+    'tray_reducer': 'Cable Tray Reducer',
+
+    // Cable Trunking Accessories
+    'trunking_reducer': 'Cable Trunking Straight Reducer',
+    'trunking_equal_tee': 'Cable Trunking Equal Tee',
+    'trunking_unequal_tee': 'Cable Trunking Unequal Tee',
+    'trunking_equal_cross': 'Cable Trunking Equal Cross',
+    'trunking_unequal_cross': 'Cable Trunking Unequal Cross',
+    'trunking_bend_90': 'Cable Trunking 90° Flat Bend',
+    'trunking_bend_45': 'Cable Trunking 45° Flat Bend',
+    'trunking_inside_riser_90': 'Cable Trunking 90° Inside Riser',
+    'trunking_outside_riser_90': 'Cable Trunking 90° Outside Riser',
+    'trunking_inside_riser_45': 'Cable Trunking 45° Inside Riser',
+    'trunking_outside_riser_45': 'Cable Trunking 45° Outside Riser',
   };
 
   /// Resolves a template synchronously from disk (used by desktop / test runner).
   static DsfDocument? resolveTemplateSync(DdsTemplateReference ref, {String? baseDirectory}) {
+    if (ref.templateId.toLowerCase().contains('ladder')) {
+      return _synthesizeLadderTemplate(ref.templateId);
+    }
     final fileName = _resolveFileName(ref);
     if (fileName == null) return null;
+    if (fileName.toLowerCase().contains('ladder')) {
+      return _synthesizeLadderTemplate(ref.templateId);
+    }
 
     final dir = baseDirectory ?? defaultTemplatesDir;
     final candidatePaths = [
@@ -84,8 +118,14 @@ class DdsTemplateResolver {
 
   /// Resolves a template asynchronously via Flutter AssetBundle (for live UI).
   static Future<DsfDocument?> resolveTemplateAsync(DdsTemplateReference ref, {String? baseDirectory}) async {
+    if (ref.templateId.toLowerCase().contains('ladder')) {
+      return _synthesizeLadderTemplate(ref.templateId);
+    }
     final fileName = _resolveFileName(ref);
     if (fileName == null) return null;
+    if (fileName.toLowerCase().contains('ladder')) {
+      return _synthesizeLadderTemplate(ref.templateId);
+    }
 
     final dir = baseDirectory ?? defaultTemplatesDir;
     final candidateAssetPaths = [
@@ -128,8 +168,20 @@ class DdsTemplateResolver {
     final fileName = standardTemplates[templateId] ?? '$templateId.dsf';
     return DdsTemplateReference(
       templateId: templateId,
-      templateCategory: 'trunking_accessories',
+      templateCategory: templateId.contains('ladder') ? 'ladder_accessories' : 'trunking_accessories',
       baselineFileName: fileName,
+    );
+  }
+
+  /// Synthesizes a baseline [DsfDocument] for generative cable ladder assemblies.
+  /// Ladder assemblies are purely generative (no disk DSF template required).
+  static DsfDocument _synthesizeLadderTemplate(String templateId) {
+    return DsfDocument(
+      productType: 'cable_ladder',
+      itemName: templateDisplayNames[templateId] ?? 'Cable Ladder Assembly',
+      outerContour: const [],
+      bends: const [],
+      metadata: {'isLadderAssembly': true, 'templateId': templateId},
     );
   }
 
@@ -137,6 +189,30 @@ class DdsTemplateResolver {
   /// Used by the Excel importer for intelligent batch auto-matching.
   static DdsTemplateReference? matchByDescription(String text) {
     final lower = text.toLowerCase();
+
+    // 0. Dedicated Cable Ladder Matching
+    if (lower.contains('ladder')) {
+      if (lower.contains('inside') && (lower.contains('riser') || lower.contains('rise') || lower.contains('internal'))) {
+        return createReference('ladder_inside_riser_90');
+      }
+      if (lower.contains('outside') && (lower.contains('riser') || lower.contains('rise') || lower.contains('external'))) {
+        return createReference('ladder_outside_riser_90');
+      }
+      if (lower.contains('bend') || lower.contains('elbow')) {
+        if (lower.contains('45')) return createReference('ladder_bend_45');
+        return createReference('ladder_bend_90');
+      }
+      if (lower.contains('reducer') || lower.contains('transition')) {
+        return createReference('ladder_reducer');
+      }
+      if (lower.contains('cross') || lower.contains('4-way')) {
+        return createReference('ladder_equal_cross');
+      }
+      if (lower.contains('tee') || lower.contains('t-piece')) {
+        return createReference('ladder_equal_tee');
+      }
+      return createReference('ladder_straight');
+    }
 
     if (lower.contains('reducer') || lower.contains('transition')) {
       return createReference('trunking_reducer');
@@ -171,3 +247,4 @@ class DdsTemplateResolver {
     return null;
   }
 }
+

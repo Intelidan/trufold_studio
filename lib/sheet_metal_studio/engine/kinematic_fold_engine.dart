@@ -269,7 +269,9 @@ class KinematicFoldEngine {
         doc.metadata['isCover'] == true ||
         doc.productType.toLowerCase().contains('cover') ||
         doc.itemName.toLowerCase().contains('cover');
-    final shouldEnsureBaseFloorAtBottom = ensureBaseFloorAtBottom && !isCoverDoc;
+    final docType = '${doc.productType} ${doc.itemName}'.toLowerCase();
+    final isOutsideRiser = docType.contains('outside') && (docType.contains('riser') || docType.contains('rise'));
+    final shouldEnsureBaseFloorAtBottom = ensureBaseFloorAtBottom && !isCoverDoc && !isOutsideRiser;
 
     if (shouldEnsureBaseFloorAtBottom && t > 0.05 && polygons.isNotEmpty) {
       double baseSumZ = 0.0;

@@ -24,6 +24,9 @@ import '../cms/cms_3d_opening_detector.dart';
 import '../cms/cms_opening_plane_analyzer.dart';
 import '../cms/cms_port_matcher.dart';
 import '../cms/cms_scaling_controller.dart';
+import '../ladder/ladder_assembly_generator.dart';
+import '../../models/ladder/ladder_assembly_models.dart';
+import '../../models/ladder/ladder_assembly_parameters.dart';
 import '../covers/trunking_cover_generator.dart';
 import '../kinematic_fold_engine.dart';
 
@@ -76,6 +79,148 @@ class DdsInstanceEvaluator {
     required DdsProductInstance instance,
     required DsfDocument baselineDoc,
   }) {
+    // 0. Dedicated Generative Pipeline for Cable Ladders
+    final tId = instance.templateReference.templateId.toLowerCase();
+    final pName = instance.productName.toLowerCase();
+    final isLadder = tId.contains('ladder') || pName.contains('ladder');
+
+    if (isLadder) {
+      final width = (instance.instanceParameters['width'] ?? instance.instanceParameters['W'] ?? 600.0);
+      final height = (instance.instanceParameters['height'] ?? instance.instanceParameters['H'] ?? 100.0);
+      final length = (instance.instanceParameters['length'] ?? instance.instanceParameters['L'] ?? 3000.0);
+      final thickness = (instance.instanceParameters['thickness'] ?? instance.instanceParameters['T'] ?? 2.0);
+      final flangeW = (instance.instanceParameters['flangeWidth'] ?? instance.instanceParameters['flange_width'] ?? 32.0);
+      final endMargin = (instance.instanceParameters['endMarginPitch'] ?? instance.instanceParameters['end_rung_offset'] ?? 75.0);
+      final targetPitch = (instance.instanceParameters['rungPitch'] ?? instance.instanceParameters['rung_pitch'] ?? 250.0);
+
+      final jointStr = instance.instanceParameters['rungJointMethod']?.toString() ??
+          (instance.instanceParameters['rung_joint_method'] == 0.0 ? 'directInsideWeld' : 'passThroughOutsideWeld');
+      final jointMethod = LadderRungJointMethod.fromString(jointStr);
+
+      final pitchModeStr = instance.instanceParameters['rungPitchMode']?.toString();
+      final pitchMode = RungPitchMode.fromString(pitchModeStr);
+
+      final flangeDir = (instance.instanceParameters['flange_direction'] ?? 0.0) == 1.0
+          ? LadderFlangeDirection.outside
+          : LadderFlangeDirection.inside;
+
+      final ladderParams = LadderAssemblyParameters(
+        width: width,
+        height: height,
+        length: length,
+        thickness: thickness,
+        flangeWidth: flangeW,
+        flangeDirection: flangeDir,
+        endMarginPitch: endMargin,
+        intermediateTargetPitch: targetPitch,
+        pitchMode: pitchMode,
+        jointMethod: jointMethod,
+        outsideWeldProjection: (instance.instanceParameters['outsideWeldProjection'] ?? 3.5),
+        includeCover: instance.coverConfiguration.included,
+        coverHeight: instance.coverConfiguration.flangeDepthMm > 0 ? instance.coverConfiguration.flangeDepthMm : 12.0,
+        includeSpliceHoles: (instance.instanceParameters['include_splice_holes'] ?? 1.0) > 0.5,
+        materialName: instance.material,
+      );
+
+      final DsfLadderAssembly ladderAssembly;
+      if (tId.contains('inside_riser') || pName.contains('inside riser')) {
+        final angle = (instance.instanceParameters['angle'] ?? (tId.contains('45') ? 45.0 : 90.0)).toDouble();
+        final radius = (instance.instanceParameters['radius'] ?? 300.0).toDouble();
+        ladderAssembly = LadderAssemblyGenerator.generateRiser(
+          angleDeg: angle,
+          radiusMm: radius,
+          isInsideRiser: true,
+          params: ladderParams,
+        );
+      } else if (tId.contains('outside_riser') || pName.contains('outside riser')) {
+        final angle = (instance.instanceParameters['angle'] ?? (tId.contains('45') ? 45.0 : 90.0)).toDouble();
+        final radius = (instance.instanceParameters['radius'] ?? 300.0).toDouble();
+        ladderAssembly = LadderAssemblyGenerator.generateRiser(
+          angleDeg: angle,
+          radiusMm: radius,
+          isInsideRiser: false,
+          params: ladderParams,
+        );
+      } else if (tId.contains('bend') || pName.contains('bend')) {
+        final angle = (instance.instanceParameters['angle'] ?? (tId.contains('45') ? 45.0 : 90.0)).toDouble();
+        final radius = (instance.instanceParameters['radius'] ?? 300.0).toDouble();
+        ladderAssembly = LadderAssemblyGenerator.generateHorizontalBend(
+          angleDeg: angle,
+          radiusMm: radius,
+          params: ladderParams,
+        );
+      } else if (tId.contains('reducer') || pName.contains('reducer')) {
+        final w1 = (instance.instanceParameters['width'] ?? instance.instanceParameters['W'] ?? 600.0).toDouble();
+        final w2 = (instance.instanceParameters['port2_width'] ?? instance.instanceParameters['width2'] ?? instance.instanceParameters['W2'] ?? 300.0).toDouble();
+        final len = (instance.instanceParameters['length'] ?? instance.instanceParameters['L'] ?? 500.0).toDouble();
+        final alignment = instance.instanceParameters['alignment']?.toString() ?? 'straight';
+        ladderAssembly = LadderAssemblyGenerator.generateReducer(
+          width1: w1,
+          width2: w2,
+          length: len,
+          alignment: alignment,
+          params: ladderParams,
+        );
+      } else if (tId.contains('tee') || pName.contains('tee')) {
+        final mainW = (instance.instanceParameters['width'] ?? instance.instanceParameters['W'] ?? 600.0).toDouble();
+        final branchW = (instance.instanceParameters['port3_width'] ?? instance.instanceParameters['branch_width'] ?? mainW).toDouble();
+        final radius = (instance.instanceParameters['radius'] ?? 300.0).toDouble();
+        ladderAssembly = LadderAssemblyGenerator.generateTee(
+          mainWidth: mainW,
+          branchWidth: branchW,
+          radiusMm: radius,
+          params: ladderParams,
+        );
+      } else if (tId.contains('cross') || pName.contains('cross')) {
+        final mainW = (instance.instanceParameters['width'] ?? instance.instanceParameters['W'] ?? 600.0).toDouble();
+        final branchW = (instance.instanceParameters['port4_width'] ?? instance.instanceParameters['branch_width'] ?? mainW).toDouble();
+        final radius = (instance.instanceParameters['radius'] ?? 300.0).toDouble();
+        ladderAssembly = LadderAssemblyGenerator.generateCross(
+          mainWidth: mainW,
+          branchWidth: branchW,
+          radiusMm: radius,
+          params: ladderParams,
+        );
+      } else {
+        ladderAssembly = LadderAssemblyGenerator.generateStraightLadder(ladderParams);
+      }
+
+      final baseMesh3D = ladderAssembly.assembledMesh3D;
+      final coverMesh3D = ladderAssembly.coverMesh3D;
+      final combinedMesh3D = coverMesh3D != null
+          ? baseMesh3D.combineWith(coverMesh3D, preserveCenter: true)
+          : baseMesh3D;
+
+      final density = resolveDensity(instance.material);
+      final weightKg = ladderAssembly.hardwareBOM.totalSteelWeightKg;
+      final areaM2 = weightKg / (density * (thickness / 1000.0));
+
+      final takeoff = DdsCalculatedTakeoff(
+        blankSurfaceAreaM2: areaM2,
+        estimatedNetWeightKg: weightKg,
+      );
+
+      return EvaluatedDdsInstance(
+        instance: instance.copyWith(calculatedTakeoff: takeoff),
+        scaledBaseDocument: baselineDoc.copyWith(
+          parameters: {
+            ...baselineDoc.parameters,
+            ...instance.instanceParameters,
+          },
+          metadata: {
+            ...baselineDoc.metadata,
+            'ladderAssembly': ladderAssembly,
+          },
+        ),
+        coverData: null,
+        baseMesh3D: baseMesh3D,
+        coverMesh3D: coverMesh3D,
+        combinedMesh3D: combinedMesh3D,
+        calculatedTakeoff: takeoff,
+        scaledPorts: ladderAssembly.splicePorts,
+      );
+    }
+
     // 1. Resolve CMS Product Contract & baseline ports
     final contract = _resolveContract(instance.templateReference.templateId, baselineDoc);
     final baselinePorts = _extractBaselinePorts(baselineDoc, contract);

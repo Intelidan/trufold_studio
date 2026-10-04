@@ -15,8 +15,7 @@ import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../press_brake_machine_dialog.dart';
 import '../punch_tooling_selector_dialog.dart';
 import '../studio_tab_bar.dart';
-import '../template_library_gallery_dialog.dart';
-import '../template_authoring_wizard_dialog.dart';
+import '../dds/dds_template_library_dialog.dart';
 import '../../../services/studio_clipboard_service.dart';
 import 'studio_3d_tool_icons.dart';
 import 'studio_menu_bar.dart';
@@ -168,29 +167,44 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
           // Active Drawing Status Pill
           _buildActiveDrawingStatusPill(vm),
 
-          const SizedBox(width: 6),
-
-          // Quick Save Button
+          // Parametric Template Library Action Button (Always visible on top bar)
           Tooltip(
-            message: 'Save Part (Ctrl+S)',
+            message: 'Parametric Template Library (Standard Cable Trays, Ladders & Trunking)',
             child: InkWell(
-              onTap: widget.onSaveFile,
+              onTap: () {
+                if (widget.onOpenTemplateLibrary != null) {
+                  widget.onOpenTemplateLibrary!();
+                } else {
+                  DdsTemplateLibraryDialog.show(
+                    context,
+                    viewModel: vm,
+                    onOpenInEditor: (dsfDoc) => vm.loadDocument(dsfDoc),
+                  );
+                }
+              },
               borderRadius: BorderRadius.circular(4),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0284C7).withValues(alpha: 0.2),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0D9488), Color(0xFF0F766E)],
+                  ),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFF0284C7), width: 0.8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0D9488).withValues(alpha: 0.35),
+                      blurRadius: 4,
+                    ),
+                  ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: const [
-                    Icon(Icons.save_outlined, size: 13, color: Color(0xFF38BDF8)),
+                    Icon(Icons.dashboard_customize, size: 13, color: Colors.white),
                     SizedBox(width: 4),
                     Text(
-                      'Save',
-                      style: TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.bold),
+                      'Template Library',
+                      style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -251,36 +265,7 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
             ),
           ),
 
-          // Consolidated CMS Parameter Inspector Action Button
-          if (widget.onOpenCmsInspector != null) ...[
-            const SizedBox(width: 6),
-            Tooltip(
-              message: 'Consolidated CMS Parameters Inspector (Detachable Panel)',
-              child: InkWell(
-                onTap: widget.onOpenCmsInspector,
-                borderRadius: BorderRadius.circular(4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: const Color(0xFF6366F1), width: 0.8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.tune, size: 13, color: Color(0xFF818CF8)),
-                      SizedBox(width: 4),
-                      Text(
-                        'CMS Params',
-                        style: TextStyle(color: Color(0xFF818CF8), fontSize: 10.5, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
+
 
           if (widget.onMaterialDialog != null) ...[
             const SizedBox(width: 6),
@@ -349,8 +334,8 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
       primary = meta.product;
     } else if (meta != null && meta.category.isNotEmpty && meta.category != 'None') {
       primary = meta.category;
-    } else if (activeTab != null && activeTab.title.trim().isNotEmpty && activeTab.title != 'Untitled Part') {
-      primary = activeTab.title.trim();
+    } else if (activeTab != null && activeTab.displayTitle.trim().isNotEmpty && activeTab.displayTitle != 'Untitled Part') {
+      primary = activeTab.displayTitle.trim();
     } else if (vm.document.itemName.trim().isNotEmpty) {
       primary = vm.document.itemName.trim();
     } else {
@@ -684,8 +669,8 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
 
                   _buildDivider(),
 
-                  // Parametric Templates Popover
-                  _buildTemplatesDropdown(context, vm),
+                  // Parametric Template Library Button
+                  _buildTemplateLibraryButton(context, vm),
                 ],
               ),
             ),
@@ -784,131 +769,52 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
     );
   }
 
-  Widget _buildTemplatesDropdown(BuildContext context, SheetMetalStudioViewModel vm) {
-    return PopupMenuButton<String>(
-      tooltip: 'Parametric Sheet Metal Templates',
-      offset: const Offset(0, 42),
-      onSelected: (value) {
-        if (value == 'sample_bracket') {
-          widget.onLoadSampleBracket?.call();
-          return;
-        }
-        if (value == 'gallery') {
+  Widget _buildTemplateLibraryButton(BuildContext context, SheetMetalStudioViewModel vm) {
+    return Tooltip(
+      message: 'Template Library (Browse & Insert Standard Templates)',
+      child: InkWell(
+        onTap: () {
           if (widget.onOpenTemplateLibrary != null) {
             widget.onOpenTemplateLibrary!.call();
           } else {
-            showDialog(
-              context: context,
-              builder: (ctx) => TemplateLibraryGalleryDialog(viewModel: vm),
+            DdsTemplateLibraryDialog.show(
+              context,
+              viewModel: vm,
+              onOpenInEditor: (dsfDoc) => vm.loadDocument(dsfDoc),
             );
           }
-          return;
-        }
-        if (value == 'author_wizard') {
-          if (widget.onOpenTemplateAuthoring != null) {
-            widget.onOpenTemplateAuthoring!.call();
-          } else {
-            showDialog(
-              context: context,
-              builder: (ctx) => TemplateAuthoringWizardDialog(viewModel: vm),
-            );
-          }
-          return;
-        }
-        vm.setPropertyInspectorOpen(true);
-        switch (value) {
-          case 'tee':
-            vm.loadTemplateTee();
-            break;
-          case 'bend90':
-            vm.loadTemplateBend90();
-            break;
-          case 'bend45':
-            vm.loadTemplateBend45();
-            break;
-          case 'reducer':
-            vm.loadTemplateReducer();
-            break;
-          case 'cross':
-            vm.loadTemplateCross();
-            break;
-          case 'straight':
-            vm.loadTemplateStraight();
-            break;
-          case 'close':
-            vm.closeTemplateMode();
-            break;
-        }
-      },
-      itemBuilder: (context) => [
-        const PopupMenuItem(
-          value: 'gallery',
-          child: Row(
-            children: [
-              Icon(Icons.dashboard_customize, size: 16, color: Color(0xFF0284C7)),
-              SizedBox(width: 8),
-              Text('Template Library...'),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'author_wizard',
-          child: Row(
-            children: [
-              Icon(Icons.auto_fix_high, size: 16, color: Color(0xFF10B981)),
-              SizedBox(width: 8),
-              Text('Author Template from DXF...'),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        const PopupMenuItem(
-          value: 'sample_bracket',
-          child: Row(
-            children: [
-              Icon(Icons.architecture, size: 16, color: Color(0xFF0284C7)),
-              SizedBox(width: 8),
-              Text('Sample Sheet Metal Bracket'),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        const PopupMenuItem(value: 'tee', child: Text('T-Piece Duct Fitting')),
-        const PopupMenuItem(value: 'bend90', child: Text('90° Radius Elbow')),
-        const PopupMenuItem(value: 'bend45', child: Text('45° Radius Elbow')),
-        const PopupMenuItem(value: 'reducer', child: Text('Concentric Reducer')),
-        const PopupMenuItem(value: 'cross', child: Text('4-Way Cross Fitting')),
-      ],
-      child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: vm.isTemplateActive ? const Color(0xFFE0F2FE) : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
-            width: 1.0,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.auto_awesome_mosaic_outlined,
-              size: 16,
-              color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFF475569),
+        },
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: vm.isTemplateActive ? const Color(0xFFE0F2FE) : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
+              width: 1.0,
             ),
-            const SizedBox(width: 5),
-            Text(
-              'Templates',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFF334155),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.dashboard_customize,
+                size: 16,
+                color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFF475569),
               ),
-            ),
-            const Icon(Icons.arrow_drop_down, size: 15, color: Color(0xFF64748B)),
-          ],
+              const SizedBox(width: 6),
+              Text(
+                'Template Library',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: vm.isTemplateActive ? const Color(0xFF0284C7) : const Color(0xFF334155),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

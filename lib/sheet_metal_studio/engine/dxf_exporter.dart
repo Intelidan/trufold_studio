@@ -14,11 +14,14 @@
 // =============================================================================
 
 import 'dart:math' as math;
+import '../models/cad_geometry.dart';
+import '../models/cad_part.dart';
 import '../models/cad_primitives.dart';
 import '../models/cnc_punch_primitive.dart';
 import '../models/fold_bend_line.dart';
 import '../models/dsf_document.dart';
 import '../models/dsf_layer.dart';
+import '../models/ladder/ladder_assembly_models.dart';
 import '../models/trunking_cover_data.dart';
 import 'covers/trunking_cover_generator.dart';
 import 'associative_dimension_engine.dart';
@@ -66,6 +69,145 @@ class DxfExporter {
     }
 
     return _exportCombinedDxf(doc, doc.cover!);
+  }
+
+  /// Converts a [CadPart] into a standalone [DsfDocument] for DXF and CAM operations.
+  static DsfDocument partToDsfDocument(CadPart part) {
+    final bends = <FoldBendLine>[];
+    final punches = <CncPunchPrimitive>[];
+    final cutLines = <CadLineSegment>[];
+
+    for (final geom in part.geometries) {
+      if (geom is CadLine2D) {
+        if (geom.layer.toLowerCase().contains('bend')) {
+          bends.add(FoldBendLine(
+            id: geom.id,
+            p1: geom.p1,
+            p2: geom.p2,
+            targetAngleDeg: 90.0,
+            direction: BendDirection.up,
+            layer: geom.layer,
+          ));
+        } else {
+          cutLines.add(CadLineSegment(
+            id: geom.id,
+            p1: geom.p1,
+            p2: geom.p2,
+            layer: geom.layer,
+          ));
+        }
+      } else if (geom is CadCircle2D) {
+        punches.add(CncPunchPrimitive(
+          id: geom.id,
+          center: geom.center,
+          type: PunchType.roundHole,
+          diameterMm: geom.radius * 2.0,
+          role: CncPunchRole.coupler,
+          layer: geom.layer,
+        ));
+      } else if (geom is CadRectangle2D) {
+        punches.add(CncPunchPrimitive(
+          id: geom.id,
+          center: geom.center,
+          type: PunchType.rectangle,
+          widthMm: geom.widthMm,
+          lengthMm: geom.heightMm,
+          role: CncPunchRole.perforation,
+          layer: geom.layer,
+        ));
+      } else if (geom is CadSlot2D) {
+        punches.add(CncPunchPrimitive(
+          id: geom.id,
+          center: geom.center,
+          type: PunchType.obroundSlot,
+          widthMm: geom.widthMm,
+          lengthMm: geom.lengthMm,
+          rotationDeg: geom.rotationDeg,
+          role: CncPunchRole.perforation,
+          layer: geom.layer,
+        ));
+      }
+    }
+
+    return DsfDocument(
+      productType: 'Ladder Component',
+      itemName: part.name,
+      material: part.material,
+      outerContour: part.outerContour,
+      bends: bends,
+      punches: punches,
+      cutLines: cutLines,
+    );
+  }
+
+  /// Exports a single [CadPart] to AutoCAD Release 12 / 2000 compliant ASCII DXF string.
+  static String exportPartDxf(CadPart part) {
+    return exportDxf(partToDsfDocument(part));
+  }
+
+  /// Exports all constituent CAD blanks of a [DsfLadderAssembly] as a map of filename -> DXF string.
+  static Map<String, String> exportLadderAssemblyDxfFiles(DsfLadderAssembly assembly) {
+    final result = <String, String>{};
+    final baseId = assembly.id.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+    result['${baseId}_left_rail.dxf'] = exportPartDxf(assembly.leftRailBlank);
+    result['${baseId}_right_rail.dxf'] = exportPartDxf(assembly.rightRailBlank);
+    result['${baseId}_rung_blank.dxf'] = exportPartDxf(assembly.rungBlank);
+    if (assembly.coverBlank != null) {
+      result['${baseId}_cover.dxf'] = exportPartDxf(assembly.coverBlank!);
+    }
+    return result;
+  }
+
+  /// Exports all constituent blanks of a [DsfLadderAssembly] nested / arranged side-by-side in a single DXF file.
+  static String exportLadderAssemblyCombinedDxf(DsfLadderAssembly assembly) {
+    final sb = StringBuffer();
+    final parts = [
+      assembly.leftRailBlank,
+      assembly.rightRailBlank,
+      assembly.rungBlank,
+      if (assembly.coverBlank != null) assembly.coverBlank!,
+    ];
+
+    double currentOffsetY = 0.0;
+    double maxPartWidthX = 0.0;
+    final docsWithOffsets = <({DsfDocument doc, CadPoint2D offset, String label})>[];
+
+    for (int i = 0; i < parts.length; i++) {
+      final part = parts[i];
+      final doc = partToDsfDocument(part);
+      final bounds = _computeDocBounds(doc);
+      final partW = bounds.hasBounds ? (bounds.maxX - bounds.minX) : 100.0;
+      final partH = bounds.hasBounds ? (bounds.maxY - bounds.minY) : 100.0;
+
+      if (partW > maxPartWidthX) maxPartWidthX = partW;
+
+      final label = i == 2
+          ? '${part.name.toUpperCase()} (QTY: ${assembly.hardwareBOM.rungCount})'
+          : part.name.toUpperCase();
+
+      docsWithOffsets.add((
+        doc: doc,
+        offset: CadPoint2D(0.0, currentOffsetY),
+        label: label,
+      ));
+
+      currentOffsetY += partH + 50.0; // 50mm clearance between blanks
+    }
+
+    _writeHeaderSection(sb, 0.0, 0.0, maxPartWidthX + 100.0, currentOffsetY);
+    _writeTablesSection(sb, DsfLayer.defaultLayers());
+
+    sb.writeln('0\nSECTION');
+    sb.writeln('2\nENTITIES');
+
+    for (final item in docsWithOffsets) {
+      _writeDocEntities(sb, item.doc, offset: item.offset, partLabel: item.label);
+    }
+
+    sb.writeln('0\nENDSEC');
+    sb.writeln('0\nEOF');
+
+    return sb.toString();
   }
 
   static String _exportSingleDoc(DsfDocument doc, {String? partLabel}) {

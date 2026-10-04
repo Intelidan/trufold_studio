@@ -24,10 +24,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../engine/dds/dds_instance_evaluator.dart';
+import '../../../engine/cms/tray_reducer_scaler.dart';
 import '../../../models/cms/cms_product_contract.dart';
 import '../../../models/dds/dds_product_instance.dart';
+import '../../../models/fold_bend_line.dart';
 import '../../../models/sheet_metal_definition.dart';
 import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
+import '../../../engine/ladder/ladder_two_pitch_solver.dart';
+import '../../../models/ladder/ladder_assembly_parameters.dart';
 import '../bend_radius_dialog.dart';
 import '../cms_perforation_dialog.dart';
 
@@ -133,10 +137,33 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     }
   }
 
+  String? _lastDocFingerprint;
+
+  void _resetLocalStateIfDocChanged() {
+    final doc = widget.viewModel?.document;
+    final fingerprint = widget.instance != null
+        ? 'INSTANCE_${widget.instance!.instanceId}_${widget.instance!.productName}'
+        : (doc != null ? 'DOC_${doc.itemName}_${doc.productType}_${identityHashCode(doc)}' : null);
+
+    if (_lastDocFingerprint != null && _lastDocFingerprint != fingerprint) {
+      _localParams.clear();
+      _localCoverIncluded = null;
+      _localMaterial = null;
+      final scLinked = widget.viewModel?.scalingController?.isLinkedPorts;
+      final pType = _productType;
+      final isUnequal = pType == 'unequalCross' || pType == 'unequalTee' || pType == 'reducer';
+      _arePortsLinked = scLinked ?? !isUnequal;
+      _isFolded = false;
+      _controllers.clear();
+    }
+    _lastDocFingerprint = fingerprint;
+  }
+
   @override
   void initState() {
     super.initState();
     _controllers = {};
+    _resetLocalStateIfDocChanged();
     if (widget.instance == null) {
       widget.viewModel?.addListener(_onViewModelChanged);
     }
@@ -150,12 +177,21 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       if (oldWidget.viewModel != widget.viewModel) {
         oldWidget.viewModel?.removeListener(_onViewModelChanged);
         widget.viewModel?.addListener(_onViewModelChanged);
-        _syncControllers();
+        _localParams.clear();
+        _localCoverIncluded = null;
+        _localMaterial = null;
+        final scLinked = widget.viewModel?.scalingController?.isLinkedPorts;
+        final pType = _productType;
+        final isUnequal = pType == 'unequalCross' || pType == 'unequalTee' || pType == 'reducer';
+        _arePortsLinked = scLinked ?? !isUnequal;
+        _isFolded = false;
+        _controllers.clear();
       }
     } else {
       oldWidget.viewModel?.removeListener(_onViewModelChanged);
     }
-    if (oldWidget.instance != widget.instance) {
+    _resetLocalStateIfDocChanged();
+    if (oldWidget.instance != widget.instance || oldWidget.viewModel != widget.viewModel) {
       _syncControllers();
     }
   }
@@ -171,6 +207,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
 
   void _onViewModelChanged() {
     if (mounted) {
+      _resetLocalStateIfDocChanged();
       setState(() {
         _syncControllers();
         _localCoverIncluded = widget.viewModel?.document.cover != null;
@@ -232,6 +269,29 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     return false;
   }
 
+  bool get _isLadder {
+    final cat = _currentCategory.toLowerCase();
+    if (cat.contains('ladder')) return true;
+    if (widget.instance != null) {
+      final tId = widget.instance!.templateReference.templateId.toLowerCase();
+      final pName = widget.instance!.productName.toLowerCase();
+      if (tId.contains('ladder') || pName.contains('ladder')) return true;
+    }
+    if (widget.viewModel != null) {
+      if (widget.viewModel!.isLadderAssembly) return true;
+      final doc = widget.viewModel!.document;
+      final item = doc.itemName.toLowerCase();
+      final pType = doc.productType.toLowerCase();
+      if (item.contains('ladder') || pType.contains('ladder')) return true;
+      if (widget.viewModel!.detectedFittingMetadata?.isLadder == true) return true;
+      if (doc.metadata['ladder_accessory_type'] != null) return true;
+      if (doc.metadata['ladder_type'] != null) return true;
+      if (doc.metadata['is_ladder_assembly'] == true) return true;
+      if (doc.metadata['isLadderAssembly'] == true) return true;
+    }
+    return false;
+  }
+
   bool get _isTrayOrLadder {
     if (_isTrunking) return false;
     final cat = _currentCategory.toLowerCase();
@@ -259,8 +319,12 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         return (tId.contains('unequal') || pType.contains('unequal')) ? CmsProductContract.unequalTee : CmsProductContract.equalTee;
       }
       if (tId.contains('reducer') || pType.contains('reducer')) return CmsProductContract.straightReducer;
-      if (tId.contains('inside_riser')) return CmsProductContract.insideRiser45;
-      if (tId.contains('outside_riser')) return CmsProductContract.outsideRiser45;
+      if (tId.contains('inside_riser')) {
+        return (tId.contains('90') || pType.contains('90')) ? CmsProductContract.insideRiser90 : CmsProductContract.insideRiser45;
+      }
+      if (tId.contains('outside_riser')) {
+        return (tId.contains('90') || pType.contains('90')) ? CmsProductContract.outsideRiser90 : CmsProductContract.outsideRiser45;
+      }
       if (tId.contains('bend') || pType.contains('bend')) return tId.contains('90') ? CmsProductContract.bend90 : CmsProductContract.bend45;
 
       final params = widget.instance!.instanceParameters;
@@ -442,10 +506,28 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
           }
         }
       }
+      // 5b. Fitting metadata parameters
+      final fittingMeta = vm.document.metadata['fittingMetadata'];
+      if (fittingMeta is Map && fittingMeta['parameters'] is Map) {
+        final fParams = fittingMeta['parameters'] as Map;
+        for (final entry in fParams.entries) {
+          if (entry.value is num) {
+            result[entry.key.toString()] ??= (entry.value as num).toDouble();
+          }
+        }
+      }
       // 6. Base thickness & flange sizes
       result['thickness'] ??= vm.document.material.thicknessMm;
       result['base_flange_size'] ??= 20.0;
       result['flange_direction'] ??= (vm.document.parameters['flange_direction'] ?? 0.0);
+      double? docFlangeAngle;
+      for (final b in vm.document.bends) {
+        if (b.role == BendLineRole.flange || b.id.toUpperCase().startsWith('FL') || b.layer.toUpperCase().contains('FLANGE')) {
+          docFlangeAngle = b.targetAngleDeg;
+          break;
+        }
+      }
+      result['flange_angle'] ??= (vm.document.parameters['flange_angle'] ?? docFlangeAngle ?? 135.0);
       result['cover_flange_size'] ??= ((vm.document.cover?.properties['flangeDepthMm'] as num?)?.toDouble() ?? vm.coverFlangeDepth);
 
       // Coupler flaps & slots
@@ -456,6 +538,9 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       result['coupler_slot_length'] ??= (vm.document.parameters['coupler_slot_length'] ?? 20.0);
       result['coupler_slot_width'] ??= (vm.document.parameters['coupler_slot_width'] ?? 9.0);
       result['coupler_slot_pitch'] ??= (vm.document.parameters['coupler_slot_pitch'] ?? 25.0);
+      result['reducer_alignment'] ??= (vm.scalingController?.reducerAlignment == ReducerAlignment.left
+          ? 1.0
+          : (vm.scalingController?.reducerAlignment == ReducerAlignment.right ? 2.0 : 0.0));
 
       // 7. Bend angle & radius
       result['bend_angle'] ??= (vm.document.parameters['bend_angle'] ?? vm.document.parameters['angle'] ?? (_productType == 'flatBend45' ? 45.0 : 90.0));
@@ -467,6 +552,12 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       result['perforation_staggered'] ??= 1.0;
       result['perforation_slot_length'] ??= 30.0;
       result['perforation_slot_width'] ??= 7.0;
+
+      // 9. Ladder Assembly parameters
+      result['length'] ??= (vm.document.parameters['length'] ?? 3000.0);
+      result['accessory_style'] ??=
+          (vm.document.parameters['accessory_style'] ??
+          (vm.document.metadata['ladderParameters'] is Map && (vm.document.metadata['ladderParameters'] as Map)['accessoryStyle'] == 'curved' ? 0.0 : 1.0));
     }
     // Overlay local reactive state for immediate 0ms UI feedback
     result.addAll(_localParams);
@@ -474,6 +565,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   }
 
   void _syncControllers() {
+    final sc = widget.viewModel?.scalingController;
+    if (sc != null && sc.isLinkedPorts != _arePortsLinked) {
+      _arePortsLinked = sc.isLinkedPorts;
+    }
     final p = _currentParams;
     final ports = widget.viewModel?.verifiedCmsPorts ?? [];
     final p1 = ports.isNotEmpty ? ports[0] : null;
@@ -491,6 +586,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     _setControllerText('port4_height', p['port4_height'] ?? p4?.nominalHeight ?? 50.0);
     _setControllerText('width', p['width'] ?? p['port1_width'] ?? 100.0);
     _setControllerText('height', p['height'] ?? p['port1_height'] ?? 100.0);
+    _setControllerText('length', p['length'] ?? 3000.0);
 
     // Coupler slot controllers
     _setControllerText('coupler_slot_length', p['coupler_slot_length'] ?? 20.0);
@@ -558,24 +654,29 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       widget.onInstanceChanged!(updatedInst);
     } else if (widget.viewModel != null) {
       final vm = widget.viewModel!;
-      vm.document.parameters[key] = value;
+      if (!_isLadder && vm.scalingController == null) {
+        vm.startTeachScaling();
+      }
       if (key == 'flange_direction') {
         vm.document.parameters['flange_direction'] = value;
+      } else if (key == 'flange_angle') {
+        vm.document.parameters['flange_angle'] = value;
       } else if (key == 'cover_flange_size') {
         vm.document.parameters['cover_flange_size'] = value;
         vm.setCoverFlangeDepth(value);
       } else if (key == 'include_coupler_flaps') {
         vm.document.parameters['include_coupler_flaps'] = value;
-        if (vm.scalingController == null) vm.startTeachScaling();
         vm.scalingController?.setIncludeCouplerFlaps(value > 0.5);
       } else if (key == 'coupler_flap_length') {
         vm.document.parameters['coupler_flap_length'] = value;
-        if (vm.scalingController == null) vm.startTeachScaling();
         vm.scalingController?.setCouplerFlapLength(value);
       } else if (key == 'perforation_pitch') {
         vm.scalingController?.setPerforationPitch(value);
       } else if (key == 'radius') {
         vm.document.parameters['radius'] = value;
+      } else if (key == 'reducer_alignment') {
+        final align = value == 1.0 ? ReducerAlignment.left : (value == 2.0 ? ReducerAlignment.right : ReducerAlignment.straight);
+        vm.scalingController?.setReducerAlignment(align);
       }
 
       if (_arePortsLinked) {
@@ -595,6 +696,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
 
   /// Resets Width (W) and Height (H) back to baseline template values.
   void _resetDimensions() {
+    _localParams.clear();
     double baseW = 100.0;
     double baseH = 50.0;
 
@@ -669,11 +771,18 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
             const SizedBox(height: 12),
           ],
 
-          // --- Section 3: Floor Bed Perforations & Stamping ---
-          _buildSectionHeader('3. FLOOR PERFORATIONS & STAMPING', Icons.grid_view, null),
-          const SizedBox(height: 6),
-          _buildFloorPerforationsSection(),
-          const SizedBox(height: 12),
+          // --- Section 3: Floor Bed Perforations OR Ladder Rungs & Joints ---
+          if (_isLadder) ...[
+            _buildSectionHeader('3. LADDER RUNGS & WELDING JOINT', Icons.format_line_spacing, null),
+            const SizedBox(height: 6),
+            _buildLadderRungAndJointSection(),
+            const SizedBox(height: 12),
+          ] else ...[
+            _buildSectionHeader('3. FLOOR PERFORATIONS & STAMPING', Icons.grid_view, null),
+            const SizedBox(height: 6),
+            _buildFloorPerforationsSection(),
+            const SizedBox(height: 12),
+          ],
 
           // --- Section 4: Flange Direction Toggle ---
           _buildSectionHeader('4. BASE FLANGE DIRECTION', Icons.compare_arrows, null),
@@ -931,7 +1040,11 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
           const SizedBox(width: 6),
           // Link / Unlink Ports Toggle
           InkWell(
-            onTap: () => setState(() => _arePortsLinked = !_arePortsLinked),
+            onTap: () {
+              final newLinked = !_arePortsLinked;
+              setState(() => _arePortsLinked = newLinked);
+              widget.viewModel?.scalingController?.togglePortLinking(newLinked);
+            },
             borderRadius: BorderRadius.circular(4),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -967,21 +1080,24 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
 
   Widget _buildDynamicPortEditors(String pType) {
     if (pType == 'unequalCross') {
-      // 4 Ports for Unequal Cross
+      // 4 Ports for Unequal Cross (West, North, East, South)
       return Column(
         children: [
-          _buildPortRow('P1', 'North / Main Inlet', 'port1_width', 'port1_height', const Color(0xFF0284C7)),
+          _buildPortRow('P1', 'Port 1 (West)', 'port1_width', 'port1_height', const Color(0xFF0284C7)),
           const SizedBox(height: 6),
-          _buildPortRow('P2', 'South / Main Outlet', 'port2_width', 'port2_height', const Color(0xFF059669)),
+          _buildPortRow('P2', 'Port 2 (North)', 'port2_width', 'port2_height', const Color(0xFF059669)),
           const SizedBox(height: 6),
-          _buildPortRow('P3', 'East / Branch 1', 'port3_width', 'port3_height', const Color(0xFFD97706)),
+          _buildPortRow('P3', 'Port 3 (East)', 'port3_width', 'port3_height', const Color(0xFFD97706)),
           const SizedBox(height: 6),
-          _buildPortRow('P4', 'West / Branch 2', 'port4_width', 'port4_height', const Color(0xFF7C3AED)),
+          _buildPortRow('P4', 'Port 4 (South)', 'port4_width', 'port4_height', const Color(0xFF7C3AED)),
+          if (_isLadder) _buildLadderAccessoryStyleToggle(),
         ],
       );
     } else if (pType == 'equalCross') {
       // Equal Cross: 1 common port setting
-      return _buildPortRow('P1-4', '4 Equal Cross Ports', 'width', 'height', const Color(0xFF0284C7));
+      return Column(
+        children: [_buildPortRow('P1-4', '4 Equal Cross Ports', 'width', 'height', const Color(0xFF0284C7)), if (_isLadder) _buildLadderAccessoryStyleToggle()],
+      );
     } else if (pType == 'unequalTee') {
       // Unequal Tee: 3 distinct ports (P1 Branch, P2 Right, P3 Main)
       return Column(
@@ -991,45 +1107,243 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
           _buildPortRow('P2', 'Port 2 (Right)', 'port2_width', 'port2_height', const Color(0xFF059669)),
           const SizedBox(height: 6),
           _buildPortRow('P3', 'Port 3 (Main)', 'port3_width', 'port3_height', const Color(0xFF0284C7)),
+          if (_isLadder) _buildLadderAccessoryStyleToggle(),
         ],
       );
     } else if (pType == 'equalTee') {
       // Equal Tee: 3 Equal Ports (W × H)
-      return _buildPortRow('TEE', '3 Equal Ports (W × H)', 'width', 'height', const Color(0xFF0284C7));
-    } else if (pType == 'reducer') {
-      // Reducer: Port 1 (Inlet) + Port 2 (Outlet)
       return Column(
+        children: [
+          _buildPortRow('TEE', '3 Equal Ports (W × H)', 'width', 'height', const Color(0xFF0284C7)),
+          if (_isLadder) _buildLadderAccessoryStyleToggle(),
+        ],
+      );
+    } else if (pType == 'reducer') {
+      // Reducer: Port 1 (Inlet) + Port 2 (Outlet) + Alignment Selection
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildPortRow('INLET', 'Port 1 (Large Inlet)', 'port1_width', 'port1_height', const Color(0xFF0284C7)),
           const SizedBox(height: 6),
           _buildPortRow('OUTLET', 'Port 2 (Small Outlet)', 'port2_width', 'port2_height', const Color(0xFF059669)),
+          const SizedBox(height: 8),
+          _buildReducerAlignmentToggle(),
         ],
       );
     } else {
       // Bends, Risers, Straight
-      final isBend =
-          pType == 'flatBend45' ||
-          pType == 'flatBend90' ||
-          pType == 'insideRiser' ||
-          pType == 'outsideRiser' ||
-          pType.contains('bend') ||
-          _currentParams.containsKey('bend_angle') ||
-          _currentParams.containsKey('radius');
       final isRiser = pType == 'insideRiser' || pType == 'outsideRiser';
+      final isBend =
+          (pType == 'flatBend45' ||
+              pType == 'flatBend90' ||
+              pType.contains('bend') ||
+              ((_currentParams.containsKey('bend_angle') || _currentParams.containsKey('radius')) && pType != 'straight')) &&
+          !isRiser;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildPortRow(
-            isRiser ? 'RISER MOUTH' : (isBend ? 'BEND MOUTH' : 'MOUTH'),
-            _isTrayOrLadder ? 'Cable Tray Mouth (W × H)' : 'Trunking Mouth (W × H)',
+            isRiser ? 'RISER MOUTH' : (isBend ? 'BEND MOUTH' : (_isLadder ? 'LADDER SPAN' : 'MOUTH')),
+            _isLadder ? 'Cable Ladder Span (Rung Span W × Rail H)' : (_isTrayOrLadder ? 'Cable Tray Mouth (W × H)' : 'Trunking Mouth (W × H)'),
             'width',
             'height',
             const Color(0xFF0284C7),
           ),
-          if (isBend) ...[const SizedBox(height: 8), _buildBendAngleAndRadiusSection(isRiser: isRiser)],
+          if (_isLadder && !isBend && !isRiser) ...[const SizedBox(height: 8), _buildStraightLadderLengthRow()],
+          if (isBend || isRiser) ...[const SizedBox(height: 8), _buildBendAngleAndRadiusSection(isRiser: isRiser)],
+          if (_isLadder && (isBend || isRiser)) ...[_buildLadderAccessoryStyleToggle()],
         ],
       );
     }
+  }
+
+  Widget _buildLadderAccessoryStyleToggle() {
+    final isLight = widget.isLightTheme;
+    final styleVal = _currentParams['accessory_style'] ?? 1.0;
+    final isSegmented = styleVal >= 0.5;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: isLight ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A).withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155), width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: const Color(0xFF0D9488), borderRadius: BorderRadius.circular(4)),
+                child: const Text(
+                  'ACCESSORY PROFILE',
+                  style: TextStyle(color: Colors.white, fontSize: 10.0, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Angular / Segmented vs Curved',
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDirectionOption(
+                  title: 'Angular / Segmented',
+                  subtitle: 'Mitered Facets (ISO Standard)',
+                  icon: Icons.architecture,
+                  isSelected: isSegmented,
+                  onTap: () {
+                    setState(() {
+                      _localParams['accessory_style'] = 1.0;
+                    });
+                    _updateParam('accessory_style', 1.0);
+                  },
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildDirectionOption(
+                  title: 'Curved',
+                  subtitle: 'Smooth Radial Sweep',
+                  icon: Icons.rounded_corner,
+                  isSelected: !isSegmented,
+                  onTap: () {
+                    setState(() {
+                      _localParams['accessory_style'] = 0.0;
+                    });
+                    _updateParam('accessory_style', 0.0);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStraightLadderLengthRow() {
+    final isLight = widget.isLightTheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: isLight ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A).withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155), width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: const Color(0xFF0284C7), borderRadius: BorderRadius.circular(4)),
+                child: const Text(
+                  'LENGTH (L)',
+                  style: TextStyle(color: Colors.white, fontSize: 10.0, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Straight Cable Ladder Standard Run',
+                  style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          _buildStepperField('L (mm)', 'length', 500.0, 6000.0, step: 100.0, presetSizes: const [1000, 1500, 2000, 2400, 3000, 6000]),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReducerAlignmentToggle() {
+    final alignVal = _currentParams['reducer_alignment'] ?? 0.0;
+    final isStraight = alignVal == 0.0;
+    final isLeft = alignVal == 1.0;
+    final isRight = alignVal == 2.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6, top: 4),
+          child: Text(
+            'REDUCER ALIGNMENT',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              color: widget.isLightTheme ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+            ),
+          ),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: _buildDirectionOption(
+                title: 'Concentric',
+                subtitle: 'Straight Center',
+                icon: Icons.compress,
+                isSelected: isStraight,
+                onTap: () {
+                  setState(() {
+                    _localParams['reducer_alignment'] = 0.0;
+                  });
+                  _updateParam('reducer_alignment', 0.0);
+                },
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _buildDirectionOption(
+                title: 'Left Reducer',
+                subtitle: 'Straight Left (0°)',
+                icon: Icons.align_horizontal_left,
+                isSelected: isLeft,
+                onTap: () {
+                  setState(() {
+                    _localParams['reducer_alignment'] = 1.0;
+                  });
+                  _updateParam('reducer_alignment', 1.0);
+                },
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _buildDirectionOption(
+                title: 'Right Reducer',
+                subtitle: 'Straight Right (0°)',
+                icon: Icons.align_horizontal_right,
+                isSelected: isRight,
+                onTap: () {
+                  setState(() {
+                    _localParams['reducer_alignment'] = 2.0;
+                  });
+                  _updateParam('reducer_alignment', 2.0);
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _buildBendAngleAndRadiusSection({bool isRiser = false}) {
@@ -1317,6 +1631,25 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               Expanded(child: _buildStepperField('H (mm)', heightKey, 25.0, 250.0, step: 25.0, presetSizes: const [25, 38, 50, 75, 100, 150, 200, 250])),
             ],
           ),
+          if (_isLadder) ...[
+            const SizedBox(height: 5),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'W = Rung Cut Length (Cable Span)',
+                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: isLight ? const Color(0xFF0284C7) : const Color(0xFF38BDF8)),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    'H = Side Rail Flat Width (Erected)',
+                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: isLight ? const Color(0xFF059669) : const Color(0xFF34D399)),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -1336,110 +1669,115 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final showBadge = constraints.maxWidth >= 70;
         final showSteppers = constraints.maxWidth >= 135;
         final showPresets = constraints.maxWidth >= 105 && presetSizes != null && presetSizes.isNotEmpty;
 
-        return Container(
-          height: 34,
-          decoration: BoxDecoration(
-            color: isLight ? Colors.white : const Color(0xFF1E293B),
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.9),
-          ),
-          child: Row(
-            children: [
-              // Integrated prefix badge inside container
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-                decoration: BoxDecoration(color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF334155), borderRadius: BorderRadius.circular(3)),
-                child: Text(
-                  badgeText,
-                  style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
-                ),
-              ),
-              Expanded(
-                child: TextField(
-                  controller: ctrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF0F172A) : Colors.white),
-                  textAlign: TextAlign.center,
-                  decoration: const InputDecoration(contentPadding: EdgeInsets.zero, isDense: true, border: InputBorder.none),
-                  onChanged: (val) {
-                    final parsed = double.tryParse(val);
-                    if (parsed != null && parsed >= min && parsed <= max) {
-                      _updateParam(key, parsed);
-                    }
-                  },
-                  onSubmitted: (val) {
-                    final parsed = double.tryParse(val);
-                    if (parsed != null && parsed >= min && parsed <= max) {
-                      _updateParam(key, parsed);
-                    }
-                  },
-                ),
-              ),
-              if (showSteppers) ...[
-                // Stepper -
-                InkWell(
-                  onTap: () {
-                    final current = double.tryParse(ctrl.text) ?? 100.0;
-                    final next = (current - step).clamp(min, max);
-                    ctrl.text = decimals == 0 ? next.toStringAsFixed(0) : next.toStringAsFixed(decimals);
-                    _updateParam(key, next);
-                  },
-                  child: Container(
-                    width: 18,
-                    height: 32,
-                    alignment: Alignment.center,
-                    child: Icon(Icons.remove, size: 13, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(5),
+          child: Container(
+            height: 34,
+            decoration: BoxDecoration(
+              color: isLight ? Colors.white : const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.9),
+            ),
+            child: Row(
+              children: [
+                // Integrated prefix badge inside container
+                if (showBadge)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                    margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+                    decoration: BoxDecoration(color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF334155), borderRadius: BorderRadius.circular(3)),
+                    child: Text(
+                      badgeText,
+                      style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                    ),
+                  ),
+                Expanded(
+                  child: TextField(
+                    controller: ctrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF0F172A) : Colors.white),
+                    textAlign: TextAlign.center,
+                    decoration: const InputDecoration(contentPadding: EdgeInsets.zero, isDense: true, border: InputBorder.none),
+                    onChanged: (val) {
+                      final parsed = double.tryParse(val);
+                      if (parsed != null && parsed >= min && parsed <= max) {
+                        _updateParam(key, parsed);
+                      }
+                    },
+                    onSubmitted: (val) {
+                      final parsed = double.tryParse(val);
+                      if (parsed != null && parsed >= min && parsed <= max) {
+                        _updateParam(key, parsed);
+                      }
+                    },
                   ),
                 ),
-                // Stepper +
-                InkWell(
-                  onTap: () {
-                    final current = double.tryParse(ctrl.text) ?? 100.0;
-                    final next = (current + step).clamp(min, max);
-                    ctrl.text = decimals == 0 ? next.toStringAsFixed(0) : next.toStringAsFixed(decimals);
-                    _updateParam(key, next);
-                  },
-                  child: Container(
-                    width: 18,
-                    height: 32,
-                    alignment: Alignment.center,
-                    child: Icon(Icons.add, size: 13, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                if (showSteppers) ...[
+                  // Stepper -
+                  InkWell(
+                    onTap: () {
+                      final current = double.tryParse(ctrl.text) ?? 100.0;
+                      final next = (current - step).clamp(min, max);
+                      ctrl.text = decimals == 0 ? next.toStringAsFixed(0) : next.toStringAsFixed(decimals);
+                      _updateParam(key, next);
+                    },
+                    child: Container(
+                      width: 18,
+                      height: 32,
+                      alignment: Alignment.center,
+                      child: Icon(Icons.remove, size: 13, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                    ),
                   ),
-                ),
+                  // Stepper +
+                  InkWell(
+                    onTap: () {
+                      final current = double.tryParse(ctrl.text) ?? 100.0;
+                      final next = (current + step).clamp(min, max);
+                      ctrl.text = decimals == 0 ? next.toStringAsFixed(0) : next.toStringAsFixed(decimals);
+                      _updateParam(key, next);
+                    },
+                    child: Container(
+                      width: 18,
+                      height: 32,
+                      alignment: Alignment.center,
+                      child: Icon(Icons.add, size: 13, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                    ),
+                  ),
+                ],
+                // Compact Dropdown for standard common sizes
+                if (showPresets)
+                  PopupMenuButton<double>(
+                    tooltip: 'Common standard sizes',
+                    padding: EdgeInsets.zero,
+                    child: Container(
+                      width: 16,
+                      height: 32,
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.arrow_drop_down, size: 15, color: Color(0xFF0284C7)),
+                    ),
+                    onSelected: (selectedVal) {
+                      ctrl.text = decimals == 0 ? selectedVal.toStringAsFixed(0) : selectedVal.toStringAsFixed(decimals);
+                      _updateParam(key, selectedVal);
+                    },
+                    itemBuilder: (ctx) {
+                      return presetSizes.map((sz) {
+                        return PopupMenuItem<double>(
+                          value: sz,
+                          height: 32,
+                          child: Text(
+                            decimals == 0 ? '${sz.toStringAsFixed(0)} mm' : '${sz.toStringAsFixed(decimals)} mm',
+                            style: const TextStyle(fontSize: 12.0, fontWeight: FontWeight.w600),
+                          ),
+                        );
+                      }).toList();
+                    },
+                  ),
               ],
-              // Compact Dropdown for standard common sizes
-              if (showPresets)
-                PopupMenuButton<double>(
-                  tooltip: 'Common standard sizes',
-                  padding: EdgeInsets.zero,
-                  child: Container(
-                    width: 16,
-                    height: 32,
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.arrow_drop_down, size: 15, color: Color(0xFF0284C7)),
-                  ),
-                  onSelected: (selectedVal) {
-                    ctrl.text = decimals == 0 ? selectedVal.toStringAsFixed(0) : selectedVal.toStringAsFixed(decimals);
-                    _updateParam(key, selectedVal);
-                  },
-                  itemBuilder: (ctx) {
-                    return presetSizes.map((sz) {
-                      return PopupMenuItem<double>(
-                        value: sz,
-                        height: 32,
-                        child: Text(
-                          decimals == 0 ? '${sz.toStringAsFixed(0)} mm' : '${sz.toStringAsFixed(decimals)} mm',
-                          style: const TextStyle(fontSize: 12.0, fontWeight: FontWeight.w600),
-                        ),
-                      );
-                    }).toList();
-                  },
-                ),
-            ],
+            ),
           ),
         );
       },
@@ -1451,6 +1789,9 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     final isLight = widget.isLightTheme;
     final hasFlaps = (_currentParams['include_coupler_flaps'] ?? 0.0) > 0.5;
     final flapLen = _currentParams['coupler_flap_length'] ?? 30.0;
+
+    final portH = _currentParams['port_height'] ?? _currentParams['height'] ?? _currentParams['port1_height'] ?? 50.0;
+    final dynamicSlotLen = (portH - 20.0).clamp(10.0, 500.0).toStringAsFixed(0);
 
     return Container(
       padding: const EdgeInsets.all(8),
@@ -1481,112 +1822,443 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.4), width: 0.8),
                 ),
-                child: const Text(
-                  '3 VERTICAL SLOTS (30×8mm)',
-                  style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+                child: Text(
+                  '3 VERTICAL SLOTS ($dynamicSlotLen×8mm)',
+                  style: const TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-
-          // Prominent Coupler Flap Addition Action Button for Tray & Ladder
-          InkWell(
-            onTap: () {
-              final nextVal = hasFlaps ? 0.0 : 1.0;
-              _updateParam('include_coupler_flaps', nextVal);
-            },
-            borderRadius: BorderRadius.circular(6),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: hasFlaps ? const Color(0xFF4F46E5).withValues(alpha: 0.18) : (isLight ? Colors.white : const Color(0xFF1E293B)),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: hasFlaps ? const Color(0xFF6366F1) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
-                  width: hasFlaps ? 1.5 : 1.0,
+          // Prominent Coupler Flap Addition Action Button for Trays (Coupler flaps not needed for ladders)
+          if (!_isLadder) ...[
+            const SizedBox(height: 10),
+            InkWell(
+              onTap: () {
+                final nextVal = hasFlaps ? 0.0 : 1.0;
+                _updateParam('include_coupler_flaps', nextVal);
+              },
+              borderRadius: BorderRadius.circular(6),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: hasFlaps ? const Color(0xFF4F46E5).withValues(alpha: 0.18) : (isLight ? Colors.white : const Color(0xFF1E293B)),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: hasFlaps ? const Color(0xFF6366F1) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                    width: hasFlaps ? 1.5 : 1.0,
+                  ),
+                  boxShadow: hasFlaps ? [BoxShadow(color: const Color(0xFF6366F1).withValues(alpha: 0.25), blurRadius: 6, offset: const Offset(0, 2))] : null,
                 ),
-                boxShadow: hasFlaps ? [BoxShadow(color: const Color(0xFF6366F1).withValues(alpha: 0.25), blurRadius: 6, offset: const Offset(0, 2))] : null,
+                child: Row(
+                  children: [
+                    Icon(
+                      hasFlaps ? Icons.check_circle : Icons.add_circle_outline,
+                      size: 20,
+                      color: hasFlaps ? const Color(0xFF818CF8) : const Color(0xFF6366F1),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            hasFlaps ? 'Coupler Flaps Active' : 'Add Coupler Flaps',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              color: hasFlaps
+                                  ? (isLight ? const Color(0xFF4338CA) : const Color(0xFFE0E7FF))
+                                  : (isLight ? const Color(0xFF1E293B) : Colors.white),
+                            ),
+                          ),
+                          Text(
+                            hasFlaps
+                                ? 'Integrated cheek tabs with 3× vertical slots • ${flapLen.toStringAsFixed(0)} mm'
+                                : 'Add integrated folding connection flaps to port cheek walls',
+                            style: TextStyle(fontSize: 10.0, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                      decoration: BoxDecoration(
+                        color: hasFlaps ? const Color(0xFF6366F1) : const Color(0xFF6366F1).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        hasFlaps ? 'ACTIVE' : '+ ADD',
+                        style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: hasFlaps ? Colors.white : const Color(0xFF6366F1)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                children: [
-                  Icon(hasFlaps ? Icons.check_circle : Icons.add_circle_outline, size: 20, color: hasFlaps ? const Color(0xFF818CF8) : const Color(0xFF6366F1)),
-                  const SizedBox(width: 8),
-                  Expanded(
+            ),
+
+            if (hasFlaps) ...[
+              const SizedBox(height: 8),
+              _buildStepperField('Flap Length (mm)', 'coupler_flap_length', 20.0, 150.0, step: 5.0, presetSizes: const [60, 75, 90, 100, 120]),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [60.0, 75.0, 90.0, 100.0, 120.0].map((preset) {
+                  final isCur = (flapLen - preset).abs() < 1e-3;
+                  return InkWell(
+                    onTap: () => _updateParam('coupler_flap_length', preset),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                      decoration: BoxDecoration(
+                        color: isCur ? const Color(0xFF6366F1).withValues(alpha: 0.2) : (isLight ? Colors.white : const Color(0xFF1E293B)),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: isCur ? const Color(0xFF6366F1) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                          width: isCur ? 1.0 : 0.6,
+                        ),
+                      ),
+                      child: Text(
+                        '${preset.toStringAsFixed(0)} mm',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: isCur ? FontWeight.bold : FontWeight.w500,
+                          color: isCur ? const Color(0xFF6366F1) : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  // --- Section 3: Ladder Rungs & Welding Joint ---
+  Widget _buildLadderRungAndJointSection() {
+    final isLight = widget.isLightTheme;
+    final jointVal = _currentParams['rung_joint_method'] ?? 1.0;
+    final isPassThrough = jointVal >= 0.5;
+    final endMargin = _currentParams['end_rung_offset'] ?? _currentParams['endMarginPitch'] ?? 75.0;
+    final targetPitch = _currentParams['rung_pitch'] ?? _currentParams['rungPitch'] ?? 250.0;
+    final isFixedPitch = (_currentParams['rung_pitch_mode'] ?? 0.0) == 1.0;
+    final projection = _currentParams['outsideWeldProjection'] ?? 3.5;
+    final curWidth = _currentParams['width'] ?? 600.0;
+    final curLength = _currentParams['length'] ?? 3000.0;
+    final curThick = _currentParams['thickness'] ?? 2.0;
+
+    // Solve live pattern
+    final ladderParams = LadderAssemblyParameters(
+      width: curWidth,
+      length: curLength,
+      thickness: curThick,
+      endMarginPitch: endMargin,
+      intermediateTargetPitch: targetPitch,
+      pitchMode: isFixedPitch ? RungPitchMode.fixedPitch : RungPitchMode.equalizedPitch,
+      jointMethod: isPassThrough ? LadderRungJointMethod.passThroughOutsideWeld : LadderRungJointMethod.directInsideWeld,
+      outsideWeldProjection: projection,
+    );
+    final pitchResult = LadderTwoPitchSolver.solve(ladderParams);
+    final cutLength = ladderParams.physicalRungCutLength;
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isLight ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A).withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155), width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Row 1: Joint Method Title & Live Cut Length Pill
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'RUNG JOINT / WELDING METHOD',
+                  style: TextStyle(
+                    fontSize: 11.0,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                    color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(color: isPassThrough ? const Color(0xFF0284C7) : const Color(0xFF059669), borderRadius: BorderRadius.circular(4)),
+                child: Text(
+                  'Cut L: ${cutLength.toStringAsFixed(1)} mm',
+                  style: const TextStyle(color: Colors.white, fontSize: 10.0, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Row 2: Joint Selection Segmented Buttons
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () {
+                    _updateParam('rung_joint_method', 0.0);
+                  },
+                  borderRadius: BorderRadius.circular(5),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: !isPassThrough
+                          ? (isLight ? const Color(0xFFE0F2FE) : const Color(0xFF0369A1).withValues(alpha: 0.4))
+                          : (isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B)),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: !isPassThrough ? const Color(0xFF0284C7) : Colors.transparent, width: 1.5),
+                    ),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Icon(
+                          Icons.arrow_downward,
+                          size: 16,
+                          color: !isPassThrough ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                        ),
+                        const SizedBox(height: 2),
                         Text(
-                          hasFlaps ? 'Coupler Flaps Active' : 'Add Coupler Flaps',
+                          'Direct Inside',
                           style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.bold,
-                            color: hasFlaps
-                                ? (isLight ? const Color(0xFF4338CA) : const Color(0xFFE0E7FF))
-                                : (isLight ? const Color(0xFF1E293B) : Colors.white),
+                            fontSize: 11.0,
+                            fontWeight: !isPassThrough ? FontWeight.bold : FontWeight.normal,
+                            color: !isPassThrough ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
                           ),
                         ),
-                        Text(
-                          hasFlaps
-                              ? 'Integrated cheek tabs with 3× vertical slots • ${flapLen.toStringAsFixed(0)} mm'
-                              : 'Add integrated folding connection flaps to port cheek walls',
-                          style: TextStyle(fontSize: 10.0, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
-                        ),
+                        Text('Flush / Solid Rail', style: TextStyle(fontSize: 9.0, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: () {
+                    _updateParam('rung_joint_method', 1.0);
+                  },
+                  borderRadius: BorderRadius.circular(5),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
                     decoration: BoxDecoration(
-                      color: hasFlaps ? const Color(0xFF6366F1) : const Color(0xFF6366F1).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
+                      color: isPassThrough
+                          ? (isLight ? const Color(0xFFE0F2FE) : const Color(0xFF0369A1).withValues(alpha: 0.4))
+                          : (isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B)),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: isPassThrough ? const Color(0xFF0284C7) : Colors.transparent, width: 1.5),
                     ),
-                    child: Text(
-                      hasFlaps ? 'ACTIVE' : '+ ADD',
-                      style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: hasFlaps ? Colors.white : const Color(0xFF6366F1)),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.open_in_new,
+                          size: 16,
+                          color: isPassThrough ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Pass-Through',
+                          style: TextStyle(
+                            fontSize: 11.0,
+                            fontWeight: isPassThrough ? FontWeight.bold : FontWeight.normal,
+                            color: isPassThrough ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                          ),
+                        ),
+                        Text('Punched Slot + Outer Weld', style: TextStyle(fontSize: 9.0, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
 
-          if (hasFlaps) ...[
+          if (isPassThrough) ...[
             const SizedBox(height: 8),
-            _buildStepperField('Flap Length (mm)', 'coupler_flap_length', 20.0, 150.0, step: 5.0, presetSizes: const [60, 75, 90, 100, 120]),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: [60.0, 75.0, 90.0, 100.0, 120.0].map((preset) {
-                final isCur = (flapLen - preset).abs() < 1e-3;
-                return InkWell(
-                  onTap: () => _updateParam('coupler_flap_length', preset),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                    decoration: BoxDecoration(
-                      color: isCur ? const Color(0xFF6366F1).withValues(alpha: 0.2) : (isLight ? Colors.white : const Color(0xFF1E293B)),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: isCur ? const Color(0xFF6366F1) : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
-                        width: isCur ? 1.0 : 0.6,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Outside Projection: ${projection.toStringAsFixed(1)} mm',
+                    style: TextStyle(fontSize: 11.0, color: isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                  ),
+                ),
+                ...[3.0, 3.5, 4.0, 5.0].map((proj) {
+                  final isSel = (projection - proj).abs() < 0.1;
+                  return InkWell(
+                    onTap: () => _updateParam('outsideWeldProjection', proj),
+                    child: Container(
+                      margin: const EdgeInsets.only(left: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isSel ? const Color(0xFF0284C7) : (isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Text(
+                        '${proj}m',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                          color: isSel ? Colors.white : (isLight ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                        ),
                       ),
                     ),
+                  );
+                }),
+              ],
+            ),
+          ],
+
+          const Divider(height: 18),
+
+          // Two-Pitch Engine Controls
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'TWO-PITCH ENGINE',
+                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF059669).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFF059669), width: 0.8),
+                ),
+                child: Text(
+                  '${pitchResult.rungCount} Rungs @ ${pitchResult.actualIntermediatePitch.toStringAsFixed(1)}mm',
+                  style: const TextStyle(color: Color(0xFF059669), fontSize: 10.0, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // End Margin Pitch (P_end)
+          Row(
+            children: [
+              SizedBox(
+                width: 120,
+                child: Text('End Margin (P_end):', style: TextStyle(fontSize: 11.0, color: isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1))),
+              ),
+              Expanded(
+                child: Text('${endMargin.toStringAsFixed(0)} mm', style: const TextStyle(fontSize: 11.0, fontWeight: FontWeight.bold)),
+              ),
+              ...[50.0, 75.0, 100.0].map((preset) {
+                final isSel = (endMargin - preset).abs() < 0.5;
+                return InkWell(
+                  onTap: () {
+                    _updateParam('end_rung_offset', preset);
+                    _updateParam('endMarginPitch', preset);
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(left: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isSel ? const Color(0xFF059669) : (isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
                     child: Text(
-                      '${preset.toStringAsFixed(0)} mm',
+                      '${preset.round()}',
                       style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: isCur ? FontWeight.bold : FontWeight.w500,
-                        color: isCur ? const Color(0xFF6366F1) : (isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                        fontSize: 10.0,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                        color: isSel ? Colors.white : (isLight ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
                       ),
                     ),
                   ),
                 );
-              }).toList(),
-            ),
-          ],
+              }),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          // Target Intermediate Pitch (P_target)
+          Row(
+            children: [
+              SizedBox(
+                width: 120,
+                child: Text('Body Pitch (P_target):', style: TextStyle(fontSize: 11.0, color: isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1))),
+              ),
+              Expanded(
+                child: Text('${targetPitch.toStringAsFixed(0)} mm', style: const TextStyle(fontSize: 11.0, fontWeight: FontWeight.bold)),
+              ),
+              ...[150.0, 200.0, 250.0, 300.0].map((preset) {
+                final isSel = (targetPitch - preset).abs() < 0.5;
+                return InkWell(
+                  onTap: () {
+                    _updateParam('rung_pitch', preset);
+                    _updateParam('rungPitch', preset);
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(left: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isSel ? const Color(0xFF059669) : (isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      '${preset.round()}',
+                      style: TextStyle(
+                        fontSize: 10.0,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                        color: isSel ? Colors.white : (isLight ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          // Pitch Mode Toggle (Equalized vs Fixed)
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => _updateParam('rung_pitch_mode', 0.0),
+                  child: Row(
+                    children: [
+                      Icon(
+                        !isFixedPitch ? Icons.radio_button_checked : Icons.radio_button_off,
+                        size: 15,
+                        color: !isFixedPitch ? const Color(0xFF059669) : Colors.grey,
+                      ),
+                      const SizedBox(width: 4),
+                      Text('Equalized Pitch', style: TextStyle(fontSize: 10.5, fontWeight: !isFixedPitch ? FontWeight.bold : FontWeight.normal)),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _updateParam('rung_pitch_mode', 1.0),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isFixedPitch ? Icons.radio_button_checked : Icons.radio_button_off,
+                        size: 15,
+                        color: isFixedPitch ? const Color(0xFF059669) : Colors.grey,
+                      ),
+                      const SizedBox(width: 4),
+                      Text('Fixed Pitch', style: TextStyle(fontSize: 10.5, fontWeight: isFixedPitch ? FontWeight.bold : FontWeight.normal)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -1838,38 +2510,112 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     );
   }
 
-  // --- Section 4: Flange Direction Toggle ---
+  // --- Section 4: Flange Direction Toggle & Angle Selector ---
   Widget _buildFlangeDirectionToggle() {
     final isInside = (_currentParams['flange_direction'] ?? 0.0) == 0.0;
-    return Row(
+    double? docFlangeAngle;
+    if (widget.viewModel != null) {
+      for (final b in widget.viewModel!.document.bends) {
+        if (b.role == BendLineRole.flange || b.id.toUpperCase().startsWith('FL') || b.layer.toUpperCase().contains('FLANGE')) {
+          docFlangeAngle = b.targetAngleDeg;
+          break;
+        }
+      }
+    }
+    final curAngle = _currentParams['flange_angle'] ?? docFlangeAngle ?? 135.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: _buildDirectionOption(
-            title: 'Inside Flange',
-            subtitle: 'Standard Return Lip (90°)',
-            icon: Icons.keyboard_double_arrow_left,
-            isSelected: isInside,
-            onTap: () {
-              setState(() {
-                _localParams['flange_direction'] = 0.0;
-              });
-              _updateParam('flange_direction', 0.0);
-            },
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: _buildDirectionOption(
+                title: 'Inside Flange',
+                subtitle: 'Return Lip (${curAngle.toStringAsFixed(0)}°)',
+                icon: Icons.keyboard_double_arrow_left,
+                isSelected: isInside,
+                onTap: () {
+                  setState(() {
+                    _localParams['flange_direction'] = 0.0;
+                  });
+                  _updateParam('flange_direction', 0.0);
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildDirectionOption(
+                title: 'Outside Return Flange',
+                subtitle: 'Exterior Lip (${curAngle.toStringAsFixed(0)}°)',
+                icon: Icons.keyboard_double_arrow_right,
+                isSelected: !isInside,
+                onTap: () {
+                  setState(() {
+                    _localParams['flange_direction'] = 1.0;
+                  });
+                  _updateParam('flange_direction', 1.0);
+                },
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _buildDirectionOption(
-            title: 'Outside Return Flange',
-            subtitle: 'Flush Exterior Lip (90°)',
-            icon: Icons.keyboard_double_arrow_right,
-            isSelected: !isInside,
-            onTap: () {
-              setState(() {
-                _localParams['flange_direction'] = 1.0;
-              });
-              _updateParam('flange_direction', 1.0);
-            },
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: widget.isLightTheme ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A).withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: widget.isLightTheme ? const Color(0xFFE2E8F0) : const Color(0xFF334155), width: 0.8),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'FLANGE BEND ANGLE',
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.bold,
+                  color: widget.isLightTheme ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                  letterSpacing: 0.5,
+                ),
+              ),
+              Row(
+                children: [90.0, 135.0].map((angle) {
+                  final isSelected = (curAngle - angle).abs() < 1e-2;
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(4),
+                      onTap: () {
+                        setState(() {
+                          _localParams['flange_angle'] = angle;
+                        });
+                        _updateParam('flange_angle', angle);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? const Color(0xFF0284C7).withValues(alpha: 0.15)
+                              : (widget.isLightTheme ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B)),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: isSelected ? const Color(0xFF0284C7) : Colors.transparent, width: 1.0),
+                        ),
+                        child: Text(
+                          '${angle.toStringAsFixed(0)}°',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                            color: isSelected ? const Color(0xFF0284C7) : (widget.isLightTheme ? const Color(0xFF334155) : const Color(0xFF94A3B8)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           ),
         ),
       ],
@@ -2413,7 +3159,15 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       case 'equalTee':
         return 'Equal Tee (3 Ports)';
       case 'reducer':
-        return 'Straight Reducer (Inlet & Outlet)';
+        final align = widget.viewModel?.scalingController?.reducerAlignment ?? ReducerAlignment.straight;
+        switch (align) {
+          case ReducerAlignment.left:
+            return 'Left Reducer (Inlet & Outlet)';
+          case ReducerAlignment.right:
+            return 'Right Reducer (Inlet & Outlet)';
+          case ReducerAlignment.straight:
+            return 'Straight Reducer (Inlet & Outlet)';
+        }
       case 'flatBend45':
         return '45° Flat Bend Fitting';
       case 'flatBend90':

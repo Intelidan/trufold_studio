@@ -13,17 +13,21 @@
 // Designed with ZERO external dependencies for 100% standalone portability.
 // =============================================================================
 
+import 'dart:ffi' show DynamicLibrary;
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:three_js/three_js.dart' as three;
 import '../../models/cad_primitives.dart';
 import '../../models/cms/cms_physical_port.dart';
 import '../../models/trunking_cover_data.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../../engine/kinematic_fold_engine.dart';
+import '../../engine/three_cad_mesh_builder.dart';
 import 'studio/studio_view_cube.dart';
 
 typedef _DrawFacet = ({
@@ -37,6 +41,7 @@ typedef _DrawFacet = ({
   double maxDepth,
   Rect bounds,
   CadPoint3D camNormal,
+  CadPoint3D p0Cam,
   Offset p0Screen,
   double p0Depth,
   Color color,
@@ -45,6 +50,8 @@ typedef _DrawFacet = ({
   bool isFillet,
   bool isBore,
   bool isHighlighted,
+  List<Offset> prjVerts,
+  List<CadPoint3D> camVerts,
 });
 
 class Viewport3dWidget extends StatefulWidget {
@@ -60,9 +67,200 @@ class Viewport3dWidget extends StatefulWidget {
 class _Viewport3dWidgetState extends State<Viewport3dWidget> {
   SheetMetalStudioViewModel get viewModel => widget.viewModel;
 
+  bool _useHardwareEngine = true;
+  bool _setupComplete = false;
+  three.ThreeJS? _threeJs;
+  three.OrbitControls? _controls;
+  three.Group? _cadModelGroup;
+  FoldedMeshResult? _lastRenderedMesh;
+
+  // Decoupled Camera Orbit State (Fast 60-120 FPS 2D Fallback)
+  late double _localAzimuthDeg;
+  late double _localElevationDeg;
+  late double _localZoom;
+  late Offset _localPan;
+
   bool _isDraggingCover = false;
   bool _isHoveringCover = false;
   bool _pureVerticalDrag = false;
+  double _lastPanZoomScale3D = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _localAzimuthDeg = viewModel.azimuthDeg;
+    _localElevationDeg = viewModel.elevationDeg;
+    _localZoom = viewModel.cameraZoom;
+    _localPan = viewModel.pan3D;
+    viewModel.addListener(_onViewModelChanged);
+    _initThreeJs();
+  }
+
+  void _orbitLocalCamera(double deltaAzimuth, double deltaElevation) {
+    _localAzimuthDeg = (_localAzimuthDeg + deltaAzimuth) % 360.0;
+    if (_localAzimuthDeg < 0) _localAzimuthDeg += 360.0;
+
+    _localElevationDeg = (_localElevationDeg + deltaElevation) % 360.0;
+    if (_localElevationDeg < 0) _localElevationDeg += 360.0;
+
+    setState(() {});
+  }
+
+  void _zoomLocalCamera(double factor) {
+    _localZoom = (_localZoom * factor).clamp(0.1, 10.0);
+    setState(() {});
+  }
+
+  void _panLocalCamera(Offset delta) {
+    _localPan += delta;
+    setState(() {});
+  }
+
+  void _setLocalPresetView({required double azimuth, required double elevation}) {
+    _localAzimuthDeg = azimuth;
+    _localElevationDeg = elevation;
+    _localPan = Offset.zero;
+    viewModel.azimuthDeg = azimuth;
+    viewModel.elevationDeg = elevation;
+    viewModel.pan3D = Offset.zero;
+    setState(() {});
+  }
+
+  void _initThreeJs() {
+    try {
+      if (Platform.isWindows) {
+        // Pre-flight check: verify OpenGL / ANGLE binaries can be loaded by Dart FFI
+        // If libEGL.dll is not yet loaded or missing, this throws an ArgumentError
+        // which triggers graceful, instant fallback to the 2D custom painter!
+        DynamicLibrary.open('libEGL.dll');
+        DynamicLibrary.open('libGLESv2.dll');
+      }
+
+      _threeJs = three.ThreeJS(
+        onSetupComplete: () {
+          if (mounted) {
+            setState(() {
+              _setupComplete = true;
+            });
+          }
+        },
+        setup: _setupScene,
+      );
+    } catch (e) {
+      debugPrint('[Viewport3dWidget] Hardware 3D unavailable ($e). Falling back to 2D.');
+      if (mounted) {
+        setState(() {
+          _useHardwareEngine = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _setupScene() async {
+    try {
+      final threeJs = _threeJs!;
+      threeJs.scene = three.Scene();
+      threeJs.scene.background = three.Color(0.945, 0.961, 0.976); // Color(0xFFF1F5F9)
+
+      final mesh = viewModel.currentMesh;
+      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+      final fitDim = maxDim > 0 ? maxDim : 300.0;
+
+      final aspect = threeJs.height > 0 ? (threeJs.width / threeJs.height) : 1.33;
+      threeJs.camera = three.PerspectiveCamera(
+        45.0,
+        aspect,
+        1.0,
+        100000.0,
+      );
+      threeJs.camera.position.setValues(fitDim * 1.2, fitDim * 1.0, fitDim * 1.5);
+      threeJs.camera.lookAt(three.Vector3(0, 0, 0));
+
+      final ambientLight = three.AmbientLight(0xffffff, 0.65);
+      threeJs.scene.add(ambientLight);
+
+      final dirLight1 = three.DirectionalLight(0xffffff, 0.85);
+      dirLight1.position.setValues(fitDim, fitDim * 1.5, fitDim);
+      threeJs.scene.add(dirLight1);
+
+      final dirLight2 = three.DirectionalLight(0x94a3b8, 0.40);
+      dirLight2.position.setValues(-fitDim, -fitDim, -fitDim * 0.5);
+      threeJs.scene.add(dirLight2);
+
+      _cadModelGroup = ThreeCadMeshBuilder.buildCadModel(
+        mesh,
+        showWireframe: viewModel.showWireframe,
+        selectedFaceId: viewModel.selectedFaceId,
+        hoveredFaceId: viewModel.hoveredFaceId,
+      );
+      _lastRenderedMesh = mesh;
+      threeJs.scene.add(_cadModelGroup!);
+
+      _controls = three.OrbitControls(threeJs.camera, threeJs.globalKey);
+      _controls!.enableDamping = true;
+      _controls!.dampingFactor = 0.08;
+
+      threeJs.addAnimationEvent((dt) {
+        _controls?.update();
+      });
+    } catch (e, stack) {
+      debugPrint('[Viewport3dWidget] Hardware 3D setup failed, falling back to 2D: $e\n$stack');
+      if (mounted) {
+        setState(() {
+          _useHardwareEngine = false;
+        });
+      }
+    }
+  }
+
+  void _onViewModelChanged() {
+    if (!mounted) return;
+    if ((_localAzimuthDeg - viewModel.azimuthDeg).abs() > 0.001 ||
+        (_localElevationDeg - viewModel.elevationDeg).abs() > 0.001 ||
+        (_localZoom - viewModel.cameraZoom).abs() > 0.001 ||
+        _localPan != viewModel.pan3D) {
+      _localAzimuthDeg = viewModel.azimuthDeg;
+      _localElevationDeg = viewModel.elevationDeg;
+      _localZoom = viewModel.cameraZoom;
+      _localPan = viewModel.pan3D;
+    }
+    if (_useHardwareEngine && _setupComplete) {
+      if (!identical(viewModel.currentMesh, _lastRenderedMesh)) {
+        _updateCadModel();
+      }
+    }
+  }
+
+  void _updateCadModel() {
+    if (_threeJs == null || !_setupComplete) return;
+    if (_cadModelGroup != null) {
+      _threeJs!.scene.remove(_cadModelGroup!);
+    }
+    _cadModelGroup = ThreeCadMeshBuilder.buildCadModel(
+      viewModel.currentMesh,
+      showWireframe: viewModel.showWireframe,
+      selectedFaceId: viewModel.selectedFaceId,
+      hoveredFaceId: viewModel.hoveredFaceId,
+    );
+    _lastRenderedMesh = viewModel.currentMesh;
+    _threeJs!.scene.add(_cadModelGroup!);
+  }
+
+  @override
+  void didUpdateWidget(covariant Viewport3dWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_useHardwareEngine && _setupComplete) {
+      _updateCadModel();
+    }
+  }
+
+  @override
+  void dispose() {
+    viewModel.removeListener(_onViewModelChanged);
+    _controls?.dispose();
+    _threeJs?.dispose();
+    super.dispose();
+  }
 
   bool _isPointOverCover(Offset localPos, Size size) {
     final coverMesh = viewModel.coverMesh;
@@ -323,9 +521,34 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                     onPointerSignal: (pointerSignal) {
                       if (widget.isInteractionLocked) return;
                       if (pointerSignal is PointerScrollEvent) {
-                        final factor = pointerSignal.scrollDelta.dy < 0 ? 1.12 : 0.89;
-                        viewModel.zoom3D(factor);
+                        final dy = pointerSignal.scrollDelta.dy;
+                        final zoomFactor = dy.abs() < 40.0
+                            ? math.exp(-dy * 0.003).clamp(0.85, 1.18)
+                            : (dy < 0 ? 1.12 : 0.89);
+                        if (!_useHardwareEngine) {
+                          _zoomLocalCamera(zoomFactor);
+                        }
                       }
+                    },
+                    onPointerPanZoomStart: (event) {
+                      _lastPanZoomScale3D = 1.0;
+                    },
+                    onPointerPanZoomUpdate: (event) {
+                      if (widget.isInteractionLocked) return;
+                      if (!_useHardwareEngine) {
+                        if (event.scale != 1.0) {
+                          final incrementalScale = event.scale / _lastPanZoomScale3D;
+                          _lastPanZoomScale3D = event.scale;
+                          if ((incrementalScale - 1.0).abs() > 0.0001) {
+                            _zoomLocalCamera(incrementalScale);
+                          }
+                        } else if (event.pan != Offset.zero) {
+                          _panLocalCamera(event.pan);
+                        }
+                      }
+                    },
+                    onPointerPanZoomEnd: (event) {
+                      _lastPanZoomScale3D = 1.0;
                     },
                     onPointerDown: (event) {
                       if (widget.isInteractionLocked) return;
@@ -344,6 +567,11 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                         _isDraggingCover = false;
                         viewModel.commitCover3DMove();
                         setState(() {});
+                      } else if (!_useHardwareEngine) {
+                        viewModel.azimuthDeg = _localAzimuthDeg;
+                        viewModel.elevationDeg = _localElevationDeg;
+                        viewModel.cameraZoom = _localZoom;
+                        viewModel.pan3D = _localPan;
                       }
                     },
                     onPointerCancel: (event) {
@@ -371,38 +599,69 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
 
                       if (isMiddleMouse || (isShiftHeld && (event.buttons & kPrimaryMouseButton) != 0)) {
                         // Middle mouse or Shift+Left drag -> Pan 3D camera
-                        viewModel.pan3DCanvas(event.delta);
+                        if (!_useHardwareEngine) {
+                          _panLocalCamera(event.delta);
+                        }
                       } else if ((event.buttons & kPrimaryMouseButton) != 0) {
                         // Left mouse drag -> Orbit turntable
-                        viewModel.orbit3D(event.delta.dx * 0.5, -event.delta.dy * 0.5);
+                        if (!_useHardwareEngine) {
+                          _orbitLocalCamera(event.delta.dx * 0.5, -event.delta.dy * 0.5);
+                        }
                       }
                     },
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: widget.isInteractionLocked ? null : () => viewModel.clearSelection(),
-                      child: ExcludeSemantics(
-                        child: CustomPaint(
-                          size: Size.infinite,
-                          painter: _Viewport3dPainter(
-                            mesh: viewModel.currentMesh,
-                            azimuthDeg: viewModel.azimuthDeg,
-                            elevationDeg: viewModel.elevationDeg,
-                            zoom: viewModel.cameraZoom,
-                            pan: viewModel.pan3D,
-                            showWireframe: viewModel.showWireframe,
-                            isGlassMode: viewModel.isGlassMode,
-                            selectedBendId: viewModel.selectedBendId,
-                            selectedPunchId: viewModel.selectedPunchId,
-                            selectedFaceId: viewModel.selectedFaceId,
-                            hoveredPunchId: viewModel.hoveredPunchId,
-                            hoveredBendId: viewModel.hoveredBendId,
-                            hoveredFaceId: viewModel.hoveredFaceId,
-                            activePorts: viewModel.activeCmsPorts,
-                            focusedPortId: viewModel.cmsGuidedController.state.focus.activePortId,
+                    child: _useHardwareEngine
+                        ? Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              if (_threeJs != null) _threeJs!.build(),
+                              if (!_setupComplete)
+                                Container(
+                                  color: const Color(0xFFF1F5F9),
+                                  child: const Center(
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                        SizedBox(width: 10),
+                                        Text(
+                                          'Starting Hardware 3D Engine (OpenGL / Z-Buffer)...',
+                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          )
+                        : GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: widget.isInteractionLocked ? null : () => viewModel.clearSelection(),
+                            child: ExcludeSemantics(
+                              child: RepaintBoundary(
+                                child: CustomPaint(
+                                  size: Size.infinite,
+                                  painter: _Viewport3dPainter(
+                                    mesh: viewModel.currentMesh,
+                                    azimuthDeg: _localAzimuthDeg,
+                                    elevationDeg: _localElevationDeg,
+                                    zoom: _localZoom,
+                                    pan: _localPan,
+                                    showWireframe: viewModel.showWireframe,
+                                    isGlassMode: viewModel.isGlassMode,
+                                    isOrthoProjection: viewModel.isOrthoProjection,
+                                    selectedBendId: viewModel.selectedBendId,
+                                    selectedPunchId: viewModel.selectedPunchId,
+                                    selectedFaceId: viewModel.selectedFaceId,
+                                    hoveredPunchId: viewModel.hoveredPunchId,
+                                    hoveredBendId: viewModel.hoveredBendId,
+                                    hoveredFaceId: viewModel.hoveredFaceId,
+                                    activePorts: viewModel.activeCmsPorts,
+                                    focusedPortId: viewModel.cmsGuidedController.state.focus.activePortId,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
                   ),
                 ),
 
@@ -658,10 +917,121 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                _cameraButton('ISO', () => viewModel.setPresetView(azimuth: 45, elevation: 30)),
-                                _cameraButton('TOP', () => viewModel.setPresetView(azimuth: 0, elevation: 89)),
-                                _cameraButton('FRONT', () => viewModel.setPresetView(azimuth: 0, elevation: 0)),
-                                _cameraButton('SIDE', () => viewModel.setPresetView(azimuth: 90, elevation: 0)),
+                                _modeButton(
+                                  label: _useHardwareEngine ? '⚡ GPU 3D' : '🎨 2D FALLBACK',
+                                  isActive: _useHardwareEngine,
+                                  icon: _useHardwareEngine ? Icons.speed : Icons.brush,
+                                  tooltip: _useHardwareEngine
+                                      ? 'Hardware 3D Engine Active (OpenGL / ANGLE Hardware Z-Buffer, 120 FPS). Click to switch to 2D Fallback.'
+                                      : 'Legacy 2D Painter Fallback Active. Click to switch to Hardware 3D Engine.',
+                                  onTap: () {
+                                    if (!_useHardwareEngine) {
+                                      try {
+                                        if (Platform.isWindows) {
+                                          DynamicLibrary.open('libEGL.dll');
+                                          DynamicLibrary.open('libGLESv2.dll');
+                                        }
+                                        setState(() {
+                                          _useHardwareEngine = true;
+                                          if (_threeJs == null) {
+                                            _initThreeJs();
+                                          }
+                                        });
+                                      } catch (e) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Hardware 3D requires libEGL.dll. Restart the application to load native OpenGL libraries.',
+                                            ),
+                                            duration: Duration(seconds: 4),
+                                            backgroundColor: Color(0xFF0F172A),
+                                          ),
+                                        );
+                                      }
+                                    } else {
+                                      setState(() {
+                                        _useHardwareEngine = false;
+                                      });
+                                    }
+                                  },
+                                ),
+                                _cameraButton(
+                                  'ISO',
+                                  () {
+                                    if (_useHardwareEngine && _threeJs != null && _controls != null) {
+                                      final mesh = viewModel.currentMesh;
+                                      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+                                      final fitDim = maxDim > 0 ? maxDim : 300.0;
+                                      _threeJs!.camera.position.setValues(fitDim * 1.2, fitDim * 1.0, fitDim * 1.5);
+                                      _controls!.target.setValues(0, 0, 0);
+                                      _controls!.update();
+                                    } else {
+                                      _setLocalPresetView(azimuth: 45, elevation: 30);
+                                    }
+                                  },
+                                  isActive: (viewModel.azimuthDeg - 45).abs() < 2 && (viewModel.elevationDeg - 30).abs() < 2,
+                                  tooltip: 'Isometric View (45°, 30°)',
+                                ),
+                                _cameraButton(
+                                  'TOP',
+                                  () {
+                                    if (_useHardwareEngine && _threeJs != null && _controls != null) {
+                                      final mesh = viewModel.currentMesh;
+                                      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+                                      final fitDim = maxDim > 0 ? maxDim : 300.0;
+                                      _threeJs!.camera.position.setValues(0, fitDim * 2.5, 0.01);
+                                      _controls!.target.setValues(0, 0, 0);
+                                      _controls!.update();
+                                    } else {
+                                      _setLocalPresetView(azimuth: 0, elevation: 89);
+                                    }
+                                  },
+                                  isActive: (viewModel.elevationDeg - 89).abs() < 2,
+                                  tooltip: 'Top Plan View (0°, 89°)',
+                                ),
+                                _cameraButton(
+                                  'FRONT',
+                                  () {
+                                    if (_useHardwareEngine && _threeJs != null && _controls != null) {
+                                      final mesh = viewModel.currentMesh;
+                                      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+                                      final fitDim = maxDim > 0 ? maxDim : 300.0;
+                                      _threeJs!.camera.position.setValues(0, 0, fitDim * 2.5);
+                                      _controls!.target.setValues(0, 0, 0);
+                                      _controls!.update();
+                                    } else {
+                                      _setLocalPresetView(azimuth: 0, elevation: 0);
+                                    }
+                                  },
+                                  isActive: (viewModel.azimuthDeg).abs() < 2 && (viewModel.elevationDeg).abs() < 2,
+                                  tooltip: 'Front Elevation View (0°, 0°)',
+                                ),
+                                _cameraButton(
+                                  'RIGHT',
+                                  () {
+                                    if (_useHardwareEngine && _threeJs != null && _controls != null) {
+                                      final mesh = viewModel.currentMesh;
+                                      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+                                      final fitDim = maxDim > 0 ? maxDim : 300.0;
+                                      _threeJs!.camera.position.setValues(fitDim * 2.5, 0, 0);
+                                      _controls!.target.setValues(0, 0, 0);
+                                      _controls!.update();
+                                    } else {
+                                      _setLocalPresetView(azimuth: 90, elevation: 0);
+                                    }
+                                  },
+                                  isActive: (viewModel.azimuthDeg - 90).abs() < 2 && (viewModel.elevationDeg).abs() < 2,
+                                  tooltip: 'Right Side View (90°, 0°)',
+                                ),
+                                _modeButton(
+                                  label: 'ORTHO',
+                                  isActive: viewModel.isOrthoProjection,
+                                  icon: Icons.view_in_ar,
+                                  tooltip: viewModel.isOrthoProjection
+                                      ? 'Orthographic (Parallel) View Active — Click for Perspective'
+                                      : 'Perspective View Active — Click for Orthographic',
+                                  onTap: viewModel.toggleOrthoProjection,
+                                ),
                                 _modeButton(
                                   label: viewModel.currentEdgeChamfer > 0 ? 'CHAMFER ${viewModel.currentEdgeChamfer.toStringAsFixed(1)}mm' : 'CHAMFER',
                                   isActive: viewModel.currentEdgeChamfer > 0,
@@ -698,7 +1068,19 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                                 IconButton(
                                   icon: const Icon(Icons.refresh, size: 14, color: Color(0xFF64748B)),
                                   tooltip: 'Reset Camera',
-                                  onPressed: viewModel.resetCamera,
+                                  onPressed: () {
+                                    if (_useHardwareEngine && _threeJs != null && _controls != null) {
+                                      final mesh = viewModel.currentMesh;
+                                      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+                                      final fitDim = maxDim > 0 ? maxDim : 300.0;
+                                      _threeJs!.camera.position.setValues(fitDim * 1.2, fitDim * 1.0, fitDim * 1.5);
+                                      _controls!.target.setValues(0, 0, 0);
+                                      _controls!.update();
+                                    }
+                                    _setLocalPresetView(azimuth: 45, elevation: 30);
+                                    _localZoom = 1.0;
+                                    viewModel.resetCamera();
+                                  },
                                   padding: const EdgeInsets.all(4),
                                   constraints: const BoxConstraints(),
                                 ),
@@ -716,12 +1098,16 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                   top: 12,
                   right: 12,
                   child: StudioViewCube(
-                    azimuthDeg: viewModel.azimuthDeg,
-                    elevationDeg: viewModel.elevationDeg,
-                    onResetView: viewModel.resetCamera,
-                    onOrbit: (dAz, dEl) => viewModel.orbit3D(dAz, dEl),
+                    azimuthDeg: _localAzimuthDeg,
+                    elevationDeg: _localElevationDeg,
+                    onResetView: () {
+                      _setLocalPresetView(azimuth: 45, elevation: 30);
+                      _localZoom = 1.0;
+                      viewModel.resetCamera();
+                    },
+                    onOrbit: (dAz, dEl) => _orbitLocalCamera(dAz, dEl),
                     onSetView: (azimuth, elevation) {
-                      viewModel.setPresetView(azimuth: azimuth, elevation: elevation);
+                      _setLocalPresetView(azimuth: azimuth, elevation: elevation);
                     },
                   ),
                 ),
@@ -883,25 +1269,38 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
     );
   }
 
-  Widget _cameraButton(String label, VoidCallback onTap) {
-    return InkWell(
+  Widget _cameraButton(String label, VoidCallback onTap, {bool isActive = false, String? tooltip}) {
+    final btn = InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         margin: const EdgeInsets.symmetric(horizontal: 2),
         decoration: BoxDecoration(
-          color: const Color(0xFFF1F5F9),
+          color: isActive ? const Color(0xFF0284C7) : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(
+            color: isActive ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
+            width: isActive ? 1.2 : 0.8,
+          ),
         ),
         child: Text(
           label,
-          style: const TextStyle(color: Color(0xFF334155), fontSize: 10, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: isActive ? Colors.white : const Color(0xFF334155),
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
+    if (tooltip != null) {
+      return Tooltip(message: tooltip, child: btn);
+    }
+    return btn;
   }
+
+
 
   Widget _modeButton({required String label, required bool isActive, required IconData icon, required String tooltip, required VoidCallback onTap}) {
     return Tooltip(
@@ -942,6 +1341,7 @@ class _Viewport3dPainter extends CustomPainter {
   final Offset pan;
   final bool showWireframe;
   final bool isGlassMode;
+  final bool isOrthoProjection;
   final String? selectedBendId;
   final String? selectedPunchId;
   final String? selectedFaceId;
@@ -959,6 +1359,7 @@ class _Viewport3dPainter extends CustomPainter {
     required this.pan,
     required this.showWireframe,
     this.isGlassMode = false,
+    this.isOrthoProjection = false,
     this.selectedBendId,
     this.selectedPunchId,
     this.selectedFaceId,
@@ -997,8 +1398,11 @@ class _Viewport3dPainter extends CustomPainter {
     // Center pivot point
     final pivot = mesh.center;
 
+    // Camera perspective distance: 2.5x the model extent gives a natural 3D CAD perspective
+    final cameraDist = math.max(fitDim * 2.5, 1000.0);
+
     // Transform a 3D point to camera space and project to screen
-    ({Offset pt, double depth}) project(CadPoint3D p) {
+    ({Offset pt, double depth, CadPoint3D camPt}) project(CadPoint3D p) {
       final rx = p.x - pivot.x;
       final ry = p.y - pivot.y;
       final rz = p.z - pivot.z;
@@ -1011,10 +1415,12 @@ class _Viewport3dPainter extends CustomPainter {
       final y2 = y1 * cosEl - z1 * sinEl;
       final z2 = y1 * sinEl + z1 * cosEl;
 
-      final sx = cx + x2 * scale;
-      final sy = cy - y2 * scale;
+      final persp = isOrthoProjection ? 1.0 : (cameraDist / math.max(cameraDist - z2, cameraDist * 0.15));
 
-      return (pt: Offset(sx, sy), depth: z2);
+      final sx = cx + (x2 * persp) * scale;
+      final sy = cy - (y2 * persp) * scale;
+
+      return (pt: Offset(sx, sy), depth: z2, camPt: CadPoint3D(x2, y2, z2));
     }
 
     // List of drawable facets sorted by camera depth
@@ -1051,23 +1457,10 @@ class _Viewport3dPainter extends CustomPainter {
           // In glass mode: bore walls are inside holes — skip them (they show through transparent plate)
           if (isGlassMode && isBore) continue;
 
-          // Solid mode back-face culling
+          // Solid mode: do NOT cull sheet metal faces — in open sheet metal assemblies,
+          // both inner webs, outer webs, rungs, and flanges are visible.
+          // Only cull hidden bore walls inside hole cylinders.
           if (!isGlassMode) {
-            // Bottom face of sheet metal when viewing from above
-            if (poly.faceId.endsWith('_BOT') && camNormalZ <= 0.0) continue;
-            // Top face of sheet metal when viewing from below
-            if (!poly.faceId.endsWith('_BOT') && !isFillet && !isBore && camNormalZ <= 0.0) {
-              continue;
-            }
-            // Curved bend fillet inside/outside
-            if (poly.faceId.startsWith('FILLET_OUT_') && camNormalZ <= -0.1) {
-              continue;
-            }
-            if (poly.faceId.startsWith('FILLET_') && !poly.faceId.startsWith('FILLET_OUT_') && camNormalZ <= -0.1) {
-              continue;
-            }
-            // Bore walls: only show when mostly facing the camera (tight culling)
-            // This prevents bore walls from being visible from outside looking at the flat face
             if (isBore && camNormalZ <= 0.0) continue;
           }
         } else {
@@ -1088,9 +1481,10 @@ class _Viewport3dPainter extends CustomPainter {
         }
       }
 
-      // Diffuse CAD lighting with two-sided fallback
-      final dotLight = (n.x * lightDir.x + n.y * lightDir.y + n.z * lightDir.z).clamp(-1.0, 1.0);
-      final lightFactor = dotLight > 0 ? (0.65 + 0.35 * dotLight) : (0.45 + 0.20 * (-dotLight));
+      // Symmetric two-sided diffuse CAD lighting:
+      // Prevents sharp dark-patch discontinuities when inner and outer sheet metal walls swap depth
+      final dotLight = (n.x * lightDir.x + n.y * lightDir.y + n.z * lightDir.z).abs().clamp(0.0, 1.0);
+      final lightFactor = 0.65 + 0.35 * dotLight;
 
       final baseColor = poly.color;
       Color shadedColor;
@@ -1236,6 +1630,7 @@ class _Viewport3dPainter extends CustomPainter {
         maxDepth: maxD,
         bounds: polyBounds,
         camNormal: polyCamNormal,
+        p0Cam: prjVerts.first.camPt,
         p0Screen: prjVerts.first.pt,
         p0Depth: prjVerts.first.depth,
         color: shadedColor,
@@ -1244,6 +1639,8 @@ class _Viewport3dPainter extends CustomPainter {
         isFillet: isFillet,
         isBore: isBore,
         isHighlighted: isHighlighted,
+        prjVerts: prjVerts.map((p) => p.pt).toList(),
+        camVerts: prjVerts.map((p) => p.camPt).toList(),
       ));
     }
 
@@ -1342,6 +1739,7 @@ class _Viewport3dPainter extends CustomPainter {
           maxDepth: maxD,
           bounds: polyBounds,
           camNormal: polyCamNormal,
+          p0Cam: prjVerts.first.camPt,
           p0Screen: prjVerts.first.pt,
           p0Depth: prjVerts.first.depth,
           color: isFocused ? const Color(0xFF00E5FF) : const Color(0xFF00E5FF),
@@ -1352,152 +1750,100 @@ class _Viewport3dPainter extends CustomPainter {
           isFillet: false,
           isBore: false,
           isHighlighted: isFocused,
+          prjVerts: prjVerts.map((p) => p.pt).toList(),
+          camVerts: prjVerts.map((p) => p.camPt).toList(),
         ));
       }
     }
 
-    // Pre-calculate base vs cover average world Z to determine assembly relationship
-    double sumBaseZ = 0.0;
-    int countBaseZ = 0;
-    double sumCoverZ = 0.0;
-    int countCoverZ = 0;
-    for (final poly in mesh.allPolygons) {
-      if (poly.vertices.isEmpty) continue;
-      final polyZ = poly.vertices.fold(0.0, (acc, v) => acc + v.z) / poly.vertices.length;
-      if (poly.faceId.contains('COVER')) {
-        sumCoverZ += polyZ;
-        countCoverZ++;
-      } else {
-        sumBaseZ += polyZ;
-        countBaseZ++;
-      }
-    }
-    final isCoverAssemblyOnTop = countCoverZ > 0 && countBaseZ > 0 && ((sumCoverZ / countCoverZ) > (sumBaseZ / countBaseZ));
+    // Evaluates geometric depth order between two facets:
+    // Returns < 0 if a should be drawn BEFORE b (a is behind b in 3D)
+    // Returns > 0 if b should be drawn BEFORE a (b is behind a in 3D)
+    int compareFacetDepth(_DrawFacet a, _DrawFacet b) {
+      // 1. Strict 3D Depth Disjointness:
+      if (a.maxDepth < b.minDepth - 1e-3) return -1;
+      if (b.maxDepth < a.minDepth - 1e-3) return 1;
 
-    // Exact camera depth of a planar facet at screen point (sx, sy).
-    // STRICTLY restricted to points inside the facet's 2D boundary to prevent wild extrapolation!
-    double? depthAt(_DrawFacet item, Offset screenPt) {
-      if (!item.bounds.contains(screenPt) || !item.fillPath.contains(screenPt)) return null;
-      final nz = item.camNormal.z;
-      if (nz.abs() < 1e-4) return null;
-      final dx = (screenPt.dx - item.p0Screen.dx) / scale;
-      final dy = -(screenPt.dy - item.p0Screen.dy) / scale;
-      final d = item.p0Depth - (item.camNormal.x * dx + item.camNormal.y * dy) / nz;
-      return d.clamp(item.minDepth, item.maxDepth);
-    }
-
-    Offset? findCommonPoint(_DrawFacet a, _DrawFacet b) {
+      // 2. Screen Bounding Box Disjointness:
       final overlap = a.bounds.intersect(b.bounds);
-      if (overlap.width <= 2.0 || overlap.height <= 2.0) return null;
-      final center = overlap.center;
-      if (a.fillPath.contains(center) && b.fillPath.contains(center)) {
-        return center;
+      if (overlap.width <= 0.5 || overlap.height <= 0.5) {
+        final diff = a.depth - b.depth;
+        if (diff.abs() > 0.01) return diff < 0 ? -1 : 1;
+        return _facePriority(a.faceId).compareTo(_facePriority(b.faceId));
       }
-      final candidates = [
-        Offset(overlap.left + overlap.width * 0.25, overlap.top + overlap.height * 0.25),
-        Offset(overlap.left + overlap.width * 0.75, overlap.top + overlap.height * 0.25),
-        Offset(overlap.left + overlap.width * 0.25, overlap.top + overlap.height * 0.75),
-        Offset(overlap.left + overlap.width * 0.75, overlap.top + overlap.height * 0.75),
-        Offset(overlap.left + overlap.width * 0.50, overlap.top + overlap.height * 0.25),
-        Offset(overlap.left + overlap.width * 0.50, overlap.top + overlap.height * 0.75),
-      ];
-      for (final pt in candidates) {
-        if (a.fillPath.contains(pt) && b.fillPath.contains(pt)) {
-          return pt;
-        }
+
+      // 3. 3D Plane Half-Space Separation (Newell's Test):
+      // Test A against plane of B (camera normal oriented towards camera: nz >= 0)
+      CadPoint3D nB = b.camNormal;
+      final lenB = math.sqrt(nB.x * nB.x + nB.y * nB.y + nB.z * nB.z);
+      if (lenB > 1e-5) nB = CadPoint3D(nB.x / lenB, nB.y / lenB, nB.z / lenB);
+      if (nB.z < 0) nB = CadPoint3D(-nB.x, -nB.y, -nB.z);
+
+      bool allABehindB = true;
+      bool allAInFrontB = true;
+      for (final v in a.camVerts) {
+        final dist = nB.x * (v.x - b.p0Cam.x) + nB.y * (v.y - b.p0Cam.y) + nB.z * (v.z - b.p0Cam.z);
+        if (dist > 0.05) allABehindB = false;
+        if (dist < -0.05) allAInFrontB = false;
       }
-      return null;
+      if (allABehindB && !allAInFrontB) return -1;
+      if (allAInFrontB && !allABehindB) return 1;
+
+      // Test B against plane of A (camera normal oriented towards camera: nz >= 0)
+      CadPoint3D nA = a.camNormal;
+      final lenA = math.sqrt(nA.x * nA.x + nA.y * nA.y + nA.z * nA.z);
+      if (lenA > 1e-5) nA = CadPoint3D(nA.x / lenA, nA.y / lenA, nA.z / lenA);
+      if (nA.z < 0) nA = CadPoint3D(-nA.x, -nA.y, -nA.z);
+
+      bool allBBehindA = true;
+      bool allBInFrontA = true;
+      for (final v in b.camVerts) {
+        final dist = nA.x * (v.x - a.p0Cam.x) + nA.y * (v.y - a.p0Cam.y) + nA.z * (v.z - a.p0Cam.z);
+        if (dist > 0.05) allBBehindA = false;
+        if (dist < -0.05) allBInFrontA = false;
+      }
+      if (allBInFrontA && !allBBehindA) return -1;
+      if (allBBehindA && !allBInFrontA) return 1;
+
+      // 4. Centroid Depth & Category Priority (Instant O(1) vector math, zero Path ray-casting)
+      final depthDiff = a.depth - b.depth;
+      if (depthDiff.abs() > 0.01) return depthDiff < 0 ? -1 : 1;
+      return _facePriority(a.faceId).compareTo(_facePriority(b.faceId));
     }
 
-    // Sort from back to front (Painter's Algorithm) with verified local-depth overlap resolution
+    // Step A: Baseline sort by average camera depth (Strict total order)
     drawList.sort((a, b) {
-      final isCoverA = a.faceId.contains('COVER');
-      final isCoverB = b.faceId.contains('COVER');
-
-      // 1. Within Cover assembly:
-      if (isCoverA && isCoverB) {
-        final isMainA = a.faceId.contains('MAIN');
-        final isMainB = b.faceId.contains('MAIN');
-        if (isMainA != isMainB) {
-          return elevationDeg > 0 ? (isMainA ? 1 : -1) : (isMainA ? -1 : 1);
-        }
-        if (a.maxDepth < b.minDepth - 1.0) return -1;
-        if (b.maxDepth < a.minDepth - 1.0) return 1;
-
-        final commonPt = findCommonPoint(a, b);
-        if (commonPt != null) {
-          final dA = depthAt(a, commonPt);
-          final dB = depthAt(b, commonPt);
-          if (dA != null && dB != null) {
-            final diff = dA - dB;
-            if (diff.abs() > 1.5) {
-              return diff < 0 ? -1 : 1;
-            }
-          }
-        }
-
-        final depthDiff = a.depth - b.depth;
-        if (depthDiff.abs() > 0.05) return depthDiff < 0 ? -1 : 1;
-        final pa = _facePriority(a.faceId);
-        final pb = _facePriority(b.faceId);
-        return pa.compareTo(pb);
-      }
-
-      // 2. Between Cover and Base Fitting:
-      if (isCoverA != isCoverB) {
-        if (a.maxDepth < b.minDepth - 1.0) return -1;
-        if (b.maxDepth < a.minDepth - 1.0) return 1;
-
-        final commonPt = findCommonPoint(a, b);
-        if (commonPt != null) {
-          final dA = depthAt(a, commonPt);
-          final dB = depthAt(b, commonPt);
-          if (dA != null && dB != null) {
-            final diff = dA - dB;
-            if (diff.abs() > 1.5) {
-              return diff < 0 ? -1 : 1;
-            }
-          }
-          // Direct mechanical contact / near-coplanar alignment (< 1.5mm)
-          if (isCoverAssemblyOnTop) {
-            return elevationDeg > 0 ? (isCoverA ? 1 : -1) : (isCoverA ? -1 : 1);
-          }
-        }
-
-        final depthDiff = a.depth - b.depth;
-        if (depthDiff.abs() > 1.5) {
-          return depthDiff < 0 ? -1 : 1;
-        }
-
-        if (isCoverAssemblyOnTop) {
-          return elevationDeg > 0 ? (isCoverA ? 1 : -1) : (isCoverA ? -1 : 1);
-        }
-        return depthDiff < 0 ? -1 : 1;
-      }
-
-      // 3. Between Base facets (and Port Mouth openings):
-      if (a.maxDepth < b.minDepth - 1.0) return -1;
-      if (b.maxDepth < a.minDepth - 1.0) return 1;
-
-      final commonPt = findCommonPoint(a, b);
-      if (commonPt != null) {
-        final dA = depthAt(a, commonPt);
-        final dB = depthAt(b, commonPt);
-        if (dA != null && dB != null) {
-          final diff = dA - dB;
-          if (diff.abs() > 1.0) {
-            return diff < 0 ? -1 : 1;
-          }
-        }
-      }
-
-      final depthDiff = a.depth - b.depth;
-      if (depthDiff.abs() > 0.05) return depthDiff < 0 ? -1 : 1;
-
-      final pa = _facePriority(a.faceId);
-      final pb = _facePriority(b.faceId);
-      return pa.compareTo(pb);
+      final diff = a.depth - b.depth;
+      if (diff.abs() > 0.01) return diff < 0 ? -1 : 1;
+      return _facePriority(a.faceId).compareTo(_facePriority(b.faceId));
     });
+
+    // Step B: Topological Newell Refinement Pass
+    // Resolves any pair where depth-range overlap requires order reversal in Painter's algorithm
+    final nFacets = drawList.length;
+    int maxPasses = 3;
+    while (maxPasses-- > 0) {
+      bool anySwap = false;
+      for (int i = 0; i < nFacets - 1; i++) {
+        for (int j = i + 1; j < nFacets; j++) {
+          final p = drawList[i];
+          final q = drawList[j];
+          if (q.minDepth > p.maxDepth + 0.1) break;
+
+          final overlap = p.bounds.intersect(q.bounds);
+          if (overlap.width <= 0.5 || overlap.height <= 0.5) continue;
+
+          if (compareFacetDepth(q, p) < 0) {
+            // q is behind p in 3D, so q must be drawn before p in Painter's algorithm
+            drawList.removeAt(j);
+            drawList.insert(i, q);
+            anySwap = true;
+            break;
+          }
+        }
+      }
+      if (!anySwap) break;
+    }
 
     // Render shaded faces with true cutout holes and crisp edges
     final facePaint = Paint()..style = PaintingStyle.fill;
@@ -1793,20 +2139,18 @@ class _Viewport3dPainter extends CustomPainter {
   /// Higher priority → drawn last (in front).
   static int _facePriority(String faceId) {
     // Thickness shell: always in front of plate faces
-    if (faceId.startsWith('FILLET_CAP')) return 6;
-    if (faceId.startsWith('CHAMFER_CAP')) return 6;
-    if (faceId.startsWith('RIM_')) return 6;
-    if (faceId.startsWith('CHAMFER_')) return 6;
+    if (faceId.startsWith('FILLET_CAP')) return 5;
+    if (faceId.startsWith('CHAMFER_CAP')) return 5;
+    if (faceId.startsWith('RIM_')) return 5;
+    if (faceId.startsWith('CHAMFER_')) return 5;
     // Outer convex fillet surface
-    if (faceId.startsWith('FILLET_OUT_')) return 5;
-    // Cover main top plate
-    if (faceId.startsWith('COVER_MAIN') || faceId.endsWith('MAIN_FACE')) return 4;
-    // Standard plate face (both top and _BOT surfaces)
-    if (!faceId.startsWith('FILLET_') && !faceId.startsWith('BORE_') && !faceId.startsWith('COVER_CF_')) {
+    if (faceId.startsWith('FILLET_OUT_')) return 4;
+    // Pass-through weld projections on outside of rails
+    if (faceId.contains('_proj_') || faceId.contains('_cap_')) return 4;
+    // Standard plate face (including top plates, flanges, cover flaps, rails, rungs)
+    if (!faceId.startsWith('FILLET_') && !faceId.startsWith('BORE_')) {
       return 3;
     }
-    // Cover downward flange
-    if (faceId.startsWith('COVER_CF_')) return 2;
     // Bore walls: inside holes
     if (faceId.startsWith('BORE_')) return 2;
     // Inner concave fillet: behind the plate
@@ -1817,6 +2161,20 @@ class _Viewport3dPainter extends CustomPainter {
 
   static List<Path> _mergeOverlappingPaths(List<Path> paths) {
     if (paths.length <= 1) return paths;
+
+    // Fast check: do any path bounds actually overlap before executing expensive Path.combine CSG?
+    final bounds = paths.map((p) => p.getBounds()).toList();
+    bool anyOverlap = false;
+    for (int i = 0; i < bounds.length - 1; i++) {
+      for (int j = i + 1; j < bounds.length; j++) {
+        if (bounds[i].overlaps(bounds[j])) {
+          anyOverlap = true;
+          break;
+        }
+      }
+      if (anyOverlap) break;
+    }
+    if (!anyOverlap) return paths;
     var current = List<Path>.of(paths);
     bool changed = true;
     int safetyCounter = 0;
@@ -1856,6 +2214,7 @@ class _Viewport3dPainter extends CustomPainter {
         oldDelegate.pan != pan ||
         oldDelegate.showWireframe != showWireframe ||
         oldDelegate.isGlassMode != isGlassMode ||
+        oldDelegate.isOrthoProjection != isOrthoProjection ||
         oldDelegate.selectedBendId != selectedBendId ||
         oldDelegate.selectedPunchId != selectedPunchId ||
         oldDelegate.selectedFaceId != selectedFaceId ||
@@ -1972,16 +2331,19 @@ class _FloatingCover3DViewerState extends State<_FloatingCover3DViewer> {
                     },
                     child: Container(
                       color: const Color(0xFFF8FAFC),
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: _Viewport3dPainter(
-                          mesh: coverMesh,
-                          azimuthDeg: _azimuth,
-                          elevationDeg: _elevation,
-                          zoom: _zoom,
-                          pan: _pan,
-                          showWireframe: widget.viewModel.showWireframe,
-                          isGlassMode: widget.viewModel.isGlassMode,
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: _Viewport3dPainter(
+                            mesh: coverMesh,
+                            azimuthDeg: _azimuth,
+                            elevationDeg: _elevation,
+                            zoom: _zoom,
+                            pan: _pan,
+                            showWireframe: widget.viewModel.showWireframe,
+                            isGlassMode: widget.viewModel.isGlassMode,
+                            isOrthoProjection: widget.viewModel.isOrthoProjection,
+                          ),
                         ),
                       ),
                     ),

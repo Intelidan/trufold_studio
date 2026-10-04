@@ -156,8 +156,9 @@ class PlanarFaceDecomposer {
     final finalizedFaces = faces.map((f) {
       final depth = depthMap[f.id] ?? 0;
       final isBase = f.id == baseId;
+      final isFloor = depth == 0;
       FaceRole role;
-      if (isBase) {
+      if (isFloor) {
         role = FaceRole.baseFloor;
       } else if (depth == 1) {
         role = FaceRole.sideWall;
@@ -166,7 +167,11 @@ class PlanarFaceDecomposer {
       } else {
         role = FaceRole.custom;
       }
-      return f.copyWith(isBaseAnchor: isBase, role: role, label: isBase ? 'Bottom Base Floor' : (depth == 1 ? 'Side Wall' : 'Return Flange'));
+      return f.copyWith(
+        isBaseAnchor: isBase,
+        role: role,
+        label: isFloor ? (isBase ? 'Bottom Base Floor' : 'Angled Floor') : (depth == 1 ? 'Side Wall' : 'Return Flange'),
+      );
     }).toList();
 
     return (faces: finalizedFaces, connectedBends: directedBends, baseFaceId: baseId);
@@ -554,7 +559,11 @@ class PlanarFaceDecomposer {
     final depths = <String, int>{baseId: 0};
     for (final b in directedBends) {
       final pDepth = depths[b.parentFaceId] ?? 0;
-      depths[b.childFaceId] = pDepth + 1;
+      // Floor ramp / elevation bends (e.g. 45° bends connecting floor segments in risers)
+      // preserve the floor depth (depth 0) so child ramp faces remain baseFloor,
+      // and their cheeks become depth 1 (sideWall) instead of depth 2 (returnFlange).
+      final isFloorRampBend = pDepth == 0 && b.targetAngleDeg.abs() <= 60.0;
+      depths[b.childFaceId] = isFloorRampBend ? 0 : pDepth + 1;
     }
     return depths;
   }

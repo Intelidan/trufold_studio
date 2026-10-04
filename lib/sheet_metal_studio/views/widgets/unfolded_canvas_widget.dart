@@ -110,6 +110,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
         CanvasGestureHandlerMixin {
   final FocusNode _canvasFocusNode = FocusNode();
   DsfDocument? _lastDoc;
+  double _lastPanZoomScale2D = 1.0;
   @override
   void initState() {
     super.initState();
@@ -414,17 +415,29 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                         },
                         onPointerSignal: (pointerSignal) {
                           if (pointerSignal is PointerScrollEvent) {
-                            final zoomFactor = pointerSignal.scrollDelta.dy < 0 ? 1.12 : 0.89;
+                            final dy = pointerSignal.scrollDelta.dy;
+                            final zoomFactor = dy.abs() < 40.0
+                                ? math.exp(-dy * 0.003).clamp(0.85, 1.18)
+                                : (dy < 0 ? 1.12 : 0.89);
                             viewModel.zoom2DCanvas(zoomFactor, focalPoint: pointerSignal.localPosition, viewportSize: size);
                           }
                         },
+                        onPointerPanZoomStart: (event) {
+                          _lastPanZoomScale2D = 1.0;
+                        },
                         onPointerPanZoomUpdate: (event) {
-                          if (event.pan != Offset.zero) {
+                          if (event.scale != 1.0) {
+                            final incrementalScale = event.scale / _lastPanZoomScale2D;
+                            _lastPanZoomScale2D = event.scale;
+                            if ((incrementalScale - 1.0).abs() > 0.0001) {
+                              viewModel.zoom2DCanvas(incrementalScale, focalPoint: event.localPosition, viewportSize: size);
+                            }
+                          } else if (event.pan != Offset.zero) {
                             viewModel.pan2DCanvas(event.pan);
                           }
-                          if (event.scale != 1.0) {
-                            viewModel.zoom2DCanvas(event.scale, focalPoint: event.localPosition, viewportSize: size);
-                          }
+                        },
+                        onPointerPanZoomEnd: (event) {
+                          _lastPanZoomScale2D = 1.0;
                         },
                         onPointerMove: (event) {
                           if ((event.buttons & kPrimaryMouseButton) == 0 && _boxSelectStart != null) {

@@ -104,11 +104,19 @@ mixin CanvasOverlayStackMixin on State<UnfoldedCanvasWidget>, CanvasLegendMixin,
                     const Icon(Icons.tune, size: 14, color: Color(0xFFA78BFA)),
                     const SizedBox(width: 6),
                     Text(
-                      (viewModel.detectedFittingMetadata != null &&
-                              viewModel.detectedFittingMetadata!.isAssigned &&
-                              viewModel.detectedFittingMetadata!.product.isNotEmpty)
-                          ? '${viewModel.detectedFittingMetadata!.product} (${viewModel.detectedFittingMetadata!.variantName})'
-                          : 'DSF Inspector',
+                      () {
+                        final meta = viewModel.detectedFittingMetadata;
+                        if (meta != null && meta.isAssigned && meta.product.isNotEmpty) {
+                          if (meta.variantName.isNotEmpty && meta.variantName != 'None') {
+                            if (meta.variantName.toLowerCase().contains(meta.product.toLowerCase())) {
+                              return meta.variantName;
+                            }
+                            return '${meta.product} (${meta.variantName})';
+                          }
+                          return meta.product;
+                        }
+                        return 'DSF Inspector';
+                      }(),
                       style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 11.5, fontWeight: FontWeight.bold),
                     ),
                   ],
