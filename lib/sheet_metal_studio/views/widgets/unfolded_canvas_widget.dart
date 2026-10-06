@@ -93,8 +93,17 @@ class UnfoldedCanvasWidget extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
   final bool renderFloatingInspectors;
   final bool showInCanvasToolRibbon;
+  final bool isDarkTheme;
+  final bool showLiveCoordinateHud;
 
-  const UnfoldedCanvasWidget({super.key, required this.viewModel, this.renderFloatingInspectors = true, this.showInCanvasToolRibbon = true});
+  const UnfoldedCanvasWidget({
+    super.key,
+    required this.viewModel,
+    this.renderFloatingInspectors = true,
+    this.showInCanvasToolRibbon = true,
+    this.isDarkTheme = false,
+    this.showLiveCoordinateHud = false,
+  });
 
   @override
   State<UnfoldedCanvasWidget> createState() => _UnfoldedCanvasWidgetState();
@@ -272,7 +281,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
 
             return ClipRect(
               child: Container(
-                color: const Color(0xFFF8FAFC), // Light CAD Engineering Canvas
+                color: widget.isDarkTheme ? const Color(0xFF0D0D0D) : const Color(0xFFF8FAFC), // Dark CAD vs Light CAD Canvas
                 child: Stack(
                   children: [
                     // 1. Interactive 2D Canvas with Pan, Mouse Wheel Zoom, Hover Snap, Click/Drag, and Arrow Key Nudging
@@ -846,6 +855,7 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                                             hoverCursorCad: _hoverCursorCad,
                                             isAltPressed: _isAltPressed(),
                                             canvasSettings: viewModel.canvasDisplaySettings,
+                                            isDarkTheme: widget.isDarkTheme,
                                           ),
                                         ),
                                         AnimatedBuilder(
@@ -921,6 +931,86 @@ class _UnfoldedCanvasWidgetState extends State<UnfoldedCanvasWidget>
                       selectedPattern: selectedPattern,
                       selectedFace: selectedFace,
                     ),
+
+                    if (widget.showLiveCoordinateHud)
+                      Positioned(
+                        bottom: 14,
+                        left: 16,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: widget.isDarkTheme ? const Color(0xDD000000) : Colors.white.withValues(alpha: 0.94),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: widget.isDarkTheme ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                              width: 1.0,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'X: ',
+                                style: TextStyle(
+                                  color: widget.isDarkTheme ? Colors.white70 : const Color(0xFF64748B),
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                (_hoverCursorCad?.x ?? viewModel.currentCursorMm?.x ?? 0.0).round().toString(),
+                                style: TextStyle(
+                                  color: widget.isDarkTheme ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Y: ',
+                                style: TextStyle(
+                                  color: widget.isDarkTheme ? Colors.white70 : const Color(0xFF64748B),
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                (_hoverCursorCad?.y ?? viewModel.currentCursorMm?.y ?? 0.0).round().toString(),
+                                style: TextStyle(
+                                  color: widget.isDarkTheme ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                              if (viewModel.snapSettings.enableGrid || viewModel.activeSnap != null) ...[
+                                const SizedBox(width: 14),
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFF59E0B),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'Snap Active',
+                                  style: TextStyle(color: Color(0xFFF59E0B), fontSize: 11.5, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

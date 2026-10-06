@@ -37,8 +37,14 @@ dependencies:
   file_picker: ^12.3.0
   flutter_svg: ^2.3.0
   excel: ^4.0.6
+  flutter_scene: ^0.24.0
+  vector_math: ^2.1.4
+  hooks: ^2.2.0
   three_js: ^0.0.7
   three_js_geometry: ^0.0.2
+
+dependency_overrides:
+  archive: ^4.0.7
 
 dev_dependencies:
   flutter_test:
@@ -74,6 +80,21 @@ flutter:
     - assets/dxf_templates/trunking_accessories/trunking_cover/
     - assets/icons/
     - assets/images/
+    - flutter_scene_generated/
+    - path: flutter_scene_generated/metal_ios/
+      platforms:
+        - ios
+    - path: flutter_scene_generated/metal_desktop/
+      platforms:
+        - macos
+    - path: flutter_scene_generated/opengl_es_vulkan/
+      platforms:
+        - android
+        - linux
+        - windows
+    - path: flutter_scene_generated/opengl_es/
+      platforms:
+        - web
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

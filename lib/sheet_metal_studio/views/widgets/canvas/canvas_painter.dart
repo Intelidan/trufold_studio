@@ -71,6 +71,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
   final CadPoint2D? hoverCursorCad;
   final bool isAltPressed;
   final CanvasDisplaySettings canvasSettings;
+  final bool isDarkTheme;
 
   _UnfoldedBoardPainter({
     required this.doc,
@@ -138,6 +139,7 @@ class _UnfoldedBoardPainter extends CustomPainter {
     this.hoverCursorCad,
     this.isAltPressed = false,
     this.canvasSettings = const CanvasDisplaySettings(),
+    this.isDarkTheme = false,
   });
 
   final String? selectedArcId;
@@ -184,8 +186,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
     // 2. Render Unfolded Planar Faces (Strictly Flat 2D Blank)
     final fillPaint = Paint()..style = PaintingStyle.fill;
     final borderPaint = Paint()
-      ..color =
-          const Color(0xFF0F172A) // Crisp dark laser cut contour
+      ..color = isDarkTheme
+          ? const Color(0xFF38BDF8) // Crisp neon/cyan laser cut contour in dark theme
+          : const Color(0xFF0F172A) // Crisp dark laser cut contour in light theme
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
 
@@ -283,9 +286,17 @@ class _UnfoldedBoardPainter extends CustomPainter {
         }
 
         if (showProfileFill) {
-          fillPaint.color = face.id == selectedFaceId
-              ? const Color(0xFFFDE68A).withValues(alpha: 0.70)
-              : (face.id == doc.baseFaceId ? const Color(0xFFD6E8F6).withValues(alpha: 0.75) : const Color(0xFFE2EFF9).withValues(alpha: 0.70));
+          if (isDarkTheme) {
+            fillPaint.color = face.id == selectedFaceId
+                ? const Color(0xFFF59E0B).withValues(alpha: 0.35)
+                : (face.id == doc.baseFaceId
+                    ? const Color(0xFF0284C7).withValues(alpha: 0.35)
+                    : const Color(0xFF1E293B).withValues(alpha: 0.85));
+          } else {
+            fillPaint.color = face.id == selectedFaceId
+                ? const Color(0xFFFDE68A).withValues(alpha: 0.70)
+                : (face.id == doc.baseFaceId ? const Color(0xFFD6E8F6).withValues(alpha: 0.75) : const Color(0xFFE2EFF9).withValues(alpha: 0.70));
+          }
           canvas.drawPath(facePath, fillPaint);
         }
         canvas.drawPath(facePath, borderPaint);
@@ -318,7 +329,9 @@ class _UnfoldedBoardPainter extends CustomPainter {
       final facePath = buildSmoothPolygonPath(doc.outerContour);
 
       if (showProfileFill) {
-        fillPaint.color = const Color(0xFFE2EFF9).withValues(alpha: 0.75);
+        fillPaint.color = isDarkTheme
+            ? const Color(0xFF1E293B).withValues(alpha: 0.85)
+            : const Color(0xFFE2EFF9).withValues(alpha: 0.75);
         canvas.drawPath(facePath, fillPaint);
       }
       canvas.drawPath(facePath, borderPaint);
@@ -1923,7 +1936,13 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
     // 12. Parametric Reference / Construction Geometry (Centerlines, Offsets, Symmetries)
     if (showConstructionGeometry && referenceGeometries.isNotEmpty) {
-      CanvasReferencePainter.paint(canvas: canvas, size: size, references: referenceGeometries, cadToScreen: (pt) => toScreen(pt.x, pt.y));
+      CanvasReferencePainter.paint(
+        canvas: canvas,
+        size: size,
+        references: referenceGeometries,
+        cadToScreen: (pt) => toScreen(pt.x, pt.y),
+        isDarkTheme: isDarkTheme,
+      );
     }
 
     if (showConstraints && constraintDefinitions.isNotEmpty) {
@@ -2200,13 +2219,17 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
     // Background
     final bgPaint = Paint()
-      ..color = isSelected ? const Color(0xFFFEF3C7).withValues(alpha: 0.95) : Colors.white.withValues(alpha: 0.90)
+      ..color = isSelected
+          ? (isDarkTheme ? const Color(0xFF78350F).withValues(alpha: 0.95) : const Color(0xFFFEF3C7).withValues(alpha: 0.95))
+          : (isDarkTheme ? const Color(0xFF1E293B).withValues(alpha: 0.95) : Colors.white.withValues(alpha: 0.90))
       ..style = PaintingStyle.fill;
     canvas.drawRRect(rrect, bgPaint);
 
     // Border
     final borderPaint = Paint()
-      ..color = isSelected ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8).withValues(alpha: 0.7)
+      ..color = isSelected
+          ? const Color(0xFFF59E0B)
+          : (isDarkTheme ? const Color(0xFF38BDF8).withValues(alpha: 0.8) : const Color(0xFF94A3B8).withValues(alpha: 0.7))
       ..style = PaintingStyle.stroke
       ..strokeWidth = isSelected ? 1.4 : 0.8;
     canvas.drawRRect(rrect, borderPaint);
@@ -2258,11 +2281,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
 
   void _drawGrid(Canvas canvas, Size size, Offset pan) {
     final gridPaint = Paint()
-      ..color = const Color(0xFFE2E8F0)
+      ..color = isDarkTheme ? const Color(0xFF1E293B).withValues(alpha: 0.6) : const Color(0xFFE2E8F0)
       ..strokeWidth = 0.8;
 
     final majorGridPaint = Paint()
-      ..color = const Color(0xFFCBD5E1)
+      ..color = isDarkTheme ? const Color(0xFF334155).withValues(alpha: 0.8) : const Color(0xFFCBD5E1)
       ..strokeWidth = 1.0;
 
     const step = 40.0;
@@ -3116,10 +3139,14 @@ class _UnfoldedBoardPainter extends CustomPainter {
     final hasDeleteIcon = isSelected || isHovered;
     final fullText = hasDeleteIcon ? '$text  ✕' : text;
 
+    final badgeTextColor = (isSelected || isHovered)
+        ? (isDarkTheme ? const Color(0xFF38BDF8) : const Color(0xFF0284C7))
+        : (isDarkTheme ? const Color(0xFFF1F5F9) : effectiveStyle.color);
+
     final span = TextSpan(
       text: fullText,
       style: TextStyle(
-        color: (isSelected || isHovered) ? const Color(0xFF0284C7) : effectiveStyle.color,
+        color: badgeTextColor,
         fontSize: effectiveStyle.fontSize,
         fontWeight: (isSelected || isHovered) ? FontWeight.bold : effectiveStyle.fontWeight,
         fontFamily: 'monospace',
@@ -3141,7 +3168,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
       );
 
       // Selected / hovered badge background
-      canvas.drawRRect(rrect, Paint()..color = const Color(0xFFF0F9FF));
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = isDarkTheme ? const Color(0xFF0C4A6E).withValues(alpha: 0.95) : const Color(0xFFF0F9FF),
+      );
 
       // Blue border
       canvas.drawRRect(
@@ -3153,7 +3184,11 @@ class _UnfoldedBoardPainter extends CustomPainter {
       );
     } else {
       // Subtle backing to avoid geometry line collision
-      canvas.drawRRect(rrect, Paint()..color = const Color(0xFFF8FAFC).withValues(alpha: 0.85));
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = isDarkTheme ? const Color(0xFF0F172A).withValues(alpha: 0.90) : const Color(0xFFF8FAFC).withValues(alpha: 0.85),
+      );
     }
 
     if (!isEditing) {

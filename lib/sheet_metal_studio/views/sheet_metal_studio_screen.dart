@@ -20,6 +20,7 @@ import '../models/dsf_document.dart';
 import 'widgets/canvas_2d/vector_cad_2d_canvas_widget.dart';
 import 'widgets/unfolded_canvas_widget.dart';
 import 'widgets/viewport_3d_widget.dart';
+import 'widgets/viewport_3d/flutter_scene_viewport_widget.dart';
 import 'widgets/split_pane_divider.dart';
 import 'widgets/fold_progress_slider.dart';
 import 'widgets/studio/studio_ribbon_toolbar.dart';
@@ -92,6 +93,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
   Offset _cmsInspectorPosition = const Offset(280, 50);
   Offset? _cmsInspectorDragStart;
   bool _useModern2dCanvas = true;
+  bool _useFlutterScene3D = true;
 
   SheetMetalStudioViewModel get _viewModel => _tabs[_activeTabIndex].viewModel;
   @visibleForTesting
@@ -1123,7 +1125,22 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                               onDoubleTapReset: () {},
                                             ),
                                             Expanded(
-                                              child: ClipRect(child: Viewport3dWidget(viewModel: _viewModel)),
+                                              child: ClipRect(
+                                                child: Stack(
+                                                  children: [
+                                                    Positioned.fill(
+                                                      child: _useFlutterScene3D
+                                                          ? FlutterSceneViewportWidget(viewModel: _viewModel)
+                                                          : Viewport3dWidget(viewModel: _viewModel),
+                                                    ),
+                                                    Positioned(
+                                                      bottom: 8,
+                                                      right: 8,
+                                                      child: _buildEngineSwitchBadge(),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -1235,7 +1252,22 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                       // Right Viewport: 3D Folded Mesh
                                       SizedBox(
                                         width: rightW,
-                                        child: ClipRect(child: Viewport3dWidget(viewModel: _viewModel)),
+                                        child: ClipRect(
+                                          child: Stack(
+                                            children: [
+                                              Positioned.fill(
+                                                child: _useFlutterScene3D
+                                                    ? FlutterSceneViewportWidget(viewModel: _viewModel)
+                                                    : Viewport3dWidget(viewModel: _viewModel),
+                                              ),
+                                              Positioned(
+                                                bottom: 8,
+                                                right: 8,
+                                                child: _buildEngineSwitchBadge(),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ],
                                   ],
@@ -2160,5 +2192,41 @@ ENDSEC
 EOF
 ''';
     _viewModel.loadDxf(sampleDxf, productType: 'Formed Z-Bracket');
+  }
+
+  Widget _buildEngineSwitchBadge() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Tooltip(
+        message: _useFlutterScene3D
+            ? 'Running Flutter GPU / Impeller 3D. Click to switch to legacy ThreeJS.'
+            : 'Running legacy ThreeJS. Click to switch to native Flutter GPU / Impeller.',
+        child: TextButton.icon(
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          icon: Icon(
+            _useFlutterScene3D ? Icons.memory : Icons.view_in_ar,
+            size: 13,
+            color: _useFlutterScene3D ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8),
+          ),
+          label: Text(
+            _useFlutterScene3D ? 'Flutter GPU' : 'ThreeJS (Legacy)',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: _useFlutterScene3D ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8),
+            ),
+          ),
+          onPressed: () => setState(() => _useFlutterScene3D = !_useFlutterScene3D),
+        ),
+      ),
+    );
   }
 }
