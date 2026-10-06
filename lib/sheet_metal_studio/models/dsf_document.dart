@@ -116,7 +116,29 @@ class DsfDocument {
 
   /// Blank bounding dimensions (for rectangular laser nesting stock)
   double get blankWidthMm {
-    if (outerContour.isEmpty) return 0.0;
+    if (outerContour.isEmpty) {
+      if (faces.isNotEmpty) {
+        double minX = double.infinity, maxX = -double.infinity;
+        for (final f in faces) {
+          for (final pt in f.vertices) {
+            if (pt.x < minX) minX = pt.x;
+            if (pt.x > maxX) maxX = pt.x;
+          }
+        }
+        return (minX.isFinite && maxX.isFinite) ? maxX - minX : 0.0;
+      }
+      if (cutLines.isNotEmpty) {
+        double minX = double.infinity, maxX = -double.infinity;
+        for (final cl in cutLines) {
+          if (cl.p1.x < minX) minX = cl.p1.x;
+          if (cl.p1.x > maxX) maxX = cl.p1.x;
+          if (cl.p2.x < minX) minX = cl.p2.x;
+          if (cl.p2.x > maxX) maxX = cl.p2.x;
+        }
+        return (minX.isFinite && maxX.isFinite) ? maxX - minX : 0.0;
+      }
+      return 0.0;
+    }
     double minX = outerContour.first.x, maxX = outerContour.first.x;
     for (final pt in outerContour) {
       if (pt.x < minX) minX = pt.x;
@@ -126,7 +148,29 @@ class DsfDocument {
   }
 
   double get blankLengthMm {
-    if (outerContour.isEmpty) return 0.0;
+    if (outerContour.isEmpty) {
+      if (faces.isNotEmpty) {
+        double minY = double.infinity, maxY = -double.infinity;
+        for (final f in faces) {
+          for (final pt in f.vertices) {
+            if (pt.y < minY) minY = pt.y;
+            if (pt.y > maxY) maxY = pt.y;
+          }
+        }
+        return (minY.isFinite && maxY.isFinite) ? maxY - minY : 0.0;
+      }
+      if (cutLines.isNotEmpty) {
+        double minY = double.infinity, maxY = -double.infinity;
+        for (final cl in cutLines) {
+          if (cl.p1.y < minY) minY = cl.p1.y;
+          if (cl.p1.y > maxY) maxY = cl.p1.y;
+          if (cl.p2.y < minY) minY = cl.p2.y;
+          if (cl.p2.y > maxY) maxY = cl.p2.y;
+        }
+        return (minY.isFinite && maxY.isFinite) ? maxY - minY : 0.0;
+      }
+      return 0.0;
+    }
     double minY = outerContour.first.y, maxY = outerContour.first.y;
     for (final pt in outerContour) {
       if (pt.y < minY) minY = pt.y;

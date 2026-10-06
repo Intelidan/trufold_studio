@@ -67,11 +67,16 @@ class DdsCmsParameterInspector extends StatefulWidget {
 
 class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   late Map<String, TextEditingController> _controllers;
+  final Map<String, FocusNode> _focusNodes = {};
   bool _arePortsLinked = false;
   bool _isFolded = false;
   final Map<String, double> _localParams = {};
   bool? _localCoverIncluded;
   String? _localMaterial;
+
+  FocusNode _getFocusNode(String key) {
+    return _focusNodes.putIfAbsent(key, () => FocusNode());
+  }
 
   String get _currentMaterial => _localMaterial ?? widget.instance?.material ?? widget.viewModel?.document.material.materialGrade ?? 'Pre-Galv DX51D (GI)';
 
@@ -202,6 +207,9 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     for (final c in _controllers.values) {
       c.dispose();
     }
+    for (final f in _focusNodes.values) {
+      f.dispose();
+    }
     super.dispose();
   }
 
@@ -210,7 +218,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       _resetLocalStateIfDocChanged();
       setState(() {
         _syncControllers();
-        _localCoverIncluded = widget.viewModel?.document.cover != null;
+        _localCoverIncluded = widget.viewModel?.hasCover ?? (widget.viewModel?.document.cover != null);
       });
     }
   }
@@ -290,6 +298,24 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       if (doc.metadata['isLadderAssembly'] == true) return true;
     }
     return false;
+  }
+
+  bool get _isCableTray {
+    if (_isLadder || _isTrunking) return false;
+    final cat = _currentCategory.toLowerCase();
+    if (cat.contains('tray')) return true;
+    if (widget.instance != null) {
+      final tId = widget.instance!.templateReference.templateId.toLowerCase();
+      final pName = widget.instance!.productName.toLowerCase();
+      if (tId.contains('tray') || pName.contains('tray')) return true;
+    }
+    if (widget.viewModel != null) {
+      final doc = widget.viewModel!.document;
+      final item = doc.itemName.toLowerCase();
+      final pType = doc.productType.toLowerCase();
+      if (item.contains('tray') || pType.contains('tray') || doc.category.toLowerCase().contains('tray')) return true;
+    }
+    return cat.contains('tray');
   }
 
   bool get _isTrayOrLadder {
@@ -558,6 +584,19 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       result['accessory_style'] ??=
           (vm.document.parameters['accessory_style'] ??
           (vm.document.metadata['ladderParameters'] is Map && (vm.document.metadata['ladderParameters'] as Map)['accessoryStyle'] == 'curved' ? 0.0 : 1.0));
+      result['outsideWeldProjection'] ??= (vm.document.parameters['outsideWeldProjection'] ??
+          vm.document.parameters['outside_weld_projection'] ??
+          (vm.document.metadata['ladderParameters'] is Map
+              ? ((vm.document.metadata['ladderParameters'] as Map)['outsideWeldProjection'] as num?)?.toDouble()
+              : null) ??
+          3.5);
+      final rPitch = (result['rung_pitch'] ?? result['intermediateTargetPitch'] ?? result['rungPitch'] ?? 250.0);
+      result['end_margin_pitch'] ??= (vm.document.parameters['end_margin_pitch'] ??
+          vm.document.parameters['endMarginPitch'] ??
+          (vm.document.metadata['ladderParameters'] is Map
+              ? ((vm.document.metadata['ladderParameters'] as Map)['endMarginPitch'] as num?)?.toDouble()
+              : null) ??
+          (rPitch / 2.0));
     }
     // Overlay local reactive state for immediate 0ms UI feedback
     result.addAll(_localParams);
@@ -607,9 +646,18 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     _setControllerText('base_flange_size', p['base_flange_size'] ?? 20.0);
     _setControllerText('cover_flange_size', widget.instance?.coverConfiguration.flangeDepthMm ?? p['cover_flange_size'] ?? 15.0);
     _setControllerText('thickness', p['thickness'] ?? 1.5);
+
+    // Ladder two-pitch controllers
+    final rungPitchVal = p['rung_pitch'] ?? p['intermediateTargetPitch'] ?? p['rungPitch'] ?? 250.0;
+    _setControllerText('rung_pitch', rungPitchVal);
+    final endMarginVal = p['end_margin_pitch'] ?? p['end_rung_offset'] ?? p['endMarginPitch'] ?? (rungPitchVal / 2.0);
+    _setControllerText('end_margin_pitch', endMarginVal);
   }
 
   void _setControllerText(String key, double val) {
+    if (_focusNodes[key]?.hasFocus == true) {
+      return;
+    }
     final text = key == 'thickness' ? val.toStringAsFixed(2) : (val % 1 == 0 ? val.toInt().toString() : val.toStringAsFixed(1));
     if (_controllers.containsKey(key)) {
       if (_controllers[key]!.text != text) {
@@ -624,8 +672,37 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     _localParams[key] = value;
     _setControllerText(key, value);
 
+    if (key == 'end_margin_pitch' || key == 'endMarginPitch' || key == 'end_rung_offset') {
+      _localParams['end_margin_pitch'] = value;
+      _localParams['endMarginPitch'] = value;
+      _localParams['end_rung_offset'] = value;
+      _setControllerText('end_margin_pitch', value);
+    } else if (key == 'rung_pitch' || key == 'intermediateTargetPitch' || key == 'rungPitch') {
+      _localParams['rung_pitch'] = value;
+      _localParams['intermediateTargetPitch'] = value;
+      _localParams['rungPitch'] = value;
+      _setControllerText('rung_pitch', value);
+    } else if (key == 'outsideWeldProjection' || key == 'outside_weld_projection') {
+      _localParams['outsideWeldProjection'] = value;
+      _localParams['outside_weld_projection'] = value;
+      _setControllerText('outsideWeldProjection', value);
+      _setControllerText('outside_weld_projection', value);
+    }
+
     final updated = Map<String, double>.from(_currentParams);
     updated[key] = value;
+    if (key == 'end_margin_pitch' || key == 'endMarginPitch' || key == 'end_rung_offset') {
+      updated['end_margin_pitch'] = value;
+      updated['endMarginPitch'] = value;
+      updated['end_rung_offset'] = value;
+    } else if (key == 'rung_pitch' || key == 'intermediateTargetPitch' || key == 'rungPitch') {
+      updated['rung_pitch'] = value;
+      updated['intermediateTargetPitch'] = value;
+      updated['rungPitch'] = value;
+    } else if (key == 'outsideWeldProjection' || key == 'outside_weld_projection') {
+      updated['outsideWeldProjection'] = value;
+      updated['outside_weld_projection'] = value;
+    }
 
     if (_arePortsLinked) {
       if (key.endsWith('_width') || key == 'width') {
@@ -685,6 +762,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         } else if (key.endsWith('_height') || key == 'height') {
           vm.applyCmsMorphParameter('height', value);
         }
+      }
+      if (key == 'outsideWeldProjection' || key == 'outside_weld_projection') {
+        vm.applyCmsMorphParameter('outsideWeldProjection', value);
+        vm.applyCmsMorphParameter('outside_weld_projection', value);
       }
       vm.applyCmsMorphParameter(key, value);
       if (key == 'bend_angle') {
@@ -763,8 +844,8 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
           const SizedBox(height: 12),
 
           // --- Section 2: Coupler Slots & Flaps (Common Size) ---
-          // Bend Radius and Coupler shouldn't be available for any Trunking Accessories category
-          if (!_isTrunking) ...[
+          // Coupler slots and flaps are only required for Cable tray items and no other categories
+          if (_isCableTray) ...[
             _buildSectionHeader('2. COUPLER SLOTS & FLAPS', Icons.more_horiz, null),
             const SizedBox(height: 6),
             _buildCouplerSlotsSection(),
@@ -1034,42 +1115,6 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                     ),
                   ],
                 ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          // Link / Unlink Ports Toggle
-          InkWell(
-            onTap: () {
-              final newLinked = !_arePortsLinked;
-              setState(() => _arePortsLinked = newLinked);
-              widget.viewModel?.scalingController?.togglePortLinking(newLinked);
-            },
-            borderRadius: BorderRadius.circular(4),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: _arePortsLinked ? const Color(0xFF0284C7) : (isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _arePortsLinked ? Icons.link : Icons.link_off,
-                    size: 13,
-                    color: _arePortsLinked ? Colors.white : (isLight ? const Color(0xFF64748B) : Colors.white70),
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    _arePortsLinked ? 'LINKED' : 'UNLINK',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.bold,
-                      color: _arePortsLinked ? Colors.white : (isLight ? const Color(0xFF64748B) : Colors.white70),
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
@@ -1698,6 +1743,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                 Expanded(
                   child: TextField(
                     controller: ctrl,
+                    focusNode: _getFocusNode(key),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF0F172A) : Colors.white),
                     textAlign: TextAlign.center,
@@ -1943,8 +1989,8 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     final isLight = widget.isLightTheme;
     final jointVal = _currentParams['rung_joint_method'] ?? 1.0;
     final isPassThrough = jointVal >= 0.5;
-    final endMargin = _currentParams['end_rung_offset'] ?? _currentParams['endMarginPitch'] ?? 75.0;
-    final targetPitch = _currentParams['rung_pitch'] ?? _currentParams['rungPitch'] ?? 250.0;
+    final endMargin = _currentParams['end_margin_pitch'] ?? _currentParams['endMarginPitch'] ?? _currentParams['end_rung_offset'] ?? 75.0;
+    final targetPitch = _currentParams['rung_pitch'] ?? _currentParams['intermediateTargetPitch'] ?? _currentParams['rungPitch'] ?? 250.0;
     final isFixedPitch = (_currentParams['rung_pitch_mode'] ?? 0.0) == 1.0;
     final projection = _currentParams['outsideWeldProjection'] ?? 3.5;
     final curWidth = _currentParams['width'] ?? 600.0;
@@ -2092,7 +2138,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                     style: TextStyle(fontSize: 11.0, color: isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
                   ),
                 ),
-                ...[3.0, 3.5, 4.0, 5.0].map((proj) {
+                ...[5.0, 10.0, 15.0].map((proj) {
                   final isSel = (projection - proj).abs() < 0.1;
                   return InkWell(
                     onTap: () => _updateParam('outsideWeldProjection', proj),
@@ -2104,7 +2150,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                         borderRadius: BorderRadius.circular(3),
                       ),
                       child: Text(
-                        '${proj}m',
+                        '${proj.toInt()}mm',
                         style: TextStyle(
                           fontSize: 9.5,
                           fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
@@ -2148,18 +2194,52 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
           Row(
             children: [
               SizedBox(
-                width: 120,
+                width: 112,
                 child: Text('End Margin (P_end):', style: TextStyle(fontSize: 11.0, color: isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1))),
               ),
-              Expanded(
-                child: Text('${endMargin.toStringAsFixed(0)} mm', style: const TextStyle(fontSize: 11.0, fontWeight: FontWeight.bold)),
+              Container(
+                width: 62,
+                height: 26,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: isLight ? Colors.white : const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.9),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _controllers['end_margin_pitch'] ??= TextEditingController(text: endMargin.round().toString()),
+                        focusNode: _getFocusNode('end_margin_pitch'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: TextStyle(fontSize: 11.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF0F172A) : Colors.white),
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(contentPadding: EdgeInsets.zero, isDense: true, border: InputBorder.none),
+                        onChanged: (val) {
+                          final parsed = double.tryParse(val);
+                          if (parsed != null && parsed >= 10.0 && parsed <= 1000.0) {
+                            _updateParam('end_margin_pitch', parsed);
+                          }
+                        },
+                        onSubmitted: (val) {
+                          final parsed = double.tryParse(val);
+                          if (parsed != null && parsed >= 10.0 && parsed <= 1000.0) {
+                            _updateParam('end_margin_pitch', parsed);
+                          }
+                        },
+                      ),
+                    ),
+                    Text('mm', style: TextStyle(fontSize: 9.0, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
+                  ],
+                ),
               ),
+              const Spacer(),
               ...[50.0, 75.0, 100.0].map((preset) {
                 final isSel = (endMargin - preset).abs() < 0.5;
                 return InkWell(
                   onTap: () {
-                    _updateParam('end_rung_offset', preset);
-                    _updateParam('endMarginPitch', preset);
+                    _updateParam('end_margin_pitch', preset);
                   },
                   child: Container(
                     margin: const EdgeInsets.only(left: 4),
@@ -2187,18 +2267,52 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
           Row(
             children: [
               SizedBox(
-                width: 120,
+                width: 112,
                 child: Text('Body Pitch (P_target):', style: TextStyle(fontSize: 11.0, color: isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1))),
               ),
-              Expanded(
-                child: Text('${targetPitch.toStringAsFixed(0)} mm', style: const TextStyle(fontSize: 11.0, fontWeight: FontWeight.bold)),
+              Container(
+                width: 62,
+                height: 26,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: isLight ? Colors.white : const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.9),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _controllers['rung_pitch'] ??= TextEditingController(text: targetPitch.round().toString()),
+                        focusNode: _getFocusNode('rung_pitch'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: TextStyle(fontSize: 11.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF0F172A) : Colors.white),
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(contentPadding: EdgeInsets.zero, isDense: true, border: InputBorder.none),
+                        onChanged: (val) {
+                          final parsed = double.tryParse(val);
+                          if (parsed != null && parsed >= 50.0 && parsed <= 2000.0) {
+                            _updateParam('rung_pitch', parsed);
+                          }
+                        },
+                        onSubmitted: (val) {
+                          final parsed = double.tryParse(val);
+                          if (parsed != null && parsed >= 50.0 && parsed <= 2000.0) {
+                            _updateParam('rung_pitch', parsed);
+                          }
+                        },
+                      ),
+                    ),
+                    Text('mm', style: TextStyle(fontSize: 9.0, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
+                  ],
+                ),
               ),
+              const Spacer(),
               ...[150.0, 200.0, 250.0, 300.0].map((preset) {
                 final isSel = (targetPitch - preset).abs() < 0.5;
                 return InkWell(
                   onTap: () {
                     _updateParam('rung_pitch', preset);
-                    _updateParam('rungPitch', preset);
                   },
                   child: Container(
                     margin: const EdgeInsets.only(left: 4),
@@ -2695,7 +2809,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     final isLight = widget.isLightTheme;
     final coverIncluded = widget.instance != null
         ? (_localCoverIncluded ?? widget.instance!.coverConfiguration.included)
-        : (widget.viewModel?.document.cover != null);
+        : (widget.viewModel?.hasCover ?? (widget.viewModel?.document.cover != null));
 
     void toggleCoverState(bool newIncluded) {
       setState(() {
@@ -2705,10 +2819,14 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         final updated = widget.instance!.copyWith(coverConfiguration: widget.instance!.coverConfiguration.copyWith(included: newIncluded));
         widget.onInstanceChanged!(updated);
       } else if (widget.viewModel != null) {
-        if (newIncluded) {
-          widget.viewModel!.createCoverForCurrentFitting();
+        if (_isLadder) {
+          widget.viewModel!.applyCmsMorphParameter('include_cover', newIncluded ? 1.0 : 0.0);
         } else {
-          widget.viewModel!.removeCover();
+          if (newIncluded) {
+            widget.viewModel!.createCoverForCurrentFitting();
+          } else {
+            widget.viewModel!.removeCover();
+          }
         }
       }
     }

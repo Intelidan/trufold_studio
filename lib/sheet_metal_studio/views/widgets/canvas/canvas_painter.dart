@@ -2439,6 +2439,59 @@ class _UnfoldedBoardPainter extends CustomPainter {
     }
     if (allPoints.isEmpty) return;
 
+    final bool isMultiBlankLadder = (doc.metadata['isLadderAssembly'] == true || doc.productType == 'cable_ladder') && visibleFaces.length > 1;
+    if (isMultiBlankLadder) {
+      _drawHoleCrosshairs(canvas, doc, toScreen, scale);
+      if (canvasSettings.outsideDimLabel.visible && canvasSettings.showDimensions) {
+        for (int i = 0; i < visibleFaces.length; i++) {
+          final f = visibleFaces[i];
+          if (f.vertices.length < 3) continue;
+          double fMinX = f.vertices.first.x, fMaxX = f.vertices.first.x;
+          double fMinY = f.vertices.first.y, fMaxY = f.vertices.first.y;
+          for (final p in f.vertices) {
+            if (p.x < fMinX) fMinX = p.x;
+            if (p.x > fMaxX) fMaxX = p.x;
+            if (p.y < fMinY) fMinY = p.y;
+            if (p.y > fMaxY) fMaxY = p.y;
+          }
+          final fW = fMaxX - fMinX;
+          final fL = fMaxY - fMinY;
+          if (fW < 1.0 || fL < 1.0) continue;
+
+          // Blank Width along bottom of this face
+          final bScreenY = toScreen(0, fMinY).dy + 26.0;
+          _drawLinearDimension(
+            canvas,
+            p1Screen: toScreen(fMinX, fMinY),
+            p2Screen: toScreen(fMaxX, fMinY),
+            dimScreenCoord: bScreenY,
+            isVertical: false,
+            valueText: formatMeasure(fW, canvasSettings),
+            dimId: 'dim_part_${f.id}_w',
+            ptA: CadPoint2D(fMinX, fMinY),
+            ptB: CadPoint2D(fMaxX, fMinY),
+            scale: scale,
+          );
+
+          // Blank Length along right of this face
+          final rScreenX = toScreen(fMaxX, 0).dx + 26.0;
+          _drawLinearDimension(
+            canvas,
+            p1Screen: toScreen(fMaxX, fMinY),
+            p2Screen: toScreen(fMaxX, fMaxY),
+            dimScreenCoord: rScreenX,
+            isVertical: true,
+            valueText: formatMeasure(fL, canvasSettings),
+            dimId: 'dim_part_${f.id}_l',
+            ptA: CadPoint2D(fMaxX, fMinY),
+            ptB: CadPoint2D(fMaxX, fMaxY),
+            scale: scale,
+          );
+        }
+      }
+      return;
+    }
+
     double minX = allPoints.first.x, maxX = allPoints.first.x;
     double minY = allPoints.first.y, maxY = allPoints.first.y;
     for (final p in allPoints) {

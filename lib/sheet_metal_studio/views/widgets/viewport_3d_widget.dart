@@ -72,7 +72,13 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
   three.ThreeJS? _threeJs;
   three.OrbitControls? _controls;
   three.Group? _cadModelGroup;
+  three.AmbientLight? _ambientLight;
+  three.DirectionalLight? _dirLight1;
+  three.DirectionalLight? _dirLight2;
+  three.DirectionalLight? _backLight;
+  Size? _threeJsViewportSize;
   FoldedMeshResult? _lastRenderedMesh;
+  AntiAliasingQuality _lastAntiAliasingQuality = AntiAliasingQuality.extreme;
 
   // Decoupled Camera Orbit State (Fast 60-120 FPS 2D Fallback)
   late double _localAzimuthDeg;
@@ -92,6 +98,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
     _localElevationDeg = viewModel.elevationDeg;
     _localZoom = viewModel.cameraZoom;
     _localPan = viewModel.pan3D;
+    _lastAntiAliasingQuality = viewModel.antiAliasingQuality;
     viewModel.addListener(_onViewModelChanged);
     _initThreeJs();
   }
@@ -137,6 +144,12 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
       }
 
       _threeJs = three.ThreeJS(
+        settings: three.Settings(
+          renderOptions: {
+            "format": three.RGBAFormat,
+            "samples": 4,
+          },
+        ),
         onSetupComplete: () {
           if (mounted) {
             setState(() {
@@ -162,6 +175,20 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
       threeJs.scene = three.Scene();
       threeJs.scene.background = three.Color(0.945, 0.961, 0.976); // Color(0xFFF1F5F9)
 
+      // Apply User-Defined Anti-Aliasing & Supersampling scale
+      final baseDpr = MediaQuery.of(context).devicePixelRatio;
+      final dpr = baseDpr * viewModel.antiAliasingQuality.pixelRatioScale;
+      threeJs.dpr = dpr;
+      threeJs.renderer?.setPixelRatio(dpr);
+
+      final vpSize = _threeJsViewportSize;
+      if (vpSize != null && vpSize.width > 0 && vpSize.height > 0) {
+        threeJs.width = vpSize.width;
+        threeJs.height = vpSize.height;
+        threeJs.screenSize = vpSize;
+        threeJs.renderer?.setSize(vpSize.width, vpSize.height, false);
+      }
+
       final mesh = viewModel.currentMesh;
       final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
       final fitDim = maxDim > 0 ? maxDim : 300.0;
@@ -176,20 +203,39 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
       threeJs.camera.position.setValues(fitDim * 1.2, fitDim * 1.0, fitDim * 1.5);
       threeJs.camera.lookAt(three.Vector3(0, 0, 0));
 
-      final ambientLight = three.AmbientLight(0xffffff, 0.65);
-      threeJs.scene.add(ambientLight);
+      _ambientLight = three.AmbientLight(0xffffff, (0.45 - viewModel.graphicsPreferences.ambientOcclusion / 100.0 * 0.20).clamp(0.25, 0.60));
+      threeJs.scene.add(_ambientLight!);
 
-      final dirLight1 = three.DirectionalLight(0xffffff, 0.85);
-      dirLight1.position.setValues(fitDim, fitDim * 1.5, fitDim);
-      threeJs.scene.add(dirLight1);
+      final lightAz = viewModel.graphicsPreferences.lightAzimuthDeg * math.pi / 180.0;
+      final lightEl = viewModel.graphicsPreferences.lightElevationDeg * math.pi / 180.0;
+      final lightDist = fitDim * 3.0;
 
-      final dirLight2 = three.DirectionalLight(0x94a3b8, 0.40);
-      dirLight2.position.setValues(-fitDim, -fitDim, -fitDim * 0.5);
-      threeJs.scene.add(dirLight2);
+      _dirLight1 = three.DirectionalLight(0xffffff, viewModel.graphicsPreferences.keyLightIntensity);
+      _dirLight1!.position.setValues(
+        lightDist * math.cos(lightEl) * math.sin(lightAz),
+        lightDist * math.sin(lightEl),
+        lightDist * math.cos(lightEl) * math.cos(lightAz),
+      );
+      threeJs.scene.add(_dirLight1!);
+
+      _dirLight2 = three.DirectionalLight(0x94a3b8, 0.40);
+      _dirLight2!.position.setValues(-fitDim * 1.5, -fitDim * 1.5, -fitDim * 0.8);
+      _dirLight2!.visible = viewModel.graphicsPreferences.hasSecondaryLight;
+      threeJs.scene.add(_dirLight2!);
+
+      _backLight = three.DirectionalLight(0xe2e8f0, 0.60);
+      _backLight!.position.setValues(0, fitDim * 1.8, -lightDist);
+      _backLight!.visible = viewModel.graphicsPreferences.hasBackLight;
+      threeJs.scene.add(_backLight!);
 
       _cadModelGroup = ThreeCadMeshBuilder.buildCadModel(
         mesh,
         showWireframe: viewModel.showWireframe,
+        showBorderLines: viewModel.showBorderLines,
+        isObstructedXRayMode: viewModel.isObstructedXRayMode,
+        shadingStyle: viewModel.cadShadingStyle,
+        preferences: viewModel.graphicsPreferences,
+        renderMode: viewModel.onshapeRenderMode,
         selectedFaceId: viewModel.selectedFaceId,
         hoveredFaceId: viewModel.hoveredFaceId,
       );
@@ -202,6 +248,37 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
 
       threeJs.addAnimationEvent((dt) {
         _controls?.update();
+
+        // Live update ambient occlusion, lighting, and camera FOV
+        final prefs = viewModel.graphicsPreferences;
+        if (_ambientLight != null) {
+          final ao = prefs.ambientOcclusion;
+          _ambientLight!.intensity = (0.45 - ao / 100.0 * 0.20).clamp(0.25, 0.60);
+        }
+        if (_dirLight1 != null) {
+          final az = prefs.lightAzimuthDeg * math.pi / 180.0;
+          final el = prefs.lightElevationDeg * math.pi / 180.0;
+          final lightDist = fitDim * 3.0;
+          _dirLight1!.position.setValues(
+            lightDist * math.cos(el) * math.sin(az),
+            lightDist * math.sin(el),
+            lightDist * math.cos(el) * math.cos(az),
+          );
+          _dirLight1!.intensity = prefs.keyLightIntensity;
+        }
+        if (_dirLight2 != null) {
+          _dirLight2!.visible = prefs.hasSecondaryLight;
+        }
+        if (_backLight != null) {
+          _backLight!.visible = prefs.hasBackLight;
+        }
+        if (!viewModel.isOrthoProjection) {
+          final fov = prefs.fieldOfView;
+          if ((threeJs.camera.fov - fov).abs() > 0.1) {
+            threeJs.camera.fov = fov;
+            threeJs.camera.updateProjectionMatrix();
+          }
+        }
       });
     } catch (e, stack) {
       debugPrint('[Viewport3dWidget] Hardware 3D setup failed, falling back to 2D: $e\n$stack');
@@ -211,6 +288,44 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
         });
       }
     }
+  }
+
+  void _updateAntiAliasing(AntiAliasingQuality quality) {
+    viewModel.antiAliasingQuality = quality;
+    if (_useHardwareEngine && _threeJs != null) {
+      final baseDpr = MediaQuery.of(context).devicePixelRatio;
+      final targetDpr = baseDpr * quality.pixelRatioScale;
+      _threeJs!.dpr = targetDpr;
+      _threeJs!.renderer?.setPixelRatio(targetDpr);
+      if (_threeJsViewportSize != null) {
+        _threeJs!.width = _threeJsViewportSize!.width;
+        _threeJs!.height = _threeJsViewportSize!.height;
+        _threeJs!.screenSize = _threeJsViewportSize!;
+        _threeJs!.renderer?.setSize(_threeJsViewportSize!.width, _threeJsViewportSize!.height, false);
+        if (_threeJsViewportSize!.height > 0) {
+          _threeJs!.camera.aspect = _threeJsViewportSize!.width / _threeJsViewportSize!.height;
+          _threeJs!.camera.updateProjectionMatrix();
+        }
+      }
+      setState(() {});
+    }
+  }
+
+  void _updateThreeJsViewportSize(Size size) {
+    if (_threeJs == null) return;
+    _threeJs!.width = size.width;
+    _threeJs!.height = size.height;
+    _threeJs!.screenSize = size;
+    final cam = _threeJs!.camera;
+    if (size.height > 0) {
+      cam.aspect = size.width / size.height;
+      cam.updateProjectionMatrix();
+    }
+    final baseDpr = MediaQuery.of(context).devicePixelRatio;
+    final curDpr = baseDpr * viewModel.antiAliasingQuality.pixelRatioScale;
+    _threeJs!.dpr = curDpr;
+    _threeJs!.renderer?.setPixelRatio(curDpr);
+    _threeJs!.renderer?.setSize(size.width, size.height, false);
   }
 
   void _onViewModelChanged() {
@@ -223,6 +338,10 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
       _localElevationDeg = viewModel.elevationDeg;
       _localZoom = viewModel.cameraZoom;
       _localPan = viewModel.pan3D;
+    }
+    if (viewModel.antiAliasingQuality != _lastAntiAliasingQuality) {
+      _lastAntiAliasingQuality = viewModel.antiAliasingQuality;
+      _updateAntiAliasing(_lastAntiAliasingQuality);
     }
     if (_useHardwareEngine && _setupComplete) {
       if (!identical(viewModel.currentMesh, _lastRenderedMesh)) {
@@ -239,6 +358,11 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
     _cadModelGroup = ThreeCadMeshBuilder.buildCadModel(
       viewModel.currentMesh,
       showWireframe: viewModel.showWireframe,
+      showBorderLines: viewModel.showBorderLines,
+      isObstructedXRayMode: viewModel.isObstructedXRayMode,
+      shadingStyle: viewModel.cadShadingStyle,
+      preferences: viewModel.graphicsPreferences,
+      renderMode: viewModel.onshapeRenderMode,
       selectedFaceId: viewModel.selectedFaceId,
       hoveredFaceId: viewModel.hoveredFaceId,
     );
@@ -496,7 +620,15 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
         return ClipRect(
           child: LayoutBuilder(
             builder: (context, constraints) {
-          final size = constraints.biggest;
+              final size = constraints.biggest;
+              if (size.width > 0 && size.height > 0 && _threeJs != null) {
+                if (_threeJsViewportSize == null ||
+                    (_threeJsViewportSize!.width - size.width).abs() > 1.0 ||
+                    (_threeJsViewportSize!.height - size.height).abs() > 1.0) {
+                  _threeJsViewportSize = size;
+                  _updateThreeJsViewportSize(size);
+                }
+              }
           return Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFF8FAFC), Color(0xFFE2E8F0)]),
@@ -613,7 +745,12 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                         ? Stack(
                             fit: StackFit.expand,
                             children: [
-                              if (_threeJs != null) _threeJs!.build(),
+                              if (_threeJs != null)
+                                SizedBox(
+                                  width: size.width,
+                                  height: size.height,
+                                  child: _threeJs!.build(),
+                                ),
                               if (!_setupComplete)
                                 Container(
                                   color: const Color(0xFFF1F5F9),
@@ -1033,18 +1170,16 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                                   onTap: viewModel.toggleOrthoProjection,
                                 ),
                                 _modeButton(
-                                  label: viewModel.currentEdgeChamfer > 0 ? 'CHAMFER ${viewModel.currentEdgeChamfer.toStringAsFixed(1)}mm' : 'CHAMFER',
-                                  isActive: viewModel.currentEdgeChamfer > 0,
-                                  icon: Icons.change_history,
-                                  tooltip: 'Sheet Edge Chamfer (Bevel / Weld Prep)',
-                                  onTap: () => _showChamferDialog(context),
-                                ),
-                                _modeButton(
                                   label: 'GLASS',
-                                  isActive: viewModel.isGlassMode,
+                                  isActive: viewModel.onshapeRenderMode == OnshapeRenderMode.translucent || viewModel.isGlassMode,
                                   icon: Icons.opacity,
-                                  tooltip: 'Toggle Glass / X-Ray Mode (See Back Part)',
-                                  onTap: viewModel.toggleGlassMode,
+                                  tooltip: 'Toggle Translucent Glass Mode (GPU 3D & 2D)',
+                                  onTap: () {
+                                    final isTranslucent = viewModel.onshapeRenderMode == OnshapeRenderMode.translucent;
+                                    viewModel.onshapeRenderMode = isTranslucent ? OnshapeRenderMode.shadedWithEdges : OnshapeRenderMode.translucent;
+                                    viewModel.setGlassMode(!isTranslucent);
+                                    _updateCadModel();
+                                  },
                                 ),
                                 if (viewModel.persistentCmsPorts.isNotEmpty)
                                   _modeButton(
@@ -1182,92 +1317,6 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
   },
 );
 }
-
-  void _showChamferDialog(BuildContext context) {
-    final currentChamfer = viewModel.currentEdgeChamfer;
-    const presets = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0];
-    final controller = TextEditingController(text: currentChamfer > 0 ? currentChamfer.toStringAsFixed(1) : '1.0');
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: const [
-            Icon(Icons.change_history, color: Color(0xFF0284C7), size: 20),
-            SizedBox(width: 8),
-            Text('3D Sheet Edge Chamfer (Weld Prep)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: SizedBox(
-          width: 340,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Apply 45° beveled edge chamfers to the 3D sheet model. Essential for thick sheets (edge deburring, safety, and weld V-grooves). Settings are stored in the .dsf file.',
-                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: presets.map((ch) {
-                  final isSelected = (ch - currentChamfer).abs() < 1e-3;
-                  return ChoiceChip(
-                    label: Text(ch == 0 ? 'None (Sharp)' : '${ch.toStringAsFixed(1)} mm'),
-                    selected: isSelected,
-                    selectedColor: const Color(0xFFE0F2FE),
-                    labelStyle: TextStyle(
-                      fontSize: 11,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF334155),
-                    ),
-                    onSelected: (_) {
-                      viewModel.setGlobalEdgeChamfer(ch);
-                      Navigator.of(ctx).pop();
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Custom Chamfer Width (mm)', border: OutlineInputBorder(), isDense: true),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          if (viewModel.edgeChamfers.isNotEmpty || currentChamfer > 0)
-            TextButton(
-              onPressed: () {
-                viewModel.setGlobalEdgeChamfer(0.0);
-                for (final k in viewModel.edgeChamfers.keys.toList()) {
-                  viewModel.setEdgeChamfer(k, 0.0);
-                }
-                Navigator.of(ctx).pop();
-              },
-              style: TextButton.styleFrom(foregroundColor: const Color(0xFFEF4444)),
-              child: const Text('Clear All'),
-            ),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7), foregroundColor: Colors.white),
-            onPressed: () {
-              final val = double.tryParse(controller.text);
-              if (val != null && val >= 0) {
-                viewModel.setGlobalEdgeChamfer(val);
-              }
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('Apply'),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _cameraButton(String label, VoidCallback onTap, {bool isActive = false, String? tooltip}) {
     final btn = InkWell(

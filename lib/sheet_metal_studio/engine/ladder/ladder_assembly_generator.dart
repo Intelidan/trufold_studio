@@ -8,6 +8,7 @@ import '../../models/cad_part.dart';
 import '../../models/cad_primitives.dart';
 import '../../models/cnc_punch_primitive.dart';
 import '../../models/fold_bend_line.dart';
+import '../../models/planar_sheet_face.dart';
 import '../../models/dsf_document.dart';
 import '../../models/cms/cms_physical_port.dart';
 import '../../models/ladder/ladder_assembly_models.dart';
@@ -27,16 +28,8 @@ class LadderAssemblyGenerator {
   static const double densitySteel = 7850.0;
 
   /// Generates a horizontal bend ladder assembly (30°, 45°, 60°, 90°).
-  static DsfLadderAssembly generateHorizontalBend({
-    required double angleDeg,
-    double radiusMm = 300.0,
-    required LadderAssemblyParameters params,
-  }) =>
-      LadderAccessoryGenerator.generateHorizontalBend(
-        angleDeg: angleDeg,
-        radiusMm: radiusMm,
-        params: params,
-      );
+  static DsfLadderAssembly generateHorizontalBend({required double angleDeg, double radiusMm = 300.0, required LadderAssemblyParameters params}) =>
+      LadderAccessoryGenerator.generateHorizontalBend(angleDeg: angleDeg, radiusMm: radiusMm, params: params);
 
   /// Generates an inside or outside riser ladder assembly (30°, 45°, 90°).
   static DsfLadderAssembly generateRiser({
@@ -44,13 +37,7 @@ class LadderAssemblyGenerator {
     double radiusMm = 300.0,
     required bool isInsideRiser,
     required LadderAssemblyParameters params,
-  }) =>
-      LadderAccessoryGenerator.generateRiser(
-        angleDeg: angleDeg,
-        radiusMm: radiusMm,
-        isInsideRiser: isInsideRiser,
-        params: params,
-      );
+  }) => LadderAccessoryGenerator.generateRiser(angleDeg: angleDeg, radiusMm: radiusMm, isInsideRiser: isInsideRiser, params: params);
 
   /// Generates a reducer ladder assembly (straight/concentric, left, right).
   static DsfLadderAssembly generateReducer({
@@ -59,14 +46,7 @@ class LadderAssemblyGenerator {
     double length = 500.0,
     String alignment = 'straight',
     required LadderAssemblyParameters params,
-  }) =>
-      LadderAccessoryGenerator.generateReducer(
-        width1: width1,
-        width2: width2,
-        length: length,
-        alignment: alignment,
-        params: params,
-      );
+  }) => LadderAccessoryGenerator.generateReducer(width1: width1, width2: width2, length: length, alignment: alignment, params: params);
 
   /// Generates an equal or unequal tee ladder assembly.
   static DsfLadderAssembly generateTee({
@@ -74,13 +54,7 @@ class LadderAssemblyGenerator {
     required double branchWidth,
     double radiusMm = 300.0,
     required LadderAssemblyParameters params,
-  }) =>
-      LadderAccessoryGenerator.generateTee(
-        mainWidth: mainWidth,
-        branchWidth: branchWidth,
-        radiusMm: radiusMm,
-        params: params,
-      );
+  }) => LadderAccessoryGenerator.generateTee(mainWidth: mainWidth, branchWidth: branchWidth, radiusMm: radiusMm, params: params);
 
   /// Generates an equal or unequal cross ladder assembly.
   static DsfLadderAssembly generateCross({
@@ -88,13 +62,7 @@ class LadderAssemblyGenerator {
     required double branchWidth,
     double radiusMm = 300.0,
     required LadderAssemblyParameters params,
-  }) =>
-      LadderAccessoryGenerator.generateCross(
-        mainWidth: mainWidth,
-        branchWidth: branchWidth,
-        radiusMm: radiusMm,
-        params: params,
-      );
+  }) => LadderAccessoryGenerator.generateCross(mainWidth: mainWidth, branchWidth: branchWidth, radiusMm: radiusMm, params: params);
 
   /// Generates a complete straight cable ladder assembly.
   static DsfLadderAssembly generateStraightLadder(LadderAssemblyParameters params) {
@@ -349,28 +317,22 @@ class LadderAssemblyGenerator {
     const double thickness = 2.0;
 
     // Formed C-Channel Rung Profile (40mm width by rungCutLength)
-    final outerContour = [
-      const CadPoint2D(0.0, 0.0),
-      CadPoint2D(rungCutLength, 0.0),
-      CadPoint2D(rungCutLength, profileW),
-      const CadPoint2D(0.0, profileW),
-    ];
+    final outerContour = [const CadPoint2D(0.0, 0.0), CadPoint2D(rungCutLength, 0.0), CadPoint2D(rungCutLength, profileW), const CadPoint2D(0.0, profileW)];
 
     final geometries = <CadGeometry>[];
 
     // Longitudinal channel leg return / flange edge lines
-    geometries.add(CadLine2D(
-      id: 'rung_flange_front_edge',
-      p1: const CadPoint2D(0.0, thickness),
-      p2: CadPoint2D(rungCutLength, thickness),
-      layer: 'FORMED_EDGES',
-    ));
-    geometries.add(CadLine2D(
-      id: 'rung_flange_back_edge',
-      p1: CadPoint2D(0.0, profileW - thickness),
-      p2: CadPoint2D(rungCutLength, profileW - thickness),
-      layer: 'FORMED_EDGES',
-    ));
+    geometries.add(
+      CadLine2D(id: 'rung_flange_front_edge', p1: const CadPoint2D(0.0, thickness), p2: CadPoint2D(rungCutLength, thickness), layer: 'FORMED_EDGES'),
+    );
+    geometries.add(
+      CadLine2D(
+        id: 'rung_flange_back_edge',
+        p1: CadPoint2D(0.0, profileW - thickness),
+        p2: CadPoint2D(rungCutLength, profileW - thickness),
+        layer: 'FORMED_EDGES',
+      ),
+    );
 
     // Array of 25x14mm Obrounds along web centerline
     const double obroundLength = 25.0;
@@ -387,13 +349,7 @@ class LadderAssemblyGenerator {
       for (int i = 0; i < count; i++) {
         final double x = margin + (i * actualPitch) + (obroundLength / 2.0);
         geometries.add(
-          CadSlot2D(
-            id: 'rung_obround_$i',
-            center: CadPoint2D(x, webCenterY),
-            lengthMm: obroundLength,
-            widthMm: obroundWidth,
-            layer: 'CUT_OBROUNDS',
-          ),
+          CadSlot2D(id: 'rung_obround_$i', center: CadPoint2D(x, webCenterY), lengthMm: obroundLength, widthMm: obroundWidth, layer: 'CUT_OBROUNDS'),
         );
       }
     }
@@ -499,218 +455,509 @@ class LadderAssemblyGenerator {
       }
     }
 
+    final double t = (thickness > 0.1 && thickness < (rungW / 3)) ? thickness : 1.5;
+    final double x1Inner = x1 + t;
+    final double x2Inner = x2 - t;
+    final double zTopInner = zTop - t;
+
     final bool hasLeftProj = yStart < yIntStart - 0.5;
     final bool hasRightProj = yEnd > yIntEnd + 0.5;
 
     // --- 1. LEFT PASS-THROUGH OUTSIDE WELD PROJECTION [yStart .. yIntStart] ---
     if (hasLeftProj) {
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_left_top',
-        vertices: [
-          CadPoint3D(x1, yStart, zTop),
-          CadPoint3D(x2, yStart, zTop),
-          CadPoint3D(x2, yIntStart, zTop),
-          CadPoint3D(x1, yIntStart, zTop),
-        ],
+      // Outer top web
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_left_top',
+          vertices: [CadPoint3D(x1, yStart, zTop), CadPoint3D(x2, yStart, zTop), CadPoint3D(x2, yIntStart, zTop), CadPoint3D(x1, yIntStart, zTop)],
+          normal: const CadPoint3D(0.0, 0.0, 1.0),
+          color: color,
+          boundaryLines: [
+            [CadPoint3D(x1, yStart, zTop), CadPoint3D(x2, yStart, zTop)],
+            [CadPoint3D(x1, yStart, zTop), CadPoint3D(x1, yIntStart, zTop)],
+            [CadPoint3D(x2, yStart, zTop), CadPoint3D(x2, yIntStart, zTop)],
+          ],
+        ),
+      );
+
+      // Inner top web
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_left_top_inner',
+          vertices: [
+            CadPoint3D(x1Inner, yStart, zTopInner),
+            CadPoint3D(x1Inner, yIntStart, zTopInner),
+            CadPoint3D(x2Inner, yIntStart, zTopInner),
+            CadPoint3D(x2Inner, yStart, zTopInner),
+          ],
+          normal: const CadPoint3D(0.0, 0.0, -1.0),
+          color: color,
+        ),
+      );
+
+      // Outer front flange
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_left_front',
+          vertices: [CadPoint3D(x1, yStart, zTop), CadPoint3D(x1, yIntStart, zTop), CadPoint3D(x1, yIntStart, zBottom), CadPoint3D(x1, yStart, zBottom)],
+          normal: const CadPoint3D(-1.0, 0.0, 0.0),
+          color: color,
+          boundaryLines: [
+            [CadPoint3D(x1, yStart, zTop), CadPoint3D(x1, yStart, zBottom)],
+            [CadPoint3D(x1, yStart, zBottom), CadPoint3D(x1, yIntStart, zBottom)],
+          ],
+        ),
+      );
+
+      // Inner front flange
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_left_front_inner',
+          vertices: [
+            CadPoint3D(x1Inner, yStart, zBottom),
+            CadPoint3D(x1Inner, yIntStart, zBottom),
+            CadPoint3D(x1Inner, yIntStart, zTopInner),
+            CadPoint3D(x1Inner, yStart, zTopInner),
+          ],
+          normal: const CadPoint3D(1.0, 0.0, 0.0),
+          color: color,
+        ),
+      );
+
+      // Outer back flange
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_left_back',
+          vertices: [CadPoint3D(x2, yStart, zBottom), CadPoint3D(x2, yIntStart, zBottom), CadPoint3D(x2, yIntStart, zTop), CadPoint3D(x2, yStart, zTop)],
+          normal: const CadPoint3D(1.0, 0.0, 0.0),
+          color: color,
+          boundaryLines: [
+            [CadPoint3D(x2, yStart, zBottom), CadPoint3D(x2, yStart, zTop)],
+            [CadPoint3D(x2, yStart, zBottom), CadPoint3D(x2, yIntStart, zBottom)],
+          ],
+        ),
+      );
+
+      // Inner back flange
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_left_back_inner',
+          vertices: [
+            CadPoint3D(x2Inner, yStart, zTopInner),
+            CadPoint3D(x2Inner, yIntStart, zTopInner),
+            CadPoint3D(x2Inner, yIntStart, zBottom),
+            CadPoint3D(x2Inner, yStart, zBottom),
+          ],
+          normal: const CadPoint3D(-1.0, 0.0, 0.0),
+          color: color,
+        ),
+      );
+
+      // Bottom return rims on left projection
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_proj_left_front_lip',
+          vertices: [
+            CadPoint3D(x1, yStart, zBottom),
+            CadPoint3D(x1, yIntStart, zBottom),
+            CadPoint3D(x1Inner, yIntStart, zBottom),
+            CadPoint3D(x1Inner, yStart, zBottom),
+          ],
+          normal: const CadPoint3D(0.0, 0.0, -1.0),
+          color: color,
+        ),
+      );
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_proj_left_back_lip',
+          vertices: [
+            CadPoint3D(x2Inner, yStart, zBottom),
+            CadPoint3D(x2Inner, yIntStart, zBottom),
+            CadPoint3D(x2, yIntStart, zBottom),
+            CadPoint3D(x2, yStart, zBottom),
+          ],
+          normal: const CadPoint3D(0.0, 0.0, -1.0),
+          color: color,
+        ),
+      );
+
+      // Open C-channel cross-section profile at the projecting tip (y = yStart)
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_left_top',
+          vertices: [CadPoint3D(x1, yStart, zTopInner), CadPoint3D(x2, yStart, zTopInner), CadPoint3D(x2, yStart, zTop), CadPoint3D(x1, yStart, zTop)],
+          normal: const CadPoint3D(0.0, -1.0, 0.0),
+          color: color,
+          boundaryLines: [
+            [CadPoint3D(x1, yStart, zTop), CadPoint3D(x2, yStart, zTop)],
+          ],
+        ),
+      );
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_left_front',
+          vertices: [
+            CadPoint3D(x1, yStart, zBottom),
+            CadPoint3D(x1Inner, yStart, zBottom),
+            CadPoint3D(x1Inner, yStart, zTopInner),
+            CadPoint3D(x1, yStart, zTopInner),
+          ],
+          normal: const CadPoint3D(0.0, -1.0, 0.0),
+          color: color,
+        ),
+      );
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_left_back',
+          vertices: [
+            CadPoint3D(x2Inner, yStart, zBottom),
+            CadPoint3D(x2, yStart, zBottom),
+            CadPoint3D(x2, yStart, zTopInner),
+            CadPoint3D(x2Inner, yStart, zTopInner),
+          ],
+          normal: const CadPoint3D(0.0, -1.0, 0.0),
+          color: color,
+        ),
+      );
+    }
+
+    // --- 2. INTERIOR RUNG SPAN [yIntStart .. yIntEnd] ---
+    // Outer top web
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_top_web',
+        vertices: [CadPoint3D(x1, yIntStart, zTop), CadPoint3D(x2, yIntStart, zTop), CadPoint3D(x2, yIntEnd, zTop), CadPoint3D(x1, yIntEnd, zTop)],
         normal: const CadPoint3D(0.0, 0.0, 1.0),
         color: color,
+        holes: holes,
         boundaryLines: [
-          [CadPoint3D(x1, yStart, zTop), CadPoint3D(x2, yStart, zTop)],
-          [CadPoint3D(x1, yStart, zTop), CadPoint3D(x1, yIntStart, zTop)],
-          [CadPoint3D(x2, yStart, zTop), CadPoint3D(x2, yIntStart, zTop)],
+          [CadPoint3D(x1, yIntStart, zTop), CadPoint3D(x1, yIntEnd, zTop)],
+          [CadPoint3D(x2, yIntStart, zTop), CadPoint3D(x2, yIntEnd, zTop)],
+          if (!hasLeftProj) [CadPoint3D(x1, yIntStart, zTop), CadPoint3D(x2, yIntStart, zTop)],
+          if (!hasRightProj) [CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x2, yIntEnd, zTop)],
         ],
-      ));
+      ),
+    );
 
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_left_front',
+    // Inner top web with matching cutout holes
+    final innerHoles = holes.map((h) => h.map((p) => CadPoint3D(p.x, p.y, zTopInner)).toList()).toList();
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_top_web_inner',
         vertices: [
-          CadPoint3D(x1, yStart, zTop),
-          CadPoint3D(x1, yIntStart, zTop),
-          CadPoint3D(x1, yIntStart, zBottom),
-          CadPoint3D(x1, yStart, zBottom),
+          CadPoint3D(x1Inner, yIntStart, zTopInner),
+          CadPoint3D(x1Inner, yIntEnd, zTopInner),
+          CadPoint3D(x2Inner, yIntEnd, zTopInner),
+          CadPoint3D(x2Inner, yIntStart, zTopInner),
         ],
+        normal: const CadPoint3D(0.0, 0.0, -1.0),
+        color: color,
+        holes: innerHoles,
+        boundaryLines: [
+          [CadPoint3D(x1Inner, yIntStart, zTopInner), CadPoint3D(x1Inner, yIntEnd, zTopInner)],
+          [CadPoint3D(x2Inner, yIntStart, zTopInner), CadPoint3D(x2Inner, yIntEnd, zTopInner)],
+        ],
+      ),
+    );
+
+    // Cutout sidewalls for slots in the top web (physical sheet thickness through metal)
+    for (int hIdx = 0; hIdx < holes.length; hIdx++) {
+      final hVerts = holes[hIdx];
+      for (int v = 0; v < hVerts.length; v++) {
+        final pA = hVerts[v];
+        final pB = hVerts[(v + 1) % hVerts.length];
+        final dx = pB.x - pA.x;
+        final dy = pB.y - pA.y;
+        final len = math.sqrt(dx * dx + dy * dy);
+        final nx = len > 1e-6 ? (dy / len) : 0.0;
+        final ny = len > 1e-6 ? (-dx / len) : 0.0;
+
+        polys.add(
+          CadFoldedPolygon3D(
+            faceId: '${rungId}_slot_${hIdx}_wall_$v',
+            vertices: [CadPoint3D(pA.x, pA.y, zTop), CadPoint3D(pB.x, pB.y, zTop), CadPoint3D(pB.x, pB.y, zTopInner), CadPoint3D(pA.x, pA.y, zTopInner)],
+            normal: CadPoint3D(nx, ny, 0.0),
+            color: color,
+            boundaryLines: [
+              [CadPoint3D(pA.x, pA.y, zTop), CadPoint3D(pB.x, pB.y, zTop)],
+              [CadPoint3D(pA.x, pA.y, zTopInner), CadPoint3D(pB.x, pB.y, zTopInner)],
+            ],
+          ),
+        );
+      }
+    }
+
+    // Outer front flange
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_flange_front',
+        vertices: [CadPoint3D(x1, yIntStart, zTop), CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x1, yIntEnd, zBottom), CadPoint3D(x1, yIntStart, zBottom)],
         normal: const CadPoint3D(-1.0, 0.0, 0.0),
         color: color,
         boundaryLines: [
-          [CadPoint3D(x1, yStart, zTop), CadPoint3D(x1, yStart, zBottom)],
-          [CadPoint3D(x1, yStart, zBottom), CadPoint3D(x1, yIntStart, zBottom)],
+          [CadPoint3D(x1, yIntStart, zBottom), CadPoint3D(x1, yIntEnd, zBottom)],
+          if (!hasLeftProj) [CadPoint3D(x1, yIntStart, zTop), CadPoint3D(x1, yIntStart, zBottom)],
+          if (!hasRightProj) [CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x1, yIntEnd, zBottom)],
         ],
-      ));
+      ),
+    );
 
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_left_back',
+    // Inner front flange
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_flange_front_inner',
         vertices: [
-          CadPoint3D(x2, yStart, zBottom),
-          CadPoint3D(x2, yIntStart, zBottom),
-          CadPoint3D(x2, yIntStart, zTop),
-          CadPoint3D(x2, yStart, zTop),
+          CadPoint3D(x1Inner, yIntStart, zBottom),
+          CadPoint3D(x1Inner, yIntEnd, zBottom),
+          CadPoint3D(x1Inner, yIntEnd, zTopInner),
+          CadPoint3D(x1Inner, yIntStart, zTopInner),
         ],
         normal: const CadPoint3D(1.0, 0.0, 0.0),
         color: color,
         boundaryLines: [
-          [CadPoint3D(x2, yStart, zBottom), CadPoint3D(x2, yStart, zTop)],
-          [CadPoint3D(x2, yStart, zBottom), CadPoint3D(x2, yIntStart, zBottom)],
+          [CadPoint3D(x1Inner, yIntStart, zBottom), CadPoint3D(x1Inner, yIntEnd, zBottom)],
         ],
-      ));
+      ),
+    );
 
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_cap_left',
-        vertices: [
-          CadPoint3D(x1, yStart, zBottom),
-          CadPoint3D(x2, yStart, zBottom),
-          CadPoint3D(x2, yStart, zTop),
-          CadPoint3D(x1, yStart, zTop),
-        ],
-        normal: const CadPoint3D(0.0, -1.0, 0.0),
+    // Outer back flange
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_flange_back',
+        vertices: [CadPoint3D(x2, yIntStart, zBottom), CadPoint3D(x2, yIntEnd, zBottom), CadPoint3D(x2, yIntEnd, zTop), CadPoint3D(x2, yIntStart, zTop)],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
         color: color,
-      ));
-    }
+        boundaryLines: [
+          [CadPoint3D(x2, yIntStart, zBottom), CadPoint3D(x2, yIntEnd, zBottom)],
+          if (!hasLeftProj) [CadPoint3D(x2, yIntStart, zBottom), CadPoint3D(x2, yIntStart, zTop)],
+          if (!hasRightProj) [CadPoint3D(x2, yIntEnd, zBottom), CadPoint3D(x2, yIntEnd, zTop)],
+        ],
+      ),
+    );
 
-    // --- 2. INTERIOR RUNG SPAN [yIntStart .. yIntEnd] ---
-    // Strictly between side rails to prevent any depth-sorting straddling clipping!
-    polys.add(CadFoldedPolygon3D(
-      faceId: '${rungId}_top_web',
-      vertices: [
-        CadPoint3D(x1, yIntStart, zTop),
-        CadPoint3D(x2, yIntStart, zTop),
-        CadPoint3D(x2, yIntEnd, zTop),
-        CadPoint3D(x1, yIntEnd, zTop),
-      ],
-      normal: const CadPoint3D(0.0, 0.0, 1.0),
-      color: color,
-      holes: holes,
-      boundaryLines: [
-        [CadPoint3D(x1, yIntStart, zTop), CadPoint3D(x1, yIntEnd, zTop)],
-        [CadPoint3D(x2, yIntStart, zTop), CadPoint3D(x2, yIntEnd, zTop)],
-        if (!hasLeftProj) [CadPoint3D(x1, yIntStart, zTop), CadPoint3D(x2, yIntStart, zTop)],
-        if (!hasRightProj) [CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x2, yIntEnd, zTop)],
-      ],
-    ));
+    // Inner back flange
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_flange_back_inner',
+        vertices: [
+          CadPoint3D(x2Inner, yIntStart, zTopInner),
+          CadPoint3D(x2Inner, yIntEnd, zTopInner),
+          CadPoint3D(x2Inner, yIntEnd, zBottom),
+          CadPoint3D(x2Inner, yIntStart, zBottom),
+        ],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: color,
+        boundaryLines: [
+          [CadPoint3D(x2Inner, yIntStart, zBottom), CadPoint3D(x2Inner, yIntEnd, zBottom)],
+        ],
+      ),
+    );
 
-    polys.add(CadFoldedPolygon3D(
-      faceId: '${rungId}_flange_front',
-      vertices: [
-        CadPoint3D(x1, yIntStart, zTop),
-        CadPoint3D(x1, yIntEnd, zTop),
-        CadPoint3D(x1, yIntEnd, zBottom),
-        CadPoint3D(x1, yIntStart, zBottom),
-      ],
-      normal: const CadPoint3D(-1.0, 0.0, 0.0),
-      color: color,
-      boundaryLines: [
-        [CadPoint3D(x1, yIntStart, zBottom), CadPoint3D(x1, yIntEnd, zBottom)],
-        if (!hasLeftProj) [CadPoint3D(x1, yIntStart, zTop), CadPoint3D(x1, yIntStart, zBottom)],
-        if (!hasRightProj) [CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x1, yIntEnd, zBottom)],
-      ],
-    ));
-
-    polys.add(CadFoldedPolygon3D(
-      faceId: '${rungId}_flange_back',
-      vertices: [
-        CadPoint3D(x2, yIntStart, zBottom),
-        CadPoint3D(x2, yIntEnd, zBottom),
-        CadPoint3D(x2, yIntEnd, zTop),
-        CadPoint3D(x2, yIntStart, zTop),
-      ],
-      normal: const CadPoint3D(1.0, 0.0, 0.0),
-      color: color,
-      boundaryLines: [
-        [CadPoint3D(x2, yIntStart, zBottom), CadPoint3D(x2, yIntEnd, zBottom)],
-        if (!hasLeftProj) [CadPoint3D(x2, yIntStart, zBottom), CadPoint3D(x2, yIntStart, zTop)],
-        if (!hasRightProj) [CadPoint3D(x2, yIntEnd, zBottom), CadPoint3D(x2, yIntEnd, zTop)],
-      ],
-    ));
-
-    if (!hasLeftProj) {
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_cap_left',
+    // Bottom return lips / thickness rims
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: 'RIM_${rungId}_front_lip',
         vertices: [
           CadPoint3D(x1, yIntStart, zBottom),
-          CadPoint3D(x2, yIntStart, zBottom),
-          CadPoint3D(x2, yIntStart, zTop),
-          CadPoint3D(x1, yIntStart, zTop),
+          CadPoint3D(x1, yIntEnd, zBottom),
+          CadPoint3D(x1Inner, yIntEnd, zBottom),
+          CadPoint3D(x1Inner, yIntStart, zBottom),
         ],
-        normal: const CadPoint3D(0.0, -1.0, 0.0),
+        normal: const CadPoint3D(0.0, 0.0, -1.0),
         color: color,
-      ));
+        boundaryLines: [
+          [CadPoint3D(x1, yIntStart, zBottom), CadPoint3D(x1Inner, yIntStart, zBottom)],
+          [CadPoint3D(x1, yIntEnd, zBottom), CadPoint3D(x1Inner, yIntEnd, zBottom)],
+        ],
+      ),
+    );
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: 'RIM_${rungId}_back_lip',
+        vertices: [
+          CadPoint3D(x2Inner, yIntStart, zBottom),
+          CadPoint3D(x2Inner, yIntEnd, zBottom),
+          CadPoint3D(x2, yIntEnd, zBottom),
+          CadPoint3D(x2, yIntStart, zBottom),
+        ],
+        normal: const CadPoint3D(0.0, 0.0, -1.0),
+        color: color,
+        boundaryLines: [
+          [CadPoint3D(x2Inner, yIntStart, zBottom), CadPoint3D(x2, yIntStart, zBottom)],
+          [CadPoint3D(x2Inner, yIntEnd, zBottom), CadPoint3D(x2, yIntEnd, zBottom)],
+        ],
+      ),
+    );
+
+    // End caps for direct inside weld
+    if (!hasLeftProj) {
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_left',
+          vertices: [CadPoint3D(x1, yIntStart, zBottom), CadPoint3D(x2, yIntStart, zBottom), CadPoint3D(x2, yIntStart, zTop), CadPoint3D(x1, yIntStart, zTop)],
+          normal: const CadPoint3D(0.0, -1.0, 0.0),
+          color: color,
+        ),
+      );
     }
 
     if (!hasRightProj) {
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_cap_right',
-        vertices: [
-          CadPoint3D(x1, yIntEnd, zTop),
-          CadPoint3D(x2, yIntEnd, zTop),
-          CadPoint3D(x2, yIntEnd, zBottom),
-          CadPoint3D(x1, yIntEnd, zBottom),
-        ],
-        normal: const CadPoint3D(0.0, 1.0, 0.0),
-        color: color,
-      ));
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_right',
+          vertices: [CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x2, yIntEnd, zTop), CadPoint3D(x2, yIntEnd, zBottom), CadPoint3D(x1, yIntEnd, zBottom)],
+          normal: const CadPoint3D(0.0, 1.0, 0.0),
+          color: color,
+        ),
+      );
     }
 
     // --- 3. RIGHT PASS-THROUGH OUTSIDE WELD PROJECTION [yIntEnd .. yEnd] ---
     if (hasRightProj) {
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_right_top',
-        vertices: [
-          CadPoint3D(x1, yIntEnd, zTop),
-          CadPoint3D(x2, yIntEnd, zTop),
-          CadPoint3D(x2, yEnd, zTop),
-          CadPoint3D(x1, yEnd, zTop),
-        ],
-        normal: const CadPoint3D(0.0, 0.0, 1.0),
-        color: color,
-        boundaryLines: [
-          [CadPoint3D(x1, yEnd, zTop), CadPoint3D(x2, yEnd, zTop)],
-          [CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x1, yEnd, zTop)],
-          [CadPoint3D(x2, yIntEnd, zTop), CadPoint3D(x2, yEnd, zTop)],
-        ],
-      ));
+      // Outer top web
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_right_top',
+          vertices: [CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x2, yIntEnd, zTop), CadPoint3D(x2, yEnd, zTop), CadPoint3D(x1, yEnd, zTop)],
+          normal: const CadPoint3D(0.0, 0.0, 1.0),
+          color: color,
+          boundaryLines: [
+            [CadPoint3D(x1, yEnd, zTop), CadPoint3D(x2, yEnd, zTop)],
+            [CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x1, yEnd, zTop)],
+            [CadPoint3D(x2, yIntEnd, zTop), CadPoint3D(x2, yEnd, zTop)],
+          ],
+        ),
+      );
 
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_right_front',
-        vertices: [
-          CadPoint3D(x1, yIntEnd, zTop),
-          CadPoint3D(x1, yEnd, zTop),
-          CadPoint3D(x1, yEnd, zBottom),
-          CadPoint3D(x1, yIntEnd, zBottom),
-        ],
-        normal: const CadPoint3D(-1.0, 0.0, 0.0),
-        color: color,
-        boundaryLines: [
-          [CadPoint3D(x1, yEnd, zTop), CadPoint3D(x1, yEnd, zBottom)],
-          [CadPoint3D(x1, yIntEnd, zBottom), CadPoint3D(x1, yEnd, zBottom)],
-        ],
-      ));
+      // Inner top web
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_right_top_inner',
+          vertices: [
+            CadPoint3D(x1Inner, yIntEnd, zTopInner),
+            CadPoint3D(x1Inner, yEnd, zTopInner),
+            CadPoint3D(x2Inner, yEnd, zTopInner),
+            CadPoint3D(x2Inner, yIntEnd, zTopInner),
+          ],
+          normal: const CadPoint3D(0.0, 0.0, -1.0),
+          color: color,
+        ),
+      );
 
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_right_back',
-        vertices: [
-          CadPoint3D(x2, yIntEnd, zBottom),
-          CadPoint3D(x2, yEnd, zBottom),
-          CadPoint3D(x2, yEnd, zTop),
-          CadPoint3D(x2, yIntEnd, zTop),
-        ],
-        normal: const CadPoint3D(1.0, 0.0, 0.0),
-        color: color,
-        boundaryLines: [
-          [CadPoint3D(x2, yEnd, zBottom), CadPoint3D(x2, yEnd, zTop)],
-          [CadPoint3D(x2, yIntEnd, zBottom), CadPoint3D(x2, yEnd, zBottom)],
-        ],
-      ));
+      // Outer front flange
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_right_front',
+          vertices: [CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x1, yEnd, zTop), CadPoint3D(x1, yEnd, zBottom), CadPoint3D(x1, yIntEnd, zBottom)],
+          normal: const CadPoint3D(-1.0, 0.0, 0.0),
+          color: color,
+          boundaryLines: [
+            [CadPoint3D(x1, yEnd, zTop), CadPoint3D(x1, yEnd, zBottom)],
+            [CadPoint3D(x1, yIntEnd, zBottom), CadPoint3D(x1, yEnd, zBottom)],
+          ],
+        ),
+      );
 
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_cap_right',
-        vertices: [
-          CadPoint3D(x1, yEnd, zTop),
-          CadPoint3D(x2, yEnd, zTop),
-          CadPoint3D(x2, yEnd, zBottom),
-          CadPoint3D(x1, yEnd, zBottom),
-        ],
-        normal: const CadPoint3D(0.0, 1.0, 0.0),
-        color: color,
-      ));
+      // Inner front flange
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_right_front_inner',
+          vertices: [
+            CadPoint3D(x1Inner, yIntEnd, zBottom),
+            CadPoint3D(x1Inner, yEnd, zBottom),
+            CadPoint3D(x1Inner, yEnd, zTopInner),
+            CadPoint3D(x1Inner, yIntEnd, zTopInner),
+          ],
+          normal: const CadPoint3D(1.0, 0.0, 0.0),
+          color: color,
+        ),
+      );
+
+      // Outer back flange
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_right_back',
+          vertices: [CadPoint3D(x2, yIntEnd, zBottom), CadPoint3D(x2, yEnd, zBottom), CadPoint3D(x2, yEnd, zTop), CadPoint3D(x2, yIntEnd, zTop)],
+          normal: const CadPoint3D(1.0, 0.0, 0.0),
+          color: color,
+          boundaryLines: [
+            [CadPoint3D(x2, yEnd, zBottom), CadPoint3D(x2, yEnd, zTop)],
+            [CadPoint3D(x2, yIntEnd, zBottom), CadPoint3D(x2, yEnd, zBottom)],
+          ],
+        ),
+      );
+
+      // Inner back flange
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_right_back_inner',
+          vertices: [
+            CadPoint3D(x2Inner, yIntEnd, zTopInner),
+            CadPoint3D(x2Inner, yEnd, zTopInner),
+            CadPoint3D(x2Inner, yEnd, zBottom),
+            CadPoint3D(x2Inner, yIntEnd, zBottom),
+          ],
+          normal: const CadPoint3D(-1.0, 0.0, 0.0),
+          color: color,
+        ),
+      );
+
+      // Bottom return lips on right projection
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_proj_right_front_lip',
+          vertices: [
+            CadPoint3D(x1, yIntEnd, zBottom),
+            CadPoint3D(x1, yEnd, zBottom),
+            CadPoint3D(x1Inner, yEnd, zBottom),
+            CadPoint3D(x1Inner, yIntEnd, zBottom),
+          ],
+          normal: const CadPoint3D(0.0, 0.0, -1.0),
+          color: color,
+        ),
+      );
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_proj_right_back_lip',
+          vertices: [
+            CadPoint3D(x2Inner, yIntEnd, zBottom),
+            CadPoint3D(x2Inner, yEnd, zBottom),
+            CadPoint3D(x2, yEnd, zBottom),
+            CadPoint3D(x2, yIntEnd, zBottom),
+          ],
+          normal: const CadPoint3D(0.0, 0.0, -1.0),
+          color: color,
+        ),
+      );
+
+      // Open C-channel cross-section profile at the projecting tip (y = yEnd)
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_right_top',
+          vertices: [CadPoint3D(x1, yEnd, zTop), CadPoint3D(x2, yEnd, zTop), CadPoint3D(x2, yEnd, zTopInner), CadPoint3D(x1, yEnd, zTopInner)],
+          normal: const CadPoint3D(0.0, 1.0, 0.0),
+          color: color,
+          boundaryLines: [
+            [CadPoint3D(x1, yEnd, zTop), CadPoint3D(x2, yEnd, zTop)],
+          ],
+        ),
+      );
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_right_front',
+          vertices: [CadPoint3D(x1, yEnd, zTopInner), CadPoint3D(x1Inner, yEnd, zTopInner), CadPoint3D(x1Inner, yEnd, zBottom), CadPoint3D(x1, yEnd, zBottom)],
+          normal: const CadPoint3D(0.0, 1.0, 0.0),
+          color: color,
+        ),
+      );
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_right_back',
+          vertices: [CadPoint3D(x2Inner, yEnd, zTopInner), CadPoint3D(x2, yEnd, zTopInner), CadPoint3D(x2, yEnd, zBottom), CadPoint3D(x2Inner, yEnd, zBottom)],
+          normal: const CadPoint3D(0.0, 1.0, 0.0),
+          color: color,
+        ),
+      );
     }
 
     return polys;
@@ -818,50 +1065,69 @@ class LadderAssemblyGenerator {
       if (isLast) leftWebEdges.add([CadPoint3D(xEnd, yL, 0.0), CadPoint3D(xEnd, yL, H)]);
 
       // --- Left Rail Segment ---
-      polygons.add(CadFoldedPolygon3D(
-        faceId: 'left_rail_web_$s',
-        vertices: [CadPoint3D(xStart, yL, 0.0), CadPoint3D(xEnd, yL, 0.0), CadPoint3D(xEnd, yL, H), CadPoint3D(xStart, yL, H)],
-        normal: const CadPoint3D(0.0, -1.0, 0.0),
-        color: railColor,
-        holes: leftWebHoles,
-        boundaryLines: leftWebEdges,
-      ));
-      polygons.add(CadFoldedPolygon3D(
-        faceId: 'left_rail_bottom_flange_$s',
-        vertices: [CadPoint3D(xStart, yL, 0.0), CadPoint3D(xEnd, yL, 0.0), CadPoint3D(xEnd, yLBottomFlange, 0.0), CadPoint3D(xStart, yLBottomFlange, 0.0)],
-        normal: const CadPoint3D(0.0, 0.0, -1.0),
-        color: railColor,
-        boundaryLines: [
-          [CadPoint3D(xStart, yLBottomFlange, 0.0), CadPoint3D(xEnd, yLBottomFlange, 0.0)],
-          if (isFirst) [CadPoint3D(xStart, yL, 0.0), CadPoint3D(xStart, yLBottomFlange, 0.0)],
-          if (isLast) [CadPoint3D(xEnd, yL, 0.0), CadPoint3D(xEnd, yLBottomFlange, 0.0)],
-        ],
-      ));
-      polygons.add(CadFoldedPolygon3D(
-        faceId: 'left_rail_top_flange_$s',
-        vertices: [CadPoint3D(xStart, yL, H), CadPoint3D(xStart, yLTopFlange, H), CadPoint3D(xEnd, yLTopFlange, H), CadPoint3D(xEnd, yL, H)],
-        normal: const CadPoint3D(0.0, 0.0, 1.0),
-        color: railColor,
-        boundaryLines: [
-          [CadPoint3D(xStart, yLTopFlange, H), CadPoint3D(xEnd, yLTopFlange, H)],
-          if (isFirst) [CadPoint3D(xStart, yL, H), CadPoint3D(xStart, yLTopFlange, H)],
-          if (isLast) [CadPoint3D(xEnd, yL, H), CadPoint3D(xEnd, yLTopFlange, H)],
-        ],
-      ));
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'left_rail_web_$s',
+          vertices: [CadPoint3D(xStart, yL, 0.0), CadPoint3D(xEnd, yL, 0.0), CadPoint3D(xEnd, yL, H), CadPoint3D(xStart, yL, H)],
+          normal: const CadPoint3D(0.0, -1.0, 0.0),
+          color: railColor,
+          holes: leftWebHoles,
+          boundaryLines: leftWebEdges,
+        ),
+      );
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'left_rail_bottom_flange_$s',
+          vertices: [CadPoint3D(xStart, yL, 0.0), CadPoint3D(xEnd, yL, 0.0), CadPoint3D(xEnd, yLBottomFlange, 0.0), CadPoint3D(xStart, yLBottomFlange, 0.0)],
+          normal: const CadPoint3D(0.0, 0.0, -1.0),
+          color: railColor,
+          boundaryLines: [
+            [CadPoint3D(xStart, yLBottomFlange, 0.0), CadPoint3D(xEnd, yLBottomFlange, 0.0)],
+            if (isFirst) [CadPoint3D(xStart, yL, 0.0), CadPoint3D(xStart, yLBottomFlange, 0.0)],
+            if (isLast) [CadPoint3D(xEnd, yL, 0.0), CadPoint3D(xEnd, yLBottomFlange, 0.0)],
+          ],
+        ),
+      );
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'left_rail_top_flange_$s',
+          vertices: [CadPoint3D(xStart, yL, H), CadPoint3D(xStart, yLTopFlange, H), CadPoint3D(xEnd, yLTopFlange, H), CadPoint3D(xEnd, yL, H)],
+          normal: const CadPoint3D(0.0, 0.0, 1.0),
+          color: railColor,
+          boundaryLines: [
+            [CadPoint3D(xStart, yLTopFlange, H), CadPoint3D(xEnd, yLTopFlange, H)],
+            if (isFirst) [CadPoint3D(xStart, yL, H), CadPoint3D(xStart, yLTopFlange, H)],
+            if (isLast) [CadPoint3D(xEnd, yL, H), CadPoint3D(xEnd, yLTopFlange, H)],
+          ],
+        ),
+      );
 
-
-      thicknessPolygons.add(CadFoldedPolygon3D(
-        faceId: 'RIM_left_top_flange_lip_$s',
-        vertices: [CadPoint3D(xStart, yLTopFlange, H - T), CadPoint3D(xEnd, yLTopFlange, H - T), CadPoint3D(xEnd, yLTopFlange, H), CadPoint3D(xStart, yLTopFlange, H)],
-        normal: CadPoint3D(0.0, innerSignL, 0.0),
-        color: railColor,
-      ));
-      thicknessPolygons.add(CadFoldedPolygon3D(
-        faceId: 'RIM_left_bottom_flange_lip_$s',
-        vertices: [CadPoint3D(xStart, yLBottomFlange, 0.0), CadPoint3D(xEnd, yLBottomFlange, 0.0), CadPoint3D(xEnd, yLBottomFlange, T), CadPoint3D(xStart, yLBottomFlange, T)],
-        normal: CadPoint3D(0.0, innerSignL, 0.0),
-        color: railColor,
-      ));
+      thicknessPolygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_left_top_flange_lip_$s',
+          vertices: [
+            CadPoint3D(xStart, yLTopFlange, H - T),
+            CadPoint3D(xEnd, yLTopFlange, H - T),
+            CadPoint3D(xEnd, yLTopFlange, H),
+            CadPoint3D(xStart, yLTopFlange, H),
+          ],
+          normal: CadPoint3D(0.0, innerSignL, 0.0),
+          color: railColor,
+        ),
+      );
+      thicknessPolygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_left_bottom_flange_lip_$s',
+          vertices: [
+            CadPoint3D(xStart, yLBottomFlange, 0.0),
+            CadPoint3D(xEnd, yLBottomFlange, 0.0),
+            CadPoint3D(xEnd, yLBottomFlange, T),
+            CadPoint3D(xStart, yLBottomFlange, T),
+          ],
+          normal: CadPoint3D(0.0, innerSignL, 0.0),
+          color: railColor,
+        ),
+      );
 
       final rightWebEdges = <List<CadPoint3D>>[
         [CadPoint3D(xStart, yR, 0.0), CadPoint3D(xEnd, yR, 0.0)],
@@ -871,77 +1137,104 @@ class LadderAssemblyGenerator {
       if (isLast) rightWebEdges.add([CadPoint3D(xEnd, yR, 0.0), CadPoint3D(xEnd, yR, H)]);
 
       // --- Right Rail Segment ---
-      polygons.add(CadFoldedPolygon3D(
-        faceId: 'right_rail_web_$s',
-        vertices: [CadPoint3D(xStart, yR, 0.0), CadPoint3D(xStart, yR, H), CadPoint3D(xEnd, yR, H), CadPoint3D(xEnd, yR, 0.0)],
-        normal: const CadPoint3D(0.0, 1.0, 0.0),
-        color: railColor,
-        holes: rightWebHoles,
-        boundaryLines: rightWebEdges,
-      ));
-      polygons.add(CadFoldedPolygon3D(
-        faceId: 'right_rail_bottom_flange_$s',
-        vertices: [CadPoint3D(xStart, yR, 0.0), CadPoint3D(xStart, yRBottomFlange, 0.0), CadPoint3D(xEnd, yRBottomFlange, 0.0), CadPoint3D(xEnd, yR, 0.0)],
-        normal: const CadPoint3D(0.0, 0.0, -1.0),
-        color: railColor,
-        boundaryLines: [
-          [CadPoint3D(xStart, yRBottomFlange, 0.0), CadPoint3D(xEnd, yRBottomFlange, 0.0)],
-          if (isFirst) [CadPoint3D(xStart, yR, 0.0), CadPoint3D(xStart, yRBottomFlange, 0.0)],
-          if (isLast) [CadPoint3D(xEnd, yR, 0.0), CadPoint3D(xEnd, yRBottomFlange, 0.0)],
-        ],
-      ));
-      polygons.add(CadFoldedPolygon3D(
-        faceId: 'right_rail_top_flange_$s',
-        vertices: [CadPoint3D(xStart, yR, H), CadPoint3D(xEnd, yR, H), CadPoint3D(xEnd, yRTopFlange, H), CadPoint3D(xStart, yRTopFlange, H)],
-        normal: const CadPoint3D(0.0, 0.0, 1.0),
-        color: railColor,
-        boundaryLines: [
-          [CadPoint3D(xStart, yRTopFlange, H), CadPoint3D(xEnd, yRTopFlange, H)],
-          if (isFirst) [CadPoint3D(xStart, yR, H), CadPoint3D(xStart, yRTopFlange, H)],
-          if (isLast) [CadPoint3D(xEnd, yR, H), CadPoint3D(xEnd, yRTopFlange, H)],
-        ],
-      ));
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'right_rail_web_$s',
+          vertices: [CadPoint3D(xStart, yR, 0.0), CadPoint3D(xStart, yR, H), CadPoint3D(xEnd, yR, H), CadPoint3D(xEnd, yR, 0.0)],
+          normal: const CadPoint3D(0.0, 1.0, 0.0),
+          color: railColor,
+          holes: rightWebHoles,
+          boundaryLines: rightWebEdges,
+        ),
+      );
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'right_rail_bottom_flange_$s',
+          vertices: [CadPoint3D(xStart, yR, 0.0), CadPoint3D(xStart, yRBottomFlange, 0.0), CadPoint3D(xEnd, yRBottomFlange, 0.0), CadPoint3D(xEnd, yR, 0.0)],
+          normal: const CadPoint3D(0.0, 0.0, -1.0),
+          color: railColor,
+          boundaryLines: [
+            [CadPoint3D(xStart, yRBottomFlange, 0.0), CadPoint3D(xEnd, yRBottomFlange, 0.0)],
+            if (isFirst) [CadPoint3D(xStart, yR, 0.0), CadPoint3D(xStart, yRBottomFlange, 0.0)],
+            if (isLast) [CadPoint3D(xEnd, yR, 0.0), CadPoint3D(xEnd, yRBottomFlange, 0.0)],
+          ],
+        ),
+      );
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'right_rail_top_flange_$s',
+          vertices: [CadPoint3D(xStart, yR, H), CadPoint3D(xEnd, yR, H), CadPoint3D(xEnd, yRTopFlange, H), CadPoint3D(xStart, yRTopFlange, H)],
+          normal: const CadPoint3D(0.0, 0.0, 1.0),
+          color: railColor,
+          boundaryLines: [
+            [CadPoint3D(xStart, yRTopFlange, H), CadPoint3D(xEnd, yRTopFlange, H)],
+            if (isFirst) [CadPoint3D(xStart, yR, H), CadPoint3D(xStart, yRTopFlange, H)],
+            if (isLast) [CadPoint3D(xEnd, yR, H), CadPoint3D(xEnd, yRTopFlange, H)],
+          ],
+        ),
+      );
 
-
-      thicknessPolygons.add(CadFoldedPolygon3D(
-        faceId: 'RIM_right_top_flange_lip_$s',
-        vertices: [CadPoint3D(xStart, yRTopFlange, H), CadPoint3D(xEnd, yRTopFlange, H), CadPoint3D(xEnd, yRTopFlange, H - T), CadPoint3D(xStart, yRTopFlange, H - T)],
-        normal: CadPoint3D(0.0, innerSignR, 0.0),
-        color: railColor,
-      ));
-      thicknessPolygons.add(CadFoldedPolygon3D(
-        faceId: 'RIM_right_bottom_flange_lip_$s',
-        vertices: [CadPoint3D(xStart, yRBottomFlange, T), CadPoint3D(xEnd, yRBottomFlange, T), CadPoint3D(xEnd, yRBottomFlange, 0.0), CadPoint3D(xStart, yRBottomFlange, 0.0)],
-        normal: CadPoint3D(0.0, innerSignR, 0.0),
-        color: railColor,
-      ));
+      thicknessPolygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_right_top_flange_lip_$s',
+          vertices: [
+            CadPoint3D(xStart, yRTopFlange, H),
+            CadPoint3D(xEnd, yRTopFlange, H),
+            CadPoint3D(xEnd, yRTopFlange, H - T),
+            CadPoint3D(xStart, yRTopFlange, H - T),
+          ],
+          normal: CadPoint3D(0.0, innerSignR, 0.0),
+          color: railColor,
+        ),
+      );
+      thicknessPolygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_right_bottom_flange_lip_$s',
+          vertices: [
+            CadPoint3D(xStart, yRBottomFlange, T),
+            CadPoint3D(xEnd, yRBottomFlange, T),
+            CadPoint3D(xEnd, yRBottomFlange, 0.0),
+            CadPoint3D(xStart, yRBottomFlange, 0.0),
+          ],
+          normal: CadPoint3D(0.0, innerSignR, 0.0),
+          color: railColor,
+        ),
+      );
     }
 
     // --- End port rims (Port 1 at X=0, Port 2 at X=L) ---
-    thicknessPolygons.add(CadFoldedPolygon3D(
-      faceId: 'RIM_left_port1_web',
-      vertices: [CadPoint3D(0.0, yL, 0.0), CadPoint3D(0.0, yL, H), CadPoint3D(0.0, yLInner, H), CadPoint3D(0.0, yLInner, 0.0)],
-      normal: const CadPoint3D(-1.0, 0.0, 0.0),
-      color: railColor,
-    ));
-    thicknessPolygons.add(CadFoldedPolygon3D(
-      faceId: 'RIM_left_port2_web',
-      vertices: [CadPoint3D(L, yL, 0.0), CadPoint3D(L, yLInner, 0.0), CadPoint3D(L, yLInner, H), CadPoint3D(L, yL, H)],
-      normal: const CadPoint3D(1.0, 0.0, 0.0),
-      color: railColor,
-    ));
-    thicknessPolygons.add(CadFoldedPolygon3D(
-      faceId: 'RIM_right_port1_web',
-      vertices: [CadPoint3D(0.0, yR, 0.0), CadPoint3D(0.0, yRInner, 0.0), CadPoint3D(0.0, yRInner, H), CadPoint3D(0.0, yR, H)],
-      normal: const CadPoint3D(-1.0, 0.0, 0.0),
-      color: railColor,
-    ));
-    thicknessPolygons.add(CadFoldedPolygon3D(
-      faceId: 'RIM_right_port2_web',
-      vertices: [CadPoint3D(L, yR, 0.0), CadPoint3D(L, yR, H), CadPoint3D(L, yRInner, H), CadPoint3D(L, yRInner, 0.0)],
-      normal: const CadPoint3D(1.0, 0.0, 0.0),
-      color: railColor,
-    ));
+    thicknessPolygons.add(
+      CadFoldedPolygon3D(
+        faceId: 'RIM_left_port1_web',
+        vertices: [CadPoint3D(0.0, yL, 0.0), CadPoint3D(0.0, yL, H), CadPoint3D(0.0, yLInner, H), CadPoint3D(0.0, yLInner, 0.0)],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+    );
+    thicknessPolygons.add(
+      CadFoldedPolygon3D(
+        faceId: 'RIM_left_port2_web',
+        vertices: [CadPoint3D(L, yL, 0.0), CadPoint3D(L, yLInner, 0.0), CadPoint3D(L, yLInner, H), CadPoint3D(L, yL, H)],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+    );
+    thicknessPolygons.add(
+      CadFoldedPolygon3D(
+        faceId: 'RIM_right_port1_web',
+        vertices: [CadPoint3D(0.0, yR, 0.0), CadPoint3D(0.0, yRInner, 0.0), CadPoint3D(0.0, yRInner, H), CadPoint3D(0.0, yR, H)],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+    );
+    thicknessPolygons.add(
+      CadFoldedPolygon3D(
+        faceId: 'RIM_right_port2_web',
+        vertices: [CadPoint3D(L, yR, 0.0), CadPoint3D(L, yR, H), CadPoint3D(L, yRInner, H), CadPoint3D(L, yRInner, 0.0)],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+    );
 
     // --- 3. C-CHANNEL RUNGS (40x20mm with slotted top web & downward flanges) ---
     const double rungW = 40.0;
@@ -1072,16 +1365,95 @@ class LadderAssemblyGenerator {
 
   /// Converts a multi-part [DsfLadderAssembly] into a unified multi-blank [DsfDocument].
   static DsfDocument createAssemblyDsfDocument(DsfLadderAssembly assembly) {
-    final parts = [
-      assembly.leftRailBlank,
-      assembly.rightRailBlank,
-      assembly.rungBlank,
-      if (assembly.coverBlank != null) assembly.coverBlank!,
-    ];
+    // 1. Deduplicate constituent blanks so the user sees only 1 copy of unique entities.
+    // For standard ladder: display 1 side rail and 1 rung (remaining are identical copies).
+    // For accessories: display distinct rails and distinct rungs (if sizes vary along the product's path).
+    final parts = <CadPart>[];
+
+    // Side Rails deduplication:
+    final leftRail = assembly.leftRailBlank;
+    final rightRail = assembly.rightRailBlank;
+
+    bool areBlanksIdentical(CadPart a, CadPart b) {
+      if ((a.flatBlankLength - b.flatBlankLength).abs() > 0.5) return false;
+      if ((a.flatBlankWidth - b.flatBlankWidth).abs() > 0.5) return false;
+      if (a.outerContour.length != b.outerContour.length) return false;
+      if (a.geometries.length != b.geometries.length) return false;
+      return true;
+    }
+
+    if (areBlanksIdentical(leftRail, rightRail)) {
+      parts.add(
+        CadPart(
+          id: 'side_rail_blank',
+          name: 'Side Rail Blank (Qty: 2)',
+          material: leftRail.material,
+          outerContour: leftRail.outerContour,
+          geometries: leftRail.geometries,
+          flatBlankWidth: leftRail.flatBlankWidth,
+          flatBlankLength: leftRail.flatBlankLength,
+        ),
+      );
+    } else {
+      parts.add(leftRail);
+      parts.add(rightRail);
+    }
+
+    // Rungs deduplication:
+    final uniqueRungLengths = <double, int>{};
+    for (final r in assembly.rungs) {
+      final len = (r.cutLength * 10).round() / 10.0;
+      final existingKey = uniqueRungLengths.keys.where((k) => (k - len).abs() < 0.5).firstOrNull;
+      if (existingKey != null) {
+        uniqueRungLengths[existingKey] = uniqueRungLengths[existingKey]! + 1;
+      } else {
+        uniqueRungLengths[len] = 1;
+      }
+    }
+
+    if (uniqueRungLengths.isEmpty) {
+      parts.add(assembly.rungBlank);
+    } else if (uniqueRungLengths.length == 1) {
+      final entry = uniqueRungLengths.entries.first;
+      final rungPart = generateCustomRungFlatBlank(rungCutLength: entry.key, material: assembly.rungBlank.material);
+      parts.add(
+        CadPart(
+          id: 'rung_blank',
+          name: 'Rung Blank (Qty: ${entry.value})',
+          material: rungPart.material,
+          outerContour: rungPart.outerContour,
+          geometries: rungPart.geometries,
+          flatBlankWidth: rungPart.flatBlankWidth,
+          flatBlankLength: rungPart.flatBlankLength,
+        ),
+      );
+    } else {
+      int rIdx = 1;
+      for (final entry in uniqueRungLengths.entries) {
+        final rungPart = generateCustomRungFlatBlank(rungCutLength: entry.key, material: assembly.rungBlank.material);
+        parts.add(
+          CadPart(
+            id: 'rung_blank_$rIdx',
+            name: 'Rung Blank ${entry.key.toStringAsFixed(1)}mm (Qty: ${entry.value})',
+            material: rungPart.material,
+            outerContour: rungPart.outerContour,
+            geometries: rungPart.geometries,
+            flatBlankWidth: rungPart.flatBlankWidth,
+            flatBlankLength: rungPart.flatBlankLength,
+          ),
+        );
+        rIdx++;
+      }
+    }
+
+    if (assembly.coverBlank != null) {
+      parts.add(assembly.coverBlank!);
+    }
 
     final allCutLines = <CadLineSegment>[];
     final allBends = <FoldBendLine>[];
     final allPunches = <CncPunchPrimitive>[];
+    final allFaces = <PlanarSheetFace>[];
 
     double currentOffsetX = 0.0;
     double maxPartHeight = 0.0;
@@ -1115,57 +1487,61 @@ class LadderAssemblyGenerator {
         }
       }
 
-      // Outer contour to cutLines
+      // Independent planar face for this blank (avoids artificial enclosing sheet)
+      allFaces.add(
+        PlanarSheetFace(
+          id: part.id,
+          label: part.name.isNotEmpty ? part.name : 'Component Blank',
+          role: FaceRole.baseFloor,
+          vertices: part.outerContour.map(transformPt).toList(),
+        ),
+      );
+
+      // Outer contour to cutLines (showLabel: false avoids clutter of CUT badges on outer blank boundary)
       for (int i = 0; i < part.outerContour.length; i++) {
         final pt1 = part.outerContour[i];
         final pt2 = part.outerContour[(i + 1) % part.outerContour.length];
-        allCutLines.add(CadLineSegment(
-          id: '${part.id}_cut_$i',
-          p1: transformPt(pt1),
-          p2: transformPt(pt2),
-          layer: 'OUTLINE',
-        ));
+        allCutLines.add(CadLineSegment(id: '${part.id}_cut_$i', p1: transformPt(pt1), p2: transformPt(pt2), layer: 'OUTLINE', showLabel: false));
       }
 
       // Bends
       for (final b in partDoc.bends) {
-        allBends.add(FoldBendLine(
-          id: '${part.id}_${b.id}',
-          p1: transformPt(b.p1),
-          p2: transformPt(b.p2),
-          targetAngleDeg: b.targetAngleDeg,
-          radiusMm: b.radiusMm,
-          direction: b.direction,
-          kFactor: b.kFactor,
-        ));
+        allBends.add(
+          FoldBendLine(
+            id: '${part.id}_${b.id}',
+            p1: transformPt(b.p1),
+            p2: transformPt(b.p2),
+            targetAngleDeg: b.targetAngleDeg,
+            radiusMm: b.radiusMm,
+            direction: b.direction,
+            kFactor: b.kFactor,
+          ),
+        );
       }
 
       // Punches
       for (final p in partDoc.punches) {
-        allPunches.add(CncPunchPrimitive(
-          id: '${part.id}_${p.id}',
-          center: transformPt(p.center),
-          type: p.type,
-          widthMm: p.widthMm,
-          lengthMm: p.lengthMm,
-          diameterMm: p.diameterMm,
-          rotationDeg: rotate90 ? ((p.rotationDeg + 90.0) % 360.0) : p.rotationDeg,
-          role: p.role,
-          layer: p.layer,
-        ));
+        allPunches.add(
+          CncPunchPrimitive(
+            id: '${part.id}_${p.id}',
+            center: transformPt(p.center),
+            type: p.type,
+            widthMm: p.widthMm,
+            lengthMm: p.lengthMm,
+            diameterMm: p.diameterMm,
+            rotationDeg: rotate90 ? ((p.rotationDeg + 90.0) % 360.0) : p.rotationDeg,
+            role: p.role,
+            layer: p.layer,
+          ),
+        );
       }
 
       // Cut lines from partDoc
       for (final cl in partDoc.cutLines) {
-        allCutLines.add(CadLineSegment(
-          id: '${part.id}_${cl.id}',
-          p1: transformPt(cl.p1),
-          p2: transformPt(cl.p2),
-          layer: cl.layer,
-        ));
+        allCutLines.add(CadLineSegment(id: '${part.id}_${cl.id}', p1: transformPt(cl.p1), p2: transformPt(cl.p2), layer: cl.layer));
       }
 
-      if (part.id == 'rung_blank') {
+      if (part.id == 'rung_blank' || part.id.startsWith('rung_blank')) {
         // Draw the authentic C-Channel Cross-Section profile (40x20mm) next to the rung top view (per ISO Datasheet)
         final double csX = currentOffsetX + placedW + 25.0;
         const double csW = 40.0;
@@ -1174,14 +1550,38 @@ class LadderAssemblyGenerator {
         const double csY = 20.0;
 
         final channelProfileLines = [
-          CadLineSegment(id: 'rung_cs_outer_left', p1: CadPoint2D(csX, csY + csH), p2: CadPoint2D(csX, csY), layer: 'OUTLINE'),
-          CadLineSegment(id: 'rung_cs_outer_bottom', p1: CadPoint2D(csX, csY), p2: CadPoint2D(csX + csW, csY), layer: 'OUTLINE'),
-          CadLineSegment(id: 'rung_cs_outer_right', p1: CadPoint2D(csX + csW, csY), p2: CadPoint2D(csX + csW, csY + csH), layer: 'OUTLINE'),
-          CadLineSegment(id: 'rung_cs_lip_right', p1: CadPoint2D(csX + csW, csY + csH), p2: CadPoint2D(csX + csW - csT, csY + csH), layer: 'OUTLINE'),
-          CadLineSegment(id: 'rung_cs_inner_right', p1: CadPoint2D(csX + csW - csT, csY + csH), p2: CadPoint2D(csX + csW - csT, csY + csT), layer: 'OUTLINE'),
-          CadLineSegment(id: 'rung_cs_inner_bottom', p1: CadPoint2D(csX + csW - csT, csY + csT), p2: CadPoint2D(csX + csT, csY + csT), layer: 'OUTLINE'),
-          CadLineSegment(id: 'rung_cs_inner_left', p1: CadPoint2D(csX + csT, csY + csT), p2: CadPoint2D(csX + csT, csY + csH), layer: 'OUTLINE'),
-          CadLineSegment(id: 'rung_cs_lip_left', p1: CadPoint2D(csX + csT, csY + csH), p2: CadPoint2D(csX, csY + csH), layer: 'OUTLINE'),
+          CadLineSegment(id: 'rung_cs_outer_left', p1: CadPoint2D(csX, csY + csH), p2: CadPoint2D(csX, csY), layer: 'OUTLINE', showLabel: false),
+          CadLineSegment(id: 'rung_cs_outer_bottom', p1: CadPoint2D(csX, csY), p2: CadPoint2D(csX + csW, csY), layer: 'OUTLINE', showLabel: false),
+          CadLineSegment(id: 'rung_cs_outer_right', p1: CadPoint2D(csX + csW, csY), p2: CadPoint2D(csX + csW, csY + csH), layer: 'OUTLINE', showLabel: false),
+          CadLineSegment(
+            id: 'rung_cs_lip_right',
+            p1: CadPoint2D(csX + csW, csY + csH),
+            p2: CadPoint2D(csX + csW - csT, csY + csH),
+            layer: 'OUTLINE',
+            showLabel: false,
+          ),
+          CadLineSegment(
+            id: 'rung_cs_inner_right',
+            p1: CadPoint2D(csX + csW - csT, csY + csH),
+            p2: CadPoint2D(csX + csW - csT, csY + csT),
+            layer: 'OUTLINE',
+            showLabel: false,
+          ),
+          CadLineSegment(
+            id: 'rung_cs_inner_bottom',
+            p1: CadPoint2D(csX + csW - csT, csY + csT),
+            p2: CadPoint2D(csX + csT, csY + csT),
+            layer: 'OUTLINE',
+            showLabel: false,
+          ),
+          CadLineSegment(
+            id: 'rung_cs_inner_left',
+            p1: CadPoint2D(csX + csT, csY + csT),
+            p2: CadPoint2D(csX + csT, csY + csH),
+            layer: 'OUTLINE',
+            showLabel: false,
+          ),
+          CadLineSegment(id: 'rung_cs_lip_left', p1: CadPoint2D(csX + csT, csY + csH), p2: CadPoint2D(csX, csY + csH), layer: 'OUTLINE', showLabel: false),
         ];
         allCutLines.addAll(channelProfileLines);
         currentOffsetX += csW + 35.0;
@@ -1190,14 +1590,10 @@ class LadderAssemblyGenerator {
       currentOffsetX += placedW + 80.0;
     }
 
-    final outerContour = <CadPoint2D>[
-      const CadPoint2D(0, 0),
-      CadPoint2D(currentOffsetX, 0),
-      CadPoint2D(currentOffsetX, maxPartHeight > 0 ? maxPartHeight : 100.0),
-      CadPoint2D(0, maxPartHeight > 0 ? maxPartHeight : 100.0),
-    ];
+    final outerContour = <CadPoint2D>[];
 
-    final isStraight = !assembly.id.contains('BEND') &&
+    final isStraight =
+        !assembly.id.contains('BEND') &&
         !assembly.id.contains('RISER') &&
         !assembly.id.contains('TEE') &&
         !assembly.id.contains('CROSS') &&
@@ -1206,16 +1602,16 @@ class LadderAssemblyGenerator {
     final product = isStraight
         ? 'Ladder'
         : (assembly.id.contains('BEND')
-            ? FittingProductType.bend
-            : (assembly.id.contains('IN-RISER')
-                ? FittingProductType.insideRiser
-                : (assembly.id.contains('OUT-RISER')
-                    ? FittingProductType.outsideRiser
-                    : (assembly.id.contains('TEE')
-                        ? FittingProductType.tee
-                        : (assembly.id.contains('CROSS')
-                            ? FittingProductType.cross
-                            : (assembly.id.contains('REDUCER') ? FittingProductType.reducer : 'Ladder'))))));
+              ? FittingProductType.bend
+              : (assembly.id.contains('IN-RISER')
+                    ? FittingProductType.insideRiser
+                    : (assembly.id.contains('OUT-RISER')
+                          ? FittingProductType.outsideRiser
+                          : (assembly.id.contains('TEE')
+                                ? FittingProductType.tee
+                                : (assembly.id.contains('CROSS')
+                                      ? FittingProductType.cross
+                                      : (assembly.id.contains('REDUCER') ? FittingProductType.reducer : 'Ladder'))))));
 
     final fittingMeta = DxfFittingMetadata(
       category: category,
@@ -1239,6 +1635,8 @@ class LadderAssemblyGenerator {
       itemName: assembly.productName,
       material: assembly.leftRailBlank.material,
       outerContour: outerContour,
+      faces: allFaces,
+      baseFaceId: allFaces.isNotEmpty ? allFaces.first.id : '',
       bends: allBends,
       punches: allPunches,
       cutLines: allCutLines,
@@ -1302,8 +1700,27 @@ class LadderAssemblyGenerator {
       if (doc.parameters.containsKey('rung_pitch')) {
         mergedMap['intermediateTargetPitch'] = doc.parameters['rung_pitch'];
       }
+      if (doc.parameters.containsKey('outside_weld_projection')) {
+        mergedMap['outsideWeldProjection'] = doc.parameters['outside_weld_projection'];
+      }
+      if (doc.parameters.containsKey('outsideWeldProjection')) {
+        mergedMap['outsideWeldProjection'] = doc.parameters['outsideWeldProjection'];
+      }
+      if (doc.parameters.containsKey('end_margin_pitch')) {
+        mergedMap['endMarginPitch'] = doc.parameters['end_margin_pitch'];
+      }
+      if (doc.parameters.containsKey('endMarginPitch')) {
+        mergedMap['endMarginPitch'] = doc.parameters['endMarginPitch'];
+      }
+      if (doc.parameters.containsKey('include_cover')) {
+        mergedMap['includeCover'] = doc.parameters['include_cover']! > 0.5;
+      }
+      if (doc.parameters.containsKey('includeCover')) {
+        mergedMap['includeCover'] = doc.parameters['includeCover']! > 0.5;
+      }
       params = LadderAssemblyParameters.fromJson(mergedMap);
     } else {
+      final targetPitch = (doc.parameters['rung_pitch'] ?? doc.parameters['intermediateTargetPitch'] ?? 250.0).toDouble();
       params = LadderAssemblyParameters(
         width: (doc.parameters['width'] ?? 600.0).toDouble(),
         height: (doc.parameters['height'] ?? 100.0).toDouble(),
@@ -1315,9 +1732,10 @@ class LadderAssemblyGenerator {
             ? LadderAccessoryStyle.curved
             : LadderAccessoryStyle.segmented,
         jointMethod: (doc.parameters['rung_joint_method'] ?? 1.0) > 0.5 ? LadderRungJointMethod.passThroughOutsideWeld : LadderRungJointMethod.directInsideWeld,
-        outsideWeldProjection: (doc.parameters['outside_weld_projection'] ?? 3.5).toDouble(),
-        endMarginPitch: (doc.parameters['end_margin_pitch'] ?? 75.0).toDouble(),
-        intermediateTargetPitch: (doc.parameters['rung_pitch'] ?? doc.parameters['intermediateTargetPitch'] ?? 250.0).toDouble(),
+        outsideWeldProjection: (doc.parameters['outside_weld_projection'] ?? doc.parameters['outsideWeldProjection'] ?? 3.5).toDouble(),
+        endMarginPitch: (doc.parameters['end_margin_pitch'] ?? doc.parameters['endMarginPitch'] ?? (targetPitch / 2.0)).toDouble(),
+        intermediateTargetPitch: targetPitch,
+        includeCover: (doc.parameters['include_cover'] ?? doc.parameters['includeCover'] ?? 0.0) > 0.5,
         materialName: doc.material.materialGrade.isNotEmpty ? doc.material.materialGrade : 'HDG',
       );
     }
@@ -1356,11 +1774,7 @@ class LadderAssemblyGenerator {
   }
 
   /// Saves the [DsfLadderAssembly] as a JSON-encoded .dsf file in `assets/dsf_templates/ladders/`.
-  static Future<File> saveAssemblyDsfFile(
-    DsfLadderAssembly assembly, {
-    String? fileName,
-    String? targetDirectory,
-  }) async {
+  static Future<File> saveAssemblyDsfFile(DsfLadderAssembly assembly, {String? fileName, String? targetDirectory}) async {
     final dsfDoc = createAssemblyDsfDocument(assembly);
     final dirPath = targetDirectory ?? 'assets/dsf_templates/ladders';
     final dir = Directory(dirPath);

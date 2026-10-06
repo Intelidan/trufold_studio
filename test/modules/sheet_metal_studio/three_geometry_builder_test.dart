@@ -5,6 +5,8 @@ import 'package:three_js/three_js.dart' as three;
 import 'package:three_js_geometry/three_js_geometry.dart' as three_geo;
 
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/kinematic_fold_engine.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/three_cad_mesh_builder.dart';
 
 three.Object3D createMeshFromCadPolygon(CadFoldedPolygon3D poly) {
   if (poly.vertices.length < 3) return three.Group();
@@ -154,5 +156,96 @@ void main() {
     final edges = createEdgesMesh([poly]);
     expect(edges, isNotNull);
     expect(edges.geometry, isNotNull);
+  });
+
+  test('ThreeCadMeshBuilder consolidates faces into a single batched mesh with zero draw-call overhead', () {
+    final poly1 = CadFoldedPolygon3D(
+      faceId: 'face_1',
+      vertices: [
+        const CadPoint3D(0, 0, 0),
+        const CadPoint3D(100, 0, 0),
+        const CadPoint3D(100, 100, 0),
+        const CadPoint3D(0, 100, 0),
+      ],
+      normal: const CadPoint3D(0, 0, 1),
+      color: const Color(0xFF90A4AE),
+      boundaryLines: [
+        [const CadPoint3D(0, 0, 0), const CadPoint3D(100, 0, 0)],
+      ],
+    );
+
+    final poly2 = CadFoldedPolygon3D(
+      faceId: 'face_2',
+      vertices: [
+        const CadPoint3D(100, 0, 0),
+        const CadPoint3D(200, 0, 0),
+        const CadPoint3D(200, 100, 0),
+        const CadPoint3D(100, 100, 0),
+      ],
+      normal: const CadPoint3D(0, 0, 1),
+      color: const Color(0xFF64748B),
+    );
+
+    final meshResult = FoldedMeshResult(
+      polygons: [poly1, poly2],
+      thicknessPolygons: [],
+      boundWidth: 200,
+      boundLength: 100,
+      boundHeight: 10,
+      center: const CadPoint3D(100, 50, 0),
+    );
+
+    // 1. Without selection: both faces are batched into 1 single Mesh
+    final group = ThreeCadMeshBuilder.buildCadModel(meshResult);
+    final facesGroup = group.children[0] as three.Group;
+    expect(facesGroup.children.length, 1);
+    final mesh = facesGroup.children[0] as three.Mesh;
+    final posAttr = mesh.geometry!.getAttribute(three.Attribute.position);
+    // 2 quads * 2 triangles/quad * 3 vertices/triangle = 12 vertices
+    expect(posAttr.count, 12);
+
+    // 2. With face_1 selected: face_2 in batched mesh, face_1 in highlight mesh
+    final groupWithSel = ThreeCadMeshBuilder.buildCadModel(meshResult, selectedFaceId: 'face_1');
+    final facesGroupWithSel = groupWithSel.children[0] as three.Group;
+    expect(facesGroupWithSel.children.length, 2);
+  });
+
+  test('Raycaster intersects batched CAD mesh', () {
+    final poly = CadFoldedPolygon3D(
+      faceId: 'face_1',
+      vertices: [
+        const CadPoint3D(0, 0, 0),
+        const CadPoint3D(100, 0, 0),
+        const CadPoint3D(100, 100, 0),
+        const CadPoint3D(0, 100, 0),
+      ],
+      normal: const CadPoint3D(0, 0, 1),
+      color: const Color(0xFF64748B),
+    );
+    final meshResult = FoldedMeshResult(
+      polygons: [poly],
+      thicknessPolygons: [],
+      boundWidth: 100,
+      boundLength: 100,
+      boundHeight: 10,
+      center: const CadPoint3D(50, 50, 0),
+    );
+    final group = ThreeCadMeshBuilder.buildCadModel(meshResult);
+    final meshes = <three.Mesh>[];
+    group.traverse((obj) {
+      if (obj is three.Mesh) meshes.add(obj);
+    });
+
+    final cam = three.PerspectiveCamera(45.0, 1.0, 1.0, 10000.0);
+    cam.position.setValues(50, 50, 500);
+    cam.lookAt(three.Vector3(50, 50, 0));
+    cam.updateMatrixWorld(true);
+    group.updateMatrixWorld(true);
+
+    final raycaster = three.Raycaster();
+    raycaster.setFromCamera(three.Vector2(0, 0), cam);
+    final hits = raycaster.intersectObjects(meshes, false);
+    expect(hits.isNotEmpty, isTrue);
+    expect(hits.first.point, isNotNull);
   });
 }

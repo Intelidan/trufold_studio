@@ -103,7 +103,7 @@ class LadderAssemblyParameters {
     this.flangeWidth = 32.0,
     this.flangeDirection = LadderFlangeDirection.inside,
     this.accessoryStyle = LadderAccessoryStyle.segmented,
-    this.endMarginPitch = 75.0,
+    this.endMarginPitch = 125.0,
     this.intermediateTargetPitch = 250.0,
     this.pitchMode = RungPitchMode.equalizedPitch,
     this.jointMethod = LadderRungJointMethod.passThroughOutsideWeld,
@@ -198,6 +198,7 @@ class LadderAssemblyParameters {
   }
 
   factory LadderAssemblyParameters.fromJson(Map<String, dynamic> json) {
+    final targetPitch = (json['intermediateTargetPitch'] as num?)?.toDouble() ?? (json['rung_pitch'] as num?)?.toDouble() ?? 250.0;
     return LadderAssemblyParameters(
       width: (json['width'] as num?)?.toDouble() ?? 600.0,
       height: (json['height'] as num?)?.toDouble() ?? 100.0,
@@ -206,13 +207,13 @@ class LadderAssemblyParameters {
       flangeWidth: (json['flangeWidth'] as num?)?.toDouble() ?? 32.0,
       flangeDirection: LadderFlangeDirection.fromString(json['flangeDirection'] as String?),
       accessoryStyle: LadderAccessoryStyle.fromString(json['accessoryStyle'] as String? ?? json['geometryStyle'] as String?),
-      endMarginPitch: (json['endMarginPitch'] as num?)?.toDouble() ?? 75.0,
-      intermediateTargetPitch: (json['intermediateTargetPitch'] as num?)?.toDouble() ?? 250.0,
+      endMarginPitch: (json['endMarginPitch'] as num?)?.toDouble() ?? (json['end_margin_pitch'] as num?)?.toDouble() ?? (targetPitch / 2.0),
+      intermediateTargetPitch: targetPitch,
       pitchMode: RungPitchMode.fromString(json['pitchMode'] as String?),
       jointMethod: LadderRungJointMethod.fromString(json['jointMethod'] as String?),
-      outsideWeldProjection: (json['outsideWeldProjection'] as num?)?.toDouble() ?? 3.5,
+      outsideWeldProjection: (json['outsideWeldProjection'] as num?)?.toDouble() ?? (json['outside_weld_projection'] as num?)?.toDouble() ?? 3.5,
       passThroughClearance: (json['passThroughClearance'] as num?)?.toDouble() ?? 1.0,
-      includeCover: json['includeCover'] as bool? ?? false,
+      includeCover: json['includeCover'] as bool? ?? (json['include_cover'] != null ? (json['include_cover'] as num) > 0.5 : false),
       coverHeight: (json['coverHeight'] as num?)?.toDouble() ?? 12.0,
       includeSpliceHoles: json['includeSpliceHoles'] as bool? ?? true,
       materialName: json['materialName'] as String? ?? 'HDG',

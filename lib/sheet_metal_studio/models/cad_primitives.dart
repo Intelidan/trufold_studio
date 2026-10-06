@@ -101,6 +101,7 @@ class CadFoldedPolygon3D {
   final List<String> holePunchIds;
   final List<List<CadPoint3D>> cutSegments;
   final List<List<CadPoint3D>> boundaryLines;
+  final List<List<CadPoint3D>> tangentLines;
 
   const CadFoldedPolygon3D({
     required this.faceId,
@@ -112,6 +113,7 @@ class CadFoldedPolygon3D {
     this.holePunchIds = const [],
     this.cutSegments = const [],
     this.boundaryLines = const [],
+    this.tangentLines = const [],
   });
 }
 
@@ -168,3 +170,193 @@ class CadLineSegment {
   @override
   String toString() => 'CadLineSegment($id, p1: $p1, p2: $p2, layer: $layer, showLabel: $showLabel)';
 }
+
+/// Visual shading and illustration styles for CAD 3D rendering.
+enum CadShadingStyle {
+  realisticPbr(
+    'Industrial PBR Metal',
+    'Physically-based metallic shading with realistic specular highlights and shadows.',
+  ),
+  celShaded2D(
+    '2D Anime / Drawn Illustration',
+    'Non-photorealistic cel shading with quantized light bands and crisp inked outlines, mimicking 2D animation style.',
+  ),
+  technicalBlueprint(
+    'Technical Blueprint',
+    'Crisp blueprint drawing style with cool technical tint and highlighted boundary features.',
+  );
+
+  final String label;
+  final String description;
+  const CadShadingStyle(this.label, this.description);
+}
+
+/// Anti-aliasing detail levels and resolution supersampling factors.
+enum AntiAliasingQuality {
+  off('Off', 1.0),
+  standard('Standard (MSAA)', 1.0),
+  high('High (1.5x)', 1.5),
+  ultra('Ultra (2x SSAA)', 2.0),
+  extreme('Extreme (3x SSAA)', 3.0);
+
+  final String label;
+  final double pixelRatioScale;
+  const AntiAliasingQuality(this.label, this.pixelRatioScale);
+}
+
+/// CAD Surface & Edge Render Modes matching Onshape View Context Menu.
+enum OnshapeRenderMode {
+  shadedWithEdges('Shaded with edges'),
+  shadedWithoutEdges('Shaded without edges'),
+  unshaded('Unshaded'),
+  translucent('Translucent');
+
+  final String label;
+  const OnshapeRenderMode(this.label);
+}
+
+/// Mode for rendering tangent edges (fillet transitions) on CAD parts.
+enum OnshapeTangentEdgeMode {
+  visible('Tangent edges visible'),
+  phantom('Tangent edges phantom'),
+  removed('Tangent edges removed');
+
+  final String label;
+  const OnshapeTangentEdgeMode(this.label);
+}
+
+/// Onshape-compatible 3D Graphics Preferences.
+/// Configures viewport lighting/FOV, shaded body surface properties, and phantom edge lines.
+class OnshapeGraphicsPreferences {
+  // Viewport Settings
+  final double ambientOcclusion; // 0% to 100%, default 40%
+  final double fieldOfView; // 15 deg to 90 deg, default 46 deg
+  final AntiAliasingQuality antiAliasingQuality; // Viewport anti-aliasing & SSAA level
+
+  // Shaded Bodies Settings
+  final double lineWidth; // 0.5 px to 5.0 px, default 1.3 px
+  final double shininess; // 0% to 100%, default 25% (as seen in Onshape SS2)
+  final Color specularColor; // default 0xFFFFFFFF (crisp white specular glare)
+  final Color sectionInterferenceColor; // default 0xFF4CAF50
+
+  // Phantom Edges Settings
+  final double phantomTangentEdgeWidth; // 0.5 px to 4.0 px, default 0.8 px
+  final Color phantomTangentEdgeColor; // default 0xFF212121
+  final OnshapeTangentEdgeMode tangentEdgeMode; // default: phantom
+
+  // Part Appearance
+  final bool useOnshapeCadColor; // default true (Onshape slate steel-blue 0x70A5C2)
+  final bool hiddenEdgesVisible; // default false
+
+  // Studio Lighting Controls (Global lighting addition, removal, and spherical roaming)
+  final double lightAzimuthDeg; // 0 deg to 360 deg, default 45 deg
+  final double lightElevationDeg; // 10 deg to 90 deg, default 55 deg
+  final double keyLightIntensity; // 0.0 to 3.0, default 1.45
+  final bool hasSecondaryLight; // toggle secondary fill light, default true
+  final bool hasBackLight; // toggle rim/back light, default false
+
+  const OnshapeGraphicsPreferences({
+    this.ambientOcclusion = 40.0,
+    this.fieldOfView = 46.0,
+    this.antiAliasingQuality = AntiAliasingQuality.extreme,
+    this.lineWidth = 0.65,
+    this.shininess = 25.0,
+    this.specularColor = const Color(0xFFFFFFFF),
+    this.sectionInterferenceColor = const Color(0xFF4CAF50),
+    this.phantomTangentEdgeWidth = 0.8,
+    this.phantomTangentEdgeColor = const Color(0xFF212121),
+    this.tangentEdgeMode = OnshapeTangentEdgeMode.phantom,
+    this.useOnshapeCadColor = true,
+    this.hiddenEdgesVisible = false,
+    this.lightAzimuthDeg = 45.0,
+    this.lightElevationDeg = 55.0,
+    this.keyLightIntensity = 1.45,
+    this.hasSecondaryLight = true,
+    this.hasBackLight = false,
+  });
+
+  OnshapeGraphicsPreferences copyWith({
+    double? ambientOcclusion,
+    double? fieldOfView,
+    AntiAliasingQuality? antiAliasingQuality,
+    double? lineWidth,
+    double? shininess,
+    Color? specularColor,
+    Color? sectionInterferenceColor,
+    double? phantomTangentEdgeWidth,
+    Color? phantomTangentEdgeColor,
+    OnshapeTangentEdgeMode? tangentEdgeMode,
+    bool? useOnshapeCadColor,
+    bool? hiddenEdgesVisible,
+    double? lightAzimuthDeg,
+    double? lightElevationDeg,
+    double? keyLightIntensity,
+    bool? hasSecondaryLight,
+    bool? hasBackLight,
+  }) {
+    return OnshapeGraphicsPreferences(
+      ambientOcclusion: ambientOcclusion ?? this.ambientOcclusion,
+      fieldOfView: fieldOfView ?? this.fieldOfView,
+      antiAliasingQuality: antiAliasingQuality ?? this.antiAliasingQuality,
+      lineWidth: lineWidth ?? this.lineWidth,
+      shininess: shininess ?? this.shininess,
+      specularColor: specularColor ?? this.specularColor,
+      sectionInterferenceColor: sectionInterferenceColor ?? this.sectionInterferenceColor,
+      phantomTangentEdgeWidth: phantomTangentEdgeWidth ?? this.phantomTangentEdgeWidth,
+      phantomTangentEdgeColor: phantomTangentEdgeColor ?? this.phantomTangentEdgeColor,
+      tangentEdgeMode: tangentEdgeMode ?? this.tangentEdgeMode,
+      useOnshapeCadColor: useOnshapeCadColor ?? this.useOnshapeCadColor,
+      hiddenEdgesVisible: hiddenEdgesVisible ?? this.hiddenEdgesVisible,
+      lightAzimuthDeg: lightAzimuthDeg ?? this.lightAzimuthDeg,
+      lightElevationDeg: lightElevationDeg ?? this.lightElevationDeg,
+      keyLightIntensity: keyLightIntensity ?? this.keyLightIntensity,
+      hasSecondaryLight: hasSecondaryLight ?? this.hasSecondaryLight,
+      hasBackLight: hasBackLight ?? this.hasBackLight,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is OnshapeGraphicsPreferences &&
+        other.ambientOcclusion == ambientOcclusion &&
+        other.fieldOfView == fieldOfView &&
+        other.antiAliasingQuality == antiAliasingQuality &&
+        other.lineWidth == lineWidth &&
+        other.shininess == shininess &&
+        other.specularColor == specularColor &&
+        other.sectionInterferenceColor == sectionInterferenceColor &&
+        other.phantomTangentEdgeWidth == phantomTangentEdgeWidth &&
+        other.phantomTangentEdgeColor == phantomTangentEdgeColor &&
+        other.tangentEdgeMode == tangentEdgeMode &&
+        other.useOnshapeCadColor == useOnshapeCadColor &&
+        other.hiddenEdgesVisible == hiddenEdgesVisible &&
+        other.lightAzimuthDeg == lightAzimuthDeg &&
+        other.lightElevationDeg == lightElevationDeg &&
+        other.keyLightIntensity == keyLightIntensity &&
+        other.hasSecondaryLight == hasSecondaryLight &&
+        other.hasBackLight == hasBackLight;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        ambientOcclusion,
+        fieldOfView,
+        antiAliasingQuality,
+        lineWidth,
+        shininess,
+        specularColor,
+        sectionInterferenceColor,
+        phantomTangentEdgeWidth,
+        phantomTangentEdgeColor,
+        tangentEdgeMode,
+        useOnshapeCadColor,
+        hiddenEdgesVisible,
+        lightAzimuthDeg,
+        lightElevationDeg,
+        keyLightIntensity,
+        hasSecondaryLight,
+        hasBackLight,
+      );
+}
+

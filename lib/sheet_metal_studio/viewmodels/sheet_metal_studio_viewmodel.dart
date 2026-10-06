@@ -471,7 +471,21 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   bool _showWireframe = true;
 
+  bool _showBorderLines = true;
+
   bool _isGlassMode = false;
+
+  bool _isObstructedXRayMode = false;
+
+  CadShadingStyle _cadShadingStyle = CadShadingStyle.realisticPbr;
+
+  AntiAliasingQuality _antiAliasingQuality = AntiAliasingQuality.extreme;
+
+  OnshapeGraphicsPreferences _graphicsPreferences = const OnshapeGraphicsPreferences();
+
+  OnshapeRenderMode _onshapeRenderMode = OnshapeRenderMode.shadedWithEdges;
+
+  bool _isGraphicsPreferencesOpen = false;
 
   bool _isOrthoProjection = false;
 
@@ -998,13 +1012,36 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       if (key == 'port3_width') updatedParams['branch_width'] = value;
       if (key == 'length' || key == 'straight_length') updatedParams['length'] = value;
       if (key == 'radius') updatedParams['radius'] = value;
+      final updatedMetadata = Map<String, dynamic>.from(_document.metadata);
+      final ladderMetaParams = Map<String, dynamic>.from(updatedMetadata['ladderParameters'] as Map? ?? {});
+
       if (key == 'bend_angle' || key == 'angle') {
         updatedParams['angle'] = value;
         updatedParams['bend_angle'] = value;
       }
+      if (key == 'end_margin_pitch' || key == 'endMarginPitch' || key == 'end_rung_offset') {
+        updatedParams['end_margin_pitch'] = value;
+        ladderMetaParams['endMarginPitch'] = value;
+      }
+      if (key == 'rung_pitch' || key == 'intermediateTargetPitch' || key == 'rungPitch') {
+        updatedParams['rung_pitch'] = value;
+        ladderMetaParams['intermediateTargetPitch'] = value;
+      }
+      if (key == 'outsideWeldProjection' || key == 'outside_weld_projection') {
+        updatedParams['outsideWeldProjection'] = value;
+        updatedParams['outside_weld_projection'] = value;
+        ladderMetaParams['outsideWeldProjection'] = value;
+        ladderMetaParams['outside_weld_projection'] = value;
+      }
+      if (key == 'rung_joint_method' || key == 'jointMethod') {
+        updatedParams['rung_joint_method'] = value;
+        ladderMetaParams['jointMethod'] = value >= 0.5 ? 'passThroughOutsideWeld' : 'directInsideWeld';
+      }
+      if (key == 'include_cover' || key == 'has_cover') {
+        updatedParams['include_cover'] = value;
+        ladderMetaParams['includeCover'] = value > 0.5;
+      }
 
-      final updatedMetadata = Map<String, dynamic>.from(_document.metadata);
-      final ladderMetaParams = Map<String, dynamic>.from(updatedMetadata['ladderParameters'] as Map? ?? {});
       for (final e in updatedParams.entries) {
         ladderMetaParams[e.key] = e.value;
       }
@@ -1452,9 +1489,19 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   // Trunking Accessory Covers Management
   // ---------------------------------------------------------------------------
 
-  bool get hasCover => document.cover != null;
+  bool get hasCover {
+    if (isLadderAssembly) {
+      return _activeLadderAssembly?.parameters.includeCover == true || _document.parameters['include_cover'] == 1.0;
+    }
+    return document.cover != null;
+  }
   bool get isCoverVisible2D => document.cover?.isVisible2D ?? false;
-  bool get isCoverVisible3D => document.cover?.isVisible3D ?? false;
+  bool get isCoverVisible3D {
+    if (isLadderAssembly) {
+      return hasCover;
+    }
+    return document.cover?.isVisible3D ?? false;
+  }
   TrunkingCoverData? get cover => document.cover;
   CoverPlacementMode2D get coverPlacementMode2D => document.cover?.placementMode2D ?? CoverPlacementMode2D.besideBase;
   CoverPlacementMode3D get coverPlacementMode3D => document.cover?.placementMode3D ?? CoverPlacementMode3D.snappedToBase;
@@ -1528,6 +1575,10 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   }
 
   void createCoverForCurrentFitting() {
+    if (isLadderAssembly) {
+      applyCmsMorphParameter('include_cover', 1.0);
+      return;
+    }
     final effectiveOverrides = _scalingController != null
         ? Map<String, double>.fromEntries(_scalingController!.model.parameters.entries.map((e) => MapEntry(e.key, e.value.currentValue)))
         : null;
@@ -1549,6 +1600,10 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   }
 
   void removeCover() {
+    if (isLadderAssembly) {
+      applyCmsMorphParameter('include_cover', 0.0);
+      return;
+    }
     _document = _document.copyWith(clearCover: true);
     if (_previewDocWithCover != null) {
       _previewDocWithCover = _previewDocWithCover!.copyWith(clearCover: true);
@@ -1561,7 +1616,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   }
 
   void toggleCover() {
-    if (document.cover != null) {
+    if (hasCover) {
       removeCover();
     } else {
       createCoverForCurrentFitting();
@@ -1725,6 +1780,9 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   }
 
   FoldedMeshResult? get coverMesh {
+    if (isLadderAssembly) {
+      return _activeLadderAssembly?.coverMesh3D ?? _cachedCoverMesh;
+    }
     if (_isTeachScalingActive && _scalingController?.currentPreview != null) {
       return _previewCoverMesh;
     }
@@ -1838,24 +1896,28 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   double get azimuthDeg => _azimuthDeg;
   set azimuthDeg(double val) {
+    if (_azimuthDeg == val) return;
     _azimuthDeg = val;
     notifyListeners();
   }
 
   double get elevationDeg => _elevationDeg;
   set elevationDeg(double val) {
+    if (_elevationDeg == val) return;
     _elevationDeg = val;
     notifyListeners();
   }
 
   double get cameraZoom => _cameraZoom;
   set cameraZoom(double val) {
+    if (_cameraZoom == val) return;
     _cameraZoom = val;
     notifyListeners();
   }
 
   Offset get pan3D => _pan3D;
   set pan3D(Offset val) {
+    if (_pan3D == val) return;
     _pan3D = val;
     notifyListeners();
   }
@@ -1866,7 +1928,55 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   bool get showWireframe => _showWireframe;
 
+  bool get showBorderLines => _showBorderLines;
+
   bool get isGlassMode => _isGlassMode;
+
+  bool get isObstructedXRayMode => _isObstructedXRayMode;
+
+  CadShadingStyle get cadShadingStyle => _cadShadingStyle;
+  set cadShadingStyle(CadShadingStyle style) {
+    if (_cadShadingStyle == style) return;
+    _cadShadingStyle = style;
+    notifyListeners();
+  }
+
+  AntiAliasingQuality get antiAliasingQuality => _antiAliasingQuality;
+  set antiAliasingQuality(AntiAliasingQuality q) {
+    if (_antiAliasingQuality == q) return;
+    _antiAliasingQuality = q;
+    notifyListeners();
+  }
+
+  OnshapeGraphicsPreferences get graphicsPreferences => _graphicsPreferences;
+  set graphicsPreferences(OnshapeGraphicsPreferences prefs) {
+    _graphicsPreferences = prefs;
+    notifyListeners();
+  }
+
+  void updateGraphicsPreferences(OnshapeGraphicsPreferences Function(OnshapeGraphicsPreferences current) update) {
+    _graphicsPreferences = update(_graphicsPreferences);
+    notifyListeners();
+  }
+
+  OnshapeRenderMode get onshapeRenderMode => _onshapeRenderMode;
+  set onshapeRenderMode(OnshapeRenderMode mode) {
+    if (_onshapeRenderMode == mode) return;
+    _onshapeRenderMode = mode;
+    notifyListeners();
+  }
+
+  bool get isGraphicsPreferencesOpen => _isGraphicsPreferencesOpen;
+  set isGraphicsPreferencesOpen(bool val) {
+    if (_isGraphicsPreferencesOpen == val) return;
+    _isGraphicsPreferencesOpen = val;
+    notifyListeners();
+  }
+
+  void toggleGraphicsPreferences() {
+    _isGraphicsPreferencesOpen = !_isGraphicsPreferencesOpen;
+    notifyListeners();
+  }
 
   bool get isOrthoProjection => _isOrthoProjection;
   set isOrthoProjection(bool val) {
@@ -2155,16 +2265,41 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   String? get hoveredFaceId => _hoveredFaceId;
 
+  FoldedMeshResult? _cachedCombinedMesh;
+  FoldedMeshResult? _lastBaseMesh;
+  FoldedMeshResult? _lastCoverMesh;
+  bool? _lastHasCover;
+  bool? _lastIsCoverVisible;
+
   FoldedMeshResult get currentMesh {
     final baseMesh = (_isTeachScalingActive && _scalingController?.currentPreview != null)
         ? _scalingController!.currentPreview!.foldedMesh
         : (_cachedMesh ?? const FoldedMeshResult(polygons: [], boundWidth: 200, boundLength: 200, boundHeight: 100, center: CadPoint3D(0, 0, 0)));
 
     final activeCoverMesh = coverMesh;
-    if (hasCover && isCoverVisible3D && activeCoverMesh != null) {
-      return baseMesh.combineWith(activeCoverMesh, preserveCenter: true);
+    final needCombine = hasCover && isCoverVisible3D && activeCoverMesh != null;
+
+    if (!needCombine) {
+      _cachedCombinedMesh = null;
+      _lastBaseMesh = null;
+      _lastCoverMesh = null;
+      return baseMesh;
     }
-    return baseMesh;
+
+    if (_cachedCombinedMesh != null &&
+        identical(baseMesh, _lastBaseMesh) &&
+        identical(activeCoverMesh, _lastCoverMesh) &&
+        _lastHasCover == hasCover &&
+        _lastIsCoverVisible == isCoverVisible3D) {
+      return _cachedCombinedMesh!;
+    }
+
+    _lastBaseMesh = baseMesh;
+    _lastCoverMesh = activeCoverMesh;
+    _lastHasCover = hasCover;
+    _lastIsCoverVisible = isCoverVisible3D;
+    _cachedCombinedMesh = baseMesh.combineWith(activeCoverMesh, preserveCenter: true);
+    return _cachedCombinedMesh!;
   }
 
   void setHoveredPunch(String? id) {
@@ -2389,6 +2524,18 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   @override
   void notifyListeners() {
     _commitPendingHistoryDelta();
+
+    try {
+      final binding = WidgetsBinding.instance;
+      if (binding.buildOwner?.debugBuilding == true ||
+          binding.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+        binding.addPostFrameCallback((_) {
+          _commitPendingHistoryDelta();
+          super.notifyListeners();
+        });
+        return;
+      }
+    } catch (_) {}
 
     super.notifyListeners();
   }
@@ -2716,6 +2863,22 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   void toggleGlassMode() {
     _isGlassMode = !_isGlassMode;
 
+    notifyListeners();
+  }
+
+  void setGlassMode(bool val) {
+    if (_isGlassMode == val) return;
+    _isGlassMode = val;
+    notifyListeners();
+  }
+
+  void toggleBorderLines() {
+    _showBorderLines = !_showBorderLines;
+    notifyListeners();
+  }
+
+  void toggleObstructedXRayMode() {
+    _isObstructedXRayMode = !_isObstructedXRayMode;
     notifyListeners();
   }
 

@@ -1,0 +1,733 @@
+// =============================================================================
+// studio_graphics_preferences_panel.dart
+//
+// Onshape-style CAD Graphics Preferences Panel for TruFold Studio.
+// Matches the authentic Onshape Graphics Preferences drawer (Viewport,
+// Shaded Bodies, Shininess, Specular Highlights, Line Width, Phantom Edges).
+// =============================================================================
+
+import 'package:flutter/material.dart';
+import '../../../models/cad_primitives.dart';
+
+class StudioGraphicsPreferencesPanel extends StatefulWidget {
+  final OnshapeGraphicsPreferences preferences;
+  final ValueChanged<OnshapeGraphicsPreferences> onChanged;
+  final VoidCallback onClose;
+  final VoidCallback onResetToDefault;
+
+  const StudioGraphicsPreferencesPanel({
+    super.key,
+    required this.preferences,
+    required this.onChanged,
+    required this.onClose,
+    required this.onResetToDefault,
+  });
+
+  @override
+  State<StudioGraphicsPreferencesPanel> createState() => _StudioGraphicsPreferencesPanelState();
+}
+
+class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferencesPanel> {
+  int _activeTab = 0; // 0 = General, 1 = Sketch
+  bool _viewportExpanded = true;
+  bool _shadedBodiesExpanded = true;
+  bool _phantomEdgesExpanded = true;
+  bool _lightingExpanded = true;
+  bool _meshBodiesExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final prefs = widget.preferences;
+
+    return Container(
+      width: 320,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFCBD5E1), width: 1.0),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1A000000),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Header: "Graphics preferences" with Green Checkmark and Red Close
+          _buildHeader(),
+
+          // 2. Tabs: General | Sketch
+          _buildTabs(),
+
+          // 3. Scrollable settings body
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Section: Viewport
+                  _buildSectionHeader(
+                    title: 'Viewport',
+                    isExpanded: _viewportExpanded,
+                    onToggle: () => setState(() => _viewportExpanded = !_viewportExpanded),
+                  ),
+                  if (_viewportExpanded) ...[
+                    _buildSliderRow(
+                      label: 'Ambient occlusion',
+                      valueStr: '${prefs.ambientOcclusion.round()}%',
+                      tooltip: 'Controls the contrast of soft ambient shadows in crevices and corners.',
+                      value: prefs.ambientOcclusion,
+                      min: 0,
+                      max: 100,
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(ambientOcclusion: val)),
+                    ),
+                    _buildSliderRow(
+                      label: 'Field of view',
+                      valueStr: '${prefs.fieldOfView.round()} deg',
+                      tooltip: 'Camera angle of view for perspective mode. Lower values approach parallel projection.',
+                      value: prefs.fieldOfView,
+                      min: 15,
+                      max: 90,
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(fieldOfView: val)),
+                    ),
+                    _buildDropdownRow<AntiAliasingQuality>(
+                      label: 'Anti-aliasing',
+                      value: prefs.antiAliasingQuality,
+                      valueLabel: prefs.antiAliasingQuality.label,
+                      tooltip: 'Controls hardware MSAA and supersampling anti-aliasing (SSAA) quality in the 3D viewport.',
+                      items: AntiAliasingQuality.values.map((q) => PopupMenuItem<AntiAliasingQuality>(
+                        value: q,
+                        height: 28,
+                        child: Text(q.label, style: const TextStyle(fontSize: 11, color: Color(0xFF1E293B))),
+                      )).toList(),
+                      onSelected: (val) => widget.onChanged(prefs.copyWith(antiAliasingQuality: val)),
+                    ),
+                  ],
+
+                  const SizedBox(height: 6),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 6),
+
+                  // Section: Shaded bodies
+                  _buildSectionHeader(
+                    title: 'Shaded bodies',
+                    isExpanded: _shadedBodiesExpanded,
+                    onToggle: () => setState(() => _shadedBodiesExpanded = !_shadedBodiesExpanded),
+                  ),
+                  if (_shadedBodiesExpanded) ...[
+                    _buildSliderRow(
+                      label: 'Line width',
+                      valueStr: prefs.lineWidth <= 0.05 ? 'Off' : '${prefs.lineWidth.toStringAsFixed(1)} px',
+                      tooltip: 'Thickness of visible CAD feature and boundary lines. Slide to 0 to turn borders off.',
+                      value: prefs.lineWidth,
+                      min: 0.0,
+                      max: 4.0,
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(lineWidth: val <= 0.05 ? 0.0 : val)),
+                    ),
+                    _buildSliderRow(
+                      label: 'Shininess',
+                      valueStr: '${prefs.shininess.round()}%',
+                      tooltip: 'Change the shininess of shaded surfaces (specular reflectivity).',
+                      value: prefs.shininess,
+                      min: 0,
+                      max: 100,
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(shininess: val)),
+                    ),
+                    _buildColorRow(
+                      label: 'Specular color',
+                      color: prefs.specularColor,
+                      tooltip: 'Color of the glossy specular light highlight.',
+                      onSelect: (c) => widget.onChanged(prefs.copyWith(specularColor: c)),
+                    ),
+                    _buildColorRow(
+                      label: 'Section interference color',
+                      color: prefs.sectionInterferenceColor,
+                      tooltip: 'Color used for highlighting section interference cuts.',
+                      onSelect: (c) => widget.onChanged(prefs.copyWith(sectionInterferenceColor: c)),
+                    ),
+                  ],
+
+                  const SizedBox(height: 6),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 6),
+
+                  // Section: Phantom edges
+                  _buildSectionHeader(
+                    title: 'Phantom edges',
+                    isExpanded: _phantomEdgesExpanded,
+                    onToggle: () => setState(() => _phantomEdgesExpanded = !_phantomEdgesExpanded),
+                  ),
+                  if (_phantomEdgesExpanded) ...[
+                    _buildSliderRow(
+                      label: 'Phantom tangent edge width',
+                      valueStr: '${prefs.phantomTangentEdgeWidth.toStringAsFixed(1)} px',
+                      tooltip: 'Thickness of hidden and phantom tangent edges.',
+                      value: prefs.phantomTangentEdgeWidth,
+                      min: 0.5,
+                      max: 4.0,
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(phantomTangentEdgeWidth: val)),
+                    ),
+                    _buildColorRow(
+                      label: 'Phantom tangent edge color',
+                      color: prefs.phantomTangentEdgeColor,
+                      tooltip: 'Color of phantom and hidden edge line segments.',
+                      onSelect: (c) => widget.onChanged(prefs.copyWith(phantomTangentEdgeColor: c)),
+                    ),
+                  ],
+
+                  const SizedBox(height: 6),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 6),
+
+                  // Section: Studio Lighting
+                  _buildSectionHeader(
+                    title: 'Studio lighting',
+                    isExpanded: _lightingExpanded,
+                    onToggle: () => setState(() => _lightingExpanded = !_lightingExpanded),
+                  ),
+                  if (_lightingExpanded) ...[
+                    _buildSliderRow(
+                      label: 'Light azimuth',
+                      valueStr: '${prefs.lightAzimuthDeg.round()} deg',
+                      tooltip: 'Rotates the key light horizontally around the 3D model.',
+                      value: prefs.lightAzimuthDeg,
+                      min: 0,
+                      max: 360,
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(lightAzimuthDeg: val)),
+                    ),
+                    _buildSliderRow(
+                      label: 'Light elevation',
+                      valueStr: '${prefs.lightElevationDeg.round()} deg',
+                      tooltip: 'Tilts the key light angle up from horizontal to zenith.',
+                      value: prefs.lightElevationDeg,
+                      min: 10,
+                      max: 90,
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(lightElevationDeg: val)),
+                    ),
+                    _buildSliderRow(
+                      label: 'Key intensity',
+                      valueStr: prefs.keyLightIntensity.toStringAsFixed(2),
+                      tooltip: 'Brightness of the primary spotlight creating highlights.',
+                      value: prefs.keyLightIntensity,
+                      min: 0.0,
+                      max: 3.0,
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(keyLightIntensity: val)),
+                    ),
+                    _buildToggleRow(
+                      label: 'Secondary fill light',
+                      value: prefs.hasSecondaryLight,
+                      tooltip: 'Soft ambient fill light from opposite angle to brighten shadows.',
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(hasSecondaryLight: val)),
+                    ),
+                    _buildToggleRow(
+                      label: 'Rim / back light',
+                      value: prefs.hasBackLight,
+                      tooltip: 'Backlight behind the model creating sharp edge silhouettes.',
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(hasBackLight: val)),
+                    ),
+                  ],
+
+                  const SizedBox(height: 6),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 6),
+
+                  // Section: Mesh bodies (collapsed placeholder)
+                  _buildSectionHeader(
+                    title: 'Mesh bodies',
+                    isExpanded: _meshBodiesExpanded,
+                    onToggle: () => setState(() => _meshBodiesExpanded = !_meshBodiesExpanded),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 4. Footer: Reset to default button and Help icon
+          _buildFooter(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(6),
+          topRight: Radius.circular(6),
+        ),
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.0),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Expanded(
+            child: Text(
+              'Graphics preferences',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1E293B),
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Row(
+            children: [
+              // Green Checkmark Button
+              InkWell(
+                onTap: widget.onClose,
+                borderRadius: BorderRadius.circular(3),
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16A34A),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    color: Colors.white,
+                    size: 15,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Red Close Button
+              InkWell(
+                onTap: widget.onClose,
+                borderRadius: BorderRadius.circular(3),
+                child: const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: Icon(
+                    Icons.close,
+                    color: Color(0xFFEF4444),
+                    size: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabs() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFF1F5F9),
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.0),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _activeTab = 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: _activeTab == 0 ? const Color(0xFF0284C7) : Colors.transparent,
+                      width: 2.0,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  'General',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: _activeTab == 0 ? FontWeight.bold : FontWeight.w500,
+                    color: _activeTab == 0 ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _activeTab = 1),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: _activeTab == 1 ? const Color(0xFF0284C7) : Colors.transparent,
+                      width: 2.0,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  'Sketch',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: _activeTab == 1 ? FontWeight.bold : FontWeight.w500,
+                    color: _activeTab == 1 ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader({
+    required String title,
+    required bool isExpanded,
+    required VoidCallback onToggle,
+  }) {
+    return InkWell(
+      onTap: onToggle,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+        child: Row(
+          children: [
+            Icon(
+              isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+              size: 16,
+              color: const Color(0xFF475569),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF334155),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSliderRow({
+    required String label,
+    required String valueStr,
+    required String tooltip,
+    required double value,
+    required double min,
+    required double max,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF475569)),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Row(
+                children: [
+                  Text(
+                    valueStr,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: tooltip,
+                    child: const Icon(
+                      Icons.info_outline,
+                      size: 13,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderThemeData(
+              trackHeight: 3,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              activeTrackColor: const Color(0xFF0284C7),
+              inactiveTrackColor: const Color(0xFFE2E8F0),
+              thumbColor: const Color(0xFF0284C7),
+            ),
+            child: Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              onChanged: onChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorRow({
+    required String label,
+    required Color color,
+    required String tooltip,
+    required ValueChanged<Color> onSelect,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, top: 6, bottom: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF475569)),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PopupMenuButton<Color>(
+                tooltip: 'Select $label',
+                padding: EdgeInsets.zero,
+                itemBuilder: (context) => [
+                  Colors.white,
+                  const Color(0xFFE0E0E0),
+                  const Color(0xFFB0BEC5),
+                  const Color(0xFF70A5C2),
+                  const Color(0xFF4CAF50),
+                  const Color(0xFFEF4444),
+                  const Color(0xFF212121),
+                ].map((c) {
+                  return PopupMenuItem<Color>(
+                    value: c,
+                    height: 32,
+                    child: Container(
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: c,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                    ),
+                  );
+                }).toList(),
+                onSelected: onSelect,
+                child: Container(
+                  width: 32,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: const Color(0xFF94A3B8), width: 1.0),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: tooltip,
+                child: const Icon(
+                  Icons.info_outline,
+                  size: 13,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDropdownRow<T>({
+    required String label,
+    required T value,
+    required String valueLabel,
+    required List<PopupMenuEntry<T>> items,
+    required ValueChanged<T> onSelected,
+    required String tooltip,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF475569)),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PopupMenuButton<T>(
+                initialValue: value,
+                itemBuilder: (context) => items,
+                onSelected: onSelected,
+                child: Container(
+                  height: 22,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                    color: const Color(0xFFF8FAFC),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        valueLabel,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF1E293B),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.arrow_drop_down, size: 14, color: Color(0xFF64748B)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: tooltip,
+                child: const Icon(
+                  Icons.info_outline,
+                  size: 13,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleRow({
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required String tooltip,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF475569)),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 20,
+                width: 34,
+                child: Switch(
+                  value: value,
+                  onChanged: onChanged,
+                  activeThumbColor: const Color(0xFF0284C7),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: tooltip,
+                child: const Icon(
+                  Icons.info_outline,
+                  size: 13,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(6),
+          bottomRight: Radius.circular(6),
+        ),
+        border: Border(
+          top: BorderSide(color: Color(0xFFE2E8F0), width: 1.0),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          OutlinedButton(
+            onPressed: widget.onResetToDefault,
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+            ),
+            child: const Text(
+              'Reset to default',
+              style: TextStyle(fontSize: 11, color: Color(0xFF475569)),
+            ),
+          ),
+          Tooltip(
+            message: 'Help & Documentation on Graphics Preferences',
+            child: InkWell(
+              onTap: () {},
+              borderRadius: BorderRadius.circular(10),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(
+                  Icons.help_outline,
+                  size: 16,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

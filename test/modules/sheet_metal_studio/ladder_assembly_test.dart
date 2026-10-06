@@ -671,7 +671,14 @@ void main() {
       expect(rimPolys.any((p) => p.faceId.contains('bottom_flange_lip')), isTrue);
       expect(rimPolys.any((p) => p.faceId.contains('port1')), isTrue);
       expect(rimPolys.any((p) => p.faceId.contains('port2')), isTrue);
+
+      // Verify rung thickness faces (inner web, slot walls, and bottom lips)
+      expect(mesh.polygons.any((p) => p.faceId.contains('top_web_inner')), isTrue);
+      expect(mesh.polygons.any((p) => p.faceId.contains('flange_front_inner')), isTrue);
+      expect(mesh.polygons.any((p) => p.faceId.contains('front_lip')), isTrue);
+      expect(mesh.polygons.any((p) => p.faceId.contains('wall_')), isTrue);
     });
+
 
     test('eliminates yellow color artifacts across straight ladder and accessories', () {
       const params = LadderAssemblyParameters(
@@ -744,6 +751,122 @@ void main() {
       final heightMorphedMesh = vm.cachedMesh;
       expect(heightMorphedMesh, isNotNull);
       expect(heightMorphedMesh!.boundHeight, equals(150.0));
+    });
+
+    test('SS1: displays 1 copy of unique entities in 2D view and eliminates enclosing sheet', () {
+      const params = LadderAssemblyParameters(
+        width: 300.0,
+        height: 100.0,
+        length: 3000.0,
+        thickness: 2.0,
+      );
+      final assembly = LadderAssemblyGenerator.generateStraightLadder(params);
+      final doc = LadderAssemblyGenerator.createAssemblyDsfDocument(assembly);
+
+      // Verify that artificial outer sheet is eliminated
+      expect(doc.outerContour.isEmpty, isTrue);
+
+      // Verify exactly 1 unique side rail blank and 1 unique rung blank
+      expect(doc.faces.length, equals(2));
+      expect(doc.faces.any((f) => f.id == 'side_rail_blank'), isTrue);
+      expect(doc.faces.any((f) => f.id == 'rung_blank'), isTrue);
+
+      // Verify quantity is clearly designated
+      final railFace = doc.faces.firstWhere((f) => f.id == 'side_rail_blank');
+      expect(railFace.label.contains('Qty: 2'), isTrue);
+      final rungFace = doc.faces.firstWhere((f) => f.id == 'rung_blank');
+      expect(rungFace.label.contains('Qty: ${assembly.rungs.length}'), isTrue);
+
+      // Verify blankWidthMm and blankLengthMm still compute true bounds
+      expect(doc.blankLengthMm, closeTo(3000.0, 1.0));
+      expect(doc.blankWidthMm, greaterThan(200.0));
+    });
+
+    test('SS1: displays 1 piece of each unique entity for accessories with varying rung sizes', () {
+      const reducerParams = LadderAssemblyParameters(
+        width: 600.0,
+        height: 100.0,
+        thickness: 2.0,
+      );
+      final reducerAssembly = LadderAssemblyGenerator.generateReducer(
+        width1: 600.0,
+        width2: 300.0,
+        length: 1200.0,
+        alignment: 'straight',
+        params: reducerParams,
+      );
+      final doc = LadderAssemblyGenerator.createAssemblyDsfDocument(reducerAssembly);
+
+      // Outer bounding sheet is eliminated
+      expect(doc.outerContour.isEmpty, isTrue);
+
+      // Tapering reducer rungs should generate distinct unique rung entities
+      final rungFaces = doc.faces.where((f) => f.id.startsWith('rung_blank')).toList();
+      expect(rungFaces.length, greaterThan(1));
+    });
+
+    test('SS2: Two-pitch engine accepts arbitrary custom end margin and body pitch values', () {
+      const params = LadderAssemblyParameters(
+        width: 300.0,
+        height: 100.0,
+        length: 3000.0,
+        thickness: 2.0,
+        endMarginPitch: 62.0, // Arbitrary custom value
+        intermediateTargetPitch: 280.0, // Arbitrary custom value
+      );
+      final assembly = LadderAssemblyGenerator.generateStraightLadder(params);
+      expect(assembly.parameters.endMarginPitch, equals(62.0));
+      expect(assembly.parameters.intermediateTargetPitch, equals(280.0));
+
+      final doc = LadderAssemblyGenerator.createAssemblyDsfDocument(assembly);
+      expect(doc.parameters['end_margin_pitch'], equals(62.0));
+      expect(doc.parameters['rung_pitch'], equals(280.0));
+
+      final vm = SheetMetalStudioViewModel();
+      vm.loadDocument(doc);
+      expect(vm.document.parameters['end_margin_pitch'], equals(62.0));
+      expect(vm.document.parameters['rung_pitch'], equals(280.0));
+
+      // Test live morph to new arbitrary values
+      vm.applyCmsMorphParameter('end_margin_pitch', 85.0);
+      expect(vm.document.parameters['end_margin_pitch'], equals(85.0));
+      expect(vm.activeLadderAssembly!.parameters.endMarginPitch, equals(85.0));
+
+      vm.applyCmsMorphParameter('rung_pitch', 220.0);
+      expect(vm.document.parameters['rung_pitch'], equals(220.0));
+      expect(vm.activeLadderAssembly!.parameters.intermediateTargetPitch, equals(220.0));
+    });
+
+    test('SS3a & SS3b & SS3c: Outside weld projection, default half body pitch, and 3D cover', () {
+      // 1. By default, end margin of rungs is half the body pitch (intermediateTargetPitch / 2.0)
+      final defaultParams = LadderAssemblyParameters(intermediateTargetPitch: 260.0, endMarginPitch: 130.0);
+      expect(defaultParams.endMarginPitch, equals(defaultParams.intermediateTargetPitch / 2.0));
+
+      final jsonDecoded = LadderAssemblyParameters.fromJson({'intermediateTargetPitch': 300.0});
+      expect(jsonDecoded.endMarginPitch, equals(150.0)); // 300.0 / 2.0
+
+      // 2. Ladder assembly document live morphing for outside projection (5mm, 10mm, 15mm)
+      final assembly = LadderAssemblyGenerator.generateStraightLadder(
+        const LadderAssemblyParameters(length: 1500.0, width: 400.0, intermediateTargetPitch: 250.0),
+      );
+      final doc = LadderAssemblyGenerator.createAssemblyDsfDocument(assembly);
+      final vm = SheetMetalStudioViewModel();
+      vm.loadDocument(doc);
+
+      for (final proj in [5.0, 10.0, 15.0]) {
+        vm.applyCmsMorphParameter('outsideWeldProjection', proj);
+        expect(vm.activeLadderAssembly!.parameters.outsideWeldProjection, equals(proj));
+      }
+
+      // 3. Parametric cover in 3D for ladder assembly
+      expect(vm.hasCover, isFalse);
+      expect(vm.isCoverVisible3D, isFalse);
+
+      vm.applyCmsMorphParameter('include_cover', 1.0);
+      expect(vm.hasCover, isTrue);
+      expect(vm.isCoverVisible3D, isTrue);
+      expect(vm.coverMesh, isNotNull);
+      expect(vm.currentMesh.polygons.isNotEmpty, isTrue);
     });
   });
 }

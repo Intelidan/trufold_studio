@@ -531,12 +531,17 @@ class KinematicFoldEngine {
                 var inNorm = (inAxisPt - inMid).normalized();
                 if (inNorm.length < 1e-3) inNorm = nParent;
 
+                final inTangents = <List<CadPoint3D>>[];
+                if (step == 0) inTangents.add([inA1, inA2]);
+                if (step == nSteps - 1) inTangents.add([inB1, inB2]);
+
                 filletPolygons.add(
                   CadFoldedPolygon3D(
                     faceId: 'FILLET_${bend.id}_${intIdx}_${lStep}_$step',
                     vertices: [inA1, inA2, inB2, inB1],
                     normal: inNorm,
                     color: const Color(0xFFCFD8DC), // Metallic curved fillet facet
+                    tangentLines: inTangents,
                   ),
                 );
 
@@ -553,12 +558,17 @@ class KinematicFoldEngine {
                   var outNorm = (outMid - outAxisPt).normalized();
                   if (outNorm.length < 1e-3) outNorm = nParent * -1.0;
 
+                  final outTangents = <List<CadPoint3D>>[];
+                  if (step == 0) outTangents.add([outA1, outA2]);
+                  if (step == nSteps - 1) outTangents.add([outB1, outB2]);
+
                   filletPolygons.add(
                     CadFoldedPolygon3D(
                       faceId: 'FILLET_OUT_${bend.id}_${intIdx}_${lStep}_$step',
                       vertices: [outA1, outB1, outB2, outA2],
                       normal: outNorm,
                       color: const Color(0xFFB0BEC5), // Outer curved elbow facet
+                      tangentLines: outTangents,
                     ),
                   );
 
