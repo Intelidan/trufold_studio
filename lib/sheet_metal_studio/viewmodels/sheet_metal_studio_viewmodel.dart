@@ -61,6 +61,7 @@ import '../engine/cms/cms_scaling_controller.dart';
 import '../models/cms/cms_ux_state.dart';
 import '../engine/cms/cms_3d_opening_detector.dart';
 import '../engine/cms/cms_opening_plane_analyzer.dart';
+import '../engine/cms/cms_port_matcher.dart';
 import '../engine/cms/cms_port_reconciler.dart';
 import '../engine/cms/cms_coupler_classifier.dart';
 import '../engine/cms/tray_equal_cross_scaler.dart';
@@ -952,6 +953,38 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         baselinePorts = list.map((p) => CmsPhysicalPort.fromJson(Map<String, dynamic>.from(p as Map))).toList();
       } catch (_) {}
     }
+    if (baselinePorts.isEmpty && baselineDoc.bends.isNotEmpty) {
+      try {
+        final foldResult = KinematicFoldEngine.foldDocument(baselineDoc, foldProgress: 1.0);
+        final rawOpenings = Cms3DOpeningDetector.detectOpenings(document: baselineDoc, foldResult: foldResult);
+        if (rawOpenings.isNotEmpty) {
+          final measured = rawOpenings.map((r) => CmsOpeningPlaneAnalyzer.analyze(raw: r, document: baselineDoc, foldResult: foldResult)).toList();
+          final matchResult = CmsPortMatcher.match(measuredOpenings: measured, contract: contract);
+          if (matchResult.matchedPorts.isNotEmpty) {
+            baselinePorts = matchResult.matchedPorts;
+          } else {
+            baselinePorts = measured.asMap().entries.map<CmsPhysicalPort>((e) {
+              final idx = e.key + 1;
+              final m = e.value;
+              return CmsPhysicalPort(
+                id: 'PORT_$idx',
+                index: idx,
+                width: m.width,
+                height: m.height,
+                flange: m.flange,
+                center: m.center,
+                flatCenter: CadPoint2D((m.flatP1.x + m.flatP2.x) * 0.5, (m.flatP1.y + m.flatP2.y) * 0.5),
+                normal: m.normal,
+                derivedMouthCorners: m.derivedMouthCorners,
+              );
+            }).toList();
+          }
+        }
+      } catch (_) {}
+    }
+    if (_persistentCmsPorts.isEmpty && baselinePorts.isNotEmpty) {
+      _persistentCmsPorts = List<CmsPhysicalPort>.from(baselinePorts);
+    }
 
     // Current Parameter Values extraction:
     final currentParamValues = <String, double>{};
@@ -966,14 +999,14 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         }
       }
     }
-    for (int i = 0; i < _persistentCmsPorts.length; i++) {
-      final port = _persistentCmsPorts[i];
+    for (int i = 0; i < baselinePorts.length; i++) {
+      final port = baselinePorts[i];
       currentParamValues['port${i + 1}_width'] ??= port.width;
       currentParamValues['port${i + 1}_height'] ??= port.height;
     }
-    if (_persistentCmsPorts.isNotEmpty) {
-      currentParamValues['width'] ??= _persistentCmsPorts.first.width;
-      currentParamValues['height'] ??= _persistentCmsPorts.first.height;
+    if (baselinePorts.isNotEmpty) {
+      currentParamValues['width'] ??= baselinePorts.first.width;
+      currentParamValues['height'] ??= baselinePorts.first.height;
     }
 
     _scalingController?.removeListener(_onScalingControllerChanged);
@@ -1081,6 +1114,14 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       if (_scalingController!.model.parameters.containsKey(key)) {
         _scalingController!.selectParameter(key);
         _scalingController!.evaluateMorph(value);
+      } else if (key == 'width' && _scalingController!.model.parameters.containsKey('port1_width')) {
+        _scalingController!.selectParameter('port1_width');
+        _scalingController!.evaluateMorph(value);
+        _document.parameters['port1_width'] = value;
+      } else if (key == 'height' && _scalingController!.model.parameters.containsKey('port1_height')) {
+        _scalingController!.selectParameter('port1_height');
+        _scalingController!.evaluateMorph(value);
+        _document.parameters['port1_height'] = value;
       } else if ((key.endsWith('_width') || (key.startsWith('port') && key.contains('width'))) &&
           _scalingController!.model.parameters.containsKey('width')) {
         _scalingController!.selectParameter('width');
@@ -1394,8 +1435,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     if (_isTeachScalingActive && _scalingController?.currentPreview != null) {
       final scaled = _scalingController!.currentPreview!.scaledDocument;
       final previewDoc = scaled.copyWith(
-        parameters: Map<String, double>.from(scaled.parameters)..addAll(_document.parameters),
-        metadata: Map<String, dynamic>.from(scaled.metadata)..addAll(_document.metadata),
+        parameters: Map<String, double>.from(_document.parameters)..addAll(scaled.parameters),
+        metadata: Map<String, dynamic>.from(_document.metadata)..addAll(scaled.metadata),
       );
       if (_document.cover != null) {
         final syncedCover = _syncCoverForPreview(previewDoc);
@@ -2712,14 +2753,17 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     notifyListeners();
   }
 
-  void orbit3D(double deltaAzimuth, double deltaElevation) {
+  void orbit3D(double deltaAzimuth, double deltaElevation, {bool clampElevation = false}) {
     _azimuthDeg = (_azimuthDeg + deltaAzimuth) % 360.0;
 
     if (_azimuthDeg < 0) _azimuthDeg += 360.0;
 
-    _elevationDeg = (_elevationDeg + deltaElevation) % 360.0;
-
-    if (_elevationDeg < 0) _elevationDeg += 360.0;
+    if (clampElevation) {
+      _elevationDeg = (_elevationDeg + deltaElevation).clamp(-89.0, 89.0);
+    } else {
+      _elevationDeg = (_elevationDeg + deltaElevation) % 360.0;
+      if (_elevationDeg < 0) _elevationDeg += 360.0;
+    }
 
     notifyListeners();
   }
@@ -9992,7 +10036,11 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   /// Updates a single parameter in the active template and re-morphs the baseline model.
 
   void updateTemplateParameter(String paramKey, double newValue) {
-    if (_activeTemplate == null || _templateBaselineDoc == null) return;
+    if (_activeTemplate == null || _templateBaselineDoc == null) {
+      // Fallback for imported DSF drawings and CMS Parametric Scaling
+      applyCmsMorphParameter(paramKey, newValue);
+      return;
+    }
 
     _recordHistory('Morph $paramKey to ${newValue.toStringAsFixed(1)} mm');
 

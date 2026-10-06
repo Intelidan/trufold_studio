@@ -435,7 +435,7 @@ class LadderAssemblyGenerator {
         final holeVertices = <CadPoint3D>[];
 
         // Semicircular cap at +Y end (from angle 0 to pi)
-        const int arcSteps = 6;
+        const int arcSteps = 16;
         for (int a = 0; a <= arcSteps; a++) {
           final double angle = math.pi * a / arcSteps;
           final double hx = xCenter + (rSlot * math.cos(angle));

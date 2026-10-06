@@ -13,10 +13,12 @@
 // Designed with ZERO external dependencies for 100% standalone portability.
 // =============================================================================
 
+import 'dart:async' show Timer;
 import 'dart:ffi' show DynamicLibrary;
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,6 +30,8 @@ import '../../models/trunking_cover_data.dart';
 import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../../engine/kinematic_fold_engine.dart';
 import '../../engine/three_cad_mesh_builder.dart';
+import 'studio/studio_3d_navigation_bar.dart';
+import 'studio/studio_graphics_preferences_panel.dart';
 import 'studio/studio_view_cube.dart';
 
 typedef _DrawFacet = ({
@@ -57,8 +61,14 @@ typedef _DrawFacet = ({
 class Viewport3dWidget extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
   final bool isInteractionLocked;
+  final Widget Function(BuildContext context, Size size, Offset Function(CadPoint3D p) projectPoint)? overlayBuilder;
 
-  const Viewport3dWidget({super.key, required this.viewModel, this.isInteractionLocked = false});
+  const Viewport3dWidget({
+    super.key,
+    required this.viewModel,
+    this.isInteractionLocked = false,
+    this.overlayBuilder,
+  });
 
   @override
   State<Viewport3dWidget> createState() => _Viewport3dWidgetState();
@@ -70,7 +80,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
   bool _useHardwareEngine = true;
   bool _setupComplete = false;
   three.ThreeJS? _threeJs;
-  three.OrbitControls? _controls;
+  final three.Vector3 _cameraTarget = three.Vector3(0, 0, 0);
   three.Group? _cadModelGroup;
   three.AmbientLight? _ambientLight;
   three.DirectionalLight? _dirLight1;
@@ -86,6 +96,12 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
   late double _localZoom;
   late Offset _localPan;
 
+  late final ValueNotifier<(double, double)> _viewCubeNotifier;
+  Timer? _hardwareTimeoutTimer;
+  bool _isUserInteracting = false;
+  bool _isTurntableOrbit = true;
+  bool _isPanToolActive = false;
+
   bool _isDraggingCover = false;
   bool _isHoveringCover = false;
   bool _pureVerticalDrag = false;
@@ -99,17 +115,165 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
     _localZoom = viewModel.cameraZoom;
     _localPan = viewModel.pan3D;
     _lastAntiAliasingQuality = viewModel.antiAliasingQuality;
+    _viewCubeNotifier = ValueNotifier((viewModel.azimuthDeg, viewModel.elevationDeg));
     viewModel.addListener(_onViewModelChanged);
     _initThreeJs();
+  }
+
+  void _setCameraFromAngles(double azimuthDeg, double elevationDeg, {double? distance}) {
+    _localAzimuthDeg = azimuthDeg % 360.0;
+    if (_localAzimuthDeg < 0) _localAzimuthDeg += 360.0;
+    _localElevationDeg = elevationDeg.clamp(-89.9, 89.9);
+    _localPan = Offset.zero;
+
+    viewModel.azimuthDeg = _localAzimuthDeg;
+    viewModel.elevationDeg = _localElevationDeg;
+    viewModel.pan3D = Offset.zero;
+
+    _viewCubeNotifier.value = (_localAzimuthDeg, _localElevationDeg);
+
+    if (_useHardwareEngine && _threeJs != null) {
+      if (_cadModelGroup != null) {
+        _cadModelGroup!.quaternion.identity();
+        _cadModelGroup!.updateMatrixWorld(true);
+      }
+      final mesh = viewModel.currentMesh;
+      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+      final fitDim = maxDim > 0 ? maxDim : 300.0;
+      final dist = distance ?? fitDim * 2.5;
+
+      final azRad = _localAzimuthDeg * math.pi / 180.0;
+      final elRad = _localElevationDeg * math.pi / 180.0;
+
+      final x = dist * math.cos(elRad) * math.sin(azRad);
+      final y = -dist * math.cos(elRad) * math.cos(azRad);
+      final z = dist * math.sin(elRad);
+
+      _threeJs!.camera.position.setValues(x, y, z);
+      _cameraTarget.setValues(0, 0, 0);
+      _threeJs!.camera.lookAt(_cameraTarget);
+    }
+    setState(() {});
+  }
+
+  /// Directly rotates the 3D CAD model around its center relative to camera view.
+  void _rotateCadModelDirectly(double deltaX, double deltaY) {
+    if (_threeJs == null || _cadModelGroup == null) return;
+    final cam = _threeJs!.camera;
+
+    // View-aligned camera axes in world space:
+    // Screen UP axis
+    final upAxis = three.Vector3(0, 1, 0).applyQuaternion(cam.quaternion).normalize();
+    // Screen RIGHT axis
+    final rightAxis = three.Vector3(1, 0, 0).applyQuaternion(cam.quaternion).normalize();
+
+    // 0.007 rad per pixel provides responsive, buttery-smooth Onshape-style model manipulation
+    const rotSpeed = 0.007;
+
+    // Dragging right rotates model rightward (yaw around camera up axis)
+    final qYaw = three.Quaternion().setFromAxisAngle(upAxis, deltaX * rotSpeed);
+
+    // Dragging down tilts model toward viewer (pitch around camera right axis)
+    final qPitch = three.Quaternion().setFromAxisAngle(rightAxis, deltaY * rotSpeed);
+
+    // Incremental rotation in camera view space
+    final qDelta = three.Quaternion().multiplyQuaternions(qYaw, qPitch);
+
+    // Premultiply so the rotation is applied in current camera view frame, rotating the 3D model directly!
+    _cadModelGroup!.quaternion.premultiply(qDelta);
+    _cadModelGroup!.updateMatrixWorld(true);
+
+    // Synchronize angles for ViewCube: compute camera direction relative to model's local coordinate frame
+    final currentTarget = _cameraTarget;
+    final camDir = cam.position.clone().sub(currentTarget).normalize();
+    final localCamDir = camDir.clone().applyQuaternion(_cadModelGroup!.quaternion.clone().invert());
+    final elDeg = math.asin(localCamDir.z.clamp(-1.0, 1.0)) * 180.0 / math.pi;
+    var azDeg = math.atan2(localCamDir.x, -localCamDir.y) * 180.0 / math.pi;
+    if (azDeg < 0) azDeg += 360.0;
+    _localAzimuthDeg = azDeg;
+    _localElevationDeg = elDeg;
+    _viewCubeNotifier.value = (azDeg, elDeg);
+    viewModel.azimuthDeg = azDeg;
+    viewModel.elevationDeg = elDeg;
+
+    setState(() {});
+  }
+
+  void _panThreeCamera(Offset delta) {
+    if (_threeJs == null) return;
+    final cam = _threeJs!.camera;
+    final dist = cam.position.distanceTo(_cameraTarget);
+    final factor = (dist * 0.0012).clamp(0.02, 50.0);
+
+    final right = three.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
+    final up = three.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+
+    final panX = -delta.dx * factor;
+    final panY = delta.dy * factor;
+
+    final shift = three.Vector3(
+      right.x * panX + up.x * panY,
+      right.y * panX + up.y * panY,
+      right.z * panX + up.z * panY,
+    );
+    cam.position.add(shift);
+    _cameraTarget.add(shift);
+    cam.lookAt(_cameraTarget);
+    setState(() {});
+  }
+
+  void _zoomThreeCamera(double factor) {
+    if (_threeJs == null) return;
+    final cam = _threeJs!.camera;
+    final dx = cam.position.x - _cameraTarget.x;
+    final dy = cam.position.y - _cameraTarget.y;
+    final dz = cam.position.z - _cameraTarget.z;
+    final dist = math.sqrt(dx * dx + dy * dy + dz * dz);
+    final newDist = (dist / factor).clamp(5.0, 50000.0);
+
+    final ratio = newDist / (dist > 0.001 ? dist : 1.0);
+    cam.position.setValues(
+      _cameraTarget.x + dx * ratio,
+      _cameraTarget.y + dy * ratio,
+      _cameraTarget.z + dz * ratio,
+    );
+    cam.lookAt(_cameraTarget);
+    setState(() {});
   }
 
   void _orbitLocalCamera(double deltaAzimuth, double deltaElevation) {
     _localAzimuthDeg = (_localAzimuthDeg + deltaAzimuth) % 360.0;
     if (_localAzimuthDeg < 0) _localAzimuthDeg += 360.0;
 
-    _localElevationDeg = (_localElevationDeg + deltaElevation) % 360.0;
-    if (_localElevationDeg < 0) _localElevationDeg += 360.0;
+    _localElevationDeg = (_localElevationDeg + deltaElevation).clamp(-89.9, 89.9);
 
+    viewModel.azimuthDeg = _localAzimuthDeg;
+    viewModel.elevationDeg = _localElevationDeg;
+    _viewCubeNotifier.value = (_localAzimuthDeg, _localElevationDeg);
+    setState(() {});
+  }
+
+  void _zoomToFit() {
+    final mesh = viewModel.currentMesh;
+    final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+    final fitDim = maxDim > 0 ? maxDim : 300.0;
+
+    if (_useHardwareEngine && _threeJs != null) {
+      final cam = _threeJs!.camera;
+      final curPos = cam.position.clone().sub(_cameraTarget);
+      final curDist = curPos.length;
+      final norm = curDist > 0 ? curPos.normalize() : three.Vector3(1, -1, 1).normalize();
+      final fitDist = fitDim * 2.5;
+
+      _cameraTarget.setValues(0, 0, 0);
+      cam.position.setValues(norm.x * fitDist, norm.y * fitDist, norm.z * fitDist);
+      cam.lookAt(_cameraTarget);
+    } else {
+      _localZoom = 1.0;
+      _localPan = Offset.zero;
+      viewModel.cameraZoom = 1.0;
+      viewModel.pan3D = Offset.zero;
+    }
     setState(() {});
   }
 
@@ -123,27 +287,32 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
     setState(() {});
   }
 
-  void _setLocalPresetView({required double azimuth, required double elevation}) {
-    _localAzimuthDeg = azimuth;
-    _localElevationDeg = elevation;
-    _localPan = Offset.zero;
-    viewModel.azimuthDeg = azimuth;
-    viewModel.elevationDeg = elevation;
-    viewModel.pan3D = Offset.zero;
-    setState(() {});
+  void _armHardwareTimeout() {
+    _hardwareTimeoutTimer?.cancel();
+    _hardwareTimeoutTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && _useHardwareEngine && !_setupComplete) {
+        debugPrint('[Viewport3dWidget] Hardware 3D setup timed out. Falling back to 2D.');
+        setState(() {
+          _useHardwareEngine = false;
+        });
+      }
+    });
   }
 
-  void _initThreeJs() {
+  void _initThreeJs({Size? initialSize}) {
     try {
       if (Platform.isWindows) {
-        // Pre-flight check: verify OpenGL / ANGLE binaries can be loaded by Dart FFI
-        // If libEGL.dll is not yet loaded or missing, this throws an ArgumentError
-        // which triggers graceful, instant fallback to the 2D custom painter!
-        DynamicLibrary.open('libEGL.dll');
-        DynamicLibrary.open('libGLESv2.dll');
+        // Pre-flight check: soft check if ANGLE binaries can be resolved directly
+        try {
+          DynamicLibrary.open('libEGL.dll');
+          DynamicLibrary.open('libGLESv2.dll');
+        } catch (_) {
+          // If direct loading fails, allow flutter_angle / ThreeJS to locate its bundled binaries
+        }
       }
 
       _threeJs = three.ThreeJS(
+        size: initialSize,
         settings: three.Settings(
           renderOptions: {
             "format": three.RGBAFormat,
@@ -151,19 +320,25 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
           },
         ),
         onSetupComplete: () {
+          _hardwareTimeoutTimer?.cancel();
           if (mounted) {
             setState(() {
               _setupComplete = true;
             });
+            if (_threeJsViewportSize != null) {
+              _updateThreeJsViewportSize(_threeJsViewportSize!);
+            }
           }
         },
         setup: _setupScene,
       );
+      _armHardwareTimeout();
     } catch (e) {
       debugPrint('[Viewport3dWidget] Hardware 3D unavailable ($e). Falling back to 2D.');
+      _useHardwareEngine = false;
       if (mounted) {
-        setState(() {
-          _useHardwareEngine = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
         });
       }
     }
@@ -200,7 +375,16 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
         1.0,
         100000.0,
       );
-      threeJs.camera.position.setValues(fitDim * 1.2, fitDim * 1.0, fitDim * 1.5);
+      // Strictly configure Z as Up (CAD Standard: Width=X, Length=Y, Height=Z)
+      threeJs.camera.up.setValues(0, 0, 1);
+      final fitDist = fitDim * 2.5;
+      const initAzRad = 45.0 * math.pi / 180.0;
+      const initElRad = 35.264 * math.pi / 180.0;
+      threeJs.camera.position.setValues(
+        fitDist * math.cos(initElRad) * math.sin(initAzRad),
+        -fitDist * math.cos(initElRad) * math.cos(initAzRad),
+        fitDist * math.sin(initElRad),
+      );
       threeJs.camera.lookAt(three.Vector3(0, 0, 0));
 
       _ambientLight = three.AmbientLight(0xffffff, (0.45 - viewModel.graphicsPreferences.ambientOcclusion / 100.0 * 0.20).clamp(0.25, 0.60));
@@ -242,12 +426,10 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
       _lastRenderedMesh = mesh;
       threeJs.scene.add(_cadModelGroup!);
 
-      _controls = three.OrbitControls(threeJs.camera, threeJs.globalKey);
-      _controls!.enableDamping = true;
-      _controls!.dampingFactor = 0.08;
+      _cameraTarget.setValues(0, 0, 0);
+      threeJs.camera.lookAt(_cameraTarget);
 
       threeJs.addAnimationEvent((dt) {
-        _controls?.update();
 
         // Live update ambient occlusion, lighting, and camera FOV
         final prefs = viewModel.graphicsPreferences;
@@ -292,8 +474,8 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
 
   void _updateAntiAliasing(AntiAliasingQuality quality) {
     viewModel.antiAliasingQuality = quality;
-    if (_useHardwareEngine && _threeJs != null) {
-      final baseDpr = MediaQuery.of(context).devicePixelRatio;
+    if (_useHardwareEngine && _threeJs != null && _setupComplete) {
+      final baseDpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
       final targetDpr = baseDpr * quality.pixelRatioScale;
       _threeJs!.dpr = targetDpr;
       _threeJs!.renderer?.setPixelRatio(targetDpr);
@@ -306,13 +488,17 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
           _threeJs!.camera.aspect = _threeJsViewportSize!.width / _threeJsViewportSize!.height;
           _threeJs!.camera.updateProjectionMatrix();
         }
+        if (_threeJs!.settings.useSourceTexture && !kIsWeb) {
+          _threeJs!.renderTarget?.width = (_threeJsViewportSize!.width * targetDpr).toInt();
+          _threeJs!.renderTarget?.height = (_threeJsViewportSize!.height * targetDpr).toInt();
+        }
       }
       setState(() {});
     }
   }
 
   void _updateThreeJsViewportSize(Size size) {
-    if (_threeJs == null) return;
+    if (_threeJs == null || !_setupComplete) return;
     _threeJs!.width = size.width;
     _threeJs!.height = size.height;
     _threeJs!.screenSize = size;
@@ -321,11 +507,15 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
       cam.aspect = size.width / size.height;
       cam.updateProjectionMatrix();
     }
-    final baseDpr = MediaQuery.of(context).devicePixelRatio;
+    final baseDpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
     final curDpr = baseDpr * viewModel.antiAliasingQuality.pixelRatioScale;
     _threeJs!.dpr = curDpr;
     _threeJs!.renderer?.setPixelRatio(curDpr);
     _threeJs!.renderer?.setSize(size.width, size.height, false);
+    if (_threeJs!.settings.useSourceTexture && !kIsWeb) {
+      _threeJs!.renderTarget?.width = (size.width * curDpr).toInt();
+      _threeJs!.renderTarget?.height = (size.height * curDpr).toInt();
+    }
   }
 
   void _onViewModelChanged() {
@@ -348,10 +538,12 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
         _updateCadModel();
       }
     }
+    setState(() {});
   }
 
   void _updateCadModel() {
     if (_threeJs == null || !_setupComplete) return;
+    final currentQuat = _cadModelGroup?.quaternion.clone();
     if (_cadModelGroup != null) {
       _threeJs!.scene.remove(_cadModelGroup!);
     }
@@ -366,8 +558,72 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
       selectedFaceId: viewModel.selectedFaceId,
       hoveredFaceId: viewModel.hoveredFaceId,
     );
+    if (currentQuat != null) {
+      _cadModelGroup!.quaternion.x = currentQuat.x;
+      _cadModelGroup!.quaternion.y = currentQuat.y;
+      _cadModelGroup!.quaternion.z = currentQuat.z;
+      _cadModelGroup!.quaternion.w = currentQuat.w;
+      _cadModelGroup!.updateMatrixWorld(true);
+    }
     _lastRenderedMesh = viewModel.currentMesh;
     _threeJs!.scene.add(_cadModelGroup!);
+  }
+
+  /// Projects any 3D CAD model coordinate to screen pixel coordinates on this viewport.
+  /// Uses the hardware ThreeJS camera and CAD model orientation quaternion for exact pixel alignment.
+  Offset projectPointToScreen(CadPoint3D p, Size viewportSize) {
+    if (_useHardwareEngine && _threeJs != null && _setupComplete && _cadModelGroup != null) {
+      final cam = _threeJs!.camera;
+      final pivot = viewModel.currentMesh.center;
+
+      // 1. Point in model local space (centered at mesh pivot)
+      final localVec = three.Vector3(p.x - pivot.x, p.y - pivot.y, p.z - pivot.z);
+
+      // 2. Transform by model group's quaternion and position into world space
+      localVec.applyQuaternion(_cadModelGroup!.quaternion);
+      localVec.add(_cadModelGroup!.position);
+
+      // 3. Ensure camera matrices are updated before projecting
+      cam.updateMatrixWorld(true);
+
+      // 4. Project world space vector through ThreeJS camera (View + Projection matrix)
+      localVec.project(cam);
+
+      // 5. Convert NDC [-1, 1] to screen pixel coordinates
+      final sx = (localVec.x + 1.0) * 0.5 * viewportSize.width;
+      final sy = (1.0 - localVec.y) * 0.5 * viewportSize.height;
+      return Offset(sx, sy);
+    } else {
+      // Software engine fallback projection (matches _Viewport3dPainter)
+      final mesh = viewModel.currentMesh;
+      final pivot = mesh.center;
+      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+      final fitDim = maxDim > 0 ? maxDim : 200.0;
+      final baseScale = (math.min(viewportSize.width, viewportSize.height) * 0.60) / fitDim;
+      final scale = baseScale * _localZoom;
+      final cx = viewportSize.width / 2.0 + _localPan.dx;
+      final cy = viewportSize.height / 2.0 + _localPan.dy;
+      final azRad = _localAzimuthDeg * math.pi / 180.0;
+      final elRad = _localElevationDeg * math.pi / 180.0;
+      final cosAz = math.cos(azRad);
+      final sinAz = math.sin(azRad);
+      final cosEl = math.cos(elRad);
+      final sinEl = math.sin(elRad);
+      final cameraDist = math.max(fitDim * 2.5, 1000.0);
+
+      final rx = p.x - pivot.x;
+      final ry = p.y - pivot.y;
+      final rz = p.z - pivot.z;
+
+      final x2 = rx * cosAz + ry * sinAz;
+      final y2 = -rx * sinEl * sinAz + ry * sinEl * cosAz + rz * cosEl;
+      final z2 = rx * cosEl * sinAz - ry * cosEl * cosAz + rz * sinEl;
+
+      final persp = viewModel.isOrthoProjection ? 1.0 : (cameraDist / math.max(cameraDist - z2, cameraDist * 0.15));
+      final sx = cx + (x2 * persp) * scale;
+      final sy = cy - (y2 * persp) * scale;
+      return Offset(sx, sy);
+    }
   }
 
   @override
@@ -381,15 +637,17 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
   @override
   void dispose() {
     viewModel.removeListener(_onViewModelChanged);
-    _controls?.dispose();
+    _hardwareTimeoutTimer?.cancel();
+    _viewCubeNotifier.dispose();
     _threeJs?.dispose();
     super.dispose();
   }
 
   bool _isPointOverCover(Offset localPos, Size size) {
-    final coverMesh = viewModel.coverMesh;
-    if (coverMesh == null || !viewModel.isCoverVisible3D) return false;
+    if (!viewModel.hasCover || !viewModel.isCoverVisible3D) return false;
     if (viewModel.isCoverLocked && !viewModel.isCover3DMoveActive) return false;
+    final coverMesh = viewModel.coverMesh;
+    if (coverMesh == null || coverMesh.polygons.isEmpty) return false;
     if (size.width <= 0 || size.height <= 0) return false;
 
     final cx = size.width / 2.0 + viewModel.pan3D.dx;
@@ -420,12 +678,8 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
         final ry = p.y - pivot.y;
         final rz = p.z - pivot.z;
 
-        final x1 = rx * cosAz - ry * sinAz;
-        final y1 = rx * sinAz + ry * cosAz;
-        final z1 = rz;
-
-        final x2 = x1;
-        final y2 = y1 * cosEl - z1 * sinEl;
+        final x2 = rx * cosAz + ry * sinAz;
+        final y2 = -rx * sinEl * sinAz + ry * sinEl * cosAz + rz * cosEl;
 
         final sx = cx + x2 * scale;
         final sy = cy - y2 * scale;
@@ -467,12 +721,12 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
       viewModel.updateCoverOffset3D(CadPoint3D(0, 0, dZ));
     } else {
       final uRightX = cosAz;
-      final uRightY = -sinAz;
+      final uRightY = sinAz;
       final uRightZ = 0.0;
 
-      final uUpX = sinAz * cosEl;
-      final uUpY = cosAz * cosEl;
-      final uUpZ = -sinEl;
+      final uUpX = -sinEl * sinAz;
+      final uUpY = sinEl * cosAz;
+      final uUpZ = cosEl;
 
       final dxCam = delta.dx / scale;
       final dyCam = -delta.dy / scale;
@@ -621,12 +875,14 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final size = constraints.biggest;
-              if (size.width > 0 && size.height > 0 && _threeJs != null) {
+              if (size.width > 0 && size.height > 0) {
                 if (_threeJsViewportSize == null ||
                     (_threeJsViewportSize!.width - size.width).abs() > 1.0 ||
                     (_threeJsViewportSize!.height - size.height).abs() > 1.0) {
                   _threeJsViewportSize = size;
-                  _updateThreeJsViewportSize(size);
+                  if (_setupComplete) {
+                    _updateThreeJsViewportSize(size);
+                  }
                 }
               }
           return Container(
@@ -657,7 +913,9 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                         final zoomFactor = dy.abs() < 40.0
                             ? math.exp(-dy * 0.003).clamp(0.85, 1.18)
                             : (dy < 0 ? 1.12 : 0.89);
-                        if (!_useHardwareEngine) {
+                        if (_useHardwareEngine && _threeJs != null) {
+                          _zoomThreeCamera(zoomFactor);
+                        } else {
                           _zoomLocalCamera(zoomFactor);
                         }
                       }
@@ -667,14 +925,20 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                     },
                     onPointerPanZoomUpdate: (event) {
                       if (widget.isInteractionLocked) return;
-                      if (!_useHardwareEngine) {
-                        if (event.scale != 1.0) {
-                          final incrementalScale = event.scale / _lastPanZoomScale3D;
-                          _lastPanZoomScale3D = event.scale;
-                          if ((incrementalScale - 1.0).abs() > 0.0001) {
+                      if (event.scale != 1.0) {
+                        final incrementalScale = event.scale / _lastPanZoomScale3D;
+                        _lastPanZoomScale3D = event.scale;
+                        if ((incrementalScale - 1.0).abs() > 0.0001) {
+                          if (_useHardwareEngine && _threeJs != null) {
+                            _zoomThreeCamera(incrementalScale);
+                          } else {
                             _zoomLocalCamera(incrementalScale);
                           }
-                        } else if (event.pan != Offset.zero) {
+                        }
+                      } else if (event.pan != Offset.zero) {
+                        if (_useHardwareEngine && _threeJs != null) {
+                          _panThreeCamera(event.pan);
+                        } else {
                           _panLocalCamera(event.pan);
                         }
                       }
@@ -684,6 +948,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                     },
                     onPointerDown: (event) {
                       if (widget.isInteractionLocked) return;
+                      _isUserInteracting = true;
                       if ((event.buttons & kPrimaryMouseButton) != 0) {
                         if (!viewModel.isCoverLocked) {
                           final overCover = _isPointOverCover(event.localPosition, size);
@@ -695,6 +960,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                       }
                     },
                     onPointerUp: (event) {
+                      _isUserInteracting = false;
                       if (_isDraggingCover) {
                         _isDraggingCover = false;
                         viewModel.commitCover3DMove();
@@ -704,9 +970,11 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                         viewModel.elevationDeg = _localElevationDeg;
                         viewModel.cameraZoom = _localZoom;
                         viewModel.pan3D = _localPan;
+                        setState(() {});
                       }
                     },
                     onPointerCancel: (event) {
+                      _isUserInteracting = false;
                       if (_isDraggingCover) {
                         _isDraggingCover = false;
                         setState(() {});
@@ -723,21 +991,38 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                         return;
                       }
 
+                      final isPrimary = (event.buttons & kPrimaryMouseButton) != 0;
                       final isMiddleMouse = (event.buttons & kTertiaryButton) != 0;
+                      final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
                       bool isShiftHeld = false;
                       try {
                         isShiftHeld = HardwareKeyboard.instance.isShiftPressed;
                       } catch (_) {}
 
-                      if (isMiddleMouse || (isShiftHeld && (event.buttons & kPrimaryMouseButton) != 0)) {
-                        // Middle mouse or Shift+Left drag -> Pan 3D camera
-                        if (!_useHardwareEngine) {
+                      // Pure Onshape CAD Mouse Navigation:
+                      // 1. Right Mouse Drag -> Rotate 3D Model directly in place
+                      // 2. Middle Mouse Drag or Left Drag (or Pan Tool) -> Pan
+                      // 3. Wheel -> Zoom
+                      if (isSecondary) {
+                        // Right Drag: Rotate Product Directly
+                        if (_useHardwareEngine && _threeJs != null) {
+                          _rotateCadModelDirectly(event.delta.dx, event.delta.dy);
+                        } else {
+                          _orbitLocalCamera(event.delta.dx * 0.5, -event.delta.dy * 0.5);
+                        }
+                      } else if (isMiddleMouse || (isPrimary && (_isPanToolActive || isShiftHeld))) {
+                        // Middle Drag / Shift+Left / Pan Tool: Pan
+                        if (_useHardwareEngine && _threeJs != null) {
+                          _panThreeCamera(event.delta);
+                        } else {
                           _panLocalCamera(event.delta);
                         }
-                      } else if ((event.buttons & kPrimaryMouseButton) != 0) {
-                        // Left mouse drag -> Orbit turntable
-                        if (!_useHardwareEngine) {
-                          _orbitLocalCamera(event.delta.dx * 0.5, -event.delta.dy * 0.5);
+                      } else if (isPrimary) {
+                        // Normal Left Drag in Onshape: Pan
+                        if (_useHardwareEngine && _threeJs != null) {
+                          _panThreeCamera(event.delta);
+                        } else {
+                          _panLocalCamera(event.delta);
                         }
                       }
                     },
@@ -786,6 +1071,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                                     showWireframe: viewModel.showWireframe,
                                     isGlassMode: viewModel.isGlassMode,
                                     isOrthoProjection: viewModel.isOrthoProjection,
+                                    isInteracting: _isUserInteracting,
                                     selectedBendId: viewModel.selectedBendId,
                                     selectedPunchId: viewModel.selectedPunchId,
                                     selectedFaceId: viewModel.selectedFaceId,
@@ -802,17 +1088,24 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                   ),
                 ),
 
+                // 1b. Custom Synchronized 3D Overlay (CAD Dimension lines, leader lines, port tags)
+                if (widget.overlayBuilder != null)
+                  Positioned.fill(
+                    child: widget.overlayBuilder!(context, size, (p) => projectPointToScreen(p, size)),
+                  ),
+
                 // 2. Viewport Responsive Top Controls Bar (Header Card + Presets)
                 Positioned(
                   top: 12,
                   left: 12,
-                  right: 88, // Clears StudioViewCube at right: 12
+                  right: 150, // Clears StudioViewCube (width: 126 at right: 12 + 12px margin)
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Left: Status & Cover Controls Card (Scrollable if constrained)
                       Flexible(
                         flex: 1,
+                        fit: FlexFit.loose,
                         child: Align(
                           alignment: Alignment.topLeft,
                           child: Container(
@@ -1039,7 +1332,8 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                       const SizedBox(width: 8),
                       // Right: Preset View & Display Buttons (ISO, TOP, FRONT, SIDE, GLASS, WIREFRAME, RESET)
                       Flexible(
-                        flex: 0,
+                        flex: 3,
+                        fit: FlexFit.loose,
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                           decoration: BoxDecoration(
@@ -1070,8 +1364,10 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                                         }
                                         setState(() {
                                           _useHardwareEngine = true;
-                                          if (_threeJs == null) {
-                                            _initThreeJs();
+                                          if (_threeJs == null || !_setupComplete) {
+                                            _threeJs?.dispose();
+                                            _setupComplete = false;
+                                            _initThreeJs(initialSize: _threeJsViewportSize);
                                           }
                                         });
                                       } catch (e) {
@@ -1094,69 +1390,25 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                                 ),
                                 _cameraButton(
                                   'ISO',
-                                  () {
-                                    if (_useHardwareEngine && _threeJs != null && _controls != null) {
-                                      final mesh = viewModel.currentMesh;
-                                      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
-                                      final fitDim = maxDim > 0 ? maxDim : 300.0;
-                                      _threeJs!.camera.position.setValues(fitDim * 1.2, fitDim * 1.0, fitDim * 1.5);
-                                      _controls!.target.setValues(0, 0, 0);
-                                      _controls!.update();
-                                    } else {
-                                      _setLocalPresetView(azimuth: 45, elevation: 30);
-                                    }
-                                  },
-                                  isActive: (viewModel.azimuthDeg - 45).abs() < 2 && (viewModel.elevationDeg - 30).abs() < 2,
-                                  tooltip: 'Isometric View (45°, 30°)',
+                                  () => _setCameraFromAngles(45, 35.264),
+                                  isActive: (viewModel.azimuthDeg - 45).abs() < 2 && (viewModel.elevationDeg - 35.264).abs() < 3,
+                                  tooltip: 'Isometric View (45°, 35.3°)',
                                 ),
                                 _cameraButton(
                                   'TOP',
-                                  () {
-                                    if (_useHardwareEngine && _threeJs != null && _controls != null) {
-                                      final mesh = viewModel.currentMesh;
-                                      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
-                                      final fitDim = maxDim > 0 ? maxDim : 300.0;
-                                      _threeJs!.camera.position.setValues(0, fitDim * 2.5, 0.01);
-                                      _controls!.target.setValues(0, 0, 0);
-                                      _controls!.update();
-                                    } else {
-                                      _setLocalPresetView(azimuth: 0, elevation: 89);
-                                    }
-                                  },
-                                  isActive: (viewModel.elevationDeg - 89).abs() < 2,
-                                  tooltip: 'Top Plan View (0°, 89°)',
+                                  () => _setCameraFromAngles(0, 89.9),
+                                  isActive: (viewModel.elevationDeg - 89.9).abs() < 2,
+                                  tooltip: 'Top Plan View (0°, 90°)',
                                 ),
                                 _cameraButton(
                                   'FRONT',
-                                  () {
-                                    if (_useHardwareEngine && _threeJs != null && _controls != null) {
-                                      final mesh = viewModel.currentMesh;
-                                      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
-                                      final fitDim = maxDim > 0 ? maxDim : 300.0;
-                                      _threeJs!.camera.position.setValues(0, 0, fitDim * 2.5);
-                                      _controls!.target.setValues(0, 0, 0);
-                                      _controls!.update();
-                                    } else {
-                                      _setLocalPresetView(azimuth: 0, elevation: 0);
-                                    }
-                                  },
+                                  () => _setCameraFromAngles(0, 0),
                                   isActive: (viewModel.azimuthDeg).abs() < 2 && (viewModel.elevationDeg).abs() < 2,
                                   tooltip: 'Front Elevation View (0°, 0°)',
                                 ),
                                 _cameraButton(
                                   'RIGHT',
-                                  () {
-                                    if (_useHardwareEngine && _threeJs != null && _controls != null) {
-                                      final mesh = viewModel.currentMesh;
-                                      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
-                                      final fitDim = maxDim > 0 ? maxDim : 300.0;
-                                      _threeJs!.camera.position.setValues(fitDim * 2.5, 0, 0);
-                                      _controls!.target.setValues(0, 0, 0);
-                                      _controls!.update();
-                                    } else {
-                                      _setLocalPresetView(azimuth: 90, elevation: 0);
-                                    }
-                                  },
+                                  () => _setCameraFromAngles(90, 0),
                                   isActive: (viewModel.azimuthDeg - 90).abs() < 2 && (viewModel.elevationDeg).abs() < 2,
                                   tooltip: 'Right Side View (90°, 0°)',
                                 ),
@@ -1181,6 +1433,17 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                                     _updateCadModel();
                                   },
                                 ),
+                                _modeButton(
+                                  label: 'GRAPHICS',
+                                  isActive: viewModel.isGraphicsPreferencesOpen,
+                                  icon: Icons.tune_rounded,
+                                  tooltip: 'Graphics & Performance Preferences (MSAA, Tessellation, Shading)',
+                                  onTap: () {
+                                    setState(() {
+                                      viewModel.isGraphicsPreferencesOpen = !viewModel.isGraphicsPreferencesOpen;
+                                    });
+                                  },
+                                ),
                                 if (viewModel.persistentCmsPorts.isNotEmpty)
                                   _modeButton(
                                     label: 'PORTS',
@@ -1202,18 +1465,10 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.refresh, size: 14, color: Color(0xFF64748B)),
-                                  tooltip: 'Reset Camera',
+                                  tooltip: 'Reset Camera & Fit Extents',
                                   onPressed: () {
-                                    if (_useHardwareEngine && _threeJs != null && _controls != null) {
-                                      final mesh = viewModel.currentMesh;
-                                      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
-                                      final fitDim = maxDim > 0 ? maxDim : 300.0;
-                                      _threeJs!.camera.position.setValues(fitDim * 1.2, fitDim * 1.0, fitDim * 1.5);
-                                      _controls!.target.setValues(0, 0, 0);
-                                      _controls!.update();
-                                    }
-                                    _setLocalPresetView(azimuth: 45, elevation: 30);
-                                    _localZoom = 1.0;
+                                    _setCameraFromAngles(45, 35.264);
+                                    _zoomToFit();
                                     viewModel.resetCamera();
                                   },
                                   padding: const EdgeInsets.all(4),
@@ -1228,21 +1483,166 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
                   ),
                 ),
 
-                // 3b. Interactive 3D ViewCube (Top Right 3D Orientation Marker)
+                // 3a. Floating Industrial CAD 3D Navigation Bar
+                Positioned(
+                  top: 56,
+                  left: 12,
+                  child: Studio3dNavigationBar(
+                    onFitAll: _zoomToFit,
+                    onSelectView: (az, el) => _setCameraFromAngles(az, el),
+                    isTurntable: _isTurntableOrbit,
+                    onToggleOrbitMode: () {
+                      setState(() {
+                        _isTurntableOrbit = !_isTurntableOrbit;
+                      });
+                    },
+                    isPanToolActive: _isPanToolActive,
+                    onTogglePanTool: () {
+                      setState(() {
+                        _isPanToolActive = !_isPanToolActive;
+                      });
+                    },
+                    isOrtho: viewModel.isOrthoProjection,
+                    onToggleProjection: () {
+                      viewModel.toggleOrthoProjection();
+                    },
+                    showBorderLines: viewModel.showBorderLines,
+                    onToggleBorderLines: () {
+                      viewModel.toggleBorderLines();
+                      if (_cadModelGroup != null) {
+                        _updateCadModel();
+                      }
+                    },
+                    isObstructedXRay: viewModel.isObstructedXRayMode,
+                    onToggleObstructedXRay: () {
+                      viewModel.toggleObstructedXRayMode();
+                      if (_cadModelGroup != null) {
+                        _updateCadModel();
+                      }
+                    },
+                    currentShadingStyle: viewModel.cadShadingStyle,
+                    onShadingStyleChanged: (style) {
+                      viewModel.cadShadingStyle = style;
+                      if (_cadModelGroup != null) {
+                        _updateCadModel();
+                      }
+                    },
+                    currentAntiAliasing: viewModel.antiAliasingQuality,
+                    onAntiAliasingChanged: (aa) {
+                      _updateAntiAliasing(aa);
+                    },
+                  ),
+                ),
+
+                // 3b. Floating Graphics Preferences Panel
+                if (viewModel.isGraphicsPreferencesOpen)
+                  Positioned(
+                    top: 56,
+                    right: 146,
+                    child: StudioGraphicsPreferencesPanel(
+                      preferences: viewModel.graphicsPreferences,
+                      onChanged: (prefs) {
+                        viewModel.graphicsPreferences = prefs;
+                        if (_cadModelGroup != null) {
+                          _updateCadModel();
+                        }
+                        setState(() {});
+                      },
+                      onClose: () {
+                        setState(() {
+                          viewModel.isGraphicsPreferencesOpen = false;
+                        });
+                      },
+                      onResetToDefault: () {
+                        viewModel.graphicsPreferences = const OnshapeGraphicsPreferences();
+                        if (_cadModelGroup != null) {
+                          _updateCadModel();
+                        }
+                        setState(() {});
+                      },
+                    ),
+                  ),
+
+                // 3c. Interactive 3D ViewCube (Top Right 3D Orientation Marker)
                 Positioned(
                   top: 12,
                   right: 12,
-                  child: StudioViewCube(
-                    azimuthDeg: _localAzimuthDeg,
-                    elevationDeg: _localElevationDeg,
-                    onResetView: () {
-                      _setLocalPresetView(azimuth: 45, elevation: 30);
-                      _localZoom = 1.0;
-                      viewModel.resetCamera();
-                    },
-                    onOrbit: (dAz, dEl) => _orbitLocalCamera(dAz, dEl),
-                    onSetView: (azimuth, elevation) {
-                      _setLocalPresetView(azimuth: azimuth, elevation: elevation);
+                  child: ValueListenableBuilder<(double, double)>(
+                    valueListenable: _viewCubeNotifier,
+                    builder: (context, angles, _) {
+                      return StudioViewCube(
+                        azimuthDeg: angles.$1,
+                        elevationDeg: angles.$2,
+                        renderMode: viewModel.onshapeRenderMode,
+                        onRenderModeChanged: (mode) {
+                          viewModel.onshapeRenderMode = mode;
+                          if (_cadModelGroup != null) {
+                            _updateCadModel();
+                          }
+                          setState(() {});
+                        },
+                        hiddenEdgesVisible: viewModel.showBorderLines,
+                        onToggleHiddenEdges: (val) {
+                          viewModel.toggleBorderLines();
+                          if (_cadModelGroup != null) {
+                            _updateCadModel();
+                          }
+                          setState(() {});
+                        },
+                        tangentEdgeMode: viewModel.graphicsPreferences.tangentEdgeMode,
+                        onTangentEdgeModeChanged: (mode) {
+                          viewModel.updateGraphicsPreferences((p) => p.copyWith(tangentEdgeMode: mode));
+                          if (_cadModelGroup != null) {
+                            _updateCadModel();
+                          }
+                          setState(() {});
+                        },
+                        isPerspective: !viewModel.isOrthoProjection,
+                        onTogglePerspective: () {
+                          viewModel.toggleOrthoProjection();
+                          setState(() {});
+                        },
+                        onOpenGraphicsPreferences: () {
+                          setState(() {
+                            viewModel.isGraphicsPreferencesOpen = true;
+                          });
+                        },
+                        onRollCw: () {
+                          if (_useHardwareEngine && _threeJs != null && _cadModelGroup != null) {
+                            final cam = _threeJs!.camera;
+                            final forward = three.Vector3();
+                            cam.getWorldDirection(forward);
+                            final rollQuat = three.Quaternion().setFromAxisAngle(forward, math.pi / 12);
+                            _cadModelGroup!.quaternion.premultiply(rollQuat);
+                            setState(() {});
+                          }
+                        },
+                        onRollCcw: () {
+                          if (_useHardwareEngine && _threeJs != null && _cadModelGroup != null) {
+                            final cam = _threeJs!.camera;
+                            final forward = three.Vector3();
+                            cam.getWorldDirection(forward);
+                            final rollQuat = three.Quaternion().setFromAxisAngle(forward, -math.pi / 12);
+                            _cadModelGroup!.quaternion.premultiply(rollQuat);
+                            setState(() {});
+                          }
+                        },
+                        onResetView: () {
+                          _setCameraFromAngles(45, 35.264);
+                          _zoomToFit();
+                        },
+                        onOrbit: (dAz, dEl) {
+                          if (_useHardwareEngine && _threeJs != null) {
+                            _rotateCadModelDirectly(dAz * 2.2, dEl * 2.2);
+                          } else {
+                            _orbitLocalCamera(dAz, dEl);
+                          }
+                        },
+                        onSetView: (azimuth, elevation) {
+                          _setCameraFromAngles(azimuth, elevation);
+                        },
+                        onZoomToFit: _zoomToFit,
+                      );
                     },
                   ),
                 ),
@@ -1391,6 +1791,7 @@ class _Viewport3dPainter extends CustomPainter {
   final bool showWireframe;
   final bool isGlassMode;
   final bool isOrthoProjection;
+  final bool isInteracting;
   final String? selectedBendId;
   final String? selectedPunchId;
   final String? selectedFaceId;
@@ -1409,6 +1810,7 @@ class _Viewport3dPainter extends CustomPainter {
     required this.showWireframe,
     this.isGlassMode = false,
     this.isOrthoProjection = false,
+    this.isInteracting = false,
     this.selectedBendId,
     this.selectedPunchId,
     this.selectedFaceId,
@@ -1450,19 +1852,15 @@ class _Viewport3dPainter extends CustomPainter {
     // Camera perspective distance: 2.5x the model extent gives a natural 3D CAD perspective
     final cameraDist = math.max(fitDim * 2.5, 1000.0);
 
-    // Transform a 3D point to camera space and project to screen
+    // Transform a 3D point to camera space and project to screen (Z-up turntable CAD coordinates)
     ({Offset pt, double depth, CadPoint3D camPt}) project(CadPoint3D p) {
       final rx = p.x - pivot.x;
       final ry = p.y - pivot.y;
       final rz = p.z - pivot.z;
 
-      final x1 = rx * cosAz - ry * sinAz;
-      final y1 = rx * sinAz + ry * cosAz;
-      final z1 = rz;
-
-      final x2 = x1;
-      final y2 = y1 * cosEl - z1 * sinEl;
-      final z2 = y1 * sinEl + z1 * cosEl;
+      final x2 = rx * cosAz + ry * sinAz;
+      final y2 = -rx * sinEl * sinAz + ry * sinEl * cosAz + rz * cosEl;
+      final z2 = rx * cosEl * sinAz - ry * cosEl * cosAz + rz * sinEl;
 
       final persp = isOrthoProjection ? 1.0 : (cameraDist / math.max(cameraDist - z2, cameraDist * 0.15));
 
@@ -1490,11 +1888,12 @@ class _Viewport3dPainter extends CustomPainter {
 
       final n = poly.normal;
 
-      // Camera-space outward normal vector
-      final nx1 = n.x * cosAz - n.y * sinAz;
-      final ny1 = n.x * sinAz + n.y * cosAz;
-      final camNormalZ = ny1 * sinEl + n.z * cosEl;
-      final polyCamNormal = CadPoint3D(nx1, ny1 * cosEl - n.z * sinEl, camNormalZ);
+      // Camera-space outward normal vector (Z-up turntable CAD coordinates)
+      final nx2 = n.x * cosAz + n.y * sinAz;
+      final ny2 = -n.x * sinEl * sinAz + n.y * sinEl * cosAz + n.z * cosEl;
+      final nz2 = n.x * cosEl * sinAz - n.y * cosEl * cosAz + n.z * sinEl;
+      final camNormalZ = nz2;
+      final polyCamNormal = CadPoint3D(nx2, ny2, nz2);
 
       // Solid/Glass Opaque Mode: Selective back-face culling
       // Thickness shell (RIM, CHAMFER, FILLET_CAP) is culled when back-facing in solid mode.
@@ -1615,8 +2014,8 @@ class _Viewport3dPainter extends CustomPainter {
       }
 
       // SS2 Fix: Merge overlapping punch voids into unified compound outlines
-      // Eliminates odd-winding solid metal island in intersection
-      final mergedHolePaths = _mergeOverlappingPaths(holePaths);
+      // During active mouse interaction, bypass expensive Path.combine CSG for smooth 60-120 FPS
+      final List<Path> mergedHolePaths = isInteracting ? holePaths : _mergeOverlappingPaths(holePaths);
 
       final allHolesPath = Path();
       bool hasHoles = false;
@@ -1867,31 +2266,33 @@ class _Viewport3dPainter extends CustomPainter {
       return _facePriority(a.faceId).compareTo(_facePriority(b.faceId));
     });
 
-    // Step B: Topological Newell Refinement Pass
+    // Step B: Topological Newell Refinement Pass (High-Fidelity pass when not actively dragging)
     // Resolves any pair where depth-range overlap requires order reversal in Painter's algorithm
-    final nFacets = drawList.length;
-    int maxPasses = 3;
-    while (maxPasses-- > 0) {
-      bool anySwap = false;
-      for (int i = 0; i < nFacets - 1; i++) {
-        for (int j = i + 1; j < nFacets; j++) {
-          final p = drawList[i];
-          final q = drawList[j];
-          if (q.minDepth > p.maxDepth + 0.1) break;
+    if (!isInteracting) {
+      final nFacets = drawList.length;
+      int maxPasses = 3;
+      while (maxPasses-- > 0) {
+        bool anySwap = false;
+        for (int i = 0; i < nFacets - 1; i++) {
+          for (int j = i + 1; j < nFacets; j++) {
+            final p = drawList[i];
+            final q = drawList[j];
+            if (q.minDepth > p.maxDepth + 0.1) break;
 
-          final overlap = p.bounds.intersect(q.bounds);
-          if (overlap.width <= 0.5 || overlap.height <= 0.5) continue;
+            final overlap = p.bounds.intersect(q.bounds);
+            if (overlap.width <= 0.5 || overlap.height <= 0.5) continue;
 
-          if (compareFacetDepth(q, p) < 0) {
-            // q is behind p in 3D, so q must be drawn before p in Painter's algorithm
-            drawList.removeAt(j);
-            drawList.insert(i, q);
-            anySwap = true;
-            break;
+            if (compareFacetDepth(q, p) < 0) {
+              // q is behind p in 3D, so q must be drawn before p in Painter's algorithm
+              drawList.removeAt(j);
+              drawList.insert(i, q);
+              anySwap = true;
+              break;
+            }
           }
         }
+        if (!anySwap) break;
       }
-      if (!anySwap) break;
     }
 
     // Render shaded faces with true cutout holes and crisp edges

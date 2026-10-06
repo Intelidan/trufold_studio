@@ -51,6 +51,10 @@ void main() {
     final group = ThreeCadMeshBuilder.buildCadModel(meshResult);
     scene.add(group);
 
+    camera.updateMatrixWorld(true);
+    final v = three.Vector3(125, 0, 50);
+    v.project(camera);
+    expect(v.x, isNotNull);
     expect(scene.children.length, 3); // ambient + dir + group
   });
 
@@ -65,8 +69,6 @@ void main() {
     bool xRayToggled = false;
     CadShadingStyle currentShadingStyle = CadShadingStyle.realisticPbr;
     AntiAliasingQuality currentAntiAliasing = AntiAliasingQuality.high;
-    CadNavigationScheme currentScheme = CadNavigationScheme.trufold;
-
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -82,8 +84,6 @@ void main() {
             onTogglePanTool: () => panToolToggled = true,
             isOrtho: false,
             onToggleProjection: () => projToggled = true,
-            currentScheme: currentScheme,
-            onSchemeChanged: (s) => currentScheme = s,
             showBorderLines: true,
             onToggleBorderLines: () => borderLinesToggled = true,
             isObstructedXRay: false,

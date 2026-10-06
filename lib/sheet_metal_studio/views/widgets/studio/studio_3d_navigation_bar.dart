@@ -15,30 +15,6 @@ import 'package:flutter/material.dart';
 
 import '../../../models/cad_primitives.dart';
 
-/// CAD Mouse Navigation Profiles matching industry-standard CAD software.
-enum CadNavigationScheme {
-  trufold(
-    'TruFold CAD (Default)',
-    'Left Drag: Orbit | Middle Drag / Shift+Left: Pan | Wheel / Right Drag: Zoom',
-  ),
-  solidworks(
-    'SolidWorks / Inventor',
-    'Middle Drag: Orbit | Shift+Middle Drag: Pan | Wheel: Zoom',
-  ),
-  fusion360(
-    'Fusion 360 / AutoCAD',
-    'Shift+Middle Drag: Orbit | Middle Drag: Pan | Wheel: Zoom',
-  ),
-  blender(
-    'Blender 3D',
-    'Middle Drag: Orbit | Shift+Middle Drag: Pan | Wheel: Zoom',
-  );
-
-  final String label;
-  final String description;
-  const CadNavigationScheme(this.label, this.description);
-}
-
 class Studio3dNavigationBar extends StatelessWidget {
   final VoidCallback onFitAll;
   final void Function(double azimuth, double elevation) onSelectView;
@@ -48,8 +24,6 @@ class Studio3dNavigationBar extends StatelessWidget {
   final VoidCallback onTogglePanTool;
   final bool isOrtho;
   final VoidCallback onToggleProjection;
-  final CadNavigationScheme currentScheme;
-  final ValueChanged<CadNavigationScheme> onSchemeChanged;
 
   final bool showBorderLines;
   final VoidCallback? onToggleBorderLines;
@@ -70,8 +44,6 @@ class Studio3dNavigationBar extends StatelessWidget {
     required this.onTogglePanTool,
     required this.isOrtho,
     required this.onToggleProjection,
-    required this.currentScheme,
-    required this.onSchemeChanged,
     this.showBorderLines = true,
     this.onToggleBorderLines,
     this.isObstructedXRay = false,
@@ -174,8 +146,8 @@ class Studio3dNavigationBar extends StatelessWidget {
           _buildAntiAliasingMenu(context),
           const _NavDivider(),
 
-          // 10. CAD Navigation Scheme Selector
-          _buildSchemeMenu(context),
+          // 10. Onshape Navigation Guide Indicator
+          _buildNavInfoButton(context),
         ],
       ),
     );
@@ -228,51 +200,13 @@ class Studio3dNavigationBar extends StatelessWidget {
     );
   }
 
-  Widget _buildSchemeMenu(BuildContext context) {
-    return PopupMenuButton<CadNavigationScheme>(
-      tooltip: 'CAD Mouse Navigation Profile\nCurrent: ${currentScheme.label}',
-      padding: EdgeInsets.zero,
-      offset: const Offset(-240, 0),
-      icon: const Icon(Icons.mouse_rounded, size: 16, color: Color(0xFF0284C7)),
-      itemBuilder: (context) => CadNavigationScheme.values.map((scheme) {
-        final isSelected = scheme == currentScheme;
-        return PopupMenuItem<CadNavigationScheme>(
-          value: scheme,
-          height: 48,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                    size: 14,
-                    color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    scheme.label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                      color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF1E293B),
-                    ),
-                  ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.only(left: 22, top: 2),
-                child: Text(
-                  scheme.description,
-                  style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-      onSelected: onSchemeChanged,
+  Widget _buildNavInfoButton(BuildContext context) {
+    return Tooltip(
+      message: 'Onshape CAD Mouse Navigation:\n• Right-Click Drag: Rotate 3D Model\n• Left-Click Drag: Pan / Select\n• Middle-Click Drag: Pan\n• Mouse Wheel: Smooth Zoom',
+      child: const Padding(
+        padding: EdgeInsets.symmetric(vertical: 4),
+        child: Icon(Icons.mouse_rounded, size: 16, color: Color(0xFF0284C7)),
+      ),
     );
   }
 

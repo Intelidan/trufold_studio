@@ -19,6 +19,7 @@
 //    - Note boxes, revision clouds with Δ1 tags, and approval stamps.
 // =============================================================================
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -142,6 +143,9 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   // Dedicated fitting ViewModel for this sheet's specific evaluated model (Reducer, Cross, Bend, Tee)
   SheetMetalStudioViewModel? _sheetViewModel;
   String? _activeLoadedInstanceId;
+  Timer? _viewSettingsPersistTimer;
+  int? _lastObservedMeshHash;
+  bool? _lastObservedCoverVisible;
 
   // Temporary interactive drawing state
   CadPoint2D? _pendingStartPoint;
@@ -192,8 +196,17 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   bool _combinePortDimensions = true;
 
   void _onSheetVmChanged() {
-    if (mounted) {
-      _persistSheetViewSettings();
+    if (!mounted) return;
+    final currentMeshHash = _sheetViewModel?.currentMesh.hashCode;
+    final currentCover = _sheetViewModel?.isCoverVisible3D;
+    final needsCanvasRebuild = currentMeshHash != _lastObservedMeshHash || currentCover != _lastObservedCoverVisible;
+    _lastObservedMeshHash = currentMeshHash;
+    _lastObservedCoverVisible = currentCover;
+
+    // Debounce view settings persistence to prevent root application rebuild storm on continuous camera drag
+    _persistSheetViewSettings(immediate: false);
+
+    if (needsCanvasRebuild) {
       if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) setState(() {});
@@ -231,7 +244,22 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     }
   }
 
-  void _persistSheetViewSettings() {
+  void _persistSheetViewSettings({bool immediate = true}) {
+    if (!mounted) return;
+    if (immediate) {
+      _viewSettingsPersistTimer?.cancel();
+      _doPersistSheetViewSettings();
+    } else {
+      _viewSettingsPersistTimer?.cancel();
+      _viewSettingsPersistTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          _doPersistSheetViewSettings();
+        }
+      });
+    }
+  }
+
+  void _doPersistSheetViewSettings() {
     if (!mounted) return;
     final cam = _sheetViewModel != null
         ? DdsCamera3DSettings(
@@ -366,6 +394,7 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
 
   @override
   void dispose() {
+    _viewSettingsPersistTimer?.cancel();
     _canvasFocusNode.dispose();
     _sheetViewModel?.removeListener(_onSheetVmChanged);
     _sheetViewModel?.dispose();
@@ -2215,8 +2244,63 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   }
 
   Widget _build3DPresentationViewport(EvaluatedDdsInstance? eval) {
-    final inst = eval?.instance ?? widget.document.productInstances.firstOrNull;
     final effectiveVm = _sheetViewModel ?? widget.viewModel;
+    return LayoutBuilder(
+      builder: (context, viewportConstraints) {
+        final viewportSize = Size(viewportConstraints.maxWidth, viewportConstraints.maxHeight);
+
+        return Container(
+          color: const Color(0xFFF8FAFC),
+          child: Stack(
+            children: [
+              // Technical Grid Background
+              Positioned.fill(
+                child: IgnorePointer(child: CustomPaint(painter: _ViewportGridPainter())),
+              ),
+
+              // 3D Rendering Engine: Reusing the main CAD's Viewport3dWidget directly with synchronized overlayBuilder
+              Positioned.fill(
+                child: effectiveVm != null
+                    ? Viewport3dWidget(
+                        viewModel: effectiveVm,
+                        isInteractionLocked: _is3DModelLocked,
+                        overlayBuilder: (overlayContext, size, project) {
+                          return _build3DDimensionsOverlay(
+                            eval: eval,
+                            effectiveVm: effectiveVm,
+                            viewportSize: size,
+                            project: project,
+                          );
+                        },
+                      )
+                    : Stack(
+                        children: [
+                          Positioned.fill(
+                            child: CustomPaint(painter: Dds3DIsometricPainter(mesh: eval?.combinedMesh3D)),
+                          ),
+                          _build3DDimensionsOverlay(
+                            eval: eval,
+                            effectiveVm: null,
+                            viewportSize: viewportSize,
+                            project: (p) => _projectMeshPoint(p, viewportSize, null),
+                          ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _build3DDimensionsOverlay({
+    required EvaluatedDdsInstance? eval,
+    required SheetMetalStudioViewModel? effectiveVm,
+    required Size viewportSize,
+    required Offset Function(CadPoint3D p) project,
+  }) {
+    final inst = eval?.instance ?? widget.document.productInstances.firstOrNull;
     final cmsLive = (effectiveVm?.document.metadata['cmsParameters'] as Map<String, dynamic>?) ?? {};
     final p = Map<String, dynamic>.from(inst?.instanceParameters ?? {})..addAll(cmsLive);
     if (effectiveVm != null) {
@@ -2259,878 +2343,851 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
         (inst?.coverConfiguration.included == true || effectiveVm?.document.cover != null || effectiveVm?.coverMesh != null);
     final thickness = (p['thickness'] ?? 1.5).toDouble();
 
-    return LayoutBuilder(
-      builder: (context, viewportConstraints) {
-        final viewportSize = Size(viewportConstraints.maxWidth, viewportConstraints.maxHeight);
-        final m = effectiveVm?.currentMesh;
-        final hasMesh = m != null && m.polygons.isNotEmpty && effectiveVm != null;
+    final m = effectiveVm?.currentMesh;
+    final hasMesh = m != null && m.polygons.isNotEmpty && effectiveVm != null;
 
-        final minX = m != null ? m.center.x - m.boundWidth / 2.0 : -100.0;
-        final maxX = m != null ? m.center.x + m.boundWidth / 2.0 : 100.0;
-        final minY = m != null ? m.center.y - m.boundLength / 2.0 : -100.0;
-        final maxY = m != null ? m.center.y + m.boundLength / 2.0 : 100.0;
-        final minZ = m != null ? m.center.z - m.boundHeight / 2.0 : -50.0;
-        final maxZ = m != null ? m.center.z + m.boundHeight / 2.0 : 50.0;
+    final minX = m != null ? m.center.x - m.boundWidth / 2.0 : -100.0;
+    final maxX = m != null ? m.center.x + m.boundWidth / 2.0 : 100.0;
+    final minY = m != null ? m.center.y - m.boundLength / 2.0 : -100.0;
+    final maxY = m != null ? m.center.y + m.boundLength / 2.0 : 100.0;
+    final minZ = m != null ? m.center.z - m.boundHeight / 2.0 : -50.0;
+    final maxZ = m != null ? m.center.z + m.boundHeight / 2.0 : 50.0;
 
-        // Accurate 3D Coupler Slot Placement on actual coupler flap
-        final punchCenters = m?.punchCenters3D ?? {};
-        final couplerPunches = (effectiveVm?.document.allPunches ?? [])
-            .where((p) => (p.role == CncPunchRole.coupler || p.isSlot || p.id.toUpperCase().contains('SLOT')) && punchCenters.containsKey(p.id))
-            .toList();
+    // Accurate 3D Coupler Slot Placement on actual coupler flap
+    final punchCenters = m?.punchCenters3D ?? {};
+    final couplerPunches = (effectiveVm?.document.allPunches ?? [])
+        .where((p) => (p.role == CncPunchRole.coupler || p.isSlot || p.id.toUpperCase().contains('SLOT')) && punchCenters.containsKey(p.id))
+        .toList();
 
-        CadPoint3D slotP1_3D;
-        CadPoint3D slotP2_3D;
-        CadPoint3D slotAnchor3D;
+    CadPoint3D slotP1_3D;
+    CadPoint3D slotP2_3D;
+    CadPoint3D slotAnchor3D;
 
-        if (couplerPunches.length >= 2) {
-          // Find pair of slots sharing the same coupler ear/flap
-          CncPunchPrimitive bestA = couplerPunches[0];
-          CncPunchPrimitive bestB = couplerPunches[1];
-          double bestDist = double.infinity;
-          for (int i = 0; i < couplerPunches.length; i++) {
-            for (int j = i + 1; j < couplerPunches.length; j++) {
-              final ptA = punchCenters[couplerPunches[i].id]!;
-              final ptB = punchCenters[couplerPunches[j].id]!;
-              final dXY = math.sqrt(math.pow(ptA.x - ptB.x, 2) + math.pow(ptA.y - ptB.y, 2));
-              if (dXY < 25.0 && (ptA.z - ptB.z).abs() > 4.0 && dXY < bestDist) {
-                bestDist = dXY;
-                bestA = couplerPunches[i];
-                bestB = couplerPunches[j];
-              }
-            }
+    if (couplerPunches.length >= 2) {
+      // Find pair of slots sharing the same coupler ear/flap
+      CncPunchPrimitive bestA = couplerPunches[0];
+      CncPunchPrimitive bestB = couplerPunches[1];
+      double bestDist = double.infinity;
+      for (int i = 0; i < couplerPunches.length; i++) {
+        for (int j = i + 1; j < couplerPunches.length; j++) {
+          final ptA = punchCenters[couplerPunches[i].id]!;
+          final ptB = punchCenters[couplerPunches[j].id]!;
+          final dXY = math.sqrt(math.pow(ptA.x - ptB.x, 2) + math.pow(ptA.y - ptB.y, 2));
+          if (dXY < 25.0 && (ptA.z - ptB.z).abs() > 4.0 && dXY < bestDist) {
+            bestDist = dXY;
+            bestA = couplerPunches[i];
+            bestB = couplerPunches[j];
           }
-          slotP1_3D = punchCenters[bestA.id]!;
-          slotP2_3D = punchCenters[bestB.id]!;
-          slotAnchor3D = CadPoint3D((slotP1_3D.x + slotP2_3D.x) / 2, (slotP1_3D.y + slotP2_3D.y) / 2, (slotP1_3D.z + slotP2_3D.z) / 2);
-        } else if (couplerPunches.length == 1) {
-          final c = punchCenters[couplerPunches.first.id]!;
-          slotP1_3D = CadPoint3D(c.x, c.y, c.z - slotL / 2);
-          slotP2_3D = CadPoint3D(c.x, c.y, c.z + slotL / 2);
-          slotAnchor3D = c;
-        } else {
-          // Geometric fallback anchored to coupler flap ear at port mouth
-          final earY = minY - 8.0;
-          slotP1_3D = CadPoint3D(minX, earY, (minZ + maxZ) / 2 - slotL / 2);
-          slotP2_3D = CadPoint3D(minX, earY, (minZ + maxZ) / 2 + slotL / 2);
-          slotAnchor3D = CadPoint3D(minX, earY, (minZ + maxZ) / 2);
         }
+      }
+      slotP1_3D = punchCenters[bestA.id]!;
+      slotP2_3D = punchCenters[bestB.id]!;
+      slotAnchor3D = CadPoint3D((slotP1_3D.x + slotP2_3D.x) / 2, (slotP1_3D.y + slotP2_3D.y) / 2, (slotP1_3D.z + slotP2_3D.z) / 2);
+    } else if (couplerPunches.length == 1) {
+      final c = punchCenters[couplerPunches.first.id]!;
+      slotP1_3D = CadPoint3D(c.x, c.y, c.z - slotL / 2);
+      slotP2_3D = CadPoint3D(c.x, c.y, c.z + slotL / 2);
+      slotAnchor3D = c;
+    } else {
+      // Geometric fallback anchored to coupler flap ear at port mouth
+      final earY = minY - 8.0;
+      slotP1_3D = CadPoint3D(minX, earY, (minZ + maxZ) / 2 - slotL / 2);
+      slotP2_3D = CadPoint3D(minX, earY, (minZ + maxZ) / 2 + slotL / 2);
+      slotAnchor3D = CadPoint3D(minX, earY, (minZ + maxZ) / 2);
+    }
 
-        // Physical 3D Port Mouth Rim Vertices extraction
-        List<CadPoint3D>? getPhysicalPortCorners(int portIndex) {
-          final ports = (eval?.scaledPorts.isNotEmpty == true) ? eval!.scaledPorts : (effectiveVm?.verifiedCmsPorts ?? []);
-          if (portIndex < ports.length) {
-            final port = ports[portIndex];
-            if (port.derivedMouthCorners.length >= 4) {
-              return port.derivedMouthCorners;
-            }
-            if (port.width > 1.0 && port.height > 1.0) {
-              final floorCenter = CadPoint3D(
-                port.center.x - (port.height / 2.0) * port.heightDirection.x,
-                port.center.y - (port.height / 2.0) * port.heightDirection.y,
-                port.center.z - (port.height / 2.0) * port.heightDirection.z,
-              );
-              final p0 = CadPoint3D(
-                floorCenter.x - (port.width / 2.0) * port.widthDirection.x,
-                floorCenter.y - (port.width / 2.0) * port.widthDirection.y,
-                floorCenter.z - (port.width / 2.0) * port.widthDirection.z,
-              );
-              final p3 = CadPoint3D(
-                floorCenter.x + (port.width / 2.0) * port.widthDirection.x,
-                floorCenter.y + (port.width / 2.0) * port.widthDirection.y,
-                floorCenter.z + (port.width / 2.0) * port.widthDirection.z,
-              );
-              final p1 = CadPoint3D(
-                p0.x + port.height * port.heightDirection.x,
-                p0.y + port.height * port.heightDirection.y,
-                p0.z + port.height * port.heightDirection.z,
-              );
-              final p2 = CadPoint3D(
-                p3.x + port.height * port.heightDirection.x,
-                p3.y + port.height * port.heightDirection.y,
-                p3.z + port.height * port.heightDirection.z,
-              );
-              return [p0, p1, p2, p3];
-            }
-          }
-          return null;
+    // Physical 3D Port Mouth Rim Vertices extraction
+    List<CadPoint3D>? getPhysicalPortCorners(int portIndex) {
+      final ports = (eval?.scaledPorts.isNotEmpty == true) ? eval!.scaledPorts : (effectiveVm?.verifiedCmsPorts ?? []);
+      if (portIndex < ports.length) {
+        final port = ports[portIndex];
+        if (port.derivedMouthCorners.length >= 4) {
+          return port.derivedMouthCorners;
         }
+        if (port.width > 1.0 && port.height > 1.0) {
+          final floorCenter = CadPoint3D(
+            port.center.x - (port.height / 2.0) * port.heightDirection.x,
+            port.center.y - (port.height / 2.0) * port.heightDirection.y,
+            port.center.z - (port.height / 2.0) * port.heightDirection.z,
+          );
+          final p0 = CadPoint3D(
+            floorCenter.x - (port.width / 2.0) * port.widthDirection.x,
+            floorCenter.y - (port.width / 2.0) * port.widthDirection.y,
+            floorCenter.z - (port.width / 2.0) * port.widthDirection.z,
+          );
+          final p3 = CadPoint3D(
+            floorCenter.x + (port.width / 2.0) * port.widthDirection.x,
+            floorCenter.y + (port.width / 2.0) * port.widthDirection.y,
+            floorCenter.z + (port.width / 2.0) * port.widthDirection.z,
+          );
+          final p1 = CadPoint3D(
+            p0.x + port.height * port.heightDirection.x,
+            p0.y + port.height * port.heightDirection.y,
+            p0.z + port.height * port.heightDirection.z,
+          );
+          final p2 = CadPoint3D(
+            p3.x + port.height * port.heightDirection.x,
+            p3.y + port.height * port.heightDirection.y,
+            p3.z + port.height * port.heightDirection.z,
+          );
+          return [p0, p1, p2, p3];
+        }
+      }
+      return null;
+    }
 
-        final port1Corners = getPhysicalPortCorners(0);
-        final port2Corners = getPhysicalPortCorners(1);
-        final port3Corners = getPhysicalPortCorners(2);
-        final port4Corners = getPhysicalPortCorners(3);
+    final port1Corners = getPhysicalPortCorners(0);
+    final port2Corners = getPhysicalPortCorners(1);
+    final port3Corners = getPhysicalPortCorners(2);
+    final port4Corners = getPhysicalPortCorners(3);
 
-        final topAnchor = port1Corners != null
-            ? _projectMeshPoint(
-                CadPoint3D(
-                  (port1Corners[1].x + port1Corners[2].x) / 2,
-                  (port1Corners[1].y + port1Corners[2].y) / 2,
-                  (port1Corners[1].z + port1Corners[2].z) / 2,
-                ),
-                viewportSize,
-                effectiveVm,
-              )
-            : (hasMesh
-                  ? _projectMeshPoint(CadPoint3D(m.center.x, minY, maxZ), viewportSize, effectiveVm)
-                  : Offset(viewportSize.width / 2.0, viewportSize.height * 0.35));
+    final topAnchor = port1Corners != null
+        ? project(
+            CadPoint3D(
+              (port1Corners[1].x + port1Corners[2].x) / 2,
+              (port1Corners[1].y + port1Corners[2].y) / 2,
+              (port1Corners[1].z + port1Corners[2].z) / 2,
+            ),
+          )
+        : (hasMesh
+              ? project(CadPoint3D(m.center.x, minY, maxZ))
+              : Offset(viewportSize.width / 2.0, viewportSize.height * 0.35));
 
-        final port2Anchor = port2Corners != null
-            ? _projectMeshPoint(
-                CadPoint3D(
-                  (port2Corners[1].x + port2Corners[2].x) / 2,
-                  (port2Corners[1].y + port2Corners[2].y) / 2,
-                  (port2Corners[1].z + port2Corners[2].z) / 2,
-                ),
-                viewportSize,
-                effectiveVm,
-              )
-            : (hasMesh
-                  ? _projectMeshPoint(CadPoint3D(m.center.x, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
-                  : Offset(viewportSize.width * 0.70, viewportSize.height * 0.40));
+    final port2Anchor = port2Corners != null
+        ? project(
+            CadPoint3D(
+              (port2Corners[1].x + port2Corners[2].x) / 2,
+              (port2Corners[1].y + port2Corners[2].y) / 2,
+              (port2Corners[1].z + port2Corners[2].z) / 2,
+            ),
+          )
+        : (hasMesh
+              ? project(CadPoint3D(m.center.x, isReducer ? (maxY - 25.0) : maxY, minZ + h2))
+              : Offset(viewportSize.width * 0.70, viewportSize.height * 0.40));
 
-        final port3Anchor = port3Corners != null
-            ? _projectMeshPoint(
-                CadPoint3D(
-                  (port3Corners[1].x + port3Corners[2].x) / 2,
-                  (port3Corners[1].y + port3Corners[2].y) / 2,
-                  (port3Corners[1].z + port3Corners[2].z) / 2,
-                ),
-                viewportSize,
-                effectiveVm,
-              )
-            : (hasMesh
-                  ? _projectMeshPoint(CadPoint3D(maxX, m.center.y, minZ + h3), viewportSize, effectiveVm)
-                  : Offset(viewportSize.width * 0.75, viewportSize.height * 0.55));
+    final port3Anchor = port3Corners != null
+        ? project(
+            CadPoint3D(
+              (port3Corners[1].x + port3Corners[2].x) / 2,
+              (port3Corners[1].y + port3Corners[2].y) / 2,
+              (port3Corners[1].z + port3Corners[2].z) / 2,
+            ),
+          )
+        : (hasMesh
+              ? project(CadPoint3D(maxX, m.center.y, minZ + h3))
+              : Offset(viewportSize.width * 0.75, viewportSize.height * 0.55));
 
-        final port4Anchor = port4Corners != null
-            ? _projectMeshPoint(
-                CadPoint3D(
-                  (port4Corners[1].x + port4Corners[2].x) / 2,
-                  (port4Corners[1].y + port4Corners[2].y) / 2,
-                  (port4Corners[1].z + port4Corners[2].z) / 2,
-                ),
-                viewportSize,
-                effectiveVm,
-              )
-            : (hasMesh
-                  ? _projectMeshPoint(CadPoint3D(minX, m.center.y, minZ + h4), viewportSize, effectiveVm)
-                  : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
+    final port4Anchor = port4Corners != null
+        ? project(
+            CadPoint3D(
+              (port4Corners[1].x + port4Corners[2].x) / 2,
+              (port4Corners[1].y + port4Corners[2].y) / 2,
+              (port4Corners[1].z + port4Corners[2].z) / 2,
+            ),
+          )
+        : (hasMesh
+              ? project(CadPoint3D(minX, m.center.y, minZ + h4))
+              : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
 
-        final rightAnchor = hasMesh
-            ? _projectMeshPoint(CadPoint3D(maxX, m.center.y, (minZ + maxZ) / 2), viewportSize, effectiveVm)
-            : Offset(viewportSize.width * 0.75, viewportSize.height * 0.55);
-        final sAnchor = hasMesh ? _projectMeshPoint(slotAnchor3D, viewportSize, effectiveVm) : Offset(viewportSize.width * 0.28, viewportSize.height * 0.55);
-        final bottomAnchor = hasMesh
-            ? _projectMeshPoint(CadPoint3D(m.center.x, (minY + maxY) / 2, minZ), viewportSize, effectiveVm)
-            : Offset(viewportSize.width / 2.0, viewportSize.height * 0.72);
+    final rightAnchor = hasMesh
+        ? project(CadPoint3D(maxX, m.center.y, (minZ + maxZ) / 2))
+        : Offset(viewportSize.width * 0.75, viewportSize.height * 0.55);
+    final sAnchor = hasMesh ? project(slotAnchor3D) : Offset(viewportSize.width * 0.28, viewportSize.height * 0.55);
+    final bottomAnchor = hasMesh
+        ? project(CadPoint3D(m.center.x, (minY + maxY) / 2, minZ))
+        : Offset(viewportSize.width / 2.0, viewportSize.height * 0.72);
 
-        // Accurate Return Flange Geometry extracted from actual physical mesh face
-        CadPoint3D? flangeInner3D;
-        CadPoint3D? flangeOuter3D;
+    // Accurate Return Flange Geometry extracted from actual physical mesh face
+    CadPoint3D? flangeInner3D;
+    CadPoint3D? flangeOuter3D;
 
-        if (hasMesh) {
-          final flangeFaceIds = <String>{};
+    if (hasMesh) {
+      final flangeFaceIds = <String>{};
 
-          // 1. Collect child face IDs from bends marked as flange
-          for (final b in effectiveVm.document.bends) {
-            if (b.role == BendLineRole.flange || b.id.toUpperCase().startsWith('FL') || b.layer.toUpperCase().contains('FLANGE')) {
-              if (b.childFaceId.isNotEmpty) {
-                flangeFaceIds.add(b.childFaceId);
-              }
-            }
+      // 1. Collect child face IDs from bends marked as flange
+      for (final b in effectiveVm.document.bends) {
+        if (b.role == BendLineRole.flange || b.id.toUpperCase().startsWith('FL') || b.layer.toUpperCase().contains('FLANGE')) {
+          if (b.childFaceId.isNotEmpty) {
+            flangeFaceIds.add(b.childFaceId);
           }
+        }
+      }
 
-          // 2. Collect from template metadata verifiedFlangeIds if present
-          final cmsMeta = effectiveVm.document.metadata['cmsTemplate'] as Map<String, dynamic>?;
-          final verifiedFlangeIds = (cmsMeta?['verifiedFlangeIds'] as List?)?.map((e) => e.toString()).toSet() ?? {};
-          for (final b in effectiveVm.document.bends) {
-            if (verifiedFlangeIds.contains(b.id) && b.childFaceId.isNotEmpty) {
-              flangeFaceIds.add(b.childFaceId);
-            }
-          }
+      // 2. Collect from template metadata verifiedFlangeIds if present
+      final cmsMeta = effectiveVm.document.metadata['cmsTemplate'] as Map<String, dynamic>?;
+      final verifiedFlangeIds = (cmsMeta?['verifiedFlangeIds'] as List?)?.map((e) => e.toString()).toSet() ?? {};
+      for (final b in effectiveVm.document.bends) {
+        if (verifiedFlangeIds.contains(b.id) && b.childFaceId.isNotEmpty) {
+          flangeFaceIds.add(b.childFaceId);
+        }
+      }
 
-          // 3. Collect from faces explicitly flagged as returnFlange
-          for (final f in effectiveVm.document.faces) {
-            if (f.role == FaceRole.returnFlange ||
-                f.id.toUpperCase().contains('FLANGE') ||
-                f.label.toLowerCase().contains('flange') ||
-                f.label.toLowerCase().contains('return')) {
-              flangeFaceIds.add(f.id);
-            }
-          }
+      // 3. Collect from faces explicitly flagged as returnFlange
+      for (final f in effectiveVm.document.faces) {
+        if (f.role == FaceRole.returnFlange ||
+            f.id.toUpperCase().contains('FLANGE') ||
+            f.label.toLowerCase().contains('flange') ||
+            f.label.toLowerCase().contains('return')) {
+          flangeFaceIds.add(f.id);
+        }
+      }
 
-          // Filter polygons: return flanges are planar 4-vertex quadrilaterals at the top rim of sidewalls
-          List<CadFoldedPolygon3D> flangePolys = m.polygons.where((poly) {
-            if (!flangeFaceIds.contains(poly.faceId)) return false;
-            if (poly.vertices.length != 4) return false;
+      // Filter polygons: return flanges are planar 4-vertex quadrilaterals at the top rim of sidewalls
+      List<CadFoldedPolygon3D> flangePolys = m.polygons.where((poly) {
+        if (!flangeFaceIds.contains(poly.faceId)) return false;
+        if (poly.vertices.length != 4) return false;
+        final avgZ = poly.vertices.map((v) => v.z).reduce((a, b) => a + b) / 4.0;
+        // Return flanges strictly reside at top sidewall elevation, never at floor or mid-flaps
+        if (avgZ < minZ + (maxZ - minZ) * 0.50) return false;
+        return true;
+      }).toList();
+
+      // Fallback: If no face was tagged with role flange, detect geometric top return lip
+      if (flangePolys.isEmpty) {
+        for (final poly in m.polygons) {
+          if (poly.vertices.length == 4) {
             final avgZ = poly.vertices.map((v) => v.z).reduce((a, b) => a + b) / 4.0;
-            // Return flanges strictly reside at top sidewall elevation, never at floor or mid-flaps
-            if (avgZ < minZ + (maxZ - minZ) * 0.50) return false;
-            return true;
-          }).toList();
-
-          // Fallback: If no face was tagged with role flange, detect geometric top return lip
-          if (flangePolys.isEmpty) {
-            for (final poly in m.polygons) {
-              if (poly.vertices.length == 4) {
-                final avgZ = poly.vertices.map((v) => v.z).reduce((a, b) => a + b) / 4.0;
-                if (avgZ >= minZ + (maxZ - minZ) * 0.65) {
-                  final v = poly.vertices;
-                  final d01 = (v[0] - v[1]).length;
-                  final d12 = (v[1] - v[2]).length;
-                  final minSide = math.min(d01, d12);
-                  final maxSide = math.max(d01, d12);
-                  if (minSide >= 5.0 && minSide <= 35.0 && maxSide > minSide * 1.5) {
-                    flangePolys.add(poly);
-                  }
-                }
-              }
-            }
-          }
-
-          if (flangePolys.isNotEmpty) {
-            CadFoldedPolygon3D? bestPoly;
-            double bestScore = -double.infinity;
-            for (final poly in flangePolys) {
-              final c3D = CadPoint3D(
-                poly.vertices.map((v) => v.x).reduce((a, b) => a + b) / 4.0,
-                poly.vertices.map((v) => v.y).reduce((a, b) => a + b) / 4.0,
-                poly.vertices.map((v) => v.z).reduce((a, b) => a + b) / 4.0,
-              );
-              final c2D = _projectMeshPoint(c3D, viewportSize, effectiveVm);
-              // Prioritize foreground left-hand return flange for clean isometric presentation
-              double score = c2D.dy;
-              if (c3D.x <= m.center.x + 5.0) {
-                score += 500.0;
-              }
-              if (score > bestScore) {
-                bestScore = score;
-                bestPoly = poly;
-              }
-            }
-
-            if (bestPoly != null && bestPoly.vertices.length >= 4) {
-              final v = bestPoly.vertices;
+            if (avgZ >= minZ + (maxZ - minZ) * 0.65) {
+              final v = poly.vertices;
               final d01 = (v[0] - v[1]).length;
               final d12 = (v[1] - v[2]).length;
-              if ((d01 - baseFlange).abs() < (d12 - baseFlange).abs()) {
-                final midA = CadPoint3D((v[0].x + v[3].x) / 2, (v[0].y + v[3].y) / 2, (v[0].z + v[3].z) / 2);
-                final midB = CadPoint3D((v[1].x + v[2].x) / 2, (v[1].y + v[2].y) / 2, (v[1].z + v[2].z) / 2);
-                final distA = (midA - m.center).length;
-                final distB = (midB - m.center).length;
-                flangeInner3D = distA <= distB ? midA : midB;
-                flangeOuter3D = distA <= distB ? midB : midA;
-              } else {
-                final midA = CadPoint3D((v[0].x + v[1].x) / 2, (v[0].y + v[1].y) / 2, (v[0].z + v[1].z) / 2);
-                final midB = CadPoint3D((v[3].x + v[2].x) / 2, (v[3].y + v[2].y) / 2, (v[3].z + v[2].z) / 2);
-                final distA = (midA - m.center).length;
-                final distB = (midB - m.center).length;
-                flangeInner3D = distA <= distB ? midA : midB;
-                flangeOuter3D = distA <= distB ? midB : midA;
+              final minSide = math.min(d01, d12);
+              final maxSide = math.max(d01, d12);
+              if (minSide >= 5.0 && minSide <= 35.0 && maxSide > minSide * 1.5) {
+                flangePolys.add(poly);
               }
             }
           }
         }
+      }
 
-        if (flangeInner3D == null || flangeOuter3D == null) {
-          if (port1Corners != null) {
-            // Anchor to the top lip of port 1 (z = port1Corners[1].z which is at max sidewall elevation)
-            flangeInner3D = port1Corners[1];
-            flangeOuter3D = CadPoint3D(flangeInner3D.x, flangeInner3D.y - baseFlange, flangeInner3D.z);
+      if (flangePolys.isNotEmpty) {
+        CadFoldedPolygon3D? bestPoly;
+        double bestScore = -double.infinity;
+        for (final poly in flangePolys) {
+          final c3D = CadPoint3D(
+            poly.vertices.map((v) => v.x).reduce((a, b) => a + b) / 4.0,
+            poly.vertices.map((v) => v.y).reduce((a, b) => a + b) / 4.0,
+            poly.vertices.map((v) => v.z).reduce((a, b) => a + b) / 4.0,
+          );
+          final c2D = project(c3D);
+          // Prioritize foreground left-hand return flange for clean isometric presentation
+          double score = c2D.dy;
+          if (c3D.x <= m.center.x + 5.0) {
+            score += 500.0;
+          }
+          if (score > bestScore) {
+            bestScore = score;
+            bestPoly = poly;
+          }
+        }
+
+        if (bestPoly != null && bestPoly.vertices.length >= 4) {
+          final v = bestPoly.vertices;
+          final d01 = (v[0] - v[1]).length;
+          final d12 = (v[1] - v[2]).length;
+          if ((d01 - baseFlange).abs() < (d12 - baseFlange).abs()) {
+            final midA = CadPoint3D((v[0].x + v[3].x) / 2, (v[0].y + v[3].y) / 2, (v[0].z + v[3].z) / 2);
+            final midB = CadPoint3D((v[1].x + v[2].x) / 2, (v[1].y + v[2].y) / 2, (v[1].z + v[2].z) / 2);
+            final distA = (midA - m.center).length;
+            final distB = (midB - m.center).length;
+            flangeInner3D = distA <= distB ? midA : midB;
+            flangeOuter3D = distA <= distB ? midB : midA;
           } else {
-            flangeInner3D = CadPoint3D(m != null ? m.center.x : 0.0, minY, maxZ);
-            flangeOuter3D = CadPoint3D(flangeInner3D.x, flangeInner3D.y - baseFlange, maxZ);
+            final midA = CadPoint3D((v[0].x + v[1].x) / 2, (v[0].y + v[1].y) / 2, (v[0].z + v[1].z) / 2);
+            final midB = CadPoint3D((v[3].x + v[2].x) / 2, (v[3].y + v[2].y) / 2, (v[3].z + v[2].z) / 2);
+            final distA = (midA - m.center).length;
+            final distB = (midB - m.center).length;
+            flangeInner3D = distA <= distB ? midA : midB;
+            flangeOuter3D = distA <= distB ? midB : midA;
           }
         }
+      }
+    }
 
-        final flangeA2D = _projectMeshPoint(flangeInner3D, viewportSize, effectiveVm);
-        final flangeB2D = _projectMeshPoint(flangeOuter3D, viewportSize, effectiveVm);
-        final flangeAnchor = flangeB2D;
+    if (flangeInner3D == null || flangeOuter3D == null) {
+      if (port1Corners != null) {
+        // Anchor to the top lip of port 1 (z = port1Corners[1].z which is at max sidewall elevation)
+        flangeInner3D = port1Corners[1];
+        flangeOuter3D = CadPoint3D(flangeInner3D.x, flangeInner3D.y - baseFlange, flangeInner3D.z);
+      } else {
+        flangeInner3D = CadPoint3D(m != null ? m.center.x : 0.0, minY, maxZ);
+        flangeOuter3D = CadPoint3D(flangeInner3D.x, flangeInner3D.y - baseFlange, maxZ);
+      }
+    }
 
-        final wBadgePos = Offset((topAnchor.dx - 60).clamp(12.0, viewportSize.width - 150.0), (topAnchor.dy - 44).clamp(38.0, viewportSize.height - 40.0));
-        final p2BadgePos = Offset((port2Anchor.dx + 20).clamp(12.0, viewportSize.width - 160.0), (port2Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0));
-        final p3BadgePos = Offset((port3Anchor.dx + 20).clamp(12.0, viewportSize.width - 160.0), (port3Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0));
-        final p4BadgePos = Offset(
-          (port4Anchor.dx - 160).clamp(12.0, viewportSize.width - 160.0),
-          (port4Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0),
-        );
-        final hBadgePos = Offset((rightAnchor.dx + 14).clamp(12.0, viewportSize.width - 140.0), (rightAnchor.dy - 16).clamp(38.0, viewportSize.height - 40.0));
-        final sBadgePos = Offset((sAnchor.dx - 180).clamp(12.0, viewportSize.width - 190.0), (sAnchor.dy - 14).clamp(38.0, viewportSize.height - 40.0));
-        final fBadgePos = Offset(
-          (flangeAnchor.dx - 110).clamp(12.0, viewportSize.width - 210.0),
-          (flangeAnchor.dy - 35).clamp(38.0, viewportSize.height - 40.0),
-        );
-        final tBadgePos = Offset(
-          (bottomAnchor.dx - 85).clamp(12.0, viewportSize.width - 200.0),
-          (bottomAnchor.dy - 15).clamp(38.0, viewportSize.height - 40.0),
-        );
+    final flangeA2D = project(flangeInner3D);
+    final flangeB2D = project(flangeOuter3D);
+    final flangeAnchor = flangeB2D;
 
-        final leaderLines = <({Offset badgePos, Offset anchorPos, Color color})>[];
-        if (_showDimWidth) leaderLines.add((badgePos: Offset(wBadgePos.dx + 55, wBadgePos.dy + 30), anchorPos: topAnchor, color: const Color(0xFF0284C7)));
-        if (_showDimPorts && hasMultiplePorts) {
-          leaderLines.add((badgePos: Offset(p2BadgePos.dx, p2BadgePos.dy + 14), anchorPos: port2Anchor, color: const Color(0xFF059669)));
-        }
-        if (_showDimPorts && (isTee || isCross)) {
-          leaderLines.add((badgePos: Offset(p3BadgePos.dx, p3BadgePos.dy + 14), anchorPos: port3Anchor, color: const Color(0xFFD97706)));
-        }
-        if (_showDimPorts && isCross) {
-          leaderLines.add((badgePos: Offset(p4BadgePos.dx + 140, p4BadgePos.dy + 14), anchorPos: port4Anchor, color: const Color(0xFF7C3AED)));
-        }
-        if (_showDimHeight && !hasMultiplePorts) {
-          leaderLines.add((badgePos: Offset(hBadgePos.dx, hBadgePos.dy + 14), anchorPos: rightAnchor, color: const Color(0xFF0284C7)));
-        }
-        if (_showDimSlots) leaderLines.add((badgePos: Offset(sBadgePos.dx + 165, sBadgePos.dy + 14), anchorPos: sAnchor, color: const Color(0xFF7C3AED)));
-        if (_showDimFlange) leaderLines.add((badgePos: Offset(fBadgePos.dx + 105, fBadgePos.dy), anchorPos: flangeAnchor, color: const Color(0xFFDB2777)));
-        // Note: Gauge tag does NOT need a leader line or dimensional line as requested
+    final wBadgePos = Offset((topAnchor.dx - 60).clamp(12.0, viewportSize.width - 150.0), (topAnchor.dy - 44).clamp(38.0, viewportSize.height - 40.0));
+    final p2BadgePos = Offset((port2Anchor.dx + 20).clamp(12.0, viewportSize.width - 160.0), (port2Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0));
+    final p3BadgePos = Offset((port3Anchor.dx + 20).clamp(12.0, viewportSize.width - 160.0), (port3Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0));
+    final p4BadgePos = Offset(
+      (port4Anchor.dx - 160).clamp(12.0, viewportSize.width - 160.0),
+      (port4Anchor.dy - 35).clamp(38.0, viewportSize.height - 40.0),
+    );
+    final hBadgePos = Offset((rightAnchor.dx + 14).clamp(12.0, viewportSize.width - 140.0), (rightAnchor.dy - 16).clamp(38.0, viewportSize.height - 40.0));
+    final sBadgePos = Offset((sAnchor.dx - 180).clamp(12.0, viewportSize.width - 190.0), (sAnchor.dy - 14).clamp(38.0, viewportSize.height - 40.0));
+    final fBadgePos = Offset(
+      (flangeAnchor.dx - 110).clamp(12.0, viewportSize.width - 210.0),
+      (flangeAnchor.dy - 35).clamp(38.0, viewportSize.height - 40.0),
+    );
+    final tBadgePos = Offset(
+      (bottomAnchor.dx - 85).clamp(12.0, viewportSize.width - 200.0),
+      (bottomAnchor.dy - 15).clamp(38.0, viewportSize.height - 40.0),
+    );
 
-        // Compute 2D CAD Dimension Line items projected from 3D geometry
-        final center2D = hasMesh ? _projectMeshPoint(m.center, viewportSize, effectiveVm) : Offset(viewportSize.width / 2.0, viewportSize.height / 2.0);
+    final leaderLines = <({Offset badgePos, Offset anchorPos, Color color})>[];
+    if (_showDimWidth) leaderLines.add((badgePos: Offset(wBadgePos.dx + 55, wBadgePos.dy + 30), anchorPos: topAnchor, color: const Color(0xFF0284C7)));
+    if (_showDimPorts && hasMultiplePorts) {
+      leaderLines.add((badgePos: Offset(p2BadgePos.dx, p2BadgePos.dy + 14), anchorPos: port2Anchor, color: const Color(0xFF059669)));
+    }
+    if (_showDimPorts && (isTee || isCross)) {
+      leaderLines.add((badgePos: Offset(p3BadgePos.dx, p3BadgePos.dy + 14), anchorPos: port3Anchor, color: const Color(0xFFD97706)));
+    }
+    if (_showDimPorts && isCross) {
+      leaderLines.add((badgePos: Offset(p4BadgePos.dx + 140, p4BadgePos.dy + 14), anchorPos: port4Anchor, color: const Color(0xFF7C3AED)));
+    }
+    if (_showDimHeight && !hasMultiplePorts) {
+      leaderLines.add((badgePos: Offset(hBadgePos.dx, hBadgePos.dy + 14), anchorPos: rightAnchor, color: const Color(0xFF0284C7)));
+    }
+    if (_showDimSlots) leaderLines.add((badgePos: Offset(sBadgePos.dx + 165, sBadgePos.dy + 14), anchorPos: sAnchor, color: const Color(0xFF7C3AED)));
+    if (_showDimFlange) leaderLines.add((badgePos: Offset(fBadgePos.dx + 105, fBadgePos.dy), anchorPos: flangeAnchor, color: const Color(0xFFDB2777)));
+    // Note: Gauge tag does NOT need a leader line or dimensional line as requested
 
-        Offset calcPerpNormal(Offset a, Offset b, Offset center) {
-          final diff = b - a;
-          final dist = diff.distance;
-          if (dist < 1e-4) return const Offset(0, -1);
-          var perp = Offset(-diff.dy / dist, diff.dx / dist);
-          final mid = Offset((a.dx + b.dx) / 2.0, (a.dy + b.dy) / 2.0);
-          final away = mid - center;
-          if (perp.dx * away.dx + perp.dy * away.dy < 0) {
-            perp = -perp;
-          }
-          return perp;
-        }
+    // Compute 2D CAD Dimension Line items projected from 3D geometry
+    final center2D = hasMesh ? project(m.center) : Offset(viewportSize.width / 2.0, viewportSize.height / 2.0);
 
-        final cadDimensionItems = <DdsCadDimensionItem>[];
+    Offset calcPerpNormal(Offset a, Offset b, Offset center) {
+      final diff = b - a;
+      final dist = diff.distance;
+      if (dist < 1e-4) return const Offset(0, -1);
+      var perp = Offset(-diff.dy / dist, diff.dx / dist);
+      final mid = Offset((a.dx + b.dx) / 2.0, (a.dy + b.dy) / 2.0);
+      final away = mid - center;
+      if (perp.dx * away.dx + perp.dy * away.dy < 0) {
+        perp = -perp;
+      }
+      return perp;
+    }
 
-        if (_combinePortDimensions) {
-          // Combined Joint Port Tags: 1 tag per port showing both W and H together (e.g. PORT 1: 100×100 mm)
-          // 1. Port 1 Joint
-          if (_showDimWidth || _showDimPorts) {
-            final pA = port1Corners != null
-                ? _projectMeshPoint(port1Corners[1], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x - w1 / 2, minY, maxZ), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.35, viewportSize.height * 0.35));
-            final pB = port1Corners != null
-                ? _projectMeshPoint(port1Corners[2], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, maxZ), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'port1_joint',
-                label: hasMultiplePorts ? 'PORT 1' : 'SIZE',
-                valueText: '${w1.toStringAsFixed(0)}×${h1.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFF0284C7),
-              ),
-            );
-          }
+    final cadDimensionItems = <DdsCadDimensionItem>[];
 
-          // 2. Port 2 Joint (for Reducer, Unequal Tee, Unequal Cross)
-          if (hasMultiplePorts && (_showDimWidth || _showDimPorts)) {
-            final pA = port2Corners != null
-                ? _projectMeshPoint(port2Corners[1], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.40));
-            final pB = port2Corners != null
-                ? _projectMeshPoint(port2Corners[2], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x + w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.85, viewportSize.height * 0.40));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'port2_joint',
-                label: 'PORT 2',
-                valueText: '${w2.toStringAsFixed(0)}×${h2.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFF059669),
-              ),
-            );
-          }
-
-          // 3. Port 3 Joint (East / Branch 1 for Tee & Cross)
-          if ((isTee || isCross) && (_showDimWidth || _showDimPorts)) {
-            final pA = port3Corners != null
-                ? _projectMeshPoint(port3Corners[1], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
-            final pB = port3Corners != null
-                ? _projectMeshPoint(port3Corners[2], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y + w3 / 2, minZ + h3), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.85, viewportSize.height * 0.65));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'port3_joint',
-                label: 'PORT 3',
-                valueText: '${w3.toStringAsFixed(0)}×${h3.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFFD97706),
-              ),
-            );
-          }
-
-          // 4. Port 4 Joint (West / Branch 2 for Cross)
-          if (isCross && (_showDimWidth || _showDimPorts)) {
-            final pA = port4Corners != null
-                ? _projectMeshPoint(port4Corners[1], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
-            final pB = port4Corners != null
-                ? _projectMeshPoint(port4Corners[2], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y - w4 / 2, minZ + h4), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.15, viewportSize.height * 0.45));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'port4_joint',
-                label: 'PORT 4',
-                valueText: '${w4.toStringAsFixed(0)}×${h4.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFF7C3AED),
-              ),
-            );
-          }
-        } else {
-          // Separate W and H Dimension Lines
-          // 1. Port 1 (Inlet) Width & Height
-          final w1Label = hasMultiplePorts ? 'W1' : 'W';
-          final h1Label = hasMultiplePorts ? 'H1' : 'H';
-
-          if (_showDimWidth) {
-            final pA = port1Corners != null
-                ? _projectMeshPoint(port1Corners[1], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x - w1 / 2, minY, maxZ), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.35, viewportSize.height * 0.35));
-            final pB = port1Corners != null
-                ? _projectMeshPoint(port1Corners[2], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, maxZ), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'width1',
-                label: w1Label,
-                valueText: '${w1.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFF0284C7),
-              ),
-            );
-          }
-
-          if (_showDimHeight) {
-            final pA = port1Corners != null
-                ? _projectMeshPoint(port1Corners[3], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, minZ), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.65));
-            final pB = port1Corners != null
-                ? _projectMeshPoint(port1Corners[2], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x + w1 / 2, minY, maxZ), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'height1',
-                label: h1Label,
-                valueText: '${h1.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFF0284C7),
-              ),
-            );
-          }
-
-          // 2. Port 2 (Outlet) Width & Height (for Reducer, Unequal Tee, Unequal Cross)
-          if (hasMultiplePorts && (_showDimWidth || _showDimPorts)) {
-            final pA = port2Corners != null
-                ? _projectMeshPoint(port2Corners[1], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.65, viewportSize.height * 0.40));
-            final pB = port2Corners != null
-                ? _projectMeshPoint(port2Corners[2], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x + w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.85, viewportSize.height * 0.40));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'width2',
-                label: 'W2',
-                valueText: '${w2.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFF0284C7),
-              ),
-            );
-          }
-
-          if (hasMultiplePorts && (_showDimHeight || _showDimPorts)) {
-            final pA = port2Corners != null
-                ? _projectMeshPoint(port2Corners[0], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.35, viewportSize.height * 0.60));
-            final pB = port2Corners != null
-                ? _projectMeshPoint(port2Corners[1], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.35, viewportSize.height * 0.40));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'height2',
-                label: 'H2',
-                valueText: '${h2.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFF0284C7),
-              ),
-            );
-          }
-
-          // 3. Port 3 (East / Branch 1) Width & Height (for Tee & Cross)
-          if ((isTee || isCross) && (_showDimWidth || _showDimPorts)) {
-            final pA = port3Corners != null
-                ? _projectMeshPoint(port3Corners[1], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
-            final pB = port3Corners != null
-                ? _projectMeshPoint(port3Corners[2], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y + w3 / 2, minZ + h3), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.85, viewportSize.height * 0.65));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'width3',
-                label: 'W3',
-                valueText: '${w3.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFFD97706),
-              ),
-            );
-          }
-
-          if ((isTee || isCross) && (_showDimHeight || _showDimPorts)) {
-            final pA = port3Corners != null
-                ? _projectMeshPoint(port3Corners[0], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.70, viewportSize.height * 0.75));
-            final pB = port3Corners != null
-                ? _projectMeshPoint(port3Corners[1], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'height3',
-                label: 'H3',
-                valueText: '${h3.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFFD97706),
-              ),
-            );
-          }
-
-          // 4. Port 4 (West / Branch 2) Width & Height (for Cross)
-          if (isCross && (_showDimWidth || _showDimPorts)) {
-            final pA = port4Corners != null
-                ? _projectMeshPoint(port4Corners[1], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
-            final pB = port4Corners != null
-                ? _projectMeshPoint(port4Corners[2], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y - w4 / 2, minZ + h4), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.15, viewportSize.height * 0.45));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'width4',
-                label: 'W4',
-                valueText: '${w4.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFF7C3AED),
-              ),
-            );
-          }
-
-          if (isCross && (_showDimHeight || _showDimPorts)) {
-            final pA = port4Corners != null
-                ? _projectMeshPoint(port4Corners[0], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.25, viewportSize.height * 0.55));
-            final pB = port4Corners != null
-                ? _projectMeshPoint(port4Corners[1], viewportSize, effectiveVm)
-                : (hasMesh
-                      ? _projectMeshPoint(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4), viewportSize, effectiveVm)
-                      : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
-            final norm = calcPerpNormal(pA, pB, center2D);
-            cadDimensionItems.add(
-              DdsCadDimensionItem(
-                id: 'height4',
-                label: 'H4',
-                valueText: '${h4.toStringAsFixed(0)} mm',
-                p1: pA,
-                p2: pB,
-                offsetVector: norm * 14.0,
-                color: const Color(0xFF7C3AED),
-              ),
-            );
-          }
-        }
-
-        // 5. Coupler Slots Dimension Line (Anchored directly on the coupler flap)
-        if (_showDimSlots) {
-          final pA = hasMesh ? _projectMeshPoint(slotP1_3D, viewportSize, effectiveVm) : Offset(viewportSize.width * 0.26, viewportSize.height * 0.58);
-          final pB = hasMesh ? _projectMeshPoint(slotP2_3D, viewportSize, effectiveVm) : Offset(viewportSize.width * 0.26, viewportSize.height * 0.46);
-          final norm = calcPerpNormal(pA, pB, center2D);
-          cadDimensionItems.add(
-            DdsCadDimensionItem(
-              id: 'slots',
-              label: 'SLOTS',
-              valueText: '${slotL.toStringAsFixed(0)}×${slotW.toStringAsFixed(1)} @ ${slotP.toStringAsFixed(0)}P',
-              p1: pA,
-              p2: pB,
-              offsetVector: norm * 14.0,
-              color: const Color(0xFF7C3AED),
-            ),
-          );
-        }
-
-        // 6. Flange Dimension Line (Accurately anchored on physical flange)
-        if (_showDimFlange) {
-          final norm = calcPerpNormal(flangeA2D, flangeB2D, center2D);
-          cadDimensionItems.add(
-            DdsCadDimensionItem(
-              id: 'flange',
-              label: 'FLANGE',
-              valueText: isCoverActive
-                  ? '${baseFlange.toStringAsFixed(0)}mm (Cover ${coverFlange.toStringAsFixed(0)}mm)'
-                  : '${baseFlange.toStringAsFixed(0)}mm ($flangeDir)',
-              p1: flangeA2D,
-              p2: flangeB2D,
-              offsetVector: norm * 12.0,
-              color: const Color(0xFFDB2777),
-            ),
-          );
-        }
-        // Note: Gauge tag does NOT need a dimensional line as requested
-
-        return Container(
-          color: const Color(0xFFF8FAFC),
-          child: Stack(
-            children: [
-              // Technical Grid Background
-              Positioned.fill(
-                child: IgnorePointer(child: CustomPaint(painter: _ViewportGridPainter())),
-              ),
-
-              // 3D Rendering Engine: Reusing the main CAD's Viewport3dWidget directly with the active fitting's ViewModel
-              Positioned.fill(
-                child: effectiveVm != null
-                    ? Viewport3dWidget(viewModel: effectiveVm, isInteractionLocked: _is3DModelLocked)
-                    : CustomPaint(painter: Dds3DIsometricPainter(mesh: eval?.combinedMesh3D)),
-              ),
-
-              // CAD Witness & Dimension Lines Anchored to 3D Model (Engineering 2D Sketch Style)
-              if (_showCadDimensionLines && cadDimensionItems.isNotEmpty)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: CustomPaint(painter: _Dds3DCadDimensionLinesPainter(items: cadDimensionItems)),
-                  ),
-                ),
-
-              // Leader Lines for Callout Badges
-              if (_showDimensionTags && leaderLines.isNotEmpty)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: CustomPaint(painter: _Dds3DLeaderLinesPainter(lines: leaderLines)),
-                  ),
-                ),
-
-              // 3D Dimension Callout Badges Anchored at the Model (User Option: Tags)
-              if (_showDimensionTags) ...[
-                // 1. Port 1 Dimension Callout
-                if (_showDimWidth)
-                  Positioned(
-                    left: wBadgePos.dx,
-                    top: wBadgePos.dy,
-                    child: _buildDimCalloutBadge(
-                      label: hasMultiplePorts ? 'PORT 1 (INLET)' : (_combinePortDimensions ? 'SIZE (W×H)' : 'WIDTH (W)'),
-                      value: hasMultiplePorts || _combinePortDimensions
-                          ? '${w1.toStringAsFixed(0)}×${h1.toStringAsFixed(0)} mm'
-                          : '${w1.toStringAsFixed(0)} mm',
-                      accentColor: const Color(0xFF0284C7),
-                      icon: Icons.straighten,
-                      onDismiss: () {
-                        setState(() => _showDimWidth = false);
-                        widget.onDimensionToggled?.call('W', false);
-                      },
-                    ),
-                  ),
-
-                // 2. Port 2 Dimension Callout (for Reducer, Tee, Cross)
-                if (hasMultiplePorts && (_showDimPorts || _showDimWidth))
-                  Positioned(
-                    left: p2BadgePos.dx,
-                    top: p2BadgePos.dy,
-                    child: _buildDimCalloutBadge(
-                      label: 'PORT 2 (OUTLET)',
-                      value: '${w2.toStringAsFixed(0)}×${h2.toStringAsFixed(0)} mm',
-                      accentColor: const Color(0xFF059669),
-                      icon: Icons.filter_frames,
-                      onDismiss: () {
-                        setState(() => _showDimPorts = false);
-                        widget.onDimensionToggled?.call('Ports', false);
-                      },
-                    ),
-                  ),
-
-                // 2b. Port 3 Dimension Callout (for Tee & Cross)
-                if ((isTee || isCross) && (_showDimPorts || _showDimWidth))
-                  Positioned(
-                    left: p3BadgePos.dx,
-                    top: p3BadgePos.dy,
-                    child: _buildDimCalloutBadge(
-                      label: 'PORT 3 (BRANCH 1)',
-                      value: '${w3.toStringAsFixed(0)}×${h3.toStringAsFixed(0)} mm',
-                      accentColor: const Color(0xFFD97706),
-                      icon: Icons.alt_route,
-                      onDismiss: () {
-                        setState(() => _showDimPorts = false);
-                        widget.onDimensionToggled?.call('Ports', false);
-                      },
-                    ),
-                  ),
-
-                // 2c. Port 4 Dimension Callout (for Cross)
-                if (isCross && (_showDimPorts || _showDimWidth))
-                  Positioned(
-                    left: p4BadgePos.dx,
-                    top: p4BadgePos.dy,
-                    child: _buildDimCalloutBadge(
-                      label: 'PORT 4 (BRANCH 2)',
-                      value: '${w4.toStringAsFixed(0)}×${h4.toStringAsFixed(0)} mm',
-                      accentColor: const Color(0xFF7C3AED),
-                      icon: Icons.alt_route,
-                      onDismiss: () {
-                        setState(() => _showDimPorts = false);
-                        widget.onDimensionToggled?.call('Ports', false);
-                      },
-                    ),
-                  ),
-
-                // 3. Height Dimension Callout (for single port fitting in split mode)
-                if (!hasMultiplePorts && _showDimHeight && !_combinePortDimensions)
-                  Positioned(
-                    left: hBadgePos.dx,
-                    top: hBadgePos.dy,
-                    child: _buildDimCalloutBadge(
-                      label: 'HEIGHT (H)',
-                      value: '${h1.toStringAsFixed(0)} mm',
-                      accentColor: const Color(0xFF0284C7),
-                      icon: Icons.height,
-                      onDismiss: () {
-                        setState(() => _showDimHeight = false);
-                        widget.onDimensionToggled?.call('H', false);
-                      },
-                    ),
-                  ),
-
-                // 4. Coupler Slot Specification Callout (Anchored on the coupler flap)
-                if (_showDimSlots)
-                  Positioned(
-                    left: sBadgePos.dx,
-                    top: sBadgePos.dy,
-                    child: _buildDimCalloutBadge(
-                      label: 'COUPLER SLOTS',
-                      value: '${slotL.toStringAsFixed(0)}×${slotW.toStringAsFixed(1)} @ ${slotP.toStringAsFixed(0)}P',
-                      accentColor: const Color(0xFF7C3AED),
-                      icon: Icons.drag_indicator,
-                      onDismiss: () {
-                        setState(() => _showDimSlots = false);
-                        widget.onDimensionToggled?.call('Slots', false);
-                      },
-                    ),
-                  ),
-
-                // 5. Flange Direction & Size Callout (Linked cover flange omitted when cover is off)
-                if (_showDimFlange)
-                  Positioned(
-                    left: fBadgePos.dx,
-                    top: fBadgePos.dy,
-                    child: _buildDimCalloutBadge(
-                      label: isCoverActive ? 'BASE & COVER FLANGE' : 'BASE FLANGE',
-                      value: isCoverActive
-                          ? '$flangeDir (${baseFlange.toStringAsFixed(0)}mm)  |  Cover: ${coverFlange.toStringAsFixed(0)}mm'
-                          : '$flangeDir (${baseFlange.toStringAsFixed(0)}mm)',
-                      accentColor: const Color(0xFFDB2777),
-                      icon: Icons.crop_square,
-                      onDismiss: () {
-                        setState(() => _showDimFlange = false);
-                        widget.onDimensionToggled?.call('Flange', false);
-                      },
-                    ),
-                  ),
-
-                // 6. Gauge / Sheet Thickness Callout (Bottom Floor of 3D Model)
-                if (_showDimThickness)
-                  Positioned(
-                    left: tBadgePos.dx,
-                    top: tBadgePos.dy,
-                    child: _buildDimCalloutBadge(
-                      label: 'SHEET THICKNESS / GAUGE',
-                      value: '${thickness.toStringAsFixed(1)} mm (Pre-Galv DX51D)',
-                      accentColor: const Color(0xFF4F46E5),
-                      icon: Icons.layers,
-                      onDismiss: () {
-                        setState(() => _showDimThickness = false);
-                        widget.onDimensionToggled?.call('Gauge', false);
-                      },
-                    ),
-                  ),
-              ],
-            ],
+    if (_combinePortDimensions) {
+      // Combined Joint Port Tags: 1 tag per port showing both W and H together (e.g. PORT 1: 100×100 mm)
+      // 1. Port 1 Joint
+      if (_showDimWidth || _showDimPorts) {
+        final pA = port1Corners != null
+            ? project(port1Corners[1])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x - w1 / 2, minY, maxZ))
+                  : Offset(viewportSize.width * 0.35, viewportSize.height * 0.35));
+        final pB = port1Corners != null
+            ? project(port1Corners[2])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x + w1 / 2, minY, maxZ))
+                  : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'port1_joint',
+            label: hasMultiplePorts ? 'PORT 1' : 'SIZE',
+            valueText: '${w1.toStringAsFixed(0)}×${h1.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFF0284C7),
           ),
         );
-      },
+      }
+
+      // 2. Port 2 Joint (for Reducer, Unequal Tee, Unequal Cross)
+      if (hasMultiplePorts && (_showDimWidth || _showDimPorts)) {
+        final pA = port2Corners != null
+            ? project(port2Corners[1])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2))
+                  : Offset(viewportSize.width * 0.65, viewportSize.height * 0.40));
+        final pB = port2Corners != null
+            ? project(port2Corners[2])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x + w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2))
+                  : Offset(viewportSize.width * 0.85, viewportSize.height * 0.40));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'port2_joint',
+            label: 'PORT 2',
+            valueText: '${w2.toStringAsFixed(0)}×${h2.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFF059669),
+          ),
+        );
+      }
+
+      // 3. Port 3 Joint (East / Branch 1 for Tee & Cross)
+      if ((isTee || isCross) && (_showDimWidth || _showDimPorts)) {
+        final pA = port3Corners != null
+            ? project(port3Corners[1])
+            : (hasMesh
+                  ? project(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3))
+                  : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
+        final pB = port3Corners != null
+            ? project(port3Corners[2])
+            : (hasMesh
+                  ? project(CadPoint3D(maxX, m.center.y + w3 / 2, minZ + h3))
+                  : Offset(viewportSize.width * 0.85, viewportSize.height * 0.65));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'port3_joint',
+            label: 'PORT 3',
+            valueText: '${w3.toStringAsFixed(0)}×${h3.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFFD97706),
+          ),
+        );
+      }
+
+      // 4. Port 4 Joint (West / Branch 2 for Cross)
+      if (isCross && (_showDimWidth || _showDimPorts)) {
+        final pA = port4Corners != null
+            ? project(port4Corners[1])
+            : (hasMesh
+                  ? project(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4))
+                  : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
+        final pB = port4Corners != null
+            ? project(port4Corners[2])
+            : (hasMesh
+                  ? project(CadPoint3D(minX, m.center.y - w4 / 2, minZ + h4))
+                  : Offset(viewportSize.width * 0.15, viewportSize.height * 0.45));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'port4_joint',
+            label: 'PORT 4',
+            valueText: '${w4.toStringAsFixed(0)}×${h4.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFF7C3AED),
+          ),
+        );
+      }
+    } else {
+      // Separate W and H Dimension Lines
+      // 1. Port 1 (Inlet) Width & Height
+      final w1Label = hasMultiplePorts ? 'W1' : 'W';
+      final h1Label = hasMultiplePorts ? 'H1' : 'H';
+
+      if (_showDimWidth) {
+        final pA = port1Corners != null
+            ? project(port1Corners[1])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x - w1 / 2, minY, maxZ))
+                  : Offset(viewportSize.width * 0.35, viewportSize.height * 0.35));
+        final pB = port1Corners != null
+            ? project(port1Corners[2])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x + w1 / 2, minY, maxZ))
+                  : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'width1',
+            label: w1Label,
+            valueText: '${w1.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFF0284C7),
+          ),
+        );
+      }
+
+      if (_showDimHeight) {
+        final pA = port1Corners != null
+            ? project(port1Corners[3])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x + w1 / 2, minY, minZ))
+                  : Offset(viewportSize.width * 0.65, viewportSize.height * 0.65));
+        final pB = port1Corners != null
+            ? project(port1Corners[2])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x + w1 / 2, minY, maxZ))
+                  : Offset(viewportSize.width * 0.65, viewportSize.height * 0.35));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'height1',
+            label: h1Label,
+            valueText: '${h1.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFF0284C7),
+          ),
+        );
+      }
+
+      // 2. Port 2 (Outlet) Width & Height (for Reducer, Unequal Tee, Unequal Cross)
+      if (hasMultiplePorts && (_showDimWidth || _showDimPorts)) {
+        final pA = port2Corners != null
+            ? project(port2Corners[1])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2))
+                  : Offset(viewportSize.width * 0.65, viewportSize.height * 0.40));
+        final pB = port2Corners != null
+            ? project(port2Corners[2])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x + w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2))
+                  : Offset(viewportSize.width * 0.85, viewportSize.height * 0.40));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'width2',
+            label: 'W2',
+            valueText: '${w2.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFF0284C7),
+          ),
+        );
+      }
+
+      if (hasMultiplePorts && (_showDimHeight || _showDimPorts)) {
+        final pA = port2Corners != null
+            ? project(port2Corners[0])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ))
+                  : Offset(viewportSize.width * 0.35, viewportSize.height * 0.60));
+        final pB = port2Corners != null
+            ? project(port2Corners[1])
+            : (hasMesh
+                  ? project(CadPoint3D(m.center.x - w2 / 2, isReducer ? (maxY - 25.0) : maxY, minZ + h2))
+                  : Offset(viewportSize.width * 0.35, viewportSize.height * 0.40));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'height2',
+            label: 'H2',
+            valueText: '${h2.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFF0284C7),
+          ),
+        );
+      }
+
+      // 3. Port 3 (East / Branch 1) Width & Height (for Tee & Cross)
+      if ((isTee || isCross) && (_showDimWidth || _showDimPorts)) {
+        final pA = port3Corners != null
+            ? project(port3Corners[1])
+            : (hasMesh
+                  ? project(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3))
+                  : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
+        final pB = port3Corners != null
+            ? project(port3Corners[2])
+            : (hasMesh
+                  ? project(CadPoint3D(maxX, m.center.y + w3 / 2, minZ + h3))
+                  : Offset(viewportSize.width * 0.85, viewportSize.height * 0.65));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'width3',
+            label: 'W3',
+            valueText: '${w3.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFFD97706),
+          ),
+        );
+      }
+
+      if ((isTee || isCross) && (_showDimHeight || _showDimPorts)) {
+        final pA = port3Corners != null
+            ? project(port3Corners[0])
+            : (hasMesh
+                  ? project(CadPoint3D(maxX, m.center.y - w3 / 2, minZ))
+                  : Offset(viewportSize.width * 0.70, viewportSize.height * 0.75));
+        final pB = port3Corners != null
+            ? project(port3Corners[1])
+            : (hasMesh
+                  ? project(CadPoint3D(maxX, m.center.y - w3 / 2, minZ + h3))
+                  : Offset(viewportSize.width * 0.70, viewportSize.height * 0.65));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'height3',
+            label: 'H3',
+            valueText: '${h3.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFFD97706),
+          ),
+        );
+      }
+
+      // 4. Port 4 (West / Branch 2) Width & Height (for Cross)
+      if (isCross && (_showDimWidth || _showDimPorts)) {
+        final pA = port4Corners != null
+            ? project(port4Corners[1])
+            : (hasMesh
+                  ? project(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4))
+                  : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
+        final pB = port4Corners != null
+            ? project(port4Corners[2])
+            : (hasMesh
+                  ? project(CadPoint3D(minX, m.center.y - w4 / 2, minZ + h4))
+                  : Offset(viewportSize.width * 0.15, viewportSize.height * 0.45));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'width4',
+            label: 'W4',
+            valueText: '${w4.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFF7C3AED),
+          ),
+        );
+      }
+
+      if (isCross && (_showDimHeight || _showDimPorts)) {
+        final pA = port4Corners != null
+            ? project(port4Corners[0])
+            : (hasMesh
+                  ? project(CadPoint3D(minX, m.center.y + w4 / 2, minZ))
+                  : Offset(viewportSize.width * 0.25, viewportSize.height * 0.55));
+        final pB = port4Corners != null
+            ? project(port4Corners[1])
+            : (hasMesh
+                  ? project(CadPoint3D(minX, m.center.y + w4 / 2, minZ + h4))
+                  : Offset(viewportSize.width * 0.25, viewportSize.height * 0.45));
+        final norm = calcPerpNormal(pA, pB, center2D);
+        cadDimensionItems.add(
+          DdsCadDimensionItem(
+            id: 'height4',
+            label: 'H4',
+            valueText: '${h4.toStringAsFixed(0)} mm',
+            p1: pA,
+            p2: pB,
+            offsetVector: norm * 14.0,
+            color: const Color(0xFF7C3AED),
+          ),
+        );
+      }
+    }
+
+    // 5. Coupler Slots Dimension Line (Anchored directly on the coupler flap)
+    if (_showDimSlots) {
+      final pA = hasMesh ? project(slotP1_3D) : Offset(viewportSize.width * 0.26, viewportSize.height * 0.58);
+      final pB = hasMesh ? project(slotP2_3D) : Offset(viewportSize.width * 0.26, viewportSize.height * 0.46);
+      final norm = calcPerpNormal(pA, pB, center2D);
+      cadDimensionItems.add(
+        DdsCadDimensionItem(
+          id: 'slots',
+          label: 'SLOTS',
+          valueText: '${slotL.toStringAsFixed(0)}×${slotW.toStringAsFixed(1)} @ ${slotP.toStringAsFixed(0)}P',
+          p1: pA,
+          p2: pB,
+          offsetVector: norm * 14.0,
+          color: const Color(0xFF7C3AED),
+        ),
+      );
+    }
+
+    // 6. Flange Dimension Line (Accurately anchored on physical flange)
+    if (_showDimFlange) {
+      final norm = calcPerpNormal(flangeA2D, flangeB2D, center2D);
+      cadDimensionItems.add(
+        DdsCadDimensionItem(
+          id: 'flange',
+          label: 'FLANGE',
+          valueText: isCoverActive
+              ? '${baseFlange.toStringAsFixed(0)}mm (Cover ${coverFlange.toStringAsFixed(0)}mm)'
+              : '${baseFlange.toStringAsFixed(0)}mm ($flangeDir)',
+          p1: flangeA2D,
+          p2: flangeB2D,
+          offsetVector: norm * 12.0,
+          color: const Color(0xFFDB2777),
+        ),
+      );
+    }
+    // Note: Gauge tag does NOT need a dimensional line as requested
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // CAD Witness & Dimension Lines Anchored to 3D Model (Engineering 2D Sketch Style)
+        if (_showCadDimensionLines && cadDimensionItems.isNotEmpty)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(painter: _Dds3DCadDimensionLinesPainter(items: cadDimensionItems)),
+            ),
+          ),
+
+        // Leader Lines for Callout Badges
+        if (_showDimensionTags && leaderLines.isNotEmpty)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(painter: _Dds3DLeaderLinesPainter(lines: leaderLines)),
+            ),
+          ),
+
+        // 3D Dimension Callout Badges Anchored at the Model (User Option: Tags)
+        if (_showDimensionTags) ...[
+          // 1. Port 1 Dimension Callout
+          if (_showDimWidth)
+            Positioned(
+              left: wBadgePos.dx,
+              top: wBadgePos.dy,
+              child: _buildDimCalloutBadge(
+                label: hasMultiplePorts ? 'PORT 1 (INLET)' : (_combinePortDimensions ? 'SIZE (W×H)' : 'WIDTH (W)'),
+                value: hasMultiplePorts || _combinePortDimensions
+                    ? '${w1.toStringAsFixed(0)}×${h1.toStringAsFixed(0)} mm'
+                    : '${w1.toStringAsFixed(0)} mm',
+                accentColor: const Color(0xFF0284C7),
+                icon: Icons.straighten,
+                onDismiss: () {
+                  setState(() => _showDimWidth = false);
+                  widget.onDimensionToggled?.call('W', false);
+                },
+              ),
+            ),
+
+          // 2. Port 2 Dimension Callout (for Reducer, Tee, Cross)
+          if (hasMultiplePorts && (_showDimPorts || _showDimWidth))
+            Positioned(
+              left: p2BadgePos.dx,
+              top: p2BadgePos.dy,
+              child: _buildDimCalloutBadge(
+                label: 'PORT 2 (OUTLET)',
+                value: '${w2.toStringAsFixed(0)}×${h2.toStringAsFixed(0)} mm',
+                accentColor: const Color(0xFF059669),
+                icon: Icons.filter_frames,
+                onDismiss: () {
+                  setState(() => _showDimPorts = false);
+                  widget.onDimensionToggled?.call('Ports', false);
+                },
+              ),
+            ),
+
+          // 2b. Port 3 Dimension Callout (for Tee & Cross)
+          if ((isTee || isCross) && (_showDimPorts || _showDimWidth))
+            Positioned(
+              left: p3BadgePos.dx,
+              top: p3BadgePos.dy,
+              child: _buildDimCalloutBadge(
+                label: 'PORT 3 (BRANCH 1)',
+                value: '${w3.toStringAsFixed(0)}×${h3.toStringAsFixed(0)} mm',
+                accentColor: const Color(0xFFD97706),
+                icon: Icons.alt_route,
+                onDismiss: () {
+                  setState(() => _showDimPorts = false);
+                  widget.onDimensionToggled?.call('Ports', false);
+                },
+              ),
+            ),
+
+          // 2c. Port 4 Dimension Callout (for Cross)
+          if (isCross && (_showDimPorts || _showDimWidth))
+            Positioned(
+              left: p4BadgePos.dx,
+              top: p4BadgePos.dy,
+              child: _buildDimCalloutBadge(
+                label: 'PORT 4 (BRANCH 2)',
+                value: '${w4.toStringAsFixed(0)}×${h4.toStringAsFixed(0)} mm',
+                accentColor: const Color(0xFF7C3AED),
+                icon: Icons.alt_route,
+                onDismiss: () {
+                  setState(() => _showDimPorts = false);
+                  widget.onDimensionToggled?.call('Ports', false);
+                },
+              ),
+            ),
+
+          // 3. Height Dimension Callout (for single port fitting in split mode)
+          if (!hasMultiplePorts && _showDimHeight && !_combinePortDimensions)
+            Positioned(
+              left: hBadgePos.dx,
+              top: hBadgePos.dy,
+              child: _buildDimCalloutBadge(
+                label: 'HEIGHT (H)',
+                value: '${h1.toStringAsFixed(0)} mm',
+                accentColor: const Color(0xFF0284C7),
+                icon: Icons.height,
+                onDismiss: () {
+                  setState(() => _showDimHeight = false);
+                  widget.onDimensionToggled?.call('H', false);
+                },
+              ),
+            ),
+
+          // 4. Coupler Slot Specification Callout (Anchored on the coupler flap)
+          if (_showDimSlots)
+            Positioned(
+              left: sBadgePos.dx,
+              top: sBadgePos.dy,
+              child: _buildDimCalloutBadge(
+                label: 'COUPLER SLOTS',
+                value: '${slotL.toStringAsFixed(0)}×${slotW.toStringAsFixed(1)} @ ${slotP.toStringAsFixed(0)}P',
+                accentColor: const Color(0xFF7C3AED),
+                icon: Icons.drag_indicator,
+                onDismiss: () {
+                  setState(() => _showDimSlots = false);
+                  widget.onDimensionToggled?.call('Slots', false);
+                },
+              ),
+            ),
+
+          // 5. Flange Direction & Size Callout (Linked cover flange omitted when cover is off)
+          if (_showDimFlange)
+            Positioned(
+              left: fBadgePos.dx,
+              top: fBadgePos.dy,
+              child: _buildDimCalloutBadge(
+                label: isCoverActive ? 'BASE & COVER FLANGE' : 'BASE FLANGE',
+                value: isCoverActive
+                    ? '$flangeDir (${baseFlange.toStringAsFixed(0)}mm)  |  Cover: ${coverFlange.toStringAsFixed(0)}mm'
+                    : '$flangeDir (${baseFlange.toStringAsFixed(0)}mm)',
+                accentColor: const Color(0xFFDB2777),
+                icon: Icons.crop_square,
+                onDismiss: () {
+                  setState(() => _showDimFlange = false);
+                  widget.onDimensionToggled?.call('Flange', false);
+                },
+              ),
+            ),
+
+          // 6. Gauge / Sheet Thickness Callout (Bottom Floor of 3D Model)
+          if (_showDimThickness)
+            Positioned(
+              left: tBadgePos.dx,
+              top: tBadgePos.dy,
+              child: _buildDimCalloutBadge(
+                label: 'SHEET THICKNESS / GAUGE',
+                value: '${thickness.toStringAsFixed(1)} mm (Pre-Galv DX51D)',
+                accentColor: const Color(0xFF4F46E5),
+                icon: Icons.layers,
+                onDismiss: () {
+                  setState(() => _showDimThickness = false);
+                  widget.onDimensionToggled?.call('Gauge', false);
+                },
+              ),
+            ),
+        ],
+      ],
     );
   }
 

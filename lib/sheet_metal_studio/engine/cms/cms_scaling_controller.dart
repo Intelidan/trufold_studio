@@ -337,8 +337,12 @@ class CmsScalingController extends ChangeNotifier {
       _model = _model.copyWith(parameters: newParams);
     }
 
-    final widthParam = _model.parameters['width'];
-    final heightParam = _model.parameters['height'];
+    final widthParam = _model.parameters['width'] ??
+        _model.parameters['port1_width'] ??
+        _model.parameters.values.where((p) => p.id.endsWith('_width')).firstOrNull;
+    final heightParam = _model.parameters['height'] ??
+        _model.parameters['port1_height'] ??
+        _model.parameters.values.where((p) => p.id.endsWith('_height')).firstOrNull;
 
     final deltaW = (widthParam != null) ? (widthParam.currentValue - widthParam.baselineValue) : 0.0;
     final deltaH = (heightParam != null) ? (heightParam.currentValue - heightParam.baselineValue) : 0.0;
@@ -396,11 +400,11 @@ class CmsScalingController extends ChangeNotifier {
     }
 
     final targetW = (prof == CmsScalingProfile.reducer || isReducerGeometry(baselineDocument) || TrayReducerScaler.isTrayReducer(baselineDocument))
-        ? (_model.parameters['port1_width']?.currentValue ?? 100.0)
-        : (widthParam?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0));
+        ? (_model.parameters['port1_width']?.currentValue ?? _model.parameters['width']?.currentValue ?? 100.0)
+        : (widthParam?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.width : (baselineDocument.parameters['width'] ?? 100.0)));
     final targetH = (prof == CmsScalingProfile.reducer || isReducerGeometry(baselineDocument) || TrayReducerScaler.isTrayReducer(baselineDocument))
-        ? (_model.parameters['port1_height']?.currentValue ?? (TrayReducerScaler.isTrayReducer(baselineDocument) ? 50.0 : 100.0))
-        : (heightParam?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0));
+        ? (_model.parameters['port1_height']?.currentValue ?? _model.parameters['height']?.currentValue ?? (TrayReducerScaler.isTrayReducer(baselineDocument) ? 50.0 : 100.0))
+        : (heightParam?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.height : (baselineDocument.parameters['height'] ?? 50.0)));
 
     if (isInsideRiserGeometry(baselineDocument) || isOutsideRiserGeometry(baselineDocument)) {
       scaledDoc = _applyRiserCouplerFlaps(
@@ -1007,12 +1011,12 @@ class CmsScalingController extends ChangeNotifier {
   ///     * Height < 95mm: exactly 1 slot centered on each flap with respect to height.
   ///     * Height >= 95mm: exactly 2 slots per flap at 50mm pitch, centered with respect to height.
   DsfDocument _scaleEqualCross2D(DsfDocument baseline, {required Map<String, CmsScalingParameter> parameters}) {
-    final w = parameters['width'];
-    final h = parameters['height'];
-    final targetW = w?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
-    final targetH = h?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.height : 50.0);
-    final baselineW = w?.baselineValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
-    final baselineH = h?.baselineValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.height : 50.0);
+    final w = parameters['width'] ?? parameters['port1_width'] ?? parameters['port2_width'] ?? parameters['port3_width'] ?? parameters['port4_width'];
+    final h = parameters['height'] ?? parameters['port1_height'] ?? parameters['port2_height'] ?? parameters['port3_height'] ?? parameters['port4_height'];
+    final targetW = w?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.width : (baseline.parameters['width'] ?? 100.0));
+    final targetH = h?.currentValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.height : (baseline.parameters['height'] ?? 50.0));
+    final baselineW = w?.baselineValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.width : (baseline.parameters['width'] ?? 100.0));
+    final baselineH = h?.baselineValue ?? (baselinePorts.isNotEmpty ? baselinePorts.first.height : (baseline.parameters['height'] ?? 50.0));
 
     if (TrayEqualCrossScaler.isTrayEqualCross(baseline)) {
       final r = parameters['radius'];
@@ -1330,18 +1334,18 @@ class CmsScalingController extends ChangeNotifier {
   ///     * Height >= 95mm: exactly 2 slots per region at 50mm pitch, centered with respect to height.
   DsfDocument _scaleEqualTee2D(DsfDocument baseline, {required Map<String, CmsScalingParameter> parameters}) {
     if (TrayEqualTeeScaler.isTrayEqualTee(baseline)) {
-      final w = parameters['width'];
-      final h = parameters['height'];
+      final w = parameters['width'] ?? parameters['port1_width'] ?? parameters['port2_width'] ?? parameters['port3_width'];
+      final h = parameters['height'] ?? parameters['port1_height'] ?? parameters['port2_height'] ?? parameters['port3_height'];
       final r = parameters['radius'];
       final metaPort1 = (baseline.metadata['ports'] is List && (baseline.metadata['ports'] as List).isNotEmpty)
           ? (baseline.metadata['ports'] as List).first as Map<String, dynamic>
           : null;
       final fallbackW = metaPort1?['width'] is num
           ? (metaPort1!['width'] as num).toDouble()
-          : (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
+          : (baselinePorts.isNotEmpty ? baselinePorts.first.width : (baseline.parameters['width'] ?? 100.0));
       final fallbackH = metaPort1?['height'] is num
           ? (metaPort1!['height'] as num).toDouble()
-          : (baselinePorts.isNotEmpty ? baselinePorts.first.height : 50.0);
+          : (baselinePorts.isNotEmpty ? baselinePorts.first.height : (baseline.parameters['height'] ?? 50.0));
 
       final targetW = w?.currentValue ?? fallbackW;
       final targetH = h?.currentValue ?? fallbackH;
@@ -1365,13 +1369,13 @@ class CmsScalingController extends ChangeNotifier {
     final maxY = verts.map((v) => v.y).reduce(math.max);
     final midX = (minX + maxX) / 2.0;
 
-    final w = parameters['width'];
-    final h = parameters['height'];
+    final w = parameters['width'] ?? parameters['port1_width'] ?? parameters['port2_width'] ?? parameters['port3_width'];
+    final h = parameters['height'] ?? parameters['port1_height'] ?? parameters['port2_height'] ?? parameters['port3_height'];
     final metaPort1 = (baseline.metadata['ports'] is List && (baseline.metadata['ports'] as List).isNotEmpty)
         ? (baseline.metadata['ports'] as List).first as Map<String, dynamic>
         : null;
-    final fallbackW = metaPort1?['width'] is num ? (metaPort1!['width'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
-    final fallbackH = metaPort1?['height'] is num ? (metaPort1!['height'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0);
+    final fallbackW = metaPort1?['width'] is num ? (metaPort1!['width'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.width : (baseline.parameters['width'] ?? 100.0));
+    final fallbackH = metaPort1?['height'] is num ? (metaPort1!['height'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.height : (baseline.parameters['height'] ?? 50.0));
 
     final targetW = w?.currentValue ?? fallbackW;
     final targetH = h?.currentValue ?? fallbackH;
@@ -1634,13 +1638,13 @@ class CmsScalingController extends ChangeNotifier {
   ///     * Height >= 95mm: exactly 2 slots per region at 50mm pitch, centered with respect to height.
   /// - Updates physical ports (Port 1 and Port 2) with synchronized width and height.
   DsfDocument _scaleFlatBend45_2D(DsfDocument baseline, {required Map<String, CmsScalingParameter> parameters}) {
-    final w = parameters['width'];
-    final h = parameters['height'];
+    final w = parameters['width'] ?? parameters['port1_width'] ?? parameters['port2_width'];
+    final h = parameters['height'] ?? parameters['port1_height'] ?? parameters['port2_height'];
     final metaPort1 = (baseline.metadata['ports'] is List && (baseline.metadata['ports'] as List).isNotEmpty)
         ? (baseline.metadata['ports'] as List).first as Map<String, dynamic>
         : null;
-    final fallbackW = metaPort1?['width'] is num ? (metaPort1!['width'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
-    final fallbackH = metaPort1?['height'] is num ? (metaPort1!['height'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0);
+    final fallbackW = metaPort1?['width'] is num ? (metaPort1!['width'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.width : (baseline.parameters['width'] ?? 100.0));
+    final fallbackH = metaPort1?['height'] is num ? (metaPort1!['height'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.height : (baseline.parameters['height'] ?? 50.0));
 
     final targetW = w?.currentValue ?? fallbackW;
     final targetH = h?.currentValue ?? fallbackH;
@@ -1706,13 +1710,13 @@ class CmsScalingController extends ChangeNotifier {
   /// - Universal 95mm Coupler Rule applied to coupler punches.
   /// - Updates physical ports (Port 1 and Port 2) with synchronized width and height.
   DsfDocument _scaleFlatBend90_2D(DsfDocument baseline, {required Map<String, CmsScalingParameter> parameters}) {
-    final w = parameters['width'];
-    final h = parameters['height'];
+    final w = parameters['width'] ?? parameters['port1_width'] ?? parameters['port2_width'];
+    final h = parameters['height'] ?? parameters['port1_height'] ?? parameters['port2_height'];
     final metaPort1 = (baseline.metadata['ports'] is List && (baseline.metadata['ports'] as List).isNotEmpty)
         ? (baseline.metadata['ports'] as List).first as Map<String, dynamic>
         : null;
-    final fallbackW = metaPort1?['width'] is num ? (metaPort1!['width'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
-    final fallbackH = metaPort1?['height'] is num ? (metaPort1!['height'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.height : 100.0);
+    final fallbackW = metaPort1?['width'] is num ? (metaPort1!['width'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.width : (baseline.parameters['width'] ?? 100.0));
+    final fallbackH = metaPort1?['height'] is num ? (metaPort1!['height'] as num).toDouble() : (baselinePorts.isNotEmpty ? baselinePorts.first.height : (baseline.parameters['height'] ?? 50.0));
 
     final targetW = w?.currentValue ?? fallbackW;
     final targetH = h?.currentValue ?? fallbackH;

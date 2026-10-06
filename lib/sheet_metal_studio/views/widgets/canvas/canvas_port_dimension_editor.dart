@@ -47,15 +47,21 @@ mixin CanvasPortDimensionEditorMixin on State<UnfoldedCanvasWidget> {
     final port = ports.where((p) => p.id == portId).firstOrNull;
     final semantic = meta.semanticPorts?[portId];
 
+    final portNumStr = portId.replaceAll(RegExp(r'[^0-9]'), '');
     final currentW =
         (semantic?['width'] as num?)?.toDouble() ??
         port?.widthMm ??
+        widget.viewModel.document.parameters['port${portNumStr}_width'] ??
+        widget.viewModel.document.parameters['port${portNumStr}Width'] ??
         widget.viewModel.document.parameters['width'] ??
         300.0;
     final currentHA =
         (semantic?['heightA'] as num?)?.toDouble() ??
         port?.heightAMm ??
         port?.heightMm ??
+        widget.viewModel.document.parameters['port${portNumStr}_height'] ??
+        widget.viewModel.document.parameters['port${portNumStr}HeightA'] ??
+        widget.viewModel.document.parameters['port${portNumStr}Height'] ??
         widget.viewModel.document.parameters['heightA'] ??
         widget.viewModel.document.parameters['height'] ??
         50.0;
@@ -63,6 +69,9 @@ mixin CanvasPortDimensionEditorMixin on State<UnfoldedCanvasWidget> {
         (semantic?['heightB'] as num?)?.toDouble() ??
         port?.heightBMm ??
         port?.heightMm ??
+        widget.viewModel.document.parameters['port${portNumStr}_height'] ??
+        widget.viewModel.document.parameters['port${portNumStr}HeightB'] ??
+        widget.viewModel.document.parameters['port${portNumStr}Height'] ??
         widget.viewModel.document.parameters['heightB'] ??
         widget.viewModel.document.parameters['height'] ??
         50.0;
@@ -98,12 +107,21 @@ mixin CanvasPortDimensionEditorMixin on State<UnfoldedCanvasWidget> {
     String? haKey;
     String? hbKey;
 
-    if (params.containsKey('port${portNum}Width')) {
+    if (params.containsKey('port${portNum}_width')) {
+      wKey = 'port${portNum}_width';
+    } else if (params.containsKey('port${portNum}Width')) {
       wKey = 'port${portNum}Width';
     }
-    if (params.containsKey('port${portNum}HeightA')) {
+
+    if (params.containsKey('port${portNum}_height')) {
+      haKey = 'port${portNum}_height';
+      hbKey = 'port${portNum}_height';
+    } else if (params.containsKey('port${portNum}HeightA')) {
       haKey = 'port${portNum}HeightA';
+    } else if (params.containsKey('port${portNum}Height')) {
+      haKey = 'port${portNum}Height';
     }
+
     if (params.containsKey('port${portNum}HeightB')) {
       hbKey = 'port${portNum}HeightB';
     }
@@ -136,7 +154,7 @@ mixin CanvasPortDimensionEditorMixin on State<UnfoldedCanvasWidget> {
           wKey = 'widthBranch';
         }
       }
-      wKey ??= 'width';
+      wKey ??= 'port${portNum}_width';
     }
 
     if (haKey == null) {
@@ -144,10 +162,12 @@ mixin CanvasPortDimensionEditorMixin on State<UnfoldedCanvasWidget> {
         haKey = 'heightA';
       } else if (params.containsKey('height')) {
         haKey = 'height';
+      } else if (params.containsKey('port${portNum}_height')) {
+        haKey = 'port${portNum}_height';
       } else if (params.containsKey('port${portNum}Height')) {
         haKey = 'port${portNum}Height';
       } else {
-        haKey = 'height';
+        haKey = 'port${portNum}_height';
       }
     }
 
@@ -156,10 +176,12 @@ mixin CanvasPortDimensionEditorMixin on State<UnfoldedCanvasWidget> {
         hbKey = 'heightB';
       } else if (params.containsKey('height')) {
         hbKey = 'height';
+      } else if (params.containsKey('port${portNum}_height')) {
+        hbKey = 'port${portNum}_height';
       } else if (params.containsKey('port${portNum}Height')) {
         hbKey = 'port${portNum}Height';
       } else {
-        hbKey = 'height';
+        hbKey = 'port${portNum}_height';
       }
     }
 
@@ -220,6 +242,7 @@ mixin CanvasPortDimensionEditorMixin on State<UnfoldedCanvasWidget> {
       },
     );
     widget.viewModel.updateFittingMetadata(updatedMeta);
+    widget.viewModel.commitCmsScaling();
     setState(() {
       _activeEditingPortId = null;
     });
@@ -229,6 +252,9 @@ mixin CanvasPortDimensionEditorMixin on State<UnfoldedCanvasWidget> {
     if (_activeEditingPortId == null) return;
     for (final entry in _portEditBaselineParams.entries) {
       widget.viewModel.updateTemplateParameter(entry.key, entry.value);
+    }
+    if (widget.viewModel.scalingController != null) {
+      widget.viewModel.exitTeachScaling();
     }
     setState(() {
       _activeEditingPortId = null;

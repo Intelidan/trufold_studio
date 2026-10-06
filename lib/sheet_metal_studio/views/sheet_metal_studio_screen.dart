@@ -17,6 +17,7 @@ import 'package:flutter/services.dart';
 
 import '../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../models/dsf_document.dart';
+import 'widgets/canvas_2d/vector_cad_2d_canvas_widget.dart';
 import 'widgets/unfolded_canvas_widget.dart';
 import 'widgets/viewport_3d_widget.dart';
 import 'widgets/split_pane_divider.dart';
@@ -90,6 +91,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
   bool _isCmsInspectorCollapsed = false;
   Offset _cmsInspectorPosition = const Offset(280, 50);
   Offset? _cmsInspectorDragStart;
+  bool _useModern2dCanvas = true;
 
   SheetMetalStudioViewModel get _viewModel => _tabs[_activeTabIndex].viewModel;
   @visibleForTesting
@@ -1081,17 +1083,38 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                           children: [
                                             Expanded(
                                               child: ClipRect(
-                                                child: Stack(
-                                                  children: [
-                                                    UnfoldedCanvasWidget(
-                                                      key: const ValueKey('unfolded_canvas_viewport'),
-                                                      viewModel: _viewModel,
-                                                      renderFloatingInspectors: false,
-                                                      showInCanvasToolRibbon: false,
-                                                    ),
-                                                    _buildCanvasTopTipBanner(_viewModel),
-                                                  ],
-                                                ),
+                                                child: _useModern2dCanvas
+                                                    ? VectorCad2DCanvasWidget(
+                                                        key: const ValueKey('vector_cad_2d_viewport_split'),
+                                                        viewModel: _viewModel,
+                                                        onSwitchToLegacyCanvas: () => setState(() => _useModern2dCanvas = false),
+                                                      )
+                                                    : Stack(
+                                                        children: [
+                                                          UnfoldedCanvasWidget(
+                                                            key: const ValueKey('unfolded_canvas_viewport'),
+                                                            viewModel: _viewModel,
+                                                            renderFloatingInspectors: false,
+                                                            showInCanvasToolRibbon: false,
+                                                          ),
+                                                          _buildCanvasTopTipBanner(_viewModel),
+                                                          Positioned(
+                                                            top: 10,
+                                                            right: 10,
+                                                            child: ElevatedButton.icon(
+                                                              style: ElevatedButton.styleFrom(
+                                                                backgroundColor: const Color(0xFF0284C7),
+                                                                foregroundColor: Colors.white,
+                                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                                              ),
+                                                              icon: const Icon(Icons.brush, size: 13),
+                                                              label: const Text('Use Modern 2D CAD Canvas', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                                              onPressed: () => setState(() => _useModern2dCanvas = true),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
                                               ),
                                             ),
                                             SplitPaneDivider(
@@ -1137,17 +1160,38 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                             crossAxisAlignment: CrossAxisAlignment.stretch,
                                             children: [
                                               Expanded(
-                                                child: Stack(
-                                                  children: [
-                                                    UnfoldedCanvasWidget(
-                                                      key: const ValueKey('unfolded_canvas_viewport'),
-                                                      viewModel: _viewModel,
-                                                      renderFloatingInspectors: false,
-                                                      showInCanvasToolRibbon: false,
-                                                    ),
-                                                    _buildCanvasTopTipBanner(_viewModel),
-                                                  ],
-                                                ),
+                                                child: _useModern2dCanvas
+                                                    ? VectorCad2DCanvasWidget(
+                                                        key: const ValueKey('vector_cad_2d_viewport_full'),
+                                                        viewModel: _viewModel,
+                                                        onSwitchToLegacyCanvas: () => setState(() => _useModern2dCanvas = false),
+                                                      )
+                                                    : Stack(
+                                                        children: [
+                                                          UnfoldedCanvasWidget(
+                                                            key: const ValueKey('unfolded_canvas_viewport'),
+                                                            viewModel: _viewModel,
+                                                            renderFloatingInspectors: false,
+                                                            showInCanvasToolRibbon: false,
+                                                          ),
+                                                          _buildCanvasTopTipBanner(_viewModel),
+                                                          Positioned(
+                                                            top: 10,
+                                                            right: 10,
+                                                            child: ElevatedButton.icon(
+                                                              style: ElevatedButton.styleFrom(
+                                                                backgroundColor: const Color(0xFF0284C7),
+                                                                foregroundColor: Colors.white,
+                                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                                              ),
+                                                              icon: const Icon(Icons.brush, size: 13),
+                                                              label: const Text('Use Modern 2D CAD Canvas', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                                              onPressed: () => setState(() => _useModern2dCanvas = true),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
                                               ),
                                               if ((_viewModel.isCmsDrawing || _isCmsInspectorOpen) && !_isCmsInspectorDetached) ...[
                                                 if (_isCmsInspectorCollapsed)

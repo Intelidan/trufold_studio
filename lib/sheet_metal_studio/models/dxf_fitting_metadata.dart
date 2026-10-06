@@ -386,16 +386,37 @@ class DxfFittingMetadata {
       });
     }
 
+    final parsedParams = <String, double>{};
+    if (json['parameters'] is Map) {
+      (json['parameters'] as Map).forEach((k, v) {
+        if (v is num) {
+          parsedParams[k.toString()] = v.toDouble();
+        } else if (v != null) {
+          final parsed = double.tryParse(v.toString());
+          if (parsed != null) parsedParams[k.toString()] = parsed;
+        }
+      });
+    }
+
+    final parsedAnalyzedDims = <String, double>{};
+    if (json['analyzedDimensions'] is Map) {
+      (json['analyzedDimensions'] as Map).forEach((k, v) {
+        if (v is num) {
+          parsedAnalyzedDims[k.toString()] = v.toDouble();
+        } else if (v != null) {
+          final parsed = double.tryParse(v.toString());
+          if (parsed != null) parsedAnalyzedDims[k.toString()] = parsed;
+        }
+      });
+    }
+
     return DxfFittingMetadata(
       category: json['category'] as String? ?? FittingCategory.none,
       product: json['product'] as String? ?? FittingProductType.none,
       variantName: json['variantName'] as String? ?? 'None',
       flangeMm: (json['flangeMm'] as num?)?.toDouble() ?? 13.0,
-      parameters: (json['parameters'] as Map<String, dynamic>? ?? {})
-          .map((k, v) => MapEntry(k, (v as num).toDouble())),
-      analyzedDimensions:
-          (json['analyzedDimensions'] as Map<String, dynamic>? ?? {})
-              .map((k, v) => MapEntry(k, (v as num).toDouble())),
+      parameters: parsedParams,
+      analyzedDimensions: parsedAnalyzedDims,
       portAssignments: (json['portAssignments'] as Map?)?.map(
         (k, v) => MapEntry(k.toString(), v.toString()),
       ),

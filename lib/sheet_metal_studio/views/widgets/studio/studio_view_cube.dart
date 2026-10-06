@@ -367,10 +367,10 @@ class _StudioViewCubeState extends State<StudioViewCube> {
   void _snapToFace(String face) {
     switch (face) {
       case 'Top':
-        widget.onSetView?.call(0, 89);
+        widget.onSetView?.call(0, 89.9);
         break;
       case 'Bottom':
-        widget.onSetView?.call(0, -89);
+        widget.onSetView?.call(0, -89.9);
         break;
       case 'Front':
         widget.onSetView?.call(0, 0);
@@ -594,11 +594,11 @@ class _ViewCubePainter extends CustomPainter {
   _ViewCubePainter({required this.azimuthDeg, required this.elevationDeg, required this.mousePos, required this.onHoverFaceChanged});
 
   static const List<_CubeFaceData> _faces = [
-    _CubeFaceData(label: 'Top', vertexIndices: [7, 6, 2, 3], normal: [0, 1, 0]),
-    _CubeFaceData(label: 'Bottom', vertexIndices: [4, 0, 1, 5], normal: [0, -1, 0]),
-    _CubeFaceData(label: 'Front', vertexIndices: [4, 5, 6, 7], normal: [0, 0, 1]),
-    _CubeFaceData(label: 'Back', vertexIndices: [1, 0, 3, 2], normal: [0, 0, -1]),
-    _CubeFaceData(label: 'Right', vertexIndices: [5, 1, 2, 6], normal: [1, 0, 0]),
+    _CubeFaceData(label: 'Top', vertexIndices: [4, 5, 6, 7], normal: [0, 0, 1]),
+    _CubeFaceData(label: 'Bottom', vertexIndices: [0, 3, 2, 1], normal: [0, 0, -1]),
+    _CubeFaceData(label: 'Front', vertexIndices: [0, 1, 5, 4], normal: [0, -1, 0]),
+    _CubeFaceData(label: 'Back', vertexIndices: [2, 6, 7, 3], normal: [0, 1, 0]),
+    _CubeFaceData(label: 'Right', vertexIndices: [1, 2, 6, 5], normal: [1, 0, 0]),
     _CubeFaceData(label: 'Left', vertexIndices: [0, 4, 7, 3], normal: [-1, 0, 0]),
   ];
 
@@ -614,15 +614,13 @@ class _ViewCubePainter extends CustomPainter {
   ];
 
   static (double x, double y, double z) _projectPoint(double x, double y, double z, double cosAz, double sinAz, double cosEl, double sinEl) {
-    // 1. Azimuth: Yaw around vertical global Y axis
-    final x1 = x * cosAz - z * sinAz;
-    final y1 = y;
-    final z1 = x * sinAz + z * cosAz;
-
-    // 2. Elevation: Pitch around camera Right X axis
-    final x2 = x1;
-    final y2 = y1 * cosEl - z1 * sinEl;
-    final z2 = y1 * sinEl + z1 * cosEl;
+    // Camera basis vectors for Z-up turntable:
+    // Right u: (cosAz, sinAz, 0)
+    // Up v: (-sinEl * sinAz, sinEl * cosAz, cosEl)
+    // View w (depth towards camera): (cosEl * sinAz, -cosEl * cosAz, sinEl)
+    final x2 = x * cosAz + y * sinAz;
+    final y2 = -x * sinEl * sinAz + y * sinEl * cosAz + z * cosEl;
+    final z2 = x * cosEl * sinAz - y * cosEl * cosAz + z * sinEl;
 
     return (x2, y2, z2);
   }

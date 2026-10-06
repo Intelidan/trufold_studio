@@ -318,22 +318,22 @@ class ThreeCadMeshBuilder {
         edgesGroup.add(three.Mesh(phantomRibbonGeo, phantomRibbonMat));
       }
 
-      // 3c. Crisp 1px Core Centerlines (Fallback & Maximum Edge-On Sharpness)
-      if (lineCoords.isNotEmpty) {
+      // 3c. Crisp 1px Core Centerlines (Fallback when ribbon quads are not generated)
+      if (edgeRibbonPositions.isEmpty && lineCoords.isNotEmpty) {
         final edgeGeo = three.BufferGeometry();
         edgeGeo.setAttribute(three.Attribute.position, three.Float32BufferAttribute.fromList(lineCoords, 3));
         final edgeMat = three.LineBasicMaterial.fromMap({'color': edgeColor, 'depthTest': true, 'depthWrite': false});
         edgesGroup.add(three.LineSegments(edgeGeo, edgeMat));
       }
 
-      if (tangentCoords.isNotEmpty) {
+      if (edgeRibbonPositions.isEmpty && tangentCoords.isNotEmpty) {
         final tanGeo = three.BufferGeometry();
         tanGeo.setAttribute(three.Attribute.position, three.Float32BufferAttribute.fromList(tangentCoords, 3));
         final tanMat = three.LineBasicMaterial.fromMap({'color': edgeColor, 'depthTest': true, 'depthWrite': false});
         edgesGroup.add(three.LineSegments(tanGeo, tanMat));
       }
 
-      if (phantomTangentCoords.isNotEmpty) {
+      if (phantomRibbonPositions.isEmpty && phantomTangentCoords.isNotEmpty) {
         final phantomGeo = three.BufferGeometry();
         phantomGeo.setAttribute(three.Attribute.position, three.Float32BufferAttribute.fromList(phantomTangentCoords, 3));
         final phantomColor = (preferences.phantomTangentEdgeColor.toARGB32() & 0x00FFFFFF);
