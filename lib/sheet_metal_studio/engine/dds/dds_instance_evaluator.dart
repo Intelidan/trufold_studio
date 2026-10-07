@@ -62,6 +62,12 @@ class DdsInstanceEvaluator {
   /// Resolves the material density in kg/m³ based on material name or code.
   static double resolveDensity(String materialName) {
     final matLower = materialName.toLowerCase();
+    if (matLower.contains('plastic') || matLower.contains('pvc') || matLower.contains('poly')) {
+      return 1200.0;
+    }
+    if (matLower.contains('copper')) {
+      return 8960.0;
+    }
     if (matLower.contains('alum') || matLower.contains('(al)') || matLower.contains('al ') || matLower.endsWith('al') || matLower.contains('5052')) {
       return densityAluminum; // 2700.0
     }

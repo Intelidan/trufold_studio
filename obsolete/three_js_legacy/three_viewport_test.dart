@@ -4,10 +4,11 @@ import 'package:three_js/three_js.dart' as three;
 
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/kinematic_fold_engine.dart';
-import 'package:trufold_studio/sheet_metal_studio/engine/three_cad_mesh_builder.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/studio/studio_3d_navigation_bar.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/studio/studio_view_cube.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/studio/studio_graphics_preferences_panel.dart';
+
+import 'three_cad_mesh_builder.dart';
 
 void main() {
   test('ThreeJS scene setup and OrbitControls initialization check', () {

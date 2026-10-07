@@ -24,15 +24,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:three_js/three_js.dart' as three;
-import '../../models/cad_primitives.dart';
-import '../../models/cms/cms_physical_port.dart';
-import '../../models/trunking_cover_data.dart';
-import '../../viewmodels/sheet_metal_studio_viewmodel.dart';
-import '../../engine/kinematic_fold_engine.dart';
-import '../../engine/three_cad_mesh_builder.dart';
-import 'studio/studio_3d_navigation_bar.dart';
-import 'studio/studio_graphics_preferences_panel.dart';
-import 'studio/studio_view_cube.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/kinematic_fold_engine.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/cms/cms_physical_port.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/trunking_cover_data.dart';
+import 'package:trufold_studio/sheet_metal_studio/viewmodels/sheet_metal_studio_viewmodel.dart';
+import 'package:trufold_studio/sheet_metal_studio/views/widgets/studio/studio_3d_navigation_bar.dart';
+import 'package:trufold_studio/sheet_metal_studio/views/widgets/studio/studio_graphics_preferences_panel.dart';
+import 'package:trufold_studio/sheet_metal_studio/views/widgets/studio/studio_view_cube.dart';
+
+import 'three_cad_mesh_builder.dart';
+
 
 typedef _DrawFacet = ({
   Path fillPath,
@@ -353,13 +355,11 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
       // Apply User-Defined Anti-Aliasing & Supersampling scale
       final baseDpr = MediaQuery.of(context).devicePixelRatio;
       final dpr = baseDpr * viewModel.antiAliasingQuality.pixelRatioScale;
-      threeJs.dpr = dpr;
+      threeJs.setResolution(dpr);
       threeJs.renderer?.setPixelRatio(dpr);
 
       final vpSize = _threeJsViewportSize;
       if (vpSize != null && vpSize.width > 0 && vpSize.height > 0) {
-        threeJs.width = vpSize.width;
-        threeJs.height = vpSize.height;
         threeJs.screenSize = vpSize;
         threeJs.renderer?.setSize(vpSize.width, vpSize.height, false);
       }
@@ -477,11 +477,9 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
     if (_useHardwareEngine && _threeJs != null && _setupComplete) {
       final baseDpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
       final targetDpr = baseDpr * quality.pixelRatioScale;
-      _threeJs!.dpr = targetDpr;
+      _threeJs!.setResolution(targetDpr);
       _threeJs!.renderer?.setPixelRatio(targetDpr);
       if (_threeJsViewportSize != null) {
-        _threeJs!.width = _threeJsViewportSize!.width;
-        _threeJs!.height = _threeJsViewportSize!.height;
         _threeJs!.screenSize = _threeJsViewportSize!;
         _threeJs!.renderer?.setSize(_threeJsViewportSize!.width, _threeJsViewportSize!.height, false);
         if (_threeJsViewportSize!.height > 0) {
@@ -499,8 +497,6 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
 
   void _updateThreeJsViewportSize(Size size) {
     if (_threeJs == null || !_setupComplete) return;
-    _threeJs!.width = size.width;
-    _threeJs!.height = size.height;
     _threeJs!.screenSize = size;
     final cam = _threeJs!.camera;
     if (size.height > 0) {
@@ -509,7 +505,7 @@ class _Viewport3dWidgetState extends State<Viewport3dWidget> {
     }
     final baseDpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
     final curDpr = baseDpr * viewModel.antiAliasingQuality.pixelRatioScale;
-    _threeJs!.dpr = curDpr;
+    _threeJs!.setResolution(curDpr);
     _threeJs!.renderer?.setPixelRatio(curDpr);
     _threeJs!.renderer?.setSize(size.width, size.height, false);
     if (_threeJs!.settings.useSourceTexture && !kIsWeb) {

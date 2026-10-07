@@ -1,0 +1,261 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_scene/scene.dart';
+import 'package:vector_math/vector_math_64.dart' as vm;
+
+void main() => runApp(const MaterialApp(home: MaterialConfiguratorScreen()));
+
+class MaterialConfiguratorScreen extends StatefulWidget {
+  const MaterialConfiguratorScreen({super.key});
+
+  @override
+  State<MaterialConfiguratorScreen> createState() => _MaterialConfiguratorScreenState();
+}
+
+class _MaterialConfiguratorScreenState extends State<MaterialConfiguratorScreen> {
+  // 1. Initial State Controls
+  String _selectedPreset = 'HotDipGalvanized';
+  Color _pickerColor = const Color(0xFF909399); // Default Steel Gray
+
+  double _roughnessFactor = 0.55;
+  double _isPlastic = 0.0;
+  double _materialMode = 1.0; // Starts with Voronoi Spangle active
+  double _spangleScale = 45.0;
+
+  ShaderInstance? _cachedShaderInstance;
+  Node? _scene3DNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAndPrepare3DScene();
+  }
+
+  // 2. Initialize Flutter Scene Materials and Nodes
+  Future<void> _loadAndPrepare3DScene() async {
+    // Load the custom procedural asset we compiled earlier
+    final ShaderMaterial material = await ShaderMaterial.fromAsset('assets/master_materials.fmat');
+    _cachedShaderInstance = material.createInstance();
+
+    // Create a basic procedural 3D Shape (e.g., a Sphere or Cube Mesh)
+    // In a real application, you would load a glTF asset via Scene.fromAsset()
+    final Mesh sampleMesh = Mesh.createSphere();
+
+    // Bind our shader reference directly to the mesh layout
+    sampleMesh.material = _cachedShaderInstance!;
+
+    _scene3DNode = Node();
+    _scene3DNode!.mesh = sampleMesh;
+
+    // Apply the active default preset constraints to the pipeline
+    _updateShaderPipeline();
+  }
+
+  // 3. Directly push updated state values into the GPU memory uniforms
+  void _updateShaderPipeline() {
+    if (_cachedShaderInstance == null) return;
+
+    setState(() {
+      // Pass the Linear RGB values to float4 uniform
+      _cachedShaderInstance!.setFloat4('baseColorFactor', vm.Vector4(_pickerColor.red / 255.0, _pickerColor.green / 255.0, _pickerColor.blue / 255.0, 1.0));
+
+      _cachedShaderInstance!.setFloat('roughnessFactor', _roughnessFactor);
+      _cachedShaderInstance!.setFloat('isPlastic', _isPlastic);
+      _cachedShaderInstance!.setFloat('materialMode', _materialMode);
+      _cachedShaderInstance!.setFloat('spangleScale', _spangleScale);
+    });
+  }
+
+  // 4. Handle Material Dropdown Switch Logic
+  void _applyPresetConfiguration(String? preset) {
+    if (preset == null) return;
+    _selectedPreset = preset;
+
+    switch (preset) {
+      case 'HotDipGalvanized':
+        _pickerColor = const Color(0xFF94979A);
+        _roughnessFactor = 0.55;
+        _isPlastic = 0.0;
+        _materialMode = 1.0; // Procedural Voronoi ON
+        _spangleScale = 45.0;
+        break;
+      case 'PreGalvanized':
+        _pickerColor = const Color(0xFFA6AABC);
+        _roughnessFactor = 0.28;
+        _isPlastic = 0.0;
+        _materialMode = 0.0;
+        break;
+      case 'Plastic':
+        _pickerColor = const Color(0xFF1B5E20); // Dark Green
+        _roughnessFactor = 0.18;
+        _isPlastic = 1.0; // Dielectric calculations ON
+        _materialMode = 0.0;
+        break;
+      case 'Gold':
+        _pickerColor = const Color(0xFFFFC961);
+        _roughnessFactor = 0.15;
+        _isPlastic = 0.0;
+        _materialMode = 0.0;
+        break;
+      case 'Chrome':
+        _pickerColor = const Color(0xFFF2F2F2);
+        _roughnessFactor = 0.04;
+        _isPlastic = 0.0;
+        _materialMode = 0.0;
+        break;
+      case 'Copper':
+        _pickerColor = const Color(0xFFF3A38A);
+        _roughnessFactor = 0.22;
+        _isPlastic = 0.0;
+        _materialMode = 0.0;
+        break;
+    }
+    _updateShaderPipeline();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Flutter Scene Shaders Playground')),
+      body: Row(
+        children: [
+          // Left Window Half: Live 3D Render Canvas
+          Expanded(
+            flex: 6,
+            child: Container(
+              color: Colors.black87,
+              child: _scene3DNode == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : Scene(
+                      node: _scene3DNode!,
+                      // Setup standard environmental camera matrices
+                      camera: Camera.perspective(position: vm.Vector3(0.0, 0.0, 3.0), target: vm.Vector3(0.0, 0.0, 0.0)),
+                    ),
+            ),
+          ),
+
+          // Right Window Half: Reactive Uniform Adjustment Sidebar
+          Expanded(
+            flex: 4,
+            child: Container(
+              padding: const EdgeInsets.all(16.0),
+              color: Colors.grey[50],
+              child: ListView(
+                children: [
+                  Text('Material Controls', style: Theme.of(context).textTheme.titleLarge),
+                  const Divider(),
+                  const SizedBox(height: 12),
+
+                  // Material Selection Dropdown
+                  const Text('Select Target Preset', style: TextStyle(fontWeight: FontWeight.bold)),
+                  DropdownButton<String>(
+                    value: _selectedPreset,
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(value: 'HotDipGalvanized', child: Text('Hot-Dip Galvanized Iron (HDG)')),
+                      DropdownMenuItem(value: 'PreGalvanized', child: Text('Pre-Galvanized Iron (PGI)')),
+                      DropdownMenuItem(value: 'Plastic', child: Text('Glossy Structural Plastic')),
+                      DropdownMenuItem(value: 'Gold', child: Text('Polished Gold Element')),
+                      DropdownMenuItem(value: 'Chrome', child: Text('Specular Chrome Mirror')),
+                      DropdownMenuItem(value: 'Copper', child: Text('Raw Copper Conductive')),
+                    ],
+                    onChanged: _applyPresetConfiguration,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Base Color Customizer
+                  if (_selectedPreset == 'Plastic') ...[
+                    const Text('Custom Plastic Pigment Tint', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Row(
+                      children: [Colors.red, Colors.green, Colors.blue, Colors.orange, Colors.purple]
+                          .map(
+                            (color) => InkWell(
+                              onTap: () {
+                                _pickerColor = color;
+                                _updateShaderPipeline();
+                              },
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                margin: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                  border: _pickerColor == color ? Border.all(width: 3, color: Colors.black) : null,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // Roughness Slider Configuration
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Roughness Factor', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text(_roughnessFactor.toStringAsFixed(2)),
+                    ],
+                  ),
+                  Slider(
+                    value: _roughnessFactor,
+                    min: 0.04,
+                    max: 1.0,
+                    onChanged: (val) {
+                      _roughnessFactor = val;
+                      _updateShaderPipeline();
+                    },
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Procedural Voronoi Controls Section
+                  Card(
+                    color: _materialMode > 0.5 ? Colors.blue[50] : Colors.grey[200],
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Procedural HDG Spangles', style: TextStyle(fontWeight: FontWeight.bold)),
+                              Switch(
+                                value: _materialMode > 0.5,
+                                onChanged: (active) {
+                                  _materialMode = active ? 1.0 : 0.0;
+                                  _updateShaderPipeline();
+                                },
+                              ),
+                            ],
+                          ),
+                          if (_materialMode > 0.5) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [const Text('Zinc Crystal Granularity Scale'), Text(_spangleScale.toStringAsFixed(0))],
+                            ),
+                            Slider(
+                              value: _spangleScale,
+                              min: 10.0,
+                              max: 100.0,
+                              onChanged: (val) {
+                                _spangleScale = val;
+                                _updateShaderPipeline();
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -473,5 +473,86 @@ void main() {
       expect(ctrl.previewDocument.bends.any((b) => b.id.startsWith('BF_RISER_')), isFalse);
       expect(ctrl.previewDocument.punches.any((p) => p.id.startsWith('FLAP_SLOT_RISER_')), isFalse);
     });
+
+    test('TC-10: Coupler Flaps Push-Out (Growing) and Pull-In (Shrinking) Animation Behavior', () async {
+      const bendPorts = [
+        CmsPhysicalPort(id: 'PORT_1', index: 1, width: 100.0, height: 50.0),
+        CmsPhysicalPort(id: 'PORT_2', index: 2, width: 100.0, height: 50.0),
+      ];
+
+      final ctrl = CmsScalingController(
+        baselineDocument: bend90Doc,
+        contract: CmsProductContract.bend90,
+        baselinePorts: bendPorts,
+      );
+
+      expect(ctrl.includeCouplerFlaps, isFalse);
+      expect(ctrl.isAnimatingCouplerFlaps, isFalse);
+
+      // 1. Push-out animation (Growing)
+      final growFuture = ctrl.animateCouplerFlaps(
+        true,
+        duration: const Duration(milliseconds: 100),
+      );
+
+      expect(ctrl.includeCouplerFlaps, isTrue, reason: 'Logical switch intent should immediately be true');
+      expect(ctrl.visualIncludeCouplerFlaps, isTrue, reason: 'Flaps should be visually active while growing');
+      expect(ctrl.isAnimatingCouplerFlaps, isTrue);
+
+      await growFuture;
+
+      expect(ctrl.isAnimatingCouplerFlaps, isFalse);
+      expect(ctrl.includeCouplerFlaps, isTrue);
+      expect(ctrl.visualIncludeCouplerFlaps, isTrue);
+      expect(ctrl.couplerFlapLength, equals(90.0));
+      expect(ctrl.previewDocument.faces.any((f) => f.id.startsWith('F_FLAP_')), isTrue);
+      expect(ctrl.previewDocument.punches.where((p) => p.id.startsWith('FLAP_SLOT_')).length, equals(12));
+
+      // 2. Pull-in animation (Shrinking)
+      final shrinkFuture = ctrl.animateCouplerFlaps(
+        false,
+        duration: const Duration(milliseconds: 100),
+      );
+
+      expect(ctrl.includeCouplerFlaps, isFalse, reason: 'Logical intent is false immediately upon disabling');
+      expect(ctrl.visualIncludeCouplerFlaps, isTrue, reason: 'Flaps stay visual during shrinking animation');
+      expect(ctrl.isAnimatingCouplerFlaps, isTrue);
+
+      await shrinkFuture;
+
+      expect(ctrl.isAnimatingCouplerFlaps, isFalse);
+      expect(ctrl.includeCouplerFlaps, isFalse);
+      expect(ctrl.visualIncludeCouplerFlaps, isFalse);
+      expect(ctrl.previewDocument.faces.any((f) => f.id.startsWith('F_FLAP_')), isFalse);
+      expect(ctrl.previewDocument.punches.any((p) => p.id.startsWith('FLAP_SLOT_')), isFalse);
+
+      // 3. Reversal mid-flight
+      ctrl.animateCouplerFlaps(
+        true,
+        duration: const Duration(milliseconds: 150),
+      );
+      // Wait for a few ticks to grow partially
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(ctrl.isAnimatingCouplerFlaps, isTrue);
+      final midLength = ctrl.couplerFlapLength;
+      expect(midLength, greaterThan(0.0));
+      expect(midLength, lessThan(90.0));
+
+      // Reverse to shrink before grow completes
+      final reversedShrink = ctrl.animateCouplerFlaps(
+        false,
+        duration: const Duration(milliseconds: 80),
+      );
+      expect(ctrl.includeCouplerFlaps, isFalse);
+      expect(ctrl.visualIncludeCouplerFlaps, isTrue);
+
+      await reversedShrink;
+      expect(ctrl.isAnimatingCouplerFlaps, isFalse);
+      expect(ctrl.includeCouplerFlaps, isFalse);
+      expect(ctrl.visualIncludeCouplerFlaps, isFalse);
+      expect(ctrl.previewDocument.faces.any((f) => f.id.startsWith('F_FLAP_')), isFalse);
+
+      ctrl.dispose();
+    });
   });
 }

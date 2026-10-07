@@ -693,6 +693,7 @@ class TrayReducerScaler {
         final uCenter = couplerFlapLength / 2.0;
         final uList = [uCenter - slotPitch, uCenter, uCenter + slotPitch];
         final v = height / 2.0;
+        if (couplerFlapLength < 20.0) return;
         for (final u in uList) {
           punches.add(
             sampleSlot.copyWith(

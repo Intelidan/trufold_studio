@@ -501,6 +501,25 @@ class KinematicFoldEngine {
             final nLenSteps = (intervalLen / 35.0).ceil().clamp(1, 8);
             final nSteps = (curveResolution3D / 5.0).round().clamp(4, 12);
 
+            // Precompute consolidated tangent seam lines across the full solid interval
+            final rotEnd = TransformMatrix4.rotationAroundLine(c1, axisVec, signedAngle);
+            final inIntervalStart = inStart1 + (inStart2 - inStart1) * intervalStart;
+            final inIntervalEnd = inStart1 + (inStart2 - inStart1) * intervalEnd;
+            final inTangentsConsolidated = <List<CadPoint3D>>[
+              [inIntervalStart, inIntervalEnd],
+              [rotEnd.transformPoint(inIntervalStart), rotEnd.transformPoint(inIntervalEnd)],
+            ];
+
+            final outTangentsConsolidated = <List<CadPoint3D>>[];
+            if (thicknessMm > 0.05) {
+              final outIntervalStart = outStart1 + (outStart2 - outStart1) * intervalStart;
+              final outIntervalEnd = outStart1 + (outStart2 - outStart1) * intervalEnd;
+              outTangentsConsolidated.addAll([
+                [outIntervalStart, outIntervalEnd],
+                [rotEnd.transformPoint(outIntervalStart), rotEnd.transformPoint(outIntervalEnd)],
+              ]);
+            }
+
             for (int lStep = 0; lStep < nLenSteps; lStep++) {
               final t1 = intervalStart + (intervalEnd - intervalStart) * (lStep / nLenSteps);
               final t2 = intervalStart + (intervalEnd - intervalStart) * ((lStep + 1) / nLenSteps);
@@ -531,9 +550,15 @@ class KinematicFoldEngine {
                 var inNorm = (inAxisPt - inMid).normalized();
                 if (inNorm.length < 1e-3) inNorm = nParent;
 
-                final inTangents = <List<CadPoint3D>>[];
-                if (step == 0) inTangents.add([inA1, inA2]);
-                if (step == nSteps - 1) inTangents.add([inB1, inB2]);
+                // Associate full-length tangent seams on the first facet of this interval
+                final inTangents = (lStep == 0 && step == 0) ? inTangentsConsolidated : const <List<CadPoint3D>>[];
+
+                // If zero-thickness sheet, rim border lines lie on inside facets
+                final thinRimBoundaries = <List<CadPoint3D>>[];
+                if (thicknessMm <= 0.05) {
+                  if (lStep == 0) thinRimBoundaries.add([inA1, inB1]);
+                  if (lStep == nLenSteps - 1) thinRimBoundaries.add([inA2, inB2]);
+                }
 
                 filletPolygons.add(
                   CadFoldedPolygon3D(
@@ -542,6 +567,7 @@ class KinematicFoldEngine {
                     normal: inNorm,
                     color: const Color(0xFFCFD8DC), // Metallic curved fillet facet
                     tangentLines: inTangents,
+                    boundaryLines: thinRimBoundaries,
                   ),
                 );
 
@@ -558,9 +584,7 @@ class KinematicFoldEngine {
                   var outNorm = (outMid - outAxisPt).normalized();
                   if (outNorm.length < 1e-3) outNorm = nParent * -1.0;
 
-                  final outTangents = <List<CadPoint3D>>[];
-                  if (step == 0) outTangents.add([outA1, outA2]);
-                  if (step == nSteps - 1) outTangents.add([outB1, outB2]);
+                  final outTangents = (lStep == 0 && step == 0) ? outTangentsConsolidated : const <List<CadPoint3D>>[];
 
                   filletPolygons.add(
                     CadFoldedPolygon3D(
@@ -573,25 +597,37 @@ class KinematicFoldEngine {
                   );
 
                   // Annular Cap at start of interval (bend end or notch opening)
+                  // Always use outA1/outB1 on the exterior convex border of the sheet metal part
                   if (lStep == 0) {
+                    final arcA = outA1;
+                    final arcB = outB1;
                     filletPolygons.add(
                       CadFoldedPolygon3D(
                         faceId: 'FILLET_CAP1_${bend.id}_${intIdx}_$step',
                         vertices: [inA1, inB1, outB1, outA1],
                         normal: axisVec * -1.0,
                         color: const Color(0xFF78909C),
+                        boundaryLines: [
+                          [arcA, arcB],
+                        ],
                       ),
                     );
                   }
 
                   // Annular Cap at end of interval (bend end or notch opening)
+                  // Always use outA2/outB2 on the exterior convex border of the sheet metal part
                   if (lStep == nLenSteps - 1) {
+                    final arcA = outA2;
+                    final arcB = outB2;
                     filletPolygons.add(
                       CadFoldedPolygon3D(
                         faceId: 'FILLET_CAP2_${bend.id}_${intIdx}_$step',
                         vertices: [outA2, outB2, inB2, inA2],
                         normal: axisVec,
                         color: const Color(0xFF78909C),
+                        boundaryLines: [
+                          [arcB, arcA],
+                        ],
                       ),
                     );
                   }
@@ -683,7 +719,8 @@ class KinematicFoldEngine {
       }
     }
 
-    // SS1 Fix: Generate true exposed boundary lines for top surface (excluding bend seams and clipped against holes)
+    // Single border line on the top surface face (z = 0.0) connecting seamlessly to bend arcs
+    const zSurface = 0.0;
     final numVerts = faceVerts.length;
     final boundaryLines3D = <List<CadPoint3D>>[];
     for (int i = 0; i < numVerts; i++) {
@@ -695,8 +732,44 @@ class KinematicFoldEngine {
         for (final seg in exposedSegments) {
           if (seg.$1.distanceTo(seg.$2) > 0.3) {
             boundaryLines3D.add([
-              currentTransform.transformPoint(CadPoint3D(seg.$1.x, seg.$1.y, 0.0)),
-              currentTransform.transformPoint(CadPoint3D(seg.$2.x, seg.$2.y, 0.0)),
+              currentTransform.transformPoint(CadPoint3D(seg.$1.x, seg.$1.y, zSurface)),
+              currentTransform.transformPoint(CadPoint3D(seg.$2.x, seg.$2.y, zSurface)),
+            ]);
+          }
+        }
+      }
+    }
+
+    // Add crisp border lines around face punch cutouts and holes on the surface faces (not insides)
+    for (final punch in facePunches) {
+      final punchRadius = math.max(punch.diameterMm / 2.0, math.min(punch.widthMm, punch.lengthMm) / 2.0);
+      final holeWireframeSegments = (punchRadius * math.pi / 1.5).round().clamp(12, 24);
+      final hole2D = punch.toPolygon(circleSegments: holeWireframeSegments);
+      if (hole2D.length >= 3) {
+        for (int i = 0; i < hole2D.length; i++) {
+          final p1 = hole2D[i];
+          final p2 = hole2D[(i + 1) % hole2D.length];
+          final clipped = _clipSegmentToPolygon(p1, p2, faceVerts);
+          for (final (cA, cB) in clipped) {
+            if (cA.distanceTo(cB) > 0.3) {
+              boundaryLines3D.add([
+                currentTransform.transformPoint(CadPoint3D(cA.x, cA.y, zSurface)),
+                currentTransform.transformPoint(CadPoint3D(cB.x, cB.y, zSurface)),
+              ]);
+            }
+          }
+        }
+      }
+    }
+    if (facePunches.isEmpty && node.face.holes.isNotEmpty) {
+      for (final hole2D in node.face.holes) {
+        if (hole2D.length >= 3) {
+          for (int i = 0; i < hole2D.length; i++) {
+            final p1 = hole2D[i];
+            final p2 = hole2D[(i + 1) % hole2D.length];
+            boundaryLines3D.add([
+              currentTransform.transformPoint(CadPoint3D(p1.x, p1.y, zSurface)),
+              currentTransform.transformPoint(CadPoint3D(p2.x, p2.y, zSurface)),
             ]);
           }
         }
@@ -737,24 +810,7 @@ class KinematicFoldEngine {
         }
       }
 
-      final boundaryLines3DBot = <List<CadPoint3D>>[];
-      for (int i = 0; i < numVerts; i++) {
-        final pA = faceVerts[i];
-        final pB = faceVerts[(i + 1) % numVerts];
-        final nonBendSegs = _clipSegmentOutsideBends(pA, pB, bends);
-        for (final (nbA, nbB) in nonBendSegs) {
-          final exposedSegments = _clipSegmentOutsidePunches(nbA, nbB, facePunches);
-          for (final seg in exposedSegments) {
-            if (seg.$1.distanceTo(seg.$2) > 0.3) {
-              boundaryLines3DBot.add([
-                currentTransform.transformPoint(CadPoint3D(seg.$1.x, seg.$1.y, -thicknessMm)),
-                currentTransform.transformPoint(CadPoint3D(seg.$2.x, seg.$2.y, -thicknessMm)),
-              ]);
-            }
-          }
-        }
-      }
-
+      // Requirement 1: Only 1 border line per segment (do not duplicate on bottom surface)
       thicknessPolygons.add(
         CadFoldedPolygon3D(
           faceId: '${node.face.id}_BOT',
@@ -763,7 +819,7 @@ class KinematicFoldEngine {
           color: faceColor,
           holes: holes3DBot,
           holePunchIds: holePunchIdsBot,
-          boundaryLines: boundaryLines3DBot,
+          boundaryLines: const [],
         ),
       );
 

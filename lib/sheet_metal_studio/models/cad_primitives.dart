@@ -11,6 +11,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 export 'cad_geometry.dart' show CadArc2D;
+export 'cad_material_preset.dart';
+
+import 'cad_material_preset.dart';
 
 /// 2D Coordinate Point (in mm)
 @immutable
@@ -225,6 +228,46 @@ enum OnshapeTangentEdgeMode {
   const OnshapeTangentEdgeMode(this.label);
 }
 
+/// Active 3D CAD rendering engine backend for TruFold Studio.
+enum Cad3dEngineMode {
+  flutterGpu(
+    'Flutter GPU (Scene)',
+    'Hardware-accelerated 120 FPS PBR renderer powered by flutter_scene and Impeller.',
+  ),
+  flutterPaint(
+    'Flutter Paint (2.5D Canvas)',
+    '1st-generation pure software Canvas CustomPainter fallback with zero GPU dependencies.',
+  );
+
+  final String label;
+  final String description;
+  const Cad3dEngineMode(this.label, this.description);
+}
+
+/// Preserves independent 3D camera pan, zoom, orbit distance, and angles across multiple open tabs.
+class Cad3dCameraState {
+  final double azimuthDeg;
+  final double elevationDeg;
+  final double zoom;
+  final Offset pan;
+  final double orbitDistance;
+  final CadPoint3D orbitTarget;
+  final bool isInitialized;
+
+  const Cad3dCameraState({
+    this.azimuthDeg = 45.0,
+    this.elevationDeg = 35.264,
+    this.zoom = 1.0,
+    this.pan = Offset.zero,
+    this.orbitDistance = 350.0,
+    this.orbitTarget = const CadPoint3D(0, 0, 0),
+    this.isInitialized = false,
+  });
+
+  double get panX => pan.dx;
+  double get panY => pan.dy;
+}
+
 /// Onshape-compatible 3D Graphics Preferences.
 /// Configures viewport lighting/FOV, shaded body surface properties, and phantom edge lines.
 class OnshapeGraphicsPreferences {
@@ -255,6 +298,9 @@ class OnshapeGraphicsPreferences {
   final bool hasSecondaryLight; // toggle secondary fill light, default true
   final bool hasBackLight; // toggle rim/back light, default false
 
+  // PBR / Shader Material Settings (Hot-Dip Galvanized, Pre-Galvanized, Plastic, Chrome, etc.)
+  final CadMaterialSettings materialSettings;
+
   const OnshapeGraphicsPreferences({
     this.ambientOcclusion = 40.0,
     this.fieldOfView = 46.0,
@@ -273,6 +319,7 @@ class OnshapeGraphicsPreferences {
     this.keyLightIntensity = 1.45,
     this.hasSecondaryLight = true,
     this.hasBackLight = false,
+    this.materialSettings = const CadMaterialSettings(),
   });
 
   OnshapeGraphicsPreferences copyWith({
@@ -293,6 +340,7 @@ class OnshapeGraphicsPreferences {
     double? keyLightIntensity,
     bool? hasSecondaryLight,
     bool? hasBackLight,
+    CadMaterialSettings? materialSettings,
   }) {
     return OnshapeGraphicsPreferences(
       ambientOcclusion: ambientOcclusion ?? this.ambientOcclusion,
@@ -312,6 +360,7 @@ class OnshapeGraphicsPreferences {
       keyLightIntensity: keyLightIntensity ?? this.keyLightIntensity,
       hasSecondaryLight: hasSecondaryLight ?? this.hasSecondaryLight,
       hasBackLight: hasBackLight ?? this.hasBackLight,
+      materialSettings: materialSettings ?? this.materialSettings,
     );
   }
 
@@ -335,7 +384,8 @@ class OnshapeGraphicsPreferences {
         other.lightElevationDeg == lightElevationDeg &&
         other.keyLightIntensity == keyLightIntensity &&
         other.hasSecondaryLight == hasSecondaryLight &&
-        other.hasBackLight == hasBackLight;
+        other.hasBackLight == hasBackLight &&
+        other.materialSettings == materialSettings;
   }
 
   @override
@@ -357,6 +407,7 @@ class OnshapeGraphicsPreferences {
         keyLightIntensity,
         hasSecondaryLight,
         hasBackLight,
+        materialSettings,
       );
 }
 

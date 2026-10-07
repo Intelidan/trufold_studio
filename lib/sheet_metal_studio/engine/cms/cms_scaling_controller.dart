@@ -10,8 +10,10 @@
 // per TRUFOLD_PHASE_1_2_TEMPLATE_SCALING_WORKFLOW.md (Sections 8-22).
 // =============================================================================
 
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/animation.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../models/cad_primitives.dart';
@@ -118,10 +120,18 @@ class CmsScalingController extends ChangeNotifier {
   int get activePortIndex => _model.activePortIndex;
 
   bool _includeCouplerFlaps = false;
-  bool get includeCouplerFlaps => _includeCouplerFlaps;
+  bool _targetIncludeCouplerFlaps = false;
+  bool get includeCouplerFlaps => _targetIncludeCouplerFlaps;
+  bool get visualIncludeCouplerFlaps => _includeCouplerFlaps;
 
   double _couplerFlapLength = 90.0;
+  double _targetCouplerFlapLength = 90.0;
   double get couplerFlapLength => _couplerFlapLength;
+  double get targetCouplerFlapLength => _targetCouplerFlapLength;
+
+  Timer? _couplerFlapAnimTimer;
+  Completer<void>? _couplerFlapAnimCompleter;
+  bool get isAnimatingCouplerFlaps => _couplerFlapAnimTimer != null && _couplerFlapAnimTimer!.isActive;
 
   double _perforationPitch = 100.0;
   double get perforationPitch => _perforationPitch;
@@ -138,15 +148,109 @@ class CmsScalingController extends ChangeNotifier {
 
   bool get isTrayReducer => TrayReducerScaler.isTrayReducer(baselineDocument);
 
-  void setIncludeCouplerFlaps(bool include) {
-    if (_includeCouplerFlaps == include) return;
+  /// Smoothly animates the coupler flaps push-out (growing) or pull-in (shrinking).
+  Future<void> animateCouplerFlaps(
+    bool enable, {
+    Duration duration = const Duration(milliseconds: 350),
+    Curve? curve,
+  }) {
+    if (_targetIncludeCouplerFlaps == enable && !isAnimatingCouplerFlaps) {
+      return Future.value();
+    }
+
+    _couplerFlapAnimTimer?.cancel();
+    _couplerFlapAnimTimer = null;
+    if (_couplerFlapAnimCompleter != null && !_couplerFlapAnimCompleter!.isCompleted) {
+      _couplerFlapAnimCompleter!.complete();
+    }
+    _couplerFlapAnimCompleter = Completer<void>();
+    _targetIncludeCouplerFlaps = enable;
+
+    final double startLength;
+    final double targetLength;
+    final Curve effectiveCurve;
+
+    if (enable) {
+      final wasDisabled = !_includeCouplerFlaps;
+      _includeCouplerFlaps = true;
+      startLength = (wasDisabled || _couplerFlapLength <= 0.5) ? 0.1 : _couplerFlapLength;
+      targetLength = _targetCouplerFlapLength;
+      effectiveCurve = curve ?? Curves.easeOutCubic;
+    } else {
+      // Keep _includeCouplerFlaps = true during the pull-in animation so geometry remains active while shrinking
+      _includeCouplerFlaps = true;
+      startLength = _couplerFlapLength;
+      targetLength = 0.1;
+      effectiveCurve = curve ?? Curves.easeInOutCubic;
+    }
+
+    final totalMs = duration.inMilliseconds;
+    if (totalMs <= 0 || (startLength - targetLength).abs() < 1e-3) {
+      _includeCouplerFlaps = enable;
+      _couplerFlapLength = enable ? _targetCouplerFlapLength : 0.0;
+      evaluateMorph(previewMorphValue);
+      notifyListeners();
+      _couplerFlapAnimCompleter?.complete();
+      return _couplerFlapAnimCompleter!.future;
+    }
+
+    final stopwatch = Stopwatch()..start();
+    const frameInterval = Duration(milliseconds: 16);
+
+    _couplerFlapAnimTimer = Timer.periodic(frameInterval, (timer) {
+      final elapsedMs = stopwatch.elapsedMilliseconds;
+      final rawT = (elapsedMs / totalMs).clamp(0.0, 1.0);
+      final t = effectiveCurve.transform(rawT);
+
+      _couplerFlapLength = (startLength + (targetLength - startLength) * t).clamp(0.1, math.max(startLength, targetLength));
+      evaluateMorph(previewMorphValue);
+      notifyListeners();
+
+      if (rawT >= 1.0) {
+        timer.cancel();
+        _couplerFlapAnimTimer = null;
+        if (!enable) {
+          _includeCouplerFlaps = false;
+          _couplerFlapLength = _targetCouplerFlapLength;
+        } else {
+          _includeCouplerFlaps = true;
+          _couplerFlapLength = targetLength;
+        }
+        evaluateMorph(previewMorphValue);
+        notifyListeners();
+        if (_couplerFlapAnimCompleter != null && !_couplerFlapAnimCompleter!.isCompleted) {
+          _couplerFlapAnimCompleter!.complete();
+        }
+      }
+    });
+
+    return _couplerFlapAnimCompleter!.future;
+  }
+
+  void setIncludeCouplerFlaps(bool include, {bool animate = false}) {
+    if (animate) {
+      animateCouplerFlaps(include);
+      return;
+    }
+    _couplerFlapAnimTimer?.cancel();
+    _couplerFlapAnimTimer = null;
+    if (_couplerFlapAnimCompleter != null && !_couplerFlapAnimCompleter!.isCompleted) {
+      _couplerFlapAnimCompleter!.complete();
+    }
+    if (_targetIncludeCouplerFlaps == include && _includeCouplerFlaps == include) return;
+    _targetIncludeCouplerFlaps = include;
     _includeCouplerFlaps = include;
+    if (include) {
+      _couplerFlapLength = _targetCouplerFlapLength;
+    }
     evaluateMorph(previewMorphValue);
     notifyListeners();
   }
 
   void setCouplerFlapLength(double length) {
     final clamped = length.clamp(20.0, 150.0);
+    _targetCouplerFlapLength = clamped;
+    if (isAnimatingCouplerFlaps) return;
     if ((_couplerFlapLength - clamped).abs() < 1e-3) return;
     _couplerFlapLength = clamped;
     evaluateMorph(previewMorphValue);
@@ -616,8 +720,15 @@ class CmsScalingController extends ChangeNotifier {
     final activeBase = _model.parameters[_activeParameterId]?.baselineValue ?? 100.0;
     _previewMorphValue = activeBase;
 
+    _couplerFlapAnimTimer?.cancel();
+    _couplerFlapAnimTimer = null;
+    if (_couplerFlapAnimCompleter != null && !_couplerFlapAnimCompleter!.isCompleted) {
+      _couplerFlapAnimCompleter!.complete();
+    }
     _includeCouplerFlaps = false;
+    _targetIncludeCouplerFlaps = false;
     _couplerFlapLength = 90.0;
+    _targetCouplerFlapLength = 90.0;
     _perforationPitch = 100.0;
     dynamic initialAlign = baselineDocument.parameters['reducer_alignment'] ??
         baselineDocument.metadata['reducer_alignment'];
@@ -634,6 +745,11 @@ class CmsScalingController extends ChangeNotifier {
 
   /// Reverts any preview changes back to the unscaled baseline.
   void cancelScaling() {
+    _couplerFlapAnimTimer?.cancel();
+    _couplerFlapAnimTimer = null;
+    if (_couplerFlapAnimCompleter != null && !_couplerFlapAnimCompleter!.isCompleted) {
+      _couplerFlapAnimCompleter!.complete();
+    }
     _currentPreview = null;
     final baseVal = baselineDocument.parameters[_activeParameterId] ?? (baselinePorts.isNotEmpty ? baselinePorts.first.width : 100.0);
     _previewMorphValue = baseVal;
@@ -649,6 +765,16 @@ class CmsScalingController extends ChangeNotifier {
 
   /// Cancels preview and reverts to baseline.
   void cancelPreview() => cancelScaling();
+
+  @override
+  void dispose() {
+    _couplerFlapAnimTimer?.cancel();
+    _couplerFlapAnimTimer = null;
+    if (_couplerFlapAnimCompleter != null && !_couplerFlapAnimCompleter!.isCompleted) {
+      _couplerFlapAnimCompleter!.complete();
+    }
+    super.dispose();
+  }
 
   /// Geometrically detects if a document has the topology of an inside riser:
   /// Two parallel ~90° bends with a transverse bend connecting between them.
@@ -2512,6 +2638,7 @@ class CmsScalingController extends ChangeNotifier {
       final uCenter = lf / 2.0;
       final uOffsets = [uCenter - slotPitch, uCenter, uCenter + slotPitch];
       final v = H / 2.0;
+      if (lf < 20.0) return;
       // Universal rule for Tray accessories: coupler obround holes maintain a 10mm margin
       // from flap top and bottom borders: flapSlotLen = H - 20mm (e.g., H=50 -> 30mm, H=150 -> 130mm)
       final flapSlotLen = math.max(10.0, H - 20.0);
@@ -4088,6 +4215,18 @@ class CmsScalingController extends ChangeNotifier {
       }
     }
     _reducerAlignment = ReducerAlignment.parse(initialAlign);
+
+    final initialFlaps = (currentParameterValues?['include_coupler_flaps'] ??
+            baselineDocument.parameters['include_coupler_flaps'] ??
+            (baselineDocument.metadata['include_coupler_flaps'] == true ? 1.0 : 0.0)) > 0.5;
+    final initialFlapLen = (currentParameterValues?['coupler_flap_length'] ??
+            baselineDocument.parameters['coupler_flap_length'] ??
+            90.0)
+        .clamp(20.0, 150.0);
+    _includeCouplerFlaps = initialFlaps;
+    _targetIncludeCouplerFlaps = initialFlaps;
+    _couplerFlapLength = initialFlapLen;
+    _targetCouplerFlapLength = initialFlapLen;
   }
 }
 

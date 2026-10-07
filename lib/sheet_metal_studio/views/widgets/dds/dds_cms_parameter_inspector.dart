@@ -25,6 +25,7 @@ import 'package:flutter/material.dart';
 
 import '../../../engine/dds/dds_instance_evaluator.dart';
 import '../../../engine/cms/tray_reducer_scaler.dart';
+import '../../../models/cad_material_preset.dart';
 import '../../../models/cms/cms_product_contract.dart';
 import '../../../models/dds/dds_product_instance.dart';
 import '../../../models/fold_bend_line.dart';
@@ -89,6 +90,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     _MaterialOption('SS304', 'Stainless Steel 304 (SS304)', isStainless: true),
     _MaterialOption('SS316', 'Stainless Steel 316 (SS316)', isStainless: true),
     _MaterialOption('HDG', 'Hot Dip Galvanized (HDG)'),
+    _MaterialOption('PLASTIC', 'Engineering Plastic (Dielectric)', isPlastic: true),
   ];
 
   void _updateMaterial(String val) {
@@ -139,6 +141,38 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         vm.setMaterialDefinition(grade: grade, finish: coating);
       }
       vm.setMaterialGrade(val);
+
+      // Synchronize 3D Shader Preset
+      final preset = CadMaterialSettings.presetFromMaterialGrade(val);
+      vm.updateGraphicsPreferences((prefs) => prefs.copyWith(
+        materialSettings: CadMaterialSettings.preset(preset),
+      ));
+    }
+  }
+
+  void _updateShaderPreset(CadMaterialPresetType preset) {
+    if (widget.viewModel == null) return;
+    final vm = widget.viewModel!;
+
+    vm.updateGraphicsPreferences((prefs) => prefs.copyWith(
+      materialSettings: CadMaterialSettings.preset(preset),
+    ));
+
+    final gradeCode = CadMaterialSettings.preset(preset).toMaterialGradeCode();
+    _MaterialOption? match;
+    for (final opt in _availableMaterials) {
+      if (opt.shortCode == gradeCode || opt.name.toUpperCase().contains(gradeCode)) {
+        match = opt;
+        break;
+      }
+    }
+    if (match != null) {
+      _updateMaterial(match.name);
+    } else {
+      vm.setMaterialGrade(gradeCode);
+      setState(() {
+        _localMaterial = gradeCode;
+      });
     }
   }
 
@@ -584,14 +618,16 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       result['accessory_style'] ??=
           (vm.document.parameters['accessory_style'] ??
           (vm.document.metadata['ladderParameters'] is Map && (vm.document.metadata['ladderParameters'] as Map)['accessoryStyle'] == 'curved' ? 0.0 : 1.0));
-      result['outsideWeldProjection'] ??= (vm.document.parameters['outsideWeldProjection'] ??
+      result['outsideWeldProjection'] ??=
+          (vm.document.parameters['outsideWeldProjection'] ??
           vm.document.parameters['outside_weld_projection'] ??
           (vm.document.metadata['ladderParameters'] is Map
               ? ((vm.document.metadata['ladderParameters'] as Map)['outsideWeldProjection'] as num?)?.toDouble()
               : null) ??
           3.5);
       final rPitch = (result['rung_pitch'] ?? result['intermediateTargetPitch'] ?? result['rungPitch'] ?? 250.0);
-      result['end_margin_pitch'] ??= (vm.document.parameters['end_margin_pitch'] ??
+      result['end_margin_pitch'] ??=
+          (vm.document.parameters['end_margin_pitch'] ??
           vm.document.parameters['endMarginPitch'] ??
           (vm.document.metadata['ladderParameters'] is Map
               ? ((vm.document.metadata['ladderParameters'] as Map)['endMarginPitch'] as num?)?.toDouble()
@@ -743,7 +779,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         vm.setCoverFlangeDepth(value);
       } else if (key == 'include_coupler_flaps') {
         vm.document.parameters['include_coupler_flaps'] = value;
-        vm.scalingController?.setIncludeCouplerFlaps(value > 0.5);
+        vm.scalingController?.setIncludeCouplerFlaps(value > 0.5, animate: true);
       } else if (key == 'coupler_flap_length') {
         vm.document.parameters['coupler_flap_length'] = value;
         vm.scalingController?.setCouplerFlapLength(value);
@@ -3011,7 +3047,11 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                               decoration: BoxDecoration(
                                 color: mat.isStainless
                                     ? Colors.amber.withValues(alpha: 0.15)
-                                    : (mat.isAluminium ? Colors.purple.withValues(alpha: 0.15) : Colors.blue.withValues(alpha: 0.15)),
+                                    : (mat.isAluminium
+                                        ? Colors.purple.withValues(alpha: 0.15)
+                                        : (mat.isPlastic
+                                            ? Colors.teal.withValues(alpha: 0.15)
+                                            : Colors.blue.withValues(alpha: 0.15))),
                                 borderRadius: BorderRadius.circular(3),
                               ),
                               child: Text(
@@ -3019,7 +3059,13 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: mat.isStainless ? Colors.amber[800] : (mat.isAluminium ? Colors.purple[700] : const Color(0xFF0284C7)),
+                                  color: mat.isStainless
+                                      ? Colors.amber[800]
+                                      : (mat.isAluminium
+                                          ? Colors.purple[700]
+                                          : (mat.isPlastic
+                                              ? Colors.teal[700]
+                                              : const Color(0xFF0284C7))),
                                 ),
                               ),
                             ),
@@ -3101,6 +3147,144 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               ],
             ],
           ),
+          const SizedBox(height: 8),
+          // 3D Shader Material Preset link row
+          Builder(builder: (ctx) {
+            final activeSettings = widget.viewModel?.graphicsPreferences.materialSettings ??
+                CadMaterialSettings.preset(CadMaterialSettings.presetFromMaterialGrade(_currentMaterial));
+            final preset = activeSettings.preset;
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+              decoration: BoxDecoration(
+                color: isLight ? Colors.white : const Color(0xFF1E293B).withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+                  width: 0.8,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: activeSettings.baseColor,
+                      border: Border.all(
+                        color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                        width: 1.0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '3D Shader:',
+                    style: TextStyle(
+                      fontSize: 10.0,
+                      fontWeight: FontWeight.w700,
+                      color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      preset.label,
+                      style: TextStyle(
+                        fontSize: 10.0,
+                        fontWeight: FontWeight.w600,
+                        color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (activeSettings.useSpangles) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(color: Colors.amber[700]!, width: 0.5),
+                      ),
+                      child: Text(
+                        'SPANGLE',
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800,
+                          color: isLight ? Colors.amber[900] : Colors.amber[300],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                  ] else if (activeSettings.isPlastic) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(color: Colors.teal[600]!, width: 0.5),
+                      ),
+                      child: Text(
+                        'DIELECTRIC',
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800,
+                          color: isLight ? Colors.teal[900] : Colors.teal[300],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  PopupMenuButton<CadMaterialPresetType>(
+                    tooltip: 'Change 3D Shader Preset',
+                    onSelected: (val) => _updateShaderPreset(val),
+                    itemBuilder: (ctx) => [
+                      for (final p in CadMaterialPresetType.values)
+                        PopupMenuItem(
+                          value: p,
+                          height: 28,
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: CadMaterialSettings.preset(p).baseColor,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                p.label,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: p == preset ? FontWeight.bold : FontWeight.w500,
+                                  color: const Color(0xFF1E293B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF334155),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Icon(
+                        Icons.tune,
+                        size: 13,
+                        color: isLight ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -3305,5 +3489,6 @@ class _MaterialOption {
   final String name;
   final bool isStainless;
   final bool isAluminium;
-  const _MaterialOption(this.shortCode, this.name, {this.isStainless = false, this.isAluminium = false});
+  final bool isPlastic;
+  const _MaterialOption(this.shortCode, this.name, {this.isStainless = false, this.isAluminium = false, this.isPlastic = false});
 }

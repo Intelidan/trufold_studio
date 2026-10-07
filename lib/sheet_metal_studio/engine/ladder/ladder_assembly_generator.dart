@@ -588,9 +588,7 @@ class LadderAssemblyGenerator {
           vertices: [CadPoint3D(x1, yStart, zTopInner), CadPoint3D(x2, yStart, zTopInner), CadPoint3D(x2, yStart, zTop), CadPoint3D(x1, yStart, zTop)],
           normal: const CadPoint3D(0.0, -1.0, 0.0),
           color: color,
-          boundaryLines: [
-            [CadPoint3D(x1, yStart, zTop), CadPoint3D(x2, yStart, zTop)],
-          ],
+          boundaryLines: const [],
         ),
       );
       polys.add(
@@ -635,6 +633,9 @@ class LadderAssemblyGenerator {
           [CadPoint3D(x2, yIntStart, zTop), CadPoint3D(x2, yIntEnd, zTop)],
           if (!hasLeftProj) [CadPoint3D(x1, yIntStart, zTop), CadPoint3D(x2, yIntStart, zTop)],
           if (!hasRightProj) [CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x2, yIntEnd, zTop)],
+          for (final h in holes)
+            for (int i = 0; i < h.length; i++)
+              [CadPoint3D(h[i].x, h[i].y, zTop), CadPoint3D(h[(i + 1) % h.length].x, h[(i + 1) % h.length].y, zTop)],
         ],
       ),
     );
@@ -653,14 +654,12 @@ class LadderAssemblyGenerator {
         normal: const CadPoint3D(0.0, 0.0, -1.0),
         color: color,
         holes: innerHoles,
-        boundaryLines: [
-          [CadPoint3D(x1Inner, yIntStart, zTopInner), CadPoint3D(x1Inner, yIntEnd, zTopInner)],
-          [CadPoint3D(x2Inner, yIntStart, zTopInner), CadPoint3D(x2Inner, yIntEnd, zTopInner)],
-        ],
+        boundaryLines: const [], // Single border rule: do not duplicate on inner face
       ),
     );
 
     // Cutout sidewalls for slots in the top web (physical sheet thickness through metal)
+    // NOTE: bore wall facets do NOT have boundary lines, preventing faceted chord segments around hole arcs
     for (int hIdx = 0; hIdx < holes.length; hIdx++) {
       final hVerts = holes[hIdx];
       for (int v = 0; v < hVerts.length; v++) {
@@ -678,10 +677,7 @@ class LadderAssemblyGenerator {
             vertices: [CadPoint3D(pA.x, pA.y, zTop), CadPoint3D(pB.x, pB.y, zTop), CadPoint3D(pB.x, pB.y, zTopInner), CadPoint3D(pA.x, pA.y, zTopInner)],
             normal: CadPoint3D(nx, ny, 0.0),
             color: color,
-            boundaryLines: [
-              [CadPoint3D(pA.x, pA.y, zTop), CadPoint3D(pB.x, pB.y, zTop)],
-              [CadPoint3D(pA.x, pA.y, zTopInner), CadPoint3D(pB.x, pB.y, zTopInner)],
-            ],
+            boundaryLines: const [], // No chord segments around hole arcs
           ),
         );
       }
@@ -714,9 +710,7 @@ class LadderAssemblyGenerator {
         ],
         normal: const CadPoint3D(1.0, 0.0, 0.0),
         color: color,
-        boundaryLines: [
-          [CadPoint3D(x1Inner, yIntStart, zBottom), CadPoint3D(x1Inner, yIntEnd, zBottom)],
-        ],
+        boundaryLines: const [], // Single border rule: do not duplicate on inner face
       ),
     );
 
@@ -747,9 +741,7 @@ class LadderAssemblyGenerator {
         ],
         normal: const CadPoint3D(-1.0, 0.0, 0.0),
         color: color,
-        boundaryLines: [
-          [CadPoint3D(x2Inner, yIntStart, zBottom), CadPoint3D(x2Inner, yIntEnd, zBottom)],
-        ],
+        boundaryLines: const [], // Single border rule: do not duplicate on inner face
       ),
     );
 
@@ -765,10 +757,7 @@ class LadderAssemblyGenerator {
         ],
         normal: const CadPoint3D(0.0, 0.0, -1.0),
         color: color,
-        boundaryLines: [
-          [CadPoint3D(x1, yIntStart, zBottom), CadPoint3D(x1Inner, yIntStart, zBottom)],
-          [CadPoint3D(x1, yIntEnd, zBottom), CadPoint3D(x1Inner, yIntEnd, zBottom)],
-        ],
+        boundaryLines: const [],
       ),
     );
     polys.add(
@@ -782,10 +771,7 @@ class LadderAssemblyGenerator {
         ],
         normal: const CadPoint3D(0.0, 0.0, -1.0),
         color: color,
-        boundaryLines: [
-          [CadPoint3D(x2Inner, yIntStart, zBottom), CadPoint3D(x2, yIntStart, zBottom)],
-          [CadPoint3D(x2Inner, yIntEnd, zBottom), CadPoint3D(x2, yIntEnd, zBottom)],
-        ],
+        boundaryLines: const [],
       ),
     );
 
@@ -937,9 +923,7 @@ class LadderAssemblyGenerator {
           vertices: [CadPoint3D(x1, yEnd, zTop), CadPoint3D(x2, yEnd, zTop), CadPoint3D(x2, yEnd, zTopInner), CadPoint3D(x1, yEnd, zTopInner)],
           normal: const CadPoint3D(0.0, 1.0, 0.0),
           color: color,
-          boundaryLines: [
-            [CadPoint3D(x1, yEnd, zTop), CadPoint3D(x2, yEnd, zTop)],
-          ],
+          boundaryLines: const [],
         ),
       );
       polys.add(
@@ -1063,8 +1047,14 @@ class LadderAssemblyGenerator {
       ];
       if (isFirst) leftWebEdges.add([CadPoint3D(xStart, yL, 0.0), CadPoint3D(xStart, yL, H)]);
       if (isLast) leftWebEdges.add([CadPoint3D(xEnd, yL, 0.0), CadPoint3D(xEnd, yL, H)]);
+      for (final h in leftWebHoles) {
+        for (int i = 0; i < h.length; i++) {
+          leftWebEdges.add([h[i], h[(i + 1) % h.length]]);
+        }
+      }
 
-      // --- Left Rail Segment ---
+      // --- Left Rail Segment (Solid Thick C-Channel Steel) ---
+      // 1. Outer Web
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'left_rail_web_$s',
@@ -1075,6 +1065,7 @@ class LadderAssemblyGenerator {
           boundaryLines: leftWebEdges,
         ),
       );
+      // 2. Outer Bottom Flange
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'left_rail_bottom_flange_$s',
@@ -1088,6 +1079,7 @@ class LadderAssemblyGenerator {
           ],
         ),
       );
+      // 3. Outer Top Flange
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'left_rail_top_flange_$s',
@@ -1102,6 +1094,7 @@ class LadderAssemblyGenerator {
         ),
       );
 
+      // 4. Solid Thickness Rims / Lips
       thicknessPolygons.add(
         CadFoldedPolygon3D(
           faceId: 'RIM_left_top_flange_lip_$s',
@@ -1129,14 +1122,69 @@ class LadderAssemblyGenerator {
         ),
       );
 
+      // 5. Solid Inner Top Flange
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'left_rail_top_flange_inner_$s',
+          vertices: [
+            CadPoint3D(xStart, yLTopFlange, H - T),
+            CadPoint3D(xStart, yLInner, H - T),
+            CadPoint3D(xEnd, yLInner, H - T),
+            CadPoint3D(xEnd, yLTopFlange, H - T),
+          ],
+          normal: const CadPoint3D(0.0, 0.0, -1.0),
+          color: railColor,
+          boundaryLines: const [],
+        ),
+      );
+
+      // 6. Solid Inner Web (with matching pass-through slots)
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'left_rail_web_inner_$s',
+          vertices: [
+            CadPoint3D(xStart, yLInner, T),
+            CadPoint3D(xStart, yLInner, H - T),
+            CadPoint3D(xEnd, yLInner, H - T),
+            CadPoint3D(xEnd, yLInner, T),
+          ],
+          normal: CadPoint3D(0.0, innerSignL, 0.0),
+          color: railColor,
+          holes: leftInnerHoles,
+          boundaryLines: const [],
+        ),
+      );
+
+      // 7. Solid Inner Bottom Flange
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'left_rail_bottom_flange_inner_$s',
+          vertices: [
+            CadPoint3D(xStart, yLInner, T),
+            CadPoint3D(xEnd, yLInner, T),
+            CadPoint3D(xEnd, yLBottomFlange, T),
+            CadPoint3D(xStart, yLBottomFlange, T),
+          ],
+          normal: const CadPoint3D(0.0, 0.0, 1.0),
+          color: railColor,
+          boundaryLines: const [],
+        ),
+      );
+
       final rightWebEdges = <List<CadPoint3D>>[
         [CadPoint3D(xStart, yR, 0.0), CadPoint3D(xEnd, yR, 0.0)],
         [CadPoint3D(xStart, yR, H), CadPoint3D(xEnd, yR, H)],
       ];
       if (isFirst) rightWebEdges.add([CadPoint3D(xStart, yR, 0.0), CadPoint3D(xStart, yR, H)]);
       if (isLast) rightWebEdges.add([CadPoint3D(xEnd, yR, 0.0), CadPoint3D(xEnd, yR, H)]);
+      for (final h in rightWebHoles) {
+        for (int i = 0; i < h.length; i++) {
+          rightWebEdges.add([h[i], h[(i + 1) % h.length]]);
+        }
+      }
 
-      // --- Right Rail Segment ---
+      // --- Right Rail Segment (Solid Thick C-Channel Steel) ---
+      // 1. Outer Web
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'right_rail_web_$s',
@@ -1147,6 +1195,7 @@ class LadderAssemblyGenerator {
           boundaryLines: rightWebEdges,
         ),
       );
+      // 2. Outer Bottom Flange
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'right_rail_bottom_flange_$s',
@@ -1160,6 +1209,7 @@ class LadderAssemblyGenerator {
           ],
         ),
       );
+      // 3. Outer Top Flange
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'right_rail_top_flange_$s',
@@ -1174,6 +1224,7 @@ class LadderAssemblyGenerator {
         ),
       );
 
+      // 4. Solid Thickness Rims / Lips
       thicknessPolygons.add(
         CadFoldedPolygon3D(
           faceId: 'RIM_right_top_flange_lip_$s',
@@ -1200,41 +1251,142 @@ class LadderAssemblyGenerator {
           color: railColor,
         ),
       );
+
+      // 5. Solid Inner Top Flange
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'right_rail_top_flange_inner_$s',
+          vertices: [
+            CadPoint3D(xStart, yRTopFlange, H - T),
+            CadPoint3D(xEnd, yRTopFlange, H - T),
+            CadPoint3D(xEnd, yRInner, H - T),
+            CadPoint3D(xStart, yRInner, H - T),
+          ],
+          normal: const CadPoint3D(0.0, 0.0, -1.0),
+          color: railColor,
+          boundaryLines: const [],
+        ),
+      );
+
+      // 6. Solid Inner Web (with matching pass-through slots)
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'right_rail_web_inner_$s',
+          vertices: [
+            CadPoint3D(xStart, yRInner, T),
+            CadPoint3D(xEnd, yRInner, T),
+            CadPoint3D(xEnd, yRInner, H - T),
+            CadPoint3D(xStart, yRInner, H - T),
+          ],
+          normal: CadPoint3D(0.0, innerSignR, 0.0),
+          color: railColor,
+          holes: rightInnerHoles,
+          boundaryLines: const [],
+        ),
+      );
+
+      // 7. Solid Inner Bottom Flange
+      polygons.add(
+        CadFoldedPolygon3D(
+          faceId: 'right_rail_bottom_flange_inner_$s',
+          vertices: [
+            CadPoint3D(xStart, yRInner, T),
+            CadPoint3D(xStart, yRBottomFlange, T),
+            CadPoint3D(xEnd, yRBottomFlange, T),
+            CadPoint3D(xEnd, yRInner, T),
+          ],
+          normal: const CadPoint3D(0.0, 0.0, 1.0),
+          color: railColor,
+          boundaryLines: const [],
+        ),
+      );
     }
 
-    // --- End port rims (Port 1 at X=0, Port 2 at X=L) ---
-    thicknessPolygons.add(
+    // --- Complete End Port Caps (Port 1 at X=0, Port 2 at X=L) ---
+    // Caps the entire C-channel profile (web, top flange, bottom flange) for solid thick steel
+    // Port 1 at X=0 (Normal in -X)
+    thicknessPolygons.addAll([
+      // Left Rail End Caps
       CadFoldedPolygon3D(
         faceId: 'RIM_left_port1_web',
         vertices: [CadPoint3D(0.0, yL, 0.0), CadPoint3D(0.0, yL, H), CadPoint3D(0.0, yLInner, H), CadPoint3D(0.0, yLInner, 0.0)],
         normal: const CadPoint3D(-1.0, 0.0, 0.0),
         color: railColor,
       ),
-    );
-    thicknessPolygons.add(
       CadFoldedPolygon3D(
-        faceId: 'RIM_left_port2_web',
-        vertices: [CadPoint3D(L, yL, 0.0), CadPoint3D(L, yLInner, 0.0), CadPoint3D(L, yLInner, H), CadPoint3D(L, yL, H)],
-        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        faceId: 'RIM_left_port1_top_flange',
+        vertices: [CadPoint3D(0.0, yL, H), CadPoint3D(0.0, yLTopFlange, H), CadPoint3D(0.0, yLTopFlange, H - T), CadPoint3D(0.0, yLInner, H - T)],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
         color: railColor,
       ),
-    );
-    thicknessPolygons.add(
+      CadFoldedPolygon3D(
+        faceId: 'RIM_left_port1_bottom_flange',
+        vertices: [CadPoint3D(0.0, yL, 0.0), CadPoint3D(0.0, yLInner, T), CadPoint3D(0.0, yLBottomFlange, T), CadPoint3D(0.0, yLBottomFlange, 0.0)],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+      // Right Rail End Caps
       CadFoldedPolygon3D(
         faceId: 'RIM_right_port1_web',
         vertices: [CadPoint3D(0.0, yR, 0.0), CadPoint3D(0.0, yRInner, 0.0), CadPoint3D(0.0, yRInner, H), CadPoint3D(0.0, yR, H)],
         normal: const CadPoint3D(-1.0, 0.0, 0.0),
         color: railColor,
       ),
-    );
-    thicknessPolygons.add(
+      CadFoldedPolygon3D(
+        faceId: 'RIM_right_port1_top_flange',
+        vertices: [CadPoint3D(0.0, yR, H), CadPoint3D(0.0, yRInner, H - T), CadPoint3D(0.0, yRTopFlange, H - T), CadPoint3D(0.0, yRTopFlange, H)],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+      CadFoldedPolygon3D(
+        faceId: 'RIM_right_port1_bottom_flange',
+        vertices: [CadPoint3D(0.0, yR, 0.0), CadPoint3D(0.0, yRBottomFlange, 0.0), CadPoint3D(0.0, yRBottomFlange, T), CadPoint3D(0.0, yRInner, T)],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+    ]);
+
+    // Port 2 at X=L (Normal in +X)
+    thicknessPolygons.addAll([
+      // Left Rail End Caps
+      CadFoldedPolygon3D(
+        faceId: 'RIM_left_port2_web',
+        vertices: [CadPoint3D(L, yL, 0.0), CadPoint3D(L, yLInner, 0.0), CadPoint3D(L, yLInner, H), CadPoint3D(L, yL, H)],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+      CadFoldedPolygon3D(
+        faceId: 'RIM_left_port2_top_flange',
+        vertices: [CadPoint3D(L, yL, H), CadPoint3D(L, yLInner, H - T), CadPoint3D(L, yLTopFlange, H - T), CadPoint3D(L, yLTopFlange, H)],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+      CadFoldedPolygon3D(
+        faceId: 'RIM_left_port2_bottom_flange',
+        vertices: [CadPoint3D(L, yL, 0.0), CadPoint3D(L, yLBottomFlange, 0.0), CadPoint3D(L, yLBottomFlange, T), CadPoint3D(L, yLInner, T)],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+      // Right Rail End Caps
       CadFoldedPolygon3D(
         faceId: 'RIM_right_port2_web',
         vertices: [CadPoint3D(L, yR, 0.0), CadPoint3D(L, yR, H), CadPoint3D(L, yRInner, H), CadPoint3D(L, yRInner, 0.0)],
         normal: const CadPoint3D(1.0, 0.0, 0.0),
         color: railColor,
       ),
-    );
+      CadFoldedPolygon3D(
+        faceId: 'RIM_right_port2_top_flange',
+        vertices: [CadPoint3D(L, yR, H), CadPoint3D(L, yRTopFlange, H), CadPoint3D(L, yRTopFlange, H - T), CadPoint3D(L, yRInner, H - T)],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+      CadFoldedPolygon3D(
+        faceId: 'RIM_right_port2_bottom_flange',
+        vertices: [CadPoint3D(L, yR, 0.0), CadPoint3D(L, yRInner, T), CadPoint3D(L, yRBottomFlange, T), CadPoint3D(L, yRBottomFlange, 0.0)],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: railColor,
+      ),
+    ]);
 
     // --- 3. C-CHANNEL RUNGS (40x20mm with slotted top web & downward flanges) ---
     const double rungW = 40.0;

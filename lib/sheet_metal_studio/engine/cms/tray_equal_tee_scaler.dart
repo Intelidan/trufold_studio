@@ -603,6 +603,7 @@ class TrayEqualTeeScaler {
         final uCenter = couplerFlapLength / 2.0;
         final uOffsets = [uCenter - slotPitch, uCenter, uCenter + slotPitch];
         final v = H / 2.0;
+        if (couplerFlapLength < 20.0) return;
         for (final u in uOffsets) {
           punches.add(
             sampleSlot.copyWith(

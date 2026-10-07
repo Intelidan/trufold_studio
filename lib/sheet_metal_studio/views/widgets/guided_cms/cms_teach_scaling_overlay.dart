@@ -875,6 +875,8 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
   Widget _buildCouplerFlapsCard() {
     final hasFlaps = widget.controller.includeCouplerFlaps;
     final flapLen = widget.controller.couplerFlapLength;
+    final targetLen = widget.controller.targetCouplerFlapLength;
+    final isAnimating = widget.controller.isAnimatingCouplerFlaps;
     final activePortIdx = widget.controller.activePortIndex;
     final activeH = _getPortHeight(activePortIdx);
 
@@ -907,12 +909,12 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                 child: Switch(
                   value: hasFlaps,
                   activeThumbColor: const Color(0xFF7C3AED),
-                  onChanged: (val) => widget.controller.setIncludeCouplerFlaps(val),
+                  onChanged: (val) => widget.controller.setIncludeCouplerFlaps(val, animate: true),
                 ),
               ),
             ],
           ),
-          if (hasFlaps) ...[
+          if (hasFlaps || isAnimating) ...[
             const SizedBox(height: 4.0),
             Row(
               children: [
@@ -920,7 +922,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                   icon: Icons.remove,
                   label: '-5',
                   tooltip: 'Decrease flap length by 5 mm',
-                  onPressed: () => widget.controller.setCouplerFlapLength(flapLen - 5.0),
+                  onPressed: () => widget.controller.setCouplerFlapLength(targetLen - 5.0),
                 ),
                 const SizedBox(width: 6.0),
                 Expanded(
@@ -933,7 +935,9 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                       border: Border.all(color: const Color(0xFFCBD5E1)),
                     ),
                     child: Text(
-                      'Length: ${flapLen.toStringAsFixed(0)} mm',
+                      isAnimating
+                          ? 'Length: ${flapLen.toStringAsFixed(0)} mm'
+                          : 'Length: ${targetLen.toStringAsFixed(0)} mm',
                       style: const TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w700,
@@ -948,7 +952,7 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                   icon: Icons.add,
                   label: '+5',
                   tooltip: 'Increase flap length by 5 mm',
-                  onPressed: () => widget.controller.setCouplerFlapLength(flapLen + 5.0),
+                  onPressed: () => widget.controller.setCouplerFlapLength(targetLen + 5.0),
                 ),
               ],
             ),
@@ -962,11 +966,11 @@ class _CmsTeachScalingOverlayState extends State<CmsTeachScalingOverlay> {
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.5),
               ),
               child: Slider(
-                value: flapLen.clamp(20.0, 50.0),
+                value: targetLen.clamp(20.0, 50.0),
                 min: 20.0,
                 max: 50.0,
                 divisions: 6,
-                onChanged: (val) => widget.controller.setCouplerFlapLength(val),
+                onChanged: isAnimating ? null : (val) => widget.controller.setCouplerFlapLength(val),
               ),
             ),
             Container(

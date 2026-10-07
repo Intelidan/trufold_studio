@@ -484,6 +484,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   OnshapeGraphicsPreferences _graphicsPreferences = const OnshapeGraphicsPreferences();
 
+  Cad3dCameraState? camera3dState;
+
   OnshapeRenderMode _onshapeRenderMode = OnshapeRenderMode.shadedWithEdges;
 
   bool _isGraphicsPreferencesOpen = false;
@@ -729,8 +731,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   }
 
   void _initCmsStateFromDocument() {
-    // Ensure faces are decomposed if bends exist
-    if (_document.bends.isNotEmpty) {
+    // Ensure faces are decomposed if bends exist and faces are not already defined
+    if (_document.bends.isNotEmpty && _document.faces.isEmpty) {
       final decomp = PlanarFaceDecomposer.decompose(
         outerContour: _document.outerContour,
         bends: _document.bends,
@@ -1288,7 +1290,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
       // Handle coupler flaps live update
       if (key == 'include_coupler_flaps') {
-        _scalingController?.setIncludeCouplerFlaps(value > 0.5);
+        _scalingController?.setIncludeCouplerFlaps(value > 0.5, animate: true);
       }
       if (key == 'coupler_flap_length') {
         _scalingController?.setCouplerFlapLength(value);
@@ -1991,13 +1993,78 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   OnshapeGraphicsPreferences get graphicsPreferences => _graphicsPreferences;
   set graphicsPreferences(OnshapeGraphicsPreferences prefs) {
+    final oldPreset = _graphicsPreferences.materialSettings.preset;
     _graphicsPreferences = prefs;
+    if (prefs.materialSettings.preset != oldPreset && prefs.materialSettings.preset != CadMaterialPresetType.custom) {
+      _syncDocumentMaterialFromShaderPreset(prefs.materialSettings.preset);
+    }
     notifyListeners();
   }
 
   void updateGraphicsPreferences(OnshapeGraphicsPreferences Function(OnshapeGraphicsPreferences current) update) {
-    _graphicsPreferences = update(_graphicsPreferences);
-    notifyListeners();
+    final updated = update(_graphicsPreferences);
+    graphicsPreferences = updated;
+  }
+
+  void _syncDocumentMaterialFromShaderPreset(CadMaterialPresetType preset) {
+    SheetMetalMaterialGrade? grade;
+    CoatingFinish coating = CoatingFinish.none;
+
+    switch (preset) {
+      case CadMaterialPresetType.hdg:
+        grade = SheetMetalMaterialGrade.gi;
+        coating = CoatingFinish.hdg;
+        break;
+      case CadMaterialPresetType.pgi:
+        grade = SheetMetalMaterialGrade.gi;
+        coating = CoatingFinish.none;
+        break;
+      case CadMaterialPresetType.aluminum:
+        grade = SheetMetalMaterialGrade.aluminium;
+        break;
+      case CadMaterialPresetType.silver:
+        grade = SheetMetalMaterialGrade.ss304;
+        break;
+      case CadMaterialPresetType.ironSteel:
+        grade = SheetMetalMaterialGrade.ms;
+        break;
+      case CadMaterialPresetType.plastic:
+        _document = _document.copyWith(material: _document.material.copyWith(materialGrade: 'Plastic (Dielectric)'));
+        return;
+      case CadMaterialPresetType.chrome:
+        _document = _document.copyWith(material: _document.material.copyWith(materialGrade: 'Chrome'));
+        return;
+      case CadMaterialPresetType.copper:
+        _document = _document.copyWith(material: _document.material.copyWith(materialGrade: 'Copper'));
+        return;
+      case CadMaterialPresetType.gold:
+        _document = _document.copyWith(material: _document.material.copyWith(materialGrade: 'Brass/Gold'));
+        return;
+      case CadMaterialPresetType.custom:
+        return;
+    }
+
+    SheetMaterialType type = SheetMaterialType.mildSteel;
+    if (grade == SheetMetalMaterialGrade.ss304 || grade == SheetMetalMaterialGrade.ss316) {
+      type = SheetMaterialType.stainlessSteel;
+    } else if (grade == SheetMetalMaterialGrade.aluminium) {
+      type = SheetMaterialType.aluminium;
+    }
+    SurfaceFinish surfaceFinish = SurfaceFinish.bare;
+    if (coating == CoatingFinish.hdg) {
+      surfaceFinish = SurfaceFinish.hotDipGalvanized;
+    } else if (coating == CoatingFinish.eg) {
+      surfaceFinish = SurfaceFinish.electroGalvanized;
+    }
+
+    _document = _document.copyWith(
+      material: _document.material.copyWith(
+        materialType: type,
+        materialGrade: grade.code,
+        kFactor: grade.defaultKFactor,
+        finish: surfaceFinish,
+      ),
+    );
   }
 
   OnshapeRenderMode get onshapeRenderMode => _onshapeRenderMode;
@@ -5354,6 +5421,11 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     _document = _document.copyWith(material: _document.material.copyWith(materialGrade: grade));
 
+    final presetType = CadMaterialSettings.presetFromMaterialGrade(grade);
+    _graphicsPreferences = _graphicsPreferences.copyWith(
+      materialSettings: CadMaterialSettings.preset(presetType),
+    );
+
     notifyListeners();
   }
 
@@ -5407,6 +5479,22 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       material: _document.material.copyWith(materialType: type, materialGrade: grade.code, kFactor: grade.defaultKFactor, finish: surfaceFinish),
     );
 
+    CadMaterialPresetType presetType;
+    if (finish == CoatingFinish.hdg || finish == CoatingFinish.twoHdg || finish == CoatingFinish.threeHdg) {
+      presetType = CadMaterialPresetType.hdg;
+    } else if (grade == SheetMetalMaterialGrade.aluminium) {
+      presetType = CadMaterialPresetType.aluminum;
+    } else if (grade == SheetMetalMaterialGrade.ss304 || grade == SheetMetalMaterialGrade.ss316) {
+      presetType = CadMaterialPresetType.silver;
+    } else if (grade == SheetMetalMaterialGrade.gi) {
+      presetType = CadMaterialPresetType.pgi;
+    } else {
+      presetType = CadMaterialSettings.presetFromMaterialGrade(grade.code);
+    }
+    _graphicsPreferences = _graphicsPreferences.copyWith(
+      materialSettings: CadMaterialSettings.preset(presetType),
+    );
+
     _recomputeMesh();
 
     notifyListeners();
@@ -5451,6 +5539,16 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }
 
     _document = _document.copyWith(material: _document.material.copyWith(finish: surfaceFinish));
+
+    if (finish == CoatingFinish.hdg || finish == CoatingFinish.twoHdg || finish == CoatingFinish.threeHdg) {
+      _graphicsPreferences = _graphicsPreferences.copyWith(
+        materialSettings: CadMaterialSettings.preset(CadMaterialPresetType.hdg),
+      );
+    } else if (finish == CoatingFinish.none && _document.material.materialGrade.toUpperCase().contains('GI')) {
+      _graphicsPreferences = _graphicsPreferences.copyWith(
+        materialSettings: CadMaterialSettings.preset(CadMaterialPresetType.pgi),
+      );
+    }
 
     notifyListeners();
   }
@@ -10314,6 +10412,14 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       if (fLayer == layerName) count++;
     }
     return count;
+  }
+
+  /// Forces a complete recomputation of the 3D folded mesh and notifies listeners.
+  /// Used during hot reload or when mesh geometry code changes.
+  void recomputeMesh() {
+    _cachedMesh = null;
+    _recomputeMesh();
+    notifyListeners();
   }
 
   void _recomputeMesh() {

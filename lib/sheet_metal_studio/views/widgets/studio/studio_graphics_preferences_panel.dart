@@ -33,6 +33,7 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
   bool _shadedBodiesExpanded = true;
   bool _phantomEdgesExpanded = true;
   bool _lightingExpanded = true;
+  bool _materialShaderExpanded = true;
   bool _meshBodiesExpanded = false;
 
   @override
@@ -230,6 +231,20 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                       tooltip: 'Backlight behind the model creating sharp edge silhouettes.',
                       onChanged: (val) => widget.onChanged(prefs.copyWith(hasBackLight: val)),
                     ),
+                  ],
+
+                  const SizedBox(height: 6),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 6),
+
+                  // Section: Material / Shader (Procedural PBR & Voronoi HDG Spangle)
+                  _buildSectionHeader(
+                    title: 'Material / Shader',
+                    isExpanded: _materialShaderExpanded,
+                    onToggle: () => setState(() => _materialShaderExpanded = !_materialShaderExpanded),
+                  ),
+                  if (_materialShaderExpanded) ...[
+                    _buildMaterialShaderSection(prefs),
                   ],
 
                   const SizedBox(height: 6),
@@ -675,6 +690,200 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMaterialShaderSection(OnshapeGraphicsPreferences prefs) {
+    final mat = prefs.materialSettings;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Preset Dropdown
+          _buildDropdownRow<CadMaterialPresetType>(
+            label: 'Material preset',
+            value: mat.preset,
+            valueLabel: mat.preset.label,
+            tooltip: 'Selects high-performance PBR or procedural shader material (HDG, PGI, Plastic, Metals)',
+            items: CadMaterialPresetType.values
+                .map((p) => PopupMenuItem<CadMaterialPresetType>(
+                      value: p,
+                      height: 28,
+                      child: Text(
+                        p.label,
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF1E293B)),
+                      ),
+                    ))
+                .toList(),
+            onSelected: (val) {
+              widget.onChanged(prefs.copyWith(
+                materialSettings: CadMaterialSettings.preset(val),
+              ));
+            },
+          ),
+
+          // 2. Roughness Slider
+          _buildSliderRow(
+            label: 'Roughness factor',
+            valueStr: mat.roughness.toStringAsFixed(2),
+            tooltip: 'Microfacet surface roughness: lower is mirror-sharp, higher is diffuse-matte.',
+            value: mat.roughness,
+            min: 0.04,
+            max: 1.0,
+            onChanged: (val) => widget.onChanged(prefs.copyWith(
+              materialSettings: mat.copyWith(roughness: val),
+            )),
+          ),
+
+          // 3. Dielectric (Plastic) vs Conductor (Metal) indicator & toggle
+          _buildToggleRow(
+            label: 'Dielectric / Plastic (0.0 metallic)',
+            value: mat.isPlastic,
+            tooltip: 'Sets metallic factor to 0.0 for non-metal dielectrics (plastics) or 1.0 for metals.',
+            onChanged: (val) => widget.onChanged(prefs.copyWith(
+              materialSettings: mat.copyWith(isPlastic: val),
+            )),
+          ),
+
+          // 4. Custom Pigment Tint Swatches (for Plastic or Custom)
+          if (mat.isPlastic || mat.preset == CadMaterialPresetType.custom) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  const Text('Pigment tint: ', style: TextStyle(fontSize: 11, color: Color(0xFF475569))),
+                  const SizedBox(width: 6),
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      const Color(0xFF1E88E5), // Blue
+                      const Color(0xFFE53935), // Red
+                      const Color(0xFF43A047), // Green
+                      const Color(0xFFFB8C00), // Orange
+                      const Color(0xFF8E24AA), // Purple
+                      const Color(0xFF263238), // Dark Slate
+                      const Color(0xFFF5F5F5), // White
+                    ].map((color) {
+                      final isSelected = mat.baseColor.toARGB32() == color.toARGB32();
+                      return InkWell(
+                        onTap: () => widget.onChanged(prefs.copyWith(
+                          materialSettings: mat.copyWith(baseColor: color),
+                        )),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isSelected ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
+                              width: isSelected ? 2.5 : 1.0,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 6),
+
+          // 5. Procedural HDG Spangle Pipeline Execution Card
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: mat.useSpangles ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(
+                color: mat.useSpangles ? const Color(0xFF86EFAC) : const Color(0xFFE2E8F0),
+                width: 1.0,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.grain,
+                          size: 15,
+                          color: mat.useSpangles ? const Color(0xFF15803D) : const Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Procedural HDG Spangles',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: mat.useSpangles ? const Color(0xFF166534) : const Color(0xFF475569),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(
+                      height: 20,
+                      width: 34,
+                      child: Switch(
+                        value: mat.useSpangles,
+                        activeThumbColor: const Color(0xFF16A34A),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (active) {
+                          widget.onChanged(prefs.copyWith(
+                            materialSettings: mat.copyWith(useSpangles: active),
+                          ));
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                if (mat.useSpangles) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Zinc crystal density (scale)',
+                        style: TextStyle(fontSize: 10, color: Color(0xFF475569)),
+                      ),
+                      Text(
+                        mat.spangleScale.toStringAsFixed(0),
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
+                      ),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                      trackHeight: 2,
+                    ),
+                    child: Slider(
+                      value: mat.spangleScale.clamp(10.0, 100.0),
+                      min: 10.0,
+                      max: 100.0,
+                      activeColor: const Color(0xFF16A34A),
+                      inactiveColor: const Color(0xFFDCFCE7),
+                      onChanged: (val) {
+                        widget.onChanged(prefs.copyWith(
+                          materialSettings: mat.copyWith(spangleScale: val),
+                        ));
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),

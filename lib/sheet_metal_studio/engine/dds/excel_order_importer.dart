@@ -13,7 +13,7 @@
 // 5. Complete import summary and exception tracking (unresolved/skipped items).
 // =============================================================================
 
-import 'package:excel/excel.dart';
+import 'package:excel_plus/excel_plus.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../models/dds/dds_document.dart';

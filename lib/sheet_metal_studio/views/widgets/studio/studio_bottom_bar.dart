@@ -292,20 +292,24 @@ class _StudioBottomBarState extends State<StudioBottomBar> {
                       ),
                       const Spacer(),
                       // Solver Constraint Status indicator
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: constraintCount > 0 ? const Color(0xFFE0F2FE) : const Color(0xFFFEF3C7),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: Text(
-                          constraintCount > 0
-                              ? 'Active Constraints: $constraintCount'
-                              : 'Under-constrained ($underConstrainedPoints points)',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            color: constraintCount > 0 ? const Color(0xFF0284C7) : const Color(0xFFB45309),
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: constraintCount > 0 ? const Color(0xFFE0F2FE) : const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            constraintCount > 0
+                                ? 'Active Constraints: $constraintCount'
+                                : 'Under-constrained ($underConstrainedPoints pts)',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: constraintCount > 0 ? const Color(0xFF0284C7) : const Color(0xFFB45309),
+                            ),
                           ),
                         ),
                       ),

@@ -20,7 +20,7 @@ import 'package:trufold_studio/sheet_metal_studio/models/cnc_punch_primitive.dar
 import 'package:trufold_studio/sheet_metal_studio/viewmodels/sheet_metal_studio_viewmodel.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/sheet_metal_studio_screen.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/unfolded_canvas_widget.dart';
-import 'package:trufold_studio/sheet_metal_studio/views/widgets/viewport_3d_widget.dart';
+import 'package:trufold_studio/sheet_metal_studio/views/widgets/viewport_3d/flutter_scene_viewport_widget.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/split_pane_divider.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/fold_progress_slider.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/obround_icon.dart';
@@ -184,13 +184,13 @@ void main() {
         // Verify core widgets exist
         expect(find.byType(UnfoldedCanvasWidget), findsOneWidget);
         expect(find.byType(SplitPaneDivider), findsOneWidget);
-        expect(find.byType(Viewport3dWidget), findsOneWidget);
+        expect(find.byType(FlutterSceneViewportWidget), findsOneWidget);
         expect(find.byType(FoldProgressSlider), findsOneWidget);
 
         // Verify header texts and buttons
         expect(find.text('truFold Studio by Danish'), findsOneWidget);
-        expect(find.byTooltip('Undo (Ctrl+Z)'), findsOneWidget);
-        expect(find.byTooltip('Redo (Ctrl+Y)'), findsOneWidget);
+        expect(find.byTooltip('Undo (Ctrl+Z)'), findsWidgets);
+        expect(find.byTooltip('Redo (Ctrl+Y)'), findsWidgets);
 
         // Tap preset button in bottom slider
         await tester.tap(find.text('0% Flat'));
@@ -403,6 +403,8 @@ void main() {
         );
         expect(updatedCut.p2.x, equals(120.0));
 
+        // Undo endpoint drag
+        vm.undo();
         // Undo cut creation
         vm.undo();
         expect(vm.document.cutLines.any((c) => c.id == cut.id), isFalse);

@@ -1,0 +1,114 @@
+material {
+    name : "MasterProceduralMaterials",
+    shading_model : lit,
+    
+    parameters : [
+        { type : vec4,  name : baseColorFactor }, 
+        { type : float, name : roughnessFactor }, 
+        { type : float, name : isPlastic },        // 1.0 = Plastic (Dielectric), 0.0 = Metal
+        { type : float, name : materialMode },     // 0.0 = Standard/PGI/Plastic, 1.0 = Procedural HDG Spangle
+        { type : float, name : spangleScale }      // Controls the sizing of zinc crystal patches (e.g., 20.0 to 60.0)
+    ],
+}
+
+fragment {
+    // Deterministic pseudo-random hash functions to generate grid cell properties
+    vec2 hash22(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+        p3 += dot(p3, p3.yzx + 33.33);
+        return fract((p3.xx + p3.yz) * p3.zy);
+    }
+
+    // Procedural Voronoi routine optimized for surface normals and roughness variations
+    // Returns: x = distance to edge, y = unique cell ID hash (0.0 to 1.0)
+    vec2 voronoi(vec2 x) {
+        vec2 n = floor(x);
+        vec2 f = fract(x);
+
+        vec2 mg = vec2(0.0);
+        vec2 mr = vec2(0.0);
+        float md = 8.0;
+        
+        // First pass: Find closest cell center point
+        for (int j = -1; j <= 1; j++) {
+            for (int i = -1; i <= 1; i++) {
+                vec2 g = vec2(float(i), float(j));
+                vec2 o = hash22(n + g);
+                vec2 r = g + o - f;
+                float d = dot(r, r);
+
+                if (d < md) {
+                    md = d;
+                    mr = r;
+                    mg = g;
+                }
+            }
+        }
+
+        // Second pass: Compute distance to structural crystalline boundaries
+        md = 8.0;
+        for (int j = -2; j <= 2; j++) {
+            for (int i = -2; i <= 2; i++) {
+                vec2 g = mg + vec2(float(i), float(j));
+                vec2 o = hash22(n + g);
+                vec2 r = g + o - f;
+
+                if (dot(mr - r, mr - r) > 0.00001) {
+                    md = min(md, dot(0.5 * (mr + r), normalize(r - mr)));
+                }
+            }
+        }
+
+        // Generate a stable cell ID hash based on the winning coordinate
+        float cellID = fract(sin(dot(n + mg, vec2(127.1, 311.7))) * 43758.5453);
+        return vec2(md, cellID);
+    }
+
+    void Surface(inout MaterialInputs material) {
+        // 1. Core Material Settings
+        material.base_color = material_params.baseColorFactor;
+        material.metallic = (material_params.isPlastic > 0.5) ? 0.0 : 1.0; 
+        
+        float baseRoughness = material_params.roughnessFactor;
+
+        // 2. Procedural HDG Spangle Pipeline Execution
+        if (material_params.materialMode > 0.5) {
+            // Scale UV space into structural micro-crystal tiles
+            vec2 uv = GetUV0() * material_params.spangleScale;
+            vec2 v = voronoi(uv);
+            
+            float edgeDist = v.x;
+            float crystalID = v.y;
+
+            // Generate an explicit pseudo-random normal offset vector unique to each crystal facet
+            float angle = crystalID * 6.28318;
+            // Introduce variable tilts simulating varying grain crystal orientations
+            float tilt = 0.08 + (fract(crystalID * 7.0) * 0.12); 
+            
+            vec3 crystalNormalTangent = vec3(cos(angle) * tilt, sin(angle) * tilt, 1.0);
+            crystalNormalTangent = normalize(crystalNormalTangent);
+
+            // Give boundaries a slight physical indented dip to enhance the tactile rough feel
+            float edgeDip = smoothstep(0.0, 0.05, edgeDist);
+            crystalNormalTangent.xy *= edgeDip;
+
+            // Transform newly calculated normal out to real-world coordinate space
+            vec3 baseNormal = GetWorldNormal();
+            vec3 up = abs(baseNormal.z) < 0.99 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+            vec3 tangent = normalize(cross(up, baseNormal));
+            vec3 bitangent = cross(baseNormal, tangent);
+            mat3 tbn = mat3(tangent, bitangent, baseNormal);
+            material.normal = normalize(tbn * crystalNormalTangent);
+
+            // Randomize per-crystal roughness to mimic varying metallic sheet grain gloss reflections
+            float roughnessDivergence = fract(crystalID * 13.3) * 0.25;
+            baseRoughness = mix(baseRoughness - 0.1, baseRoughness + 0.15, roughnessDivergence);
+            
+            // Slightly darken/lighten the base crystal tint for visual spangle patchwork contrast
+            material.base_color.rgb *= mix(0.85, 1.15, crystalID);
+        }
+
+        material.roughness = clamp(baseRoughness, 0.04, 1.0);
+        material.occlusion = 1.0; 
+    }
+}

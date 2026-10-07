@@ -501,6 +501,7 @@ class TrayBendGeometrySolver {
         final uCenter = lf / 2.0;
         final uOffsets = [uCenter - slotPitch, uCenter, uCenter + slotPitch];
         final v = H / 2.0;
+        if (lf < 20.0) return;
         for (final u in uOffsets) {
           effectivePunches.add(sampleSlot.copyWith(
             id: 'FLAP_SLOT_${flapSlotCounter++}',

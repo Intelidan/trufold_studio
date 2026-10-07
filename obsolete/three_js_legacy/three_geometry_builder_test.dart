@@ -6,7 +6,9 @@ import 'package:three_js_geometry/three_js_geometry.dart' as three_geo;
 
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/kinematic_fold_engine.dart';
-import 'package:trufold_studio/sheet_metal_studio/engine/three_cad_mesh_builder.dart';
+
+import 'three_cad_mesh_builder.dart';
+
 
 three.Object3D createMeshFromCadPolygon(CadFoldedPolygon3D poly) {
   if (poly.vertices.length < 3) return three.Group();

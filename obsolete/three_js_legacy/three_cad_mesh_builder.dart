@@ -2,9 +2,9 @@ import 'dart:math' as math;
 
 import 'package:three_js/three_js.dart' as three;
 import 'package:three_js_geometry/three_js_geometry.dart' as three_geo;
+import 'package:trufold_studio/sheet_metal_studio/engine/kinematic_fold_engine.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 
-import '../models/cad_primitives.dart';
-import 'kinematic_fold_engine.dart';
 
 /// High-Performance Hardware CAD Mesh Builder for TruFold Studio.
 /// Consolidates all model facets into high-speed batched [three.BufferGeometry] meshes

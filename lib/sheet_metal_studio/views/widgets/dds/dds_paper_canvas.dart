@@ -38,7 +38,7 @@ import '../../../models/fold_bend_line.dart';
 import '../../../models/planar_sheet_face.dart';
 import '../../../engine/dds/dds_instance_evaluator.dart';
 import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
-import '../viewport_3d_widget.dart';
+import '../viewport_3d/flutter_scene_viewport_widget.dart';
 import 'dds_drawing_painters.dart';
 
 enum DdsViewportMode { presentation3D, transitionWipe }
@@ -2258,10 +2258,10 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                 child: IgnorePointer(child: CustomPaint(painter: _ViewportGridPainter())),
               ),
 
-              // 3D Rendering Engine: Reusing the main CAD's Viewport3dWidget directly with synchronized overlayBuilder
+              // 3D Rendering Engine: Modern Flutter GPU / Impeller 3D viewport with synchronized overlayBuilder
               Positioned.fill(
                 child: effectiveVm != null
-                    ? Viewport3dWidget(
+                    ? FlutterSceneViewportWidget(
                         viewModel: effectiveVm,
                         isInteractionLocked: _is3DModelLocked,
                         overlayBuilder: (overlayContext, size, project) {
