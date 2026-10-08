@@ -96,6 +96,30 @@ class DdsCamera3DSettings {
   }
 }
 
+/// Standard engineering projection systems for multi-view orthographic drawings.
+enum DdsProjectionAngle {
+  firstAngle('1st Angle (ISO)', 'First angle projection (European/International standard)'),
+  thirdAngle('3rd Angle (ANSI)', 'Third angle projection (American standard)');
+
+  final String label;
+  final String description;
+  const DdsProjectionAngle(this.label, this.description);
+
+  bool get isFirstAngle => this == DdsProjectionAngle.firstAngle;
+  bool get isThirdAngle => this == DdsProjectionAngle.thirdAngle;
+}
+
+/// Layout arrangements for 2D multi-view drawing viewports on TDS sheets.
+enum DdsMultiViewLayout {
+  standard4View('Standard 4-View', 'Top, Front, End elevations + Isometric thumbnail'),
+  fabrication4View('Fabrication 4-View', 'Top, Front, End elevations + 2D Flat Blank'),
+  axonometricViews('Axonometric (3D)', 'Isometric, Dimetric, Trimetric + Front elevation');
+
+  final String label;
+  final String description;
+  const DdsMultiViewLayout(this.label, this.description);
+}
+
 /// 2D technical drawing view settings for the sheet.
 @immutable
 class DdsDrawing2DSettings {
@@ -104,6 +128,12 @@ class DdsDrawing2DSettings {
   final bool showPunches;
   final double zoom;
   final CadPoint2D panOffset;
+  final DdsProjectionAngle projectionAngle;
+  final bool showHiddenLines;
+  final bool isIsometricShaded;
+  final DdsMultiViewLayout multiViewLayout;
+  final bool showCenterlines;
+  final String tangentEdgeMode; // 'phantom', 'visible', 'removed'
 
   const DdsDrawing2DSettings({
     this.viewMode = 'dimensionedOutline',
@@ -111,7 +141,41 @@ class DdsDrawing2DSettings {
     this.showPunches = true,
     this.zoom = 1.0,
     this.panOffset = const CadPoint2D(0.0, 0.0),
+    this.projectionAngle = DdsProjectionAngle.firstAngle,
+    this.showHiddenLines = false,
+    this.isIsometricShaded = true,
+    this.multiViewLayout = DdsMultiViewLayout.standard4View,
+    this.showCenterlines = true,
+    this.tangentEdgeMode = 'phantom',
   });
+
+  DdsDrawing2DSettings copyWith({
+    String? viewMode,
+    bool? showBendLines,
+    bool? showPunches,
+    double? zoom,
+    CadPoint2D? panOffset,
+    DdsProjectionAngle? projectionAngle,
+    bool? showHiddenLines,
+    bool? isIsometricShaded,
+    DdsMultiViewLayout? multiViewLayout,
+    bool? showCenterlines,
+    String? tangentEdgeMode,
+  }) {
+    return DdsDrawing2DSettings(
+      viewMode: viewMode ?? this.viewMode,
+      showBendLines: showBendLines ?? this.showBendLines,
+      showPunches: showPunches ?? this.showPunches,
+      zoom: zoom ?? this.zoom,
+      panOffset: panOffset ?? this.panOffset,
+      projectionAngle: projectionAngle ?? this.projectionAngle,
+      showHiddenLines: showHiddenLines ?? this.showHiddenLines,
+      isIsometricShaded: isIsometricShaded ?? this.isIsometricShaded,
+      multiViewLayout: multiViewLayout ?? this.multiViewLayout,
+      showCenterlines: showCenterlines ?? this.showCenterlines,
+      tangentEdgeMode: tangentEdgeMode ?? this.tangentEdgeMode,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'viewMode': viewMode,
@@ -119,16 +183,40 @@ class DdsDrawing2DSettings {
     'showPunches': showPunches,
     'zoom': zoom,
     'panOffset': {'x': panOffset.x, 'y': panOffset.y},
+    'projectionAngle': projectionAngle.name,
+    'showHiddenLines': showHiddenLines,
+    'isIsometricShaded': isIsometricShaded,
+    'multiViewLayout': multiViewLayout.name,
+    'showCenterlines': showCenterlines,
+    'tangentEdgeMode': tangentEdgeMode,
   };
 
   factory DdsDrawing2DSettings.fromJson(Map<String, dynamic> json) {
     final pan = json['panOffset'] as Map<String, dynamic>?;
+    final projStr = json['projectionAngle'] as String? ?? 'firstAngle';
+    final projAngle = DdsProjectionAngle.values.firstWhere(
+      (e) => e.name == projStr,
+      orElse: () => DdsProjectionAngle.firstAngle,
+    );
+
+    final layoutStr = json['multiViewLayout'] as String? ?? 'standard4View';
+    final layout = DdsMultiViewLayout.values.firstWhere(
+      (e) => e.name == layoutStr,
+      orElse: () => DdsMultiViewLayout.standard4View,
+    );
+
     return DdsDrawing2DSettings(
       viewMode: json['viewMode'] as String? ?? 'dimensionedOutline',
       showBendLines: json['showBendLines'] as bool? ?? true,
       showPunches: json['showPunches'] as bool? ?? true,
       zoom: (json['zoom'] as num?)?.toDouble() ?? 1.0,
       panOffset: pan != null ? CadPoint2D((pan['x'] as num).toDouble(), (pan['y'] as num).toDouble()) : const CadPoint2D(0.0, 0.0),
+      projectionAngle: projAngle,
+      showHiddenLines: json['showHiddenLines'] as bool? ?? false,
+      isIsometricShaded: json['isIsometricShaded'] as bool? ?? true,
+      multiViewLayout: layout,
+      showCenterlines: json['showCenterlines'] as bool? ?? true,
+      tangentEdgeMode: json['tangentEdgeMode'] as String? ?? 'phantom',
     );
   }
 }

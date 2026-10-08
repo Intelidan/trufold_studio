@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/dds/dds_instance_evaluator.dart';
@@ -966,6 +967,119 @@ void main() {
       );
       expect(outsideRiser45.rungs.length, equals(3));
       expect(outsideRiser45.assembledMesh3D.polygons.any((p) => p.faceId.contains('riser_rung') && p.faceId.endsWith('_top_web')), isTrue);
+    });
+
+    test('Cable Ladder Assembly - SS1 through SS5 Bug Fixes Verification', () {
+      // 1. SS1: Rung perforation goes completely through the sheet metal
+      const baseParams = LadderAssemblyParameters(
+        length: 3000.0,
+        width: 300.0,
+        height: 100.0,
+        flangeWidth: 32.0,
+        thickness: 2.0,
+        jointMethod: LadderRungJointMethod.passThroughOutsideWeld,
+      );
+
+      final bend90 = LadderAssemblyGenerator.generateHorizontalBend(
+        angleDeg: 90.0,
+        params: baseParams,
+      );
+
+      // Check rung top_web and top_web_inner in 3D
+      final rungTopWeb = bend90.assembledMesh3D.allPolygons.firstWhere((p) => p.faceId.contains('rung_0') && p.faceId.endsWith('_top_web'));
+      final rungTopWebInner = bend90.assembledMesh3D.allPolygons.firstWhere((p) => p.faceId.contains('rung_0') && p.faceId.endsWith('_top_web_inner'));
+
+      expect(rungTopWeb.holes, isNotNull);
+      expect(rungTopWeb.holes, isNotEmpty, reason: 'Outer top web must have obround slot cutouts');
+      expect(rungTopWebInner.holes, isNotNull);
+      expect(rungTopWebInner.holes, isNotEmpty, reason: 'Inner top web must have matching slot cutouts so perforation is through metal');
+      expect(rungTopWebInner.holes.length, equals(rungTopWeb.holes.length));
+
+      // Check slot sidewalls (bore walls) exist
+      final slotWalls = bend90.assembledMesh3D.allPolygons.where((p) => p.faceId.contains('rung_0_slot_'));
+      expect(slotWalls.isNotEmpty, isTrue, reason: 'Obround slots must have physical sheet thickness bore walls');
+
+      // 2. SS2 & SS3: Curved accessories have seamless collars attached to ports, and no mismatched web holes
+      const curvedParams = LadderAssemblyParameters(
+        length: 3000.0,
+        width: 300.0,
+        height: 100.0,
+        flangeWidth: 32.0,
+        thickness: 2.0,
+        accessoryStyle: LadderAccessoryStyle.curved,
+        jointMethod: LadderRungJointMethod.passThroughOutsideWeld,
+      );
+
+      final curvedBend90 = LadderAssemblyGenerator.generateHorizontalBend(
+        angleDeg: 90.0,
+        params: curvedParams,
+      );
+
+      // Verify inner rail in curved mode starts at inlet Y = -leadIn (no floating border)
+      final allInnerWebs = curvedBend90.assembledMesh3D.allPolygons.where((p) => p.faceId.startsWith('inner_rail_web_') && !p.faceId.contains('inner_rail_web_inner'));
+      final minYIn = allInnerWebs.expand((p) => p.vertices).map((v) => v.y).reduce(math.min);
+      expect(minYIn, closeTo(-75.0, 1e-3), reason: 'Curved inner rail must start seamlessly at inlet lead-in Y=-75mm');
+
+      // Verify no web holes are cut in curved mode (prevents triangulation stretch artifacts)
+      for (final webPoly in allInnerWebs) {
+        expect(webPoly.holes, anyOf(isNull, isEmpty), reason: 'Curved mini-facets must not have mismatched hole cuts causing triangulation streaks');
+      }
+
+      // 3. SS4 & SS5: V-Notch on 2D blank and 3D model for inside vs outside flange
+      // Case A: Inside flange -> V-Notch on OUTER rail, inner rail continuous
+      const insideFlangeParams = LadderAssemblyParameters(
+        length: 3000.0,
+        width: 300.0,
+        height: 100.0,
+        flangeWidth: 32.0,
+        thickness: 2.0,
+        accessoryStyle: LadderAccessoryStyle.segmented,
+        flangeDirection: LadderFlangeDirection.inside,
+      );
+      final bendInsideFlange = LadderAssemblyGenerator.generateHorizontalBend(
+        angleDeg: 90.0,
+        params: insideFlangeParams,
+      );
+
+      // 2D Blanks: outer rail must have V-notches along outer contour
+      final outerBlankInside = bendInsideFlange.rightRailBlank;
+      final innerBlankInside = bendInsideFlange.leftRailBlank;
+
+      // Check outer blank contour has more than 4 vertices (V-notches cut into top and bottom edges)
+      expect(outerBlankInside.outerContour.length, greaterThan(4), reason: 'Outer rail 2D blank must have V-notch cutouts along edges');
+      expect(innerBlankInside.outerContour.length, equals(4), reason: 'Inner rail 2D blank has continuous flanges without V-notches');
+
+      // Verify transverse bend lines exist across web in 2D
+      final outerTransverseBends = outerBlankInside.geometries.where((g) => g.layer == 'BEND_TRANSVERSE');
+      expect(outerTransverseBends.isNotEmpty, isTrue, reason: 'Outer rail must have transverse bend lines across web at miter stations');
+
+      // 3D Model: outer rail must have V-notch rims
+      final outerNotchRims = bendInsideFlange.assembledMesh3D.thicknessPolygons.where((p) => p.faceId.contains('RIM_outer_top_notch_'));
+      expect(outerNotchRims.isNotEmpty, isTrue, reason: 'Outer rail in 3D must have V-notch opening rims');
+
+      // Case B: Outside flange -> V-Notch on INNER rail, outer rail continuous
+      const outsideFlangeParams = LadderAssemblyParameters(
+        length: 3000.0,
+        width: 300.0,
+        height: 100.0,
+        flangeWidth: 32.0,
+        thickness: 2.0,
+        accessoryStyle: LadderAccessoryStyle.segmented,
+        flangeDirection: LadderFlangeDirection.outside,
+      );
+      final bendOutsideFlange = LadderAssemblyGenerator.generateHorizontalBend(
+        angleDeg: 90.0,
+        params: outsideFlangeParams,
+      );
+
+      final outerBlankOutside = bendOutsideFlange.rightRailBlank;
+      final innerBlankOutside = bendOutsideFlange.leftRailBlank;
+
+      expect(innerBlankOutside.outerContour.length, greaterThan(4), reason: 'Inner rail 2D blank must have V-notch cutouts for outside flange');
+      expect(outerBlankOutside.outerContour.length, equals(4), reason: 'Outer rail 2D blank has continuous flanges for outside flange');
+
+      final innerNotchRims = bendOutsideFlange.assembledMesh3D.thicknessPolygons.where((p) => p.faceId.contains('RIM_inner_top_notch_'));
+      expect(innerNotchRims.isNotEmpty, isTrue, reason: 'Inner rail in 3D must have V-notch opening rims for outside flange');
     });
   });
 }

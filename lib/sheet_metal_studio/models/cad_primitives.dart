@@ -267,6 +267,38 @@ class Cad3dCameraState {
 
   double get panX => pan.dx;
   double get panY => pan.dy;
+
+  Map<String, dynamic> toJson() => {
+        'azimuthDeg': azimuthDeg,
+        'elevationDeg': elevationDeg,
+        'zoom': zoom,
+        'panX': pan.dx,
+        'panY': pan.dy,
+        'orbitDistance': orbitDistance,
+        'orbitTargetX': orbitTarget.x,
+        'orbitTargetY': orbitTarget.y,
+        'orbitTargetZ': orbitTarget.z,
+        'isInitialized': isInitialized,
+      };
+
+  factory Cad3dCameraState.fromJson(Map<String, dynamic> json) {
+    return Cad3dCameraState(
+      azimuthDeg: (json['azimuthDeg'] as num?)?.toDouble() ?? 45.0,
+      elevationDeg: (json['elevationDeg'] as num?)?.toDouble() ?? 35.264,
+      zoom: (json['zoom'] as num?)?.toDouble() ?? 1.0,
+      pan: Offset(
+        (json['panX'] as num?)?.toDouble() ?? 0.0,
+        (json['panY'] as num?)?.toDouble() ?? 0.0,
+      ),
+      orbitDistance: (json['orbitDistance'] as num?)?.toDouble() ?? 350.0,
+      orbitTarget: CadPoint3D(
+        (json['orbitTargetX'] as num?)?.toDouble() ?? 0.0,
+        (json['orbitTargetY'] as num?)?.toDouble() ?? 0.0,
+        (json['orbitTargetZ'] as num?)?.toDouble() ?? 0.0,
+      ),
+      isInitialized: json['isInitialized'] as bool? ?? false,
+    );
+  }
 }
 
 /// Onshape-compatible 3D Graphics Preferences.
@@ -291,6 +323,10 @@ class OnshapeGraphicsPreferences {
   // Part Appearance
   final bool useOnshapeCadColor; // default true (Onshape slate steel-blue 0x70A5C2)
   final bool hiddenEdgesVisible; // default false
+  final bool highlightBoundaryEdges; // default false (highlights open/laminar sheet edges in red)
+  final Color boundaryEdgeColor; // default 0xFFEF4444 (red)
+  final double meshLineWidth; // 0.5 px to 5.0 px, default 1.2 px
+  final double transparencyLevel; // 0.05 to 0.95, default 0.35 (opacity for translucent / isolated parts)
 
   // Studio Lighting Controls (Global lighting addition, removal, and spherical roaming)
   final double lightAzimuthDeg; // 0 deg to 360 deg, default 45 deg
@@ -315,6 +351,10 @@ class OnshapeGraphicsPreferences {
     this.tangentEdgeMode = OnshapeTangentEdgeMode.phantom,
     this.useOnshapeCadColor = true,
     this.hiddenEdgesVisible = false,
+    this.highlightBoundaryEdges = false,
+    this.boundaryEdgeColor = const Color(0xFFEF4444),
+    this.meshLineWidth = 1.2,
+    this.transparencyLevel = 0.35,
     this.lightAzimuthDeg = 45.0,
     this.lightElevationDeg = 55.0,
     this.keyLightIntensity = 1.45,
@@ -336,6 +376,10 @@ class OnshapeGraphicsPreferences {
     OnshapeTangentEdgeMode? tangentEdgeMode,
     bool? useOnshapeCadColor,
     bool? hiddenEdgesVisible,
+    bool? highlightBoundaryEdges,
+    Color? boundaryEdgeColor,
+    double? meshLineWidth,
+    double? transparencyLevel,
     double? lightAzimuthDeg,
     double? lightElevationDeg,
     double? keyLightIntensity,
@@ -356,6 +400,10 @@ class OnshapeGraphicsPreferences {
       tangentEdgeMode: tangentEdgeMode ?? this.tangentEdgeMode,
       useOnshapeCadColor: useOnshapeCadColor ?? this.useOnshapeCadColor,
       hiddenEdgesVisible: hiddenEdgesVisible ?? this.hiddenEdgesVisible,
+      highlightBoundaryEdges: highlightBoundaryEdges ?? this.highlightBoundaryEdges,
+      boundaryEdgeColor: boundaryEdgeColor ?? this.boundaryEdgeColor,
+      meshLineWidth: meshLineWidth ?? this.meshLineWidth,
+      transparencyLevel: transparencyLevel ?? this.transparencyLevel,
       lightAzimuthDeg: lightAzimuthDeg ?? this.lightAzimuthDeg,
       lightElevationDeg: lightElevationDeg ?? this.lightElevationDeg,
       keyLightIntensity: keyLightIntensity ?? this.keyLightIntensity,
@@ -381,6 +429,10 @@ class OnshapeGraphicsPreferences {
         other.tangentEdgeMode == tangentEdgeMode &&
         other.useOnshapeCadColor == useOnshapeCadColor &&
         other.hiddenEdgesVisible == hiddenEdgesVisible &&
+        other.highlightBoundaryEdges == highlightBoundaryEdges &&
+        other.boundaryEdgeColor == boundaryEdgeColor &&
+        other.meshLineWidth == meshLineWidth &&
+        other.transparencyLevel == transparencyLevel &&
         other.lightAzimuthDeg == lightAzimuthDeg &&
         other.lightElevationDeg == lightElevationDeg &&
         other.keyLightIntensity == keyLightIntensity &&
@@ -390,7 +442,7 @@ class OnshapeGraphicsPreferences {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
         ambientOcclusion,
         fieldOfView,
         antiAliasingQuality,
@@ -403,13 +455,69 @@ class OnshapeGraphicsPreferences {
         tangentEdgeMode,
         useOnshapeCadColor,
         hiddenEdgesVisible,
+        highlightBoundaryEdges,
+        boundaryEdgeColor,
+        meshLineWidth,
+        transparencyLevel,
         lightAzimuthDeg,
         lightElevationDeg,
         keyLightIntensity,
         hasSecondaryLight,
         hasBackLight,
         materialSettings,
-      );
+      ]);
+}
+
+/// Axis orientations for Onshape-style dynamic section plane.
+enum SectionPlaneAxis { xy, yz, zx }
+
+/// Configuration for Onshape dynamic 3D Section View tool.
+class SectionViewConfig {
+  final bool isEnabled;
+  final SectionPlaneAxis axis;
+  final double distanceOffsetMm;
+  final bool flipNormal;
+
+  const SectionViewConfig({
+    this.isEnabled = false,
+    this.axis = SectionPlaneAxis.yz,
+    this.distanceOffsetMm = 0.0,
+    this.flipNormal = false,
+  });
+
+  SectionViewConfig copyWith({
+    bool? isEnabled,
+    SectionPlaneAxis? axis,
+    double? distanceOffsetMm,
+    bool? flipNormal,
+  }) {
+    return SectionViewConfig(
+      isEnabled: isEnabled ?? this.isEnabled,
+      axis: axis ?? this.axis,
+      distanceOffsetMm: distanceOffsetMm ?? this.distanceOffsetMm,
+      flipNormal: flipNormal ?? this.flipNormal,
+    );
+  }
+}
+
+/// Named camera orientation snapshot.
+class NamedCadView {
+  final String name;
+  final Cad3dCameraState state;
+
+  const NamedCadView({required this.name, required this.state});
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'state': state.toJson(),
+      };
+
+  factory NamedCadView.fromJson(Map<String, dynamic> json) {
+    return NamedCadView(
+      name: json['name'] as String? ?? 'Named View',
+      state: Cad3dCameraState.fromJson(Map<String, dynamic>.from(json['state'] as Map? ?? {})),
+    );
+  }
 }
 
 /// Viewport workspace presentation layout for responsive desktop CAD screens.

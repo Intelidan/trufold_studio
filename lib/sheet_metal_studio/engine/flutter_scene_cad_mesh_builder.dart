@@ -5,6 +5,7 @@ import 'dart:ui' show Color;
 import 'package:flutter_scene/scene.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 import '../models/cad_primitives.dart';
+import '../viewmodels/sheet_metal_studio_viewmodel.dart';
 import 'cad_polygon_triangulator.dart';
 import 'kinematic_fold_engine.dart';
 
@@ -23,11 +24,17 @@ class FlutterSceneCadMeshBuilder {
     Material? customMaterial,
     OnshapeGraphicsPreferences preferences = const OnshapeGraphicsPreferences(),
     OnshapeRenderMode renderMode = OnshapeRenderMode.shadedWithEdges,
+    Set<String> hiddenPartIds = const {},
+    Set<String> isolatedPartIds = const {},
+    Set<String> transparentPartIds = const {},
+    SectionViewConfig sectionViewConfig = const SectionViewConfig(),
+    Map<String, Color> partColorOverrides = const {},
   }) {
     final rootNode = Node(name: 'CadModelRoot');
     final pivot = meshResult.center;
 
-    final builder = GeometryBuilder(deduplicate: true);
+    final opaqueBuilder = GeometryBuilder(deduplicate: true);
+    final translucentBuilder = GeometryBuilder(deduplicate: true);
 
     // Collect outer boundary lines for wireframe (single border line per segment)
     final List<(CadPoint3D, CadPoint3D)> rawBoundarySegs = [];
@@ -42,6 +49,44 @@ class FlutterSceneCadMeshBuilder {
 
     for (final poly in meshResult.allPolygons) {
       if (poly.vertices.length < 3) continue;
+
+      // Onshape Part Visibility Filter: Hide / Show
+      final partId = SheetMetalStudioViewModel.extractPartIdFromFaceId(poly.faceId);
+      if (hiddenPartIds.contains(partId)) continue;
+
+      // Onshape Dynamic Section View Clipping
+      if (sectionViewConfig.isEnabled) {
+        double avgX = 0, avgY = 0, avgZ = 0;
+        for (final v in poly.vertices) {
+          avgX += v.x;
+          avgY += v.y;
+          avgZ += v.z;
+        }
+        avgX /= poly.vertices.length;
+        avgY /= poly.vertices.length;
+        avgZ /= poly.vertices.length;
+
+        double dist;
+        switch (sectionViewConfig.axis) {
+          case SectionPlaneAxis.yz:
+            dist = (avgX - pivot.x) - sectionViewConfig.distanceOffsetMm;
+            break;
+          case SectionPlaneAxis.zx:
+            dist = (avgY - pivot.y) - sectionViewConfig.distanceOffsetMm;
+            break;
+          case SectionPlaneAxis.xy:
+            dist = (avgZ - pivot.z) - sectionViewConfig.distanceOffsetMm;
+            break;
+        }
+        if (sectionViewConfig.flipNormal) dist = -dist;
+        if (dist > 0.0) continue;
+      }
+
+      final isPartIsolated = isolatedPartIds.isNotEmpty;
+      final isTranslucent = (renderMode == OnshapeRenderMode.translucent) ||
+          transparentPartIds.contains(partId) ||
+          (isPartIsolated && !isolatedPartIds.contains(partId));
+      final currentBuilder = isTranslucent ? translucentBuilder : opaqueBuilder;
 
       final isSelected = (poly.faceId == selectedFaceId);
       final isHovered = (poly.faceId == hoveredFaceId);
@@ -59,6 +104,9 @@ class FlutterSceneCadMeshBuilder {
           baseColorOverride.b,
           1.0,
         );
+      } else if (partColorOverrides.containsKey(partId)) {
+        final pc = partColorOverrides[partId]!;
+        faceColor = vm.Vector4(pc.r, pc.g, pc.b, 1.0);
       } else if (!preferences.useOnshapeCadColor) {
         final mc = preferences.materialSettings.baseColor;
         if (poly.faceId.startsWith('BORE_') || poly.faceId.startsWith('RIM_')) {
@@ -79,7 +127,7 @@ class FlutterSceneCadMeshBuilder {
         faceColor = vm.Vector4(0.278, 0.478, 0.651, 1.0);
       }
 
-      builder.color(faceColor);
+      currentBuilder.color(faceColor);
 
       // Normal
       final n = poly.normal;
@@ -87,7 +135,7 @@ class FlutterSceneCadMeshBuilder {
       final normVec = lenN > 1e-6
           ? vm.Vector3(n.x / lenN, n.y / lenN, n.z / lenN)
           : vm.Vector3(0, 0, 1);
-      builder.normal(normVec);
+      currentBuilder.normal(normVec);
 
       // Triangulate planar polygon with inner cutout holes (round holes, obround slots, coupler slots)
       CadPolygonTriangulator.triangulateToBuilder(
@@ -95,7 +143,7 @@ class FlutterSceneCadMeshBuilder {
         holes: poly.holes,
         normal: poly.normal,
         pivot: pivot,
-        builder: builder,
+        builder: currentBuilder,
       );
 
       // Requirement 1: Only 1 border line per segment (skip bottom/inner/wall/rim duplicates)
@@ -195,21 +243,15 @@ class FlutterSceneCadMeshBuilder {
       }
     }
 
-    if (builder.triangleCount > 0) {
-      final geometry = builder.build(storage: GeometryStorage.fixed);
+    // 1. Build Opaque CAD Body
+    if (opaqueBuilder.triangleCount > 0) {
+      final geometry = opaqueBuilder.build(storage: GeometryStorage.fixed);
 
       Material material;
       if (renderMode == OnshapeRenderMode.unshaded) {
         material = UnlitMaterial()
           ..doubleSided = true
           ..baseColorFactor = vm.Vector4(1.0, 1.0, 1.0, 1.0);
-      } else if (renderMode == OnshapeRenderMode.translucent) {
-        material = PhysicallyBasedMaterial()
-          ..doubleSided = true
-          ..alphaMode = AlphaMode.blend
-          ..baseColorFactor = vm.Vector4(1.0, 1.0, 1.0, 0.45)
-          ..metallicFactor = 0.12
-          ..roughnessFactor = 0.55;
       } else if (customMaterial != null) {
         material = customMaterial..doubleSided = true;
       } else {
@@ -219,7 +261,7 @@ class FlutterSceneCadMeshBuilder {
         material = PhysicallyBasedMaterial()
           ..doubleSided = true
           ..metallicFactor = matSettings.isPlastic ? 0.0 : 1.0
-          ..roughnessFactor = matSettings.roughness
+          ..roughnessFactor = (1.0 - (preferences.shininess / 100.0) * 0.95).clamp(0.04, 0.98)
           ..baseColorFactor = vm.Vector4(
             c.r,
             c.g,
@@ -233,16 +275,39 @@ class FlutterSceneCadMeshBuilder {
       rootNode.add(bodyNode);
     }
 
-    // Add crisp silhouette wireframe if boundary lines exist
+    // 2. Build Translucent / Isolated CAD Body
+    if (translucentBuilder.triangleCount > 0) {
+      final transGeometry = translucentBuilder.build(storage: GeometryStorage.fixed);
+      final transOpacity = preferences.transparencyLevel.clamp(0.05, 0.95);
+      final transMat = PhysicallyBasedMaterial()
+        ..doubleSided = true
+        ..alphaMode = AlphaMode.blend
+        ..baseColorFactor = vm.Vector4(1.0, 1.0, 1.0, transOpacity)
+        ..metallicFactor = 0.08
+        ..roughnessFactor = 0.50;
+      final transMesh = Mesh(transGeometry, transMat);
+      final transNode = Node(name: 'TranslucentCadBody', mesh: transMesh);
+      rootNode.add(transNode);
+    }
+
+    // 3. Add crisp silhouette wireframe if boundary lines exist (with Highlight Boundary Edges support)
     if (shouldDrawWireframe && edgePositions.length >= 6) {
       final lineData = LineSegmentData(
         positions: Float32List.fromList(edgePositions),
       );
-      final computedLineWidth = (preferences.lineWidth * 0.50).clamp(0.25, 1.2);
+      final computedLineWidth = (preferences.lineWidth * 0.50).clamp(0.25, 2.5);
       final lineGeometry = LineSegmentsGeometry(lineData, width: computedLineWidth);
+      final boundaryColor = preferences.highlightBoundaryEdges
+          ? preferences.boundaryEdgeColor
+          : const Color(0xFF0F172A); // Slate 900
       final lineMat = UnlitMaterial()
         ..doubleSided = true
-        ..baseColorFactor = vm.Vector4(0.08, 0.12, 0.18, 1.0); // Slate 900
+        ..baseColorFactor = vm.Vector4(
+          boundaryColor.r,
+          boundaryColor.g,
+          boundaryColor.b,
+          1.0,
+        );
       final lineMesh = Mesh(lineGeometry, lineMat);
       final edgeNode = Node(name: 'CadBoundaryEdges', mesh: lineMesh);
       rootNode.add(edgeNode);

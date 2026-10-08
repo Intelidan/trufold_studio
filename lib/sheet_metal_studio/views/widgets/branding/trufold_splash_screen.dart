@@ -6,10 +6,11 @@
 // dynamic laser-cut trace, technical CAD blueprint aesthetics, and system loader.
 // =============================================================================
 
-import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../engine/trufold_3d_engine_preloader.dart';
 import 'trufold_3d_icon.dart';
 
 /// Full-featured animated splash screen for truFold Studio.
@@ -37,15 +38,11 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
   late Animation<Offset> _textSlideAnim;
   late Animation<double> _statusFadeAnim;
 
-  int _statusIndex = 0;
-  Timer? _statusTimer;
-
-  static const List<String> _statusMessages = [
-    'Loading Sheet Metal Kinematics Engine...',
-    'Calibrating Direct Dimension Solver...',
-    'Initializing 3D Folding Geometry...',
-    'Starting truFold Studio...',
-  ];
+  String _activeStatusMessage = 'Initializing truFold 3D Engine (Impeller GPU)...';
+  double _engineProgress = 0.0;
+  bool _enginePreloadComplete = false;
+  bool _animationComplete = false;
+  bool _hasTriggeredCompletion = false;
 
   @override
   void initState() {
@@ -91,34 +88,55 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
       ),
     );
 
-    _mainController.forward();
-
-    // Rotate status messages smoothly
-    _statusTimer = Timer.periodic(const Duration(milliseconds: 700), (timer) {
-      if (mounted && _statusIndex < _statusMessages.length - 1) {
+    // Start 3D Engine Preloading immediately as the splash screen mounts
+    TruFold3dEnginePreloader.instance.preload(
+      onProgress: (status, progress) {
+        if (!mounted) return;
         setState(() {
-          _statusIndex++;
+          _activeStatusMessage = status;
+          _engineProgress = progress;
         });
-      }
+      },
+    ).then((_) {
+      if (!mounted) return;
+      setState(() {
+        _enginePreloadComplete = true;
+      });
+      _checkAndComplete();
     });
+
+    _mainController.forward();
 
     _mainController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        widget.onInitializationComplete?.call();
+        _animationComplete = true;
+        _checkAndComplete();
       }
     });
   }
 
+  void _checkAndComplete() {
+    if (_animationComplete && _enginePreloadComplete && !_hasTriggeredCompletion) {
+      _hasTriggeredCompletion = true;
+      widget.onInitializationComplete?.call();
+    }
+  }
+
   @override
   void dispose() {
-    _statusTimer?.cancel();
     _mainController.dispose();
     super.dispose();
   }
 
   void _skip() {
     if (widget.allowTapToSkip) {
-      widget.onInitializationComplete?.call();
+      if (_enginePreloadComplete && !_hasTriggeredCompletion) {
+        _hasTriggeredCompletion = true;
+        widget.onInitializationComplete?.call();
+      } else {
+        // Fast-forward animation and complete as soon as 3D engine finishes
+        _mainController.animateTo(1.0, duration: const Duration(milliseconds: 200));
+      }
     }
   }
 
@@ -259,14 +277,14 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Precision Progress Line
+                      // Precision Progress Line (combines visual pacing with real GPU engine prewarm)
                       SizedBox(
-                        width: 220,
+                        width: 240,
                         height: 2.5,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(2),
                           child: LinearProgressIndicator(
-                            value: _mainController.value,
+                            value: math.max(_mainController.value, _engineProgress),
                             backgroundColor: const Color(0xFF1E293B),
                             valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF38BDF8)),
                           ),
@@ -274,12 +292,12 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
                       ),
                       const SizedBox(height: 14),
 
-                      // Animated Status Text
+                      // Animated Status Text reflecting live 3D engine progress
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 250),
                         child: Text(
-                          _statusMessages[_statusIndex],
-                          key: ValueKey<int>(_statusIndex),
+                          _activeStatusMessage,
+                          key: ValueKey<String>(_activeStatusMessage),
                           style: const TextStyle(color: Color(0xFF64748B), fontSize: 11.5, fontFamily: 'monospace', letterSpacing: 0.3),
                         ),
                       ),

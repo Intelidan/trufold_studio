@@ -205,6 +205,23 @@ class LadderAccessoryGenerator {
       }
     }
 
+    // Developed Miter Bend Stations & V-Notch calculation
+    final innerMiterStations = <double>[];
+    final outerMiterStations = <double>[];
+    double deltaPhi = 0.0;
+
+    if (isSegmented) {
+      deltaPhi = angleRad / (segments - 1);
+      for (int k = 0; k < segments - 1; k++) {
+        final double psi = (k + 0.5) * deltaPhi;
+        innerMiterStations.add(leadIn + (rIn * psi));
+        outerMiterStations.add(leadIn + (rOut * psi));
+      }
+    }
+
+    final bool notchOuter = isSegmented && params.flangeDirection == LadderFlangeDirection.inside;
+    final bool notchInner = isSegmented && params.flangeDirection == LadderFlangeDirection.outside;
+
     // Flat Blanks
     final leftRailPart = LadderAssemblyGenerator.generateCustomRailFlatBlank(
       railSide: 'inner',
@@ -215,6 +232,9 @@ class LadderAccessoryGenerator {
       stations: innerStations,
       slotDim: slotDim,
       material: material,
+      miterBendStations: isSegmented ? innerMiterStations : null,
+      hasFlangeVNotches: notchInner,
+      miterDeltaPhi: deltaPhi,
     );
 
     final rightRailPart = LadderAssemblyGenerator.generateCustomRailFlatBlank(
@@ -226,6 +246,9 @@ class LadderAccessoryGenerator {
       stations: outerStations,
       slotDim: slotDim,
       material: material,
+      miterBendStations: isSegmented ? outerMiterStations : null,
+      hasFlangeVNotches: notchOuter,
+      miterDeltaPhi: deltaPhi,
     );
 
     final rungPart = LadderAssemblyGenerator.generateCustomRungFlatBlank(
@@ -1055,9 +1078,28 @@ class LadderAccessoryGenerator {
       0.0,
     );
 
+    final bool isPassThrough = params.jointMethod == LadderRungJointMethod.passThroughOutsideWeld;
+    final bool notchOuter = isSegmented && params.flangeDirection == LadderFlangeDirection.inside;
+    final bool notchInner = isSegmented && params.flangeDirection == LadderFlangeDirection.outside;
+    final double T = (params.thickness > 0.1 && params.thickness < 10.0) ? params.thickness : 2.0;
+
+    final segList = <({
+      CadPoint3D pStartIn,
+      CadPoint3D pEndIn,
+      CadPoint3D pStartInF,
+      CadPoint3D pEndInF,
+      CadPoint3D pStartOut,
+      CadPoint3D pEndOut,
+      CadPoint3D pStartOutF,
+      CadPoint3D pEndOutF,
+      bool hasNotchStart,
+      bool hasNotchEnd,
+    })>[];
+
     if (isSegmented) {
       final double deltaPhi = angleRad / (segments - 1);
       final double cosHalf = math.cos(deltaPhi / 2.0);
+      final double wNotch = F * math.tan(deltaPhi / 2.0);
 
       for (int k = 0; k < segments - 1; k++) {
         final double psi = (k + 0.5) * deltaPhi;
@@ -1071,32 +1113,14 @@ class LadderAccessoryGenerator {
         mInF.add(CadPoint3D(scaleInF * math.cos(psi), scaleInF * math.sin(psi), 0.0));
         mOutF.add(CadPoint3D(scaleOutF * math.cos(psi), scaleOutF * math.sin(psi), 0.0));
       }
-    }
 
-    final bool isPassThrough = params.jointMethod == LadderRungJointMethod.passThroughOutsideWeld;
-    final bool notchOuter = isSegmented && params.flangeDirection == LadderFlangeDirection.inside;
-    final bool notchInner = isSegmented && params.flangeDirection == LadderFlangeDirection.outside;
-    final double T = (params.thickness > 0.1 && params.thickness < 10.0) ? params.thickness : 2.0;
+      for (int s = 0; s < segments; s++) {
+        final pStartIn = (s == 0) ? pInletIn : mIn[s - 1];
+        final pEndIn = (s == segments - 1) ? pOutletIn : mIn[s];
 
-    for (int s = 0; s < segments; s++) {
-      CadPoint3D pStartIn;
-      CadPoint3D pEndIn;
-      CadPoint3D pStartInF;
-      CadPoint3D pEndInF;
+        final pStartOut = (s == 0) ? pInletOut : mOut[s - 1];
+        final pEndOut = (s == segments - 1) ? pOutletOut : mOut[s];
 
-      CadPoint3D pStartOut;
-      CadPoint3D pEndOut;
-      CadPoint3D pStartOutF;
-      CadPoint3D pEndOutF;
-
-      if (isSegmented) {
-        pStartIn = (s == 0) ? pInletIn : mIn[s - 1];
-        pEndIn = (s == segments - 1) ? pOutletIn : mIn[s];
-
-        pStartOut = (s == 0) ? pInletOut : mOut[s - 1];
-        pEndOut = (s == segments - 1) ? pOutletOut : mOut[s];
-
-        // Tangents and inward normals for segment s
         final dIn = CadPoint3D(pEndIn.x - pStartIn.x, pEndIn.y - pStartIn.y, 0.0);
         final lenIn = math.sqrt((dIn.x * dIn.x) + (dIn.y * dIn.y));
         final tIn = lenIn > 1e-6 ? CadPoint3D(dIn.x / lenIn, dIn.y / lenIn, 0.0) : const CadPoint3D(0.0, 1.0, 0.0);
@@ -1107,41 +1131,111 @@ class LadderAccessoryGenerator {
         final tOut = lenOut > 1e-6 ? CadPoint3D(dOut.x / lenOut, dOut.y / lenOut, 0.0) : const CadPoint3D(0.0, 1.0, 0.0);
         final nOut = CadPoint3D(-tOut.y, tOut.x, 0.0);
 
-        // Flange vertices:
-        // Outer rail flange
+        CadPoint3D pStartOutF;
+        CadPoint3D pEndOutF;
         if (notchOuter) {
-          // V-notch on outer rail: cut perpendicular to segment s at bend lines
-          pStartOutF = (s == 0) ? pInletOutF : CadPoint3D(pStartOut.x + (nOut.x * fSign * F), pStartOut.y + (nOut.y * fSign * F), 0.0);
-          pEndOutF = (s == segments - 1) ? pOutletOutF : CadPoint3D(pEndOut.x + (nOut.x * fSign * F), pEndOut.y + (nOut.y * fSign * F), 0.0);
+          pStartOutF = (s == 0)
+              ? pInletOutF
+              : CadPoint3D(pStartOut.x + (nOut.x * fSign * F) + (tOut.x * wNotch), pStartOut.y + (nOut.y * fSign * F) + (tOut.y * wNotch), 0.0);
+          pEndOutF = (s == segments - 1)
+              ? pOutletOutF
+              : CadPoint3D(pEndOut.x + (nOut.x * fSign * F) - (tOut.x * wNotch), pEndOut.y + (nOut.y * fSign * F) - (tOut.y * wNotch), 0.0);
         } else {
-          // Continuous miter on outer rail
           pStartOutF = (s == 0) ? pInletOutF : mOutF[s - 1];
           pEndOutF = (s == segments - 1) ? pOutletOutF : mOutF[s];
         }
 
-        // Inner rail flange
+        CadPoint3D pStartInF;
+        CadPoint3D pEndInF;
         if (notchInner) {
-          // V-notch on inner rail: cut perpendicular to segment s at bend lines
-          pStartInF = (s == 0) ? pInletInF : CadPoint3D(pStartIn.x + (nIn.x * fSign * F), pStartIn.y + (nIn.y * fSign * F), 0.0);
-          pEndInF = (s == segments - 1) ? pOutletInF : CadPoint3D(pEndIn.x + (nIn.x * fSign * F), pEndIn.y + (nIn.y * fSign * F), 0.0);
+          pStartInF = (s == 0)
+              ? pInletInF
+              : CadPoint3D(pStartIn.x + (nIn.x * fSign * F) + (tIn.x * wNotch), pStartIn.y + (nIn.y * fSign * F) + (tIn.y * wNotch), 0.0);
+          pEndInF = (s == segments - 1)
+              ? pOutletInF
+              : CadPoint3D(pEndIn.x + (nIn.x * fSign * F) - (tIn.x * wNotch), pEndIn.y + (nIn.y * fSign * F) - (tIn.y * wNotch), 0.0);
         } else {
-          // Continuous miter on inner rail
           pStartInF = (s == 0) ? pInletInF : mInF[s - 1];
           pEndInF = (s == segments - 1) ? pOutletInF : mInF[s];
         }
-      } else {
+
+        segList.add((
+          pStartIn: pStartIn,
+          pEndIn: pEndIn,
+          pStartInF: pStartInF,
+          pEndInF: pEndInF,
+          pStartOut: pStartOut,
+          pEndOut: pEndOut,
+          pStartOutF: pStartOutF,
+          pEndOutF: pEndOutF,
+          hasNotchStart: s > 0,
+          hasNotchEnd: s < segments - 1,
+        ));
+      }
+    } else {
+      // Curved mode
+      // 1. Inlet straight collar (if leadIn > 0.01)
+      if (leadIn > 0.01) {
+        segList.add((
+          pStartIn: pInletIn,
+          pEndIn: CadPoint3D(rIn, 0.0, 0.0),
+          pStartInF: pInletInF,
+          pEndInF: CadPoint3D(rInF, 0.0, 0.0),
+          pStartOut: pInletOut,
+          pEndOut: CadPoint3D(rOut, 0.0, 0.0),
+          pStartOutF: pInletOutF,
+          pEndOutF: CadPoint3D(rOutF, 0.0, 0.0),
+          hasNotchStart: false,
+          hasNotchEnd: false,
+        ));
+      }
+
+      // 2. 16 curved arc segments
+      for (int s = 0; s < segments; s++) {
         final double a1 = angleRad * s / segments;
         final double a2 = angleRad * (s + 1) / segments;
-        pStartIn = CadPoint3D(rIn * math.cos(a1), rIn * math.sin(a1), 0.0);
-        pEndIn = CadPoint3D(rIn * math.cos(a2), rIn * math.sin(a2), 0.0);
-        pStartInF = CadPoint3D(rInF * math.cos(a1), rInF * math.sin(a1), 0.0);
-        pEndInF = CadPoint3D(rInF * math.cos(a2), rInF * math.sin(a2), 0.0);
-
-        pStartOut = CadPoint3D(rOut * math.cos(a1), rOut * math.sin(a1), 0.0);
-        pEndOut = CadPoint3D(rOut * math.cos(a2), rOut * math.sin(a2), 0.0);
-        pStartOutF = CadPoint3D(rOutF * math.cos(a1), rOutF * math.sin(a1), 0.0);
-        pEndOutF = CadPoint3D(rOutF * math.cos(a2), rOutF * math.sin(a2), 0.0);
+        segList.add((
+          pStartIn: CadPoint3D(rIn * math.cos(a1), rIn * math.sin(a1), 0.0),
+          pEndIn: CadPoint3D(rIn * math.cos(a2), rIn * math.sin(a2), 0.0),
+          pStartInF: CadPoint3D(rInF * math.cos(a1), rInF * math.sin(a1), 0.0),
+          pEndInF: CadPoint3D(rInF * math.cos(a2), rInF * math.sin(a2), 0.0),
+          pStartOut: CadPoint3D(rOut * math.cos(a1), rOut * math.sin(a1), 0.0),
+          pEndOut: CadPoint3D(rOut * math.cos(a2), rOut * math.sin(a2), 0.0),
+          pStartOutF: CadPoint3D(rOutF * math.cos(a1), rOutF * math.sin(a1), 0.0),
+          pEndOutF: CadPoint3D(rOutF * math.cos(a2), rOutF * math.sin(a2), 0.0),
+          hasNotchStart: false,
+          hasNotchEnd: false,
+        ));
       }
+
+      // 3. Outlet straight collar (if leadIn > 0.01)
+      if (leadIn > 0.01) {
+        segList.add((
+          pStartIn: CadPoint3D(rIn * math.cos(angleRad), rIn * math.sin(angleRad), 0.0),
+          pEndIn: pOutletIn,
+          pStartInF: CadPoint3D(rInF * math.cos(angleRad), rInF * math.sin(angleRad), 0.0),
+          pEndInF: pOutletInF,
+          pStartOut: CadPoint3D(rOut * math.cos(angleRad), rOut * math.sin(angleRad), 0.0),
+          pEndOut: pOutletOut,
+          pStartOutF: CadPoint3D(rOutF * math.cos(angleRad), rOutF * math.sin(angleRad), 0.0),
+          pEndOutF: pOutletOutF,
+          hasNotchStart: false,
+          hasNotchEnd: false,
+        ));
+      }
+    }
+
+    for (int s = 0; s < segList.length; s++) {
+      final seg = segList[s];
+      final pStartIn = seg.pStartIn;
+      final pEndIn = seg.pEndIn;
+      final pStartInF = seg.pStartInF;
+      final pEndInF = seg.pEndInF;
+
+      final pStartOut = seg.pStartOut;
+      final pEndOut = seg.pEndOut;
+      final pStartOutF = seg.pStartOutF;
+      final pEndOutF = seg.pEndOutF;
 
       // Unit tangents and normals
       final dIn = CadPoint3D(pEndIn.x - pStartIn.x, pEndIn.y - pStartIn.y, 0.0);
@@ -1160,7 +1254,7 @@ class LadderAccessoryGenerator {
       final innerWebHolesInner = <List<CadPoint3D>>[];
       final outerWebHolesInner = <List<CadPoint3D>>[];
 
-      if (isPassThrough && s < rungs.length) {
+      if (isSegmented && isPassThrough && s < rungs.length) {
         final jInList = joints.where((j) => j.rungIndex == s && j.railSide == 'left');
         final jOutList = joints.where((j) => j.rungIndex == s && j.railSide == 'right');
 
@@ -1308,7 +1402,7 @@ class LadderAccessoryGenerator {
 
       // V-Notch Rims on Inner Rail if notchInner
       if (notchInner) {
-        if (s > 0) {
+        if (seg.hasNotchStart) {
           thicknessPolygons.add(CadFoldedPolygon3D(
             faceId: 'RIM_inner_top_notch_start_$s',
             vertices: [
@@ -1332,7 +1426,7 @@ class LadderAccessoryGenerator {
             color: railColor,
           ));
         }
-        if (s < segments - 1) {
+        if (seg.hasNotchEnd) {
           thicknessPolygons.add(CadFoldedPolygon3D(
             faceId: 'RIM_inner_top_notch_end_$s',
             vertices: [
@@ -1461,7 +1555,7 @@ class LadderAccessoryGenerator {
 
       // V-Notch Rims on Outer Rail if notchOuter
       if (notchOuter) {
-        if (s > 0) {
+        if (seg.hasNotchStart) {
           thicknessPolygons.add(CadFoldedPolygon3D(
             faceId: 'RIM_outer_top_notch_start_$s',
             vertices: [
@@ -1485,7 +1579,7 @@ class LadderAccessoryGenerator {
             color: railColor,
           ));
         }
-        if (s < segments - 1) {
+        if (seg.hasNotchEnd) {
           thicknessPolygons.add(CadFoldedPolygon3D(
             faceId: 'RIM_outer_top_notch_end_$s',
             vertices: [
@@ -1743,29 +1837,61 @@ class LadderAccessoryGenerator {
       }
     }
 
-    final bool isPassThrough = params.jointMethod == LadderRungJointMethod.passThroughOutsideWeld;
+    final riserSegList = <({
+      CadPoint3D pbStart,
+      CadPoint3D pbEnd,
+      CadPoint3D ptStart,
+      CadPoint3D ptEnd,
+    })>[];
 
-    for (int s = 0; s < segments; s++) {
-      CadPoint3D pbStart;
-      CadPoint3D pbEnd;
-      CadPoint3D ptStart;
-      CadPoint3D ptEnd;
-
-      if (isSegmented) {
-        pbStart = (s == 0) ? pInletBottom : mBottom[s - 1];
-        pbEnd = (s == segments - 1) ? pOutletBottom : mBottom[s];
-        ptStart = (s == 0) ? pInletTop : mTop[s - 1];
-        ptEnd = (s == segments - 1) ? pOutletTop : mTop[s];
-      } else {
+    if (isSegmented) {
+      for (int s = 0; s < segments; s++) {
+        final pbStart = (s == 0) ? pInletBottom : mBottom[s - 1];
+        final pbEnd = (s == segments - 1) ? pOutletBottom : mBottom[s];
+        final ptStart = (s == 0) ? pInletTop : mTop[s - 1];
+        final ptEnd = (s == segments - 1) ? pOutletTop : mTop[s];
+        riserSegList.add((pbStart: pbStart, pbEnd: pbEnd, ptStart: ptStart, ptEnd: ptEnd));
+      }
+    } else {
+      // Curved mode: include inlet collar, arc segments, and outlet collar
+      if (leadIn > 0.01) {
+        riserSegList.add((
+          pbStart: pInletBottom,
+          pbEnd: const CadPoint3D(0.0, 0.0, 0.0),
+          ptStart: pInletTop,
+          ptEnd: CadPoint3D(0.0, 0.0, H),
+        ));
+      }
+      for (int s = 0; s < segments; s++) {
         final double a1 = angleRad * s / segments;
         final double a2 = angleRad * (s + 1) / segments;
-        pbStart = CadPoint3D(radius * math.sin(a1), 0.0, isInsideRiser ? radius * (1.0 - math.cos(a1)) : -radius * (1.0 - math.cos(a1)));
-        pbEnd = CadPoint3D(radius * math.sin(a2), 0.0, isInsideRiser ? radius * (1.0 - math.cos(a2)) : -radius * (1.0 - math.cos(a2)));
+        final pbStart = CadPoint3D(radius * math.sin(a1), 0.0, isInsideRiser ? radius * (1.0 - math.cos(a1)) : -radius * (1.0 - math.cos(a1)));
+        final pbEnd = CadPoint3D(radius * math.sin(a2), 0.0, isInsideRiser ? radius * (1.0 - math.cos(a2)) : -radius * (1.0 - math.cos(a2)));
         final u1 = CadPoint3D(isInsideRiser ? -math.sin(a1) : math.sin(a1), 0.0, math.cos(a1));
         final u2 = CadPoint3D(isInsideRiser ? -math.sin(a2) : math.sin(a2), 0.0, math.cos(a2));
-        ptStart = CadPoint3D(pbStart.x + (u1.x * H), 0.0, pbStart.z + (u1.z * H));
-        ptEnd = CadPoint3D(pbEnd.x + (u2.x * H), 0.0, pbEnd.z + (u2.z * H));
+        final ptStart = CadPoint3D(pbStart.x + (u1.x * H), 0.0, pbStart.z + (u1.z * H));
+        final ptEnd = CadPoint3D(pbEnd.x + (u2.x * H), 0.0, pbEnd.z + (u2.z * H));
+        riserSegList.add((pbStart: pbStart, pbEnd: pbEnd, ptStart: ptStart, ptEnd: ptEnd));
       }
+      if (leadIn > 0.01) {
+        final uExitFinal = CadPoint3D(isInsideRiser ? -math.sin(angleRad) : math.sin(angleRad), 0.0, math.cos(angleRad));
+        final ptCircTop = CadPoint3D(pCircBottom.x + (uExitFinal.x * H), 0.0, pCircBottom.z + (uExitFinal.z * H));
+        riserSegList.add((
+          pbStart: pCircBottom,
+          pbEnd: pOutletBottom,
+          ptStart: ptCircTop,
+          ptEnd: pOutletTop,
+        ));
+      }
+    }
+
+    final bool isPassThrough = params.jointMethod == LadderRungJointMethod.passThroughOutsideWeld;
+
+    for (int s = 0; s < riserSegList.length; s++) {
+      final pbStart = riserSegList[s].pbStart;
+      final pbEnd = riserSegList[s].pbEnd;
+      final ptStart = riserSegList[s].ptStart;
+      final ptEnd = riserSegList[s].ptEnd;
 
       // Unit tangent along rail and normal along web height
       final dSeg = CadPoint3D(pbEnd.x - pbStart.x, 0.0, pbEnd.z - pbStart.z);
@@ -1784,7 +1910,7 @@ class LadderAccessoryGenerator {
       final leftWebHolesInner = <List<CadPoint3D>>[];
       final rightWebHolesInner = <List<CadPoint3D>>[];
 
-      if (isPassThrough && s < rungs.length) {
+      if (isSegmented && isPassThrough && s < rungs.length) {
         final rung = rungs[s];
         final rx = rung.center3D.x;
         final rz = rung.center3D.z;

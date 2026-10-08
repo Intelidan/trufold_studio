@@ -39,6 +39,19 @@ class StudioViewCube extends StatefulWidget {
   final VoidCallback? onToggleHighQuality;
   final double size;
 
+  // Onshape Model Visualization Additions:
+  final bool is3dRotateLocked;
+  final VoidCallback? onToggle3dRotateLock;
+  final VoidCallback? onPreviousView;
+  final bool hasPreviousView;
+  final VoidCallback? onOrientNormal;
+  final bool highlightBoundaryEdges;
+  final VoidCallback? onToggleHighlightBoundaryEdges;
+  final bool isSectionViewActive;
+  final VoidCallback? onToggleSectionView;
+  final VoidCallback? onNamedViews;
+  final VoidCallback? onZoomToSelection;
+
   const StudioViewCube({
     super.key,
     required this.azimuthDeg,
@@ -61,6 +74,17 @@ class StudioViewCube extends StatefulWidget {
     this.isHighQuality = false,
     this.onToggleHighQuality,
     this.size = 80.0,
+    this.is3dRotateLocked = false,
+    this.onToggle3dRotateLock,
+    this.onPreviousView,
+    this.hasPreviousView = false,
+    this.onOrientNormal,
+    this.highlightBoundaryEdges = false,
+    this.onToggleHighlightBoundaryEdges,
+    this.isSectionViewActive = false,
+    this.onToggleSectionView,
+    this.onNamedViews,
+    this.onZoomToSelection,
   });
 
   @override
@@ -83,10 +107,42 @@ class _StudioViewCubeState extends State<StudioViewCube> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
+          // 0. Onshape 3D Rotate Lock Toggle Button
+          Positioned(
+            top: 2,
+            left: 2,
+            child: Tooltip(
+              message: widget.is3dRotateLocked ? 'Unlock 3D rotation' : 'Lock 3D rotation',
+              child: InkWell(
+                onTap: widget.onToggle3dRotateLock,
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: widget.is3dRotateLocked
+                        ? const Color(0xFF0284C7).withValues(alpha: 0.15)
+                        : Colors.white.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: widget.is3dRotateLocked ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: Icon(
+                    widget.is3dRotateLocked ? Icons.lock : Icons.lock_open_outlined,
+                    size: 12,
+                    color: widget.is3dRotateLocked ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           // 1. Top Curved Double-Arrow Roll Arc
           Positioned(
             top: 2,
-            left: 20,
+            left: 24,
             right: 20,
             height: 26,
             child: _RollArcWidget(
@@ -234,7 +290,11 @@ class _StudioViewCubeState extends State<StudioViewCube> {
 
         // Graphics preferences & fit
         _buildMenuItemWithIcon('graphics', 'Graphics preferences...', Icons.settings_outlined),
-        _buildMenuItem('fit', 'Zoom to fit'),
+        _buildMenuItem('named_views', 'Named views...'),
+        _buildMenuItem('previous_view', 'Previous view', isEnabled: widget.hasPreviousView),
+        _buildMenuItem('fit', 'Zoom to fit (F)'),
+        _buildMenuItem('zoom_selection', 'Zoom to selection'),
+        _buildMenuItem('orient_normal', 'Orient normal to face (N)'),
         const PopupMenuDivider(height: 8),
 
         // Projection
@@ -259,17 +319,26 @@ class _StudioViewCubeState extends State<StudioViewCube> {
         _buildCheckMenuItem('tangent_edges_removed', 'Tangent edges removed', widget.tangentEdgeMode == OnshapeTangentEdgeMode.removed),
         const PopupMenuDivider(height: 8),
 
-        // Quality
+        // Quality, Boundary & Section View
         _buildCheckMenuItem('high_quality', 'View in high quality', widget.isHighQuality),
+        _buildCheckMenuItem('highlight_boundary', 'Highlight boundary edges', widget.highlightBoundaryEdges),
+        _buildCheckMenuItem('section_view', 'Section view...', widget.isSectionViewActive),
       ],
     );
   }
 
-  PopupMenuItem<String> _buildMenuItem(String value, String text) {
+  PopupMenuItem<String> _buildMenuItem(String value, String text, {bool isEnabled = true}) {
     return PopupMenuItem<String>(
       value: value,
       height: 30,
-      child: Text(text, style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B))),
+      enabled: isEnabled,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          color: isEnabled ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
+        ),
+      ),
     );
   }
 
@@ -325,8 +394,20 @@ class _StudioViewCubeState extends State<StudioViewCube> {
       case 'graphics':
         widget.onOpenGraphicsPreferences?.call();
         break;
+      case 'named_views':
+        widget.onNamedViews?.call();
+        break;
+      case 'previous_view':
+        widget.onPreviousView?.call();
+        break;
       case 'fit':
         widget.onZoomToFit?.call();
+        break;
+      case 'zoom_selection':
+        widget.onZoomToSelection?.call();
+        break;
+      case 'orient_normal':
+        widget.onOrientNormal?.call();
         break;
       case 'perspective':
         widget.onTogglePerspective?.call();
@@ -360,6 +441,12 @@ class _StudioViewCubeState extends State<StudioViewCube> {
         break;
       case 'high_quality':
         widget.onToggleHighQuality?.call();
+        break;
+      case 'highlight_boundary':
+        widget.onToggleHighlightBoundaryEdges?.call();
+        break;
+      case 'section_view':
+        widget.onToggleSectionView?.call();
         break;
     }
   }

@@ -24,6 +24,7 @@ import 'package:vector_math/vector_math.dart' as vm;
 
 import '../../../engine/flutter_scene_cad_mesh_builder.dart';
 import '../../../engine/kinematic_fold_engine.dart';
+import '../../../engine/trufold_3d_engine_preloader.dart';
 import '../../../models/cad_primitives.dart';
 import '../../../models/cms/cms_physical_port.dart';
 import '../../../models/cnc_punch_primitive.dart';
@@ -311,19 +312,31 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     // 2. Studio Lighting & High-End Post-Processing Pipeline
     _applyEnvironmentSettings();
 
-    // 3. Initialize Engine Static Resources (Shaders & Materials)
-    Scene.initializeStaticResources().then((_) async {
-      if (!mounted) return;
-      try {
-        _masterShaderMaterial = await loadFmatMaterial('assets/materials/master_materials.fmat');
-        _masterShaderMaterial?.doubleSided = true;
-      } catch (e) {
-        debugPrint('FlutterSceneViewport: master_materials.fmat fallback: $e');
-      }
+    // 3. Initialize Engine Static Resources (Shaders & Materials) via Preloader
+    if (TruFold3dEnginePreloader.instance.isReady) {
+      _masterShaderMaterial = TruFold3dEnginePreloader.instance.cachedMasterMaterial;
+      _isGpuAvailable = TruFold3dEnginePreloader.instance.isGpuAvailable;
       final hasSavedCamera = widget.viewModel.camera3dState?.isInitialized == true;
       _rebuildCadMesh(preserveCamera: hasSavedCamera);
-      if (mounted) setState(() => _isEngineReady = true);
-    });
+      _isEngineReady = true;
+    } else {
+      TruFold3dEnginePreloader.instance.preload().then((_) async {
+        if (!mounted) return;
+        _masterShaderMaterial = TruFold3dEnginePreloader.instance.cachedMasterMaterial;
+        _isGpuAvailable = TruFold3dEnginePreloader.instance.isGpuAvailable;
+        if (_masterShaderMaterial == null && _isGpuAvailable) {
+          try {
+            _masterShaderMaterial = await loadFmatMaterial('assets/materials/master_materials.fmat');
+            _masterShaderMaterial?.doubleSided = true;
+          } catch (e) {
+            debugPrint('FlutterSceneViewport: master_materials.fmat fallback: $e');
+          }
+        }
+        final hasSavedCamera = widget.viewModel.camera3dState?.isInitialized == true;
+        _rebuildCadMesh(preserveCamera: hasSavedCamera);
+        if (mounted) setState(() => _isEngineReady = true);
+      });
+    }
   }
 
   void _applyEnvironmentSettings() {
@@ -443,6 +456,11 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
       customMaterial: activeShaderMaterial,
       preferences: widget.viewModel.graphicsPreferences,
       renderMode: widget.viewModel.onshapeRenderMode,
+      hiddenPartIds: widget.viewModel.hiddenPartIds,
+      isolatedPartIds: widget.viewModel.isolatedPartIds,
+      transparentPartIds: widget.viewModel.transparentPartIds,
+      sectionViewConfig: widget.viewModel.sectionViewConfig,
+      partColorOverrides: widget.viewModel.partColorOverrides,
     );
     _scene!.add(_cadModelNode!);
 
@@ -595,6 +613,655 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     if (mounted) setState(() {});
   }
 
+  void _orientNormalToSelectedFace() {
+    final selFace = widget.viewModel.selectedFaceId;
+    if (selFace == null) return;
+    for (final poly in widget.viewModel.currentMesh.allPolygons) {
+      if (poly.faceId == selFace) {
+        final n = poly.normal;
+        final len = math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+        if (len > 1e-4) {
+          final nx = n.x / len;
+          final ny = n.y / len;
+          final nz = n.z / len;
+          final elDeg = math.asin(ny.clamp(-1.0, 1.0)) * vm.radians2Degrees;
+          final azDeg = math.atan2(-nx, -nz) * vm.radians2Degrees;
+          _setCameraFromAngles(azDeg, elDeg);
+        }
+        break;
+      }
+    }
+  }
+
+  void _handlePreviousView() {
+    final prev = widget.viewModel.popPreviousCameraState();
+    if (prev != null) {
+      _animateCameraTo(prev);
+    }
+  }
+
+  void _zoomToSelection() {
+    final selFace = widget.viewModel.selectedFaceId;
+    if (selFace == null) {
+      _zoomToFit();
+      return;
+    }
+    for (final poly in widget.viewModel.currentMesh.allPolygons) {
+      if (poly.faceId == selFace && poly.vertices.isNotEmpty) {
+        final center = poly.vertices.reduce((a, b) => CadPoint3D(a.x + b.x, a.y + b.y, a.z + b.z));
+        final cx = center.x / poly.vertices.length;
+        final cy = center.y / poly.vertices.length;
+        final cz = center.z / poly.vertices.length;
+        final targetState = Cad3dCameraState(
+          azimuthDeg: _paintAzimuthDeg,
+          elevationDeg: _paintElevationDeg,
+          zoom: _paintZoom * 1.5,
+          pan: _paintPan,
+          orbitDistance: _orbitDistance * 0.65,
+          orbitTarget: CadPoint3D(cx, cy, cz),
+          isInitialized: true,
+        );
+        _animateCameraTo(targetState);
+        break;
+      }
+    }
+  }
+
+  void _showNamedViewsDialog() {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDlgState) {
+            final views = widget.viewModel.namedViews;
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.bookmark_border, size: 18, color: Color(0xFF0284C7)),
+                  SizedBox(width: 8),
+                  Text('Named Views', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 320,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: textController,
+                            decoration: const InputDecoration(
+                              hintText: 'New view name...',
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            final name = textController.text.trim();
+                            if (name.isNotEmpty) {
+                              widget.viewModel.saveNamedView(name, _getCurrentCameraState());
+                              textController.clear();
+                              setDlgState(() {});
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0284C7),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Save'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (views.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Text('No named views saved yet.', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                      )
+                    else
+                      SizedBox(
+                        height: 180,
+                        child: ListView(
+                          children: views.entries.map((entry) {
+                            return ListTile(
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                              title: Text(entry.key, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFEF4444)),
+                                onPressed: () {
+                                  widget.viewModel.deleteNamedView(entry.key);
+                                  setDlgState(() {});
+                                },
+                              ),
+                              onTap: () {
+                                _animateCameraTo(entry.value);
+                                Navigator.of(ctx).pop();
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  CadFoldedPolygon3D? _findFrontmostPolygonUnderCursor(Offset cursorLocalPos, Size size, FoldedMeshResult mesh) {
+    if (mesh.polygons.isEmpty) return null;
+
+    CadFoldedPolygon3D? bestPoly;
+    double closestDist = double.infinity;
+
+    final azRad = _paintAzimuthDeg * vm.degrees2Radians;
+    final elRad = _paintElevationDeg * vm.degrees2Radians;
+    final cosAz = math.cos(azRad);
+    final sinAz = math.sin(azRad);
+    final cosEl = math.cos(elRad);
+    final sinEl = math.sin(elRad);
+    final mCenter = mesh.center;
+
+    for (final poly in mesh.allPolygons) {
+      if (poly.vertices.length < 3) continue;
+
+      final screenPts = <Offset>[];
+      for (final v in poly.vertices) {
+        screenPts.add(projectPointToScreen(v, size));
+      }
+
+      final path = Path()..moveTo(screenPts[0].dx, screenPts[0].dy);
+      for (int i = 1; i < screenPts.length; i++) {
+        path.lineTo(screenPts[i].dx, screenPts[i].dy);
+      }
+      path.close();
+
+      if (path.contains(cursorLocalPos)) {
+        double polyDepth = 0.0;
+        for (final v in poly.vertices) {
+          final dx = v.x - mCenter.x;
+          final dy = v.y - mCenter.y;
+          final dz = v.z - mCenter.z;
+          final depth = dx * cosEl * sinAz - dy * cosEl * cosAz + dz * sinEl;
+          polyDepth += depth;
+        }
+        polyDepth /= poly.vertices.length;
+
+        final dist = -polyDepth;
+        if (dist < closestDist) {
+          closestDist = dist;
+          bestPoly = poly;
+        }
+      }
+    }
+
+    return bestPoly;
+  }
+
+  void _handleSecondaryTapUp(TapUpDetails details, Size size, FoldedMeshResult mesh) {
+    if (widget.isInteractionLocked) return;
+
+    final poly = _findFrontmostPolygonUnderCursor(details.localPosition, size, mesh);
+    if (poly != null && poly.faceId.isNotEmpty) {
+      widget.viewModel.selectFace(poly.faceId);
+    }
+
+    _showOnshapeContextMenu(
+      globalPosition: details.globalPosition,
+      polygon: poly,
+      size: size,
+    );
+  }
+
+  void _handlePrimaryTapUp(TapUpDetails details, Size size, FoldedMeshResult mesh) {
+    if (widget.isInteractionLocked) return;
+
+    final poly = _findFrontmostPolygonUnderCursor(details.localPosition, size, mesh);
+    if (poly != null && poly.faceId.isNotEmpty) {
+      widget.viewModel.selectFace(poly.faceId);
+    } else {
+      widget.viewModel.clearSelection();
+    }
+  }
+
+  Future<void> _showOnshapeContextMenu({
+    required Offset globalPosition,
+    required CadFoldedPolygon3D? polygon,
+    required Size size,
+  }) async {
+    final faceId = polygon?.faceId;
+    final partId = faceId != null ? SheetMetalStudioViewModel.extractPartIdFromFaceId(faceId) : null;
+    final isPartHidden = partId != null && widget.viewModel.isPartHidden(partId);
+    final isPartIsolated = partId != null && widget.viewModel.isPartIsolated(partId);
+    final isPartTransparent = partId != null && widget.viewModel.isPartTransparent(partId);
+
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+        Offset.zero & overlay.size,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
+      ),
+      color: Colors.white,
+      elevation: 8,
+      items: [
+        // Header Chip
+        PopupMenuItem<String>(
+          enabled: false,
+          height: 32,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  polygon != null ? Icons.layers_rounded : Icons.view_in_ar_rounded,
+                  size: 13,
+                  color: const Color(0xFF0284C7),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  polygon != null ? 'Face: $faceId' : '3D Viewport Controls',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                if (partId != null && partId != faceId) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    '($partId)',
+                    style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        const PopupMenuDivider(height: 6),
+
+        if (polygon != null) ...[
+          _buildContextItem('orient_normal', 'Orient normal to face (N)', Icons.filter_center_focus),
+          _buildContextItem('zoom_selection', 'Zoom to selection', Icons.crop_free),
+          const PopupMenuDivider(height: 6),
+          _buildContextItem('hide_part', isPartHidden ? 'Show part (Y)' : 'Hide part (Y)', Icons.visibility_off_outlined),
+          _buildContextItem('hide_other', 'Hide other parts', Icons.hide_source),
+          _buildContextItem('show_all', 'Show all parts (Shift+Y)', Icons.visibility_outlined),
+          const PopupMenuDivider(height: 6),
+          _buildContextItem('isolate_part', isPartIsolated ? 'Exit isolation (Shift+I)' : 'Isolate part (Shift+I)', Icons.filter_frames),
+          _buildContextItem('make_transparent', isPartTransparent ? 'Clear transparency (Shift+T)' : 'Make transparent (Shift+T)', Icons.opacity),
+          const PopupMenuDivider(height: 6),
+          _buildContextItem('section_on_plane', 'Create section on this face', Icons.splitscreen),
+          _buildContextItem('edit_appearance', 'Edit part appearance...', Icons.palette_outlined),
+        ] else ...[
+          _buildContextItem('zoom_fit', 'Zoom to fit (F)', Icons.fit_screen),
+          _buildContextItem('previous_view', 'Previous view', Icons.history, enabled: widget.viewModel.hasPreviousCameraView),
+          _buildContextItem('named_views', 'Named views...', Icons.bookmark_border),
+          const PopupMenuDivider(height: 6),
+          _buildContextItem('show_all', 'Show all parts (Shift+Y)', Icons.visibility_outlined),
+          _buildContextItem('clear_isolation', 'Clear all isolation', Icons.filter_none),
+          _buildContextItem('clear_transparency', 'Clear all transparency', Icons.invert_colors_off),
+          const PopupMenuDivider(height: 6),
+          _buildContextItem(
+            'toggle_lock',
+            widget.viewModel.is3dRotateLocked ? 'Unlock 3D Rotate' : 'Lock 3D Rotate',
+            widget.viewModel.is3dRotateLocked ? Icons.lock_open : Icons.lock_outline,
+          ),
+          _buildContextItem('section_view', 'Section view...', Icons.splitscreen),
+          _buildContextItem('graphics_prefs', 'Graphics preferences...', Icons.settings_outlined),
+        ],
+      ],
+    );
+
+    if (result == null) return;
+    _executeContextMenuAction(result, polygon, partId);
+  }
+
+  PopupMenuItem<String> _buildContextItem(
+    String value,
+    String text,
+    IconData icon, {
+    bool enabled = true,
+    Color? iconColor,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      enabled: enabled,
+      height: 32,
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 15,
+            color: enabled ? (iconColor ?? const Color(0xFF475569)) : const Color(0xFFCBD5E1),
+          ),
+          const SizedBox(width: 9),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: enabled ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeContextMenuAction(String action, CadFoldedPolygon3D? poly, String? partId) {
+    switch (action) {
+      case 'orient_normal':
+        _orientNormalToSelectedFace();
+        break;
+      case 'zoom_selection':
+        _zoomToSelection();
+        break;
+      case 'zoom_fit':
+        _zoomToFit();
+        break;
+      case 'previous_view':
+        _handlePreviousView();
+        break;
+      case 'named_views':
+        _showNamedViewsDialog();
+        break;
+      case 'hide_part':
+        if (partId != null) {
+          if (widget.viewModel.isPartHidden(partId)) {
+            widget.viewModel.showPart(partId);
+          } else {
+            widget.viewModel.hidePart(partId);
+          }
+        }
+        break;
+      case 'hide_other':
+        if (partId != null) {
+          widget.viewModel.hideOtherParts(partId);
+        }
+        break;
+      case 'show_all':
+        widget.viewModel.showAllParts();
+        break;
+      case 'isolate_part':
+        if (partId != null) {
+          if (widget.viewModel.isPartIsolated(partId)) {
+            widget.viewModel.clearIsolation();
+          } else {
+            widget.viewModel.isolatePart(partId);
+          }
+        }
+        break;
+      case 'clear_isolation':
+        widget.viewModel.clearIsolation();
+        break;
+      case 'make_transparent':
+        if (partId != null) {
+          widget.viewModel.makePartTransparent(partId);
+        }
+        break;
+      case 'clear_transparency':
+        widget.viewModel.clearTransparency();
+        break;
+      case 'section_on_plane':
+        if (poly != null && poly.vertices.isNotEmpty) {
+          final nx = poly.normal.x.abs();
+          final ny = poly.normal.y.abs();
+          final nz = poly.normal.z.abs();
+          SectionPlaneAxis axis;
+          double offset;
+          if (nx >= ny && nx >= nz) {
+            axis = SectionPlaneAxis.yz;
+            offset = poly.vertices.first.x;
+          } else if (ny >= nx && ny >= nz) {
+            axis = SectionPlaneAxis.zx;
+            offset = poly.vertices.first.y;
+          } else {
+            axis = SectionPlaneAxis.xy;
+            offset = poly.vertices.first.z;
+          }
+          widget.viewModel.setSectionViewAxis(axis);
+          widget.viewModel.setSectionViewOffset(offset);
+          if (!widget.viewModel.sectionViewConfig.isEnabled) {
+            widget.viewModel.toggleSectionView();
+          }
+        }
+        break;
+      case 'section_view':
+        widget.viewModel.toggleSectionView();
+        break;
+      case 'toggle_lock':
+        widget.viewModel.toggle3dRotateLock();
+        break;
+      case 'graphics_prefs':
+        setState(() {
+          widget.viewModel.isGraphicsPreferencesOpen = true;
+        });
+        break;
+      case 'edit_appearance':
+        if (partId != null) {
+          _showPartAppearanceDialog(partId);
+        }
+        break;
+    }
+  }
+
+  void _showPartAppearanceDialog(String partId) {
+    final currentColor = widget.viewModel.partColorOverrides[partId] ??
+        widget.viewModel.graphicsPreferences.materialSettings.baseColor;
+
+    final colorPresets = <(String, Color)>[
+      ('Galvanized Steel DX51D', const Color(0xFFA6AABC)),
+      ('Carbon Steel ASTM A36', const Color(0xFF475569)),
+      ('Stainless Steel 304', const Color(0xFFCBD5E1)),
+      ('Signal White Powdercoat', const Color(0xFFF8FAFC)),
+      ('RAL 7016 Anthracite', const Color(0xFF334155)),
+      ('Industrial Orange', const Color(0xFFEA580C)),
+      ('Signal Blue', const Color(0xFF0284C7)),
+      ('Safety Yellow', const Color(0xFFF59E0B)),
+      ('Forest Green', const Color(0xFF15803D)),
+      ('Anodized Gold', const Color(0xFFD97706)),
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.palette_outlined, size: 20, color: Color(0xFF0284C7)),
+            const SizedBox(width: 8),
+            Text('Part Appearance: $partId', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: SizedBox(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Select Sheet Metal Finish / Color Preset:', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: colorPresets.map((preset) {
+                  final isSelected = currentColor.toARGB32() == preset.$2.toARGB32();
+                  return Tooltip(
+                    message: preset.$1,
+                    child: InkWell(
+                      onTap: () {
+                        widget.viewModel.setPartColor(partId, preset.$2);
+                        if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                          _rebuildCadMesh(preserveCamera: true);
+                        }
+                        Navigator.of(ctx).pop();
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        width: 48,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: preset.$2,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
+                            width: isSelected ? 2.5 : 1.0,
+                          ),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2, offset: const Offset(0, 1)),
+                          ],
+                        ),
+                        child: isSelected ? const Icon(Icons.check, size: 16, color: Color(0xFF0284C7)) : null,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              widget.viewModel.clearPartColor(partId);
+              if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                _rebuildCadMesh(preserveCamera: true);
+              }
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('Reset to Default', style: TextStyle(color: Color(0xFFEF4444))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionViewControlBar() {
+    final cfg = widget.viewModel.sectionViewConfig;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFCBD5E1), width: 1.0),
+        boxShadow: const [
+          BoxShadow(color: Color(0x1F000000), blurRadius: 10, offset: Offset(0, 3)),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cut_outlined, size: 16, color: Color(0xFF0284C7)),
+          const SizedBox(width: 8),
+          const Text('Section:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+          const SizedBox(width: 8),
+          // Axis selector
+          DropdownButton<SectionPlaneAxis>(
+            value: cfg.axis,
+            isDense: true,
+            underline: const SizedBox(),
+            items: const [
+              DropdownMenuItem(value: SectionPlaneAxis.yz, child: Text('YZ (Front)', style: TextStyle(fontSize: 12))),
+              DropdownMenuItem(value: SectionPlaneAxis.zx, child: Text('ZX (Top)', style: TextStyle(fontSize: 12))),
+              DropdownMenuItem(value: SectionPlaneAxis.xy, child: Text('XY (Right)', style: TextStyle(fontSize: 12))),
+            ],
+            onChanged: (val) {
+              if (val != null) {
+                widget.viewModel.setSectionViewAxis(val);
+                if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                  _rebuildCadMesh(preserveCamera: true);
+                }
+                setState(() {});
+              }
+            },
+          ),
+          const SizedBox(width: 12),
+          // Distance slider
+          SizedBox(
+            width: 140,
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                trackHeight: 3,
+              ),
+              child: Slider(
+                value: cfg.distanceOffsetMm.clamp(-250.0, 250.0),
+                min: -250.0,
+                max: 250.0,
+                activeColor: const Color(0xFF0284C7),
+                onChanged: (val) {
+                  widget.viewModel.setSectionViewOffset(val);
+                  if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                    _rebuildCadMesh(preserveCamera: true);
+                  }
+                  setState(() {});
+                },
+              ),
+            ),
+          ),
+          Text('${cfg.distanceOffsetMm.round()} mm', style: const TextStyle(fontSize: 11, color: Color(0xFF475569))),
+          const SizedBox(width: 8),
+          // Flip normal button
+          IconButton(
+            tooltip: 'Flip cut direction',
+            icon: Icon(Icons.swap_horiz, size: 16, color: cfg.flipNormal ? const Color(0xFF0284C7) : const Color(0xFF64748B)),
+            onPressed: () {
+              widget.viewModel.sectionViewConfig = cfg.copyWith(flipNormal: !cfg.flipNormal);
+              if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                _rebuildCadMesh(preserveCamera: true);
+              }
+              setState(() {});
+            },
+          ),
+          // Close section view button
+          IconButton(
+            tooltip: 'Exit Section View',
+            icon: const Icon(Icons.close, size: 16, color: Color(0xFFEF4444)),
+            onPressed: () {
+              widget.viewModel.toggleSectionView();
+              if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                _rebuildCadMesh(preserveCamera: true);
+              }
+              setState(() {});
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- Screen-Space Projection Math (Dual-Engine Unified) ---
 
   Offset projectPointToScreenPaint(CadPoint3D p, Size size) {
@@ -702,71 +1369,148 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
             // 1. PRIMARY VIEWPORT LAYER (Flutter GPU vs Flutter Paint)
             // =================================================================
             Positioned.fill(
-              child: Listener(
-                behavior: HitTestBehavior.opaque,
-                onPointerDown: (_) => setState(() => _isUserInteracting = true),
-                onPointerUp: (_) => setState(() => _isUserInteracting = false),
-                onPointerSignal: (event) {
-                  if (event is PointerScrollEvent) {
-                    _zoomCamera(event.scrollDelta.dy < 0 ? 1.15 : 0.85);
+              child: Focus(
+                autofocus: true,
+                onKeyEvent: (node, event) {
+                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                  final key = event.logicalKey;
+                  if (key == LogicalKeyboardKey.keyF) {
+                    _zoomToFit();
+                    return KeyEventResult.handled;
                   }
-                },
-                onPointerMove: (event) {
-                  if (widget.isInteractionLocked) return;
-
-                  final isPrimary = (event.buttons & kPrimaryMouseButton) != 0;
-                  final isMiddle = (event.buttons & kTertiaryButton) != 0 || (event.buttons & kMiddleMouseButton) != 0;
-                  final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
-                  bool isShiftPressed = false;
-                  try {
-                    isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
-                  } catch (_) {}
-
-                  if (isMiddle || (isPrimary && (_isPanToolActive || isShiftPressed))) {
-                    // Panning (Middle Drag / Shift+Left / Pan Tool)
-                    _panCamera(event.delta, size);
-                  } else if (isSecondary || isPrimary) {
-                    // Orbiting (Right Mouse Button or Primary Left Mouse Button Drag)
-                    _orbitCamera(event.delta.dx * 0.5, -event.delta.dy * 0.5);
+                  if (key == LogicalKeyboardKey.keyN) {
+                    _orientNormalToSelectedFace();
+                    return KeyEventResult.handled;
                   }
+                  if (key == LogicalKeyboardKey.keyY) {
+                    final selFace = widget.viewModel.selectedFaceId;
+                    if (selFace != null) {
+                      final pId = SheetMetalStudioViewModel.extractPartIdFromFaceId(selFace);
+                      if (HardwareKeyboard.instance.isShiftPressed) {
+                        widget.viewModel.showPart(pId);
+                      } else {
+                        widget.viewModel.hidePart(pId);
+                      }
+                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                        _rebuildCadMesh(preserveCamera: true);
+                      }
+                      setState(() {});
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  if (key == LogicalKeyboardKey.keyI && HardwareKeyboard.instance.isShiftPressed) {
+                    final selFace = widget.viewModel.selectedFaceId;
+                    if (selFace != null) {
+                      final pId = SheetMetalStudioViewModel.extractPartIdFromFaceId(selFace);
+                      widget.viewModel.isolatePart(pId);
+                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                        _rebuildCadMesh(preserveCamera: true);
+                      }
+                      setState(() {});
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  if (key == LogicalKeyboardKey.keyT && HardwareKeyboard.instance.isShiftPressed) {
+                    final selFace = widget.viewModel.selectedFaceId;
+                    if (selFace != null) {
+                      final pId = SheetMetalStudioViewModel.extractPartIdFromFaceId(selFace);
+                      widget.viewModel.makePartTransparent(pId);
+                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                        _rebuildCadMesh(preserveCamera: true);
+                      }
+                      setState(() {});
+                      return KeyEventResult.handled;
+                    }
+                  }
+                  return KeyEventResult.ignored;
                 },
-                child: isPaintMode
-                    // --- 1st Generation: Pure Flutter Paint Canvas ---
-                    ? GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: widget.isInteractionLocked ? null : () => widget.viewModel.clearSelection(),
-                        onDoubleTap: _zoomToFit,
-                        child: RepaintBoundary(
-                          child: CustomPaint(
-                            size: Size.infinite,
-                            painter: FlutterPaint3dPainter(
-                              mesh: mesh,
-                              azimuthDeg: _paintAzimuthDeg,
-                              elevationDeg: _paintElevationDeg,
-                              zoom: _paintZoom,
-                              pan: _paintPan,
-                              showWireframe: _showWireframe && widget.viewModel.showBorderLines,
-                              isGlassMode: widget.viewModel.isGlassMode,
-                              isOrthoProjection: widget.viewModel.isOrthoProjection,
-                              isInteracting: _isUserInteracting,
-                              selectedBendId: widget.viewModel.selectedBendId,
-                              selectedPunchId: widget.viewModel.selectedPunchId,
-                              selectedFaceId: widget.viewModel.selectedFaceId,
-                              hoveredPunchId: widget.viewModel.hoveredPunchId,
-                              hoveredBendId: widget.viewModel.hoveredBendId,
-                              hoveredFaceId: widget.viewModel.hoveredFaceId,
-                              activePorts: widget.viewModel.activeCmsPorts,
-                              focusedPortId: widget.viewModel.cmsGuidedController.state.focus.activePortId,
+                child: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (_) {
+                    widget.viewModel.pushCameraHistory(_getCurrentCameraState());
+                    setState(() => _isUserInteracting = true);
+                  },
+                  onPointerUp: (_) => setState(() => _isUserInteracting = false),
+                  onPointerSignal: (event) {
+                    if (event is PointerScrollEvent) {
+                      _zoomCamera(event.scrollDelta.dy < 0 ? 1.15 : 0.85);
+                    }
+                  },
+                  onPointerMove: (event) {
+                    if (widget.isInteractionLocked) return;
+
+                    final isPrimary = (event.buttons & kPrimaryMouseButton) != 0;
+                    final isMiddle = (event.buttons & kTertiaryButton) != 0 || (event.buttons & kMiddleMouseButton) != 0;
+                    final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
+                    bool isShiftPressed = false;
+                    bool isCtrlPressed = false;
+                    bool isAltPressed = false;
+                    try {
+                      isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
+                      isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
+                      isAltPressed = HardwareKeyboard.instance.isAltPressed;
+                    } catch (_) {}
+
+                    if (isMiddle || (isSecondary && isCtrlPressed) || (isPrimary && (_isPanToolActive || isShiftPressed))) {
+                      // Panning (Middle Drag / Ctrl+Right Drag / Shift+Left / Pan Tool)
+                      _panCamera(event.delta, size);
+                    } else if (isSecondary || isPrimary) {
+                      if (widget.viewModel.is3dRotateLocked) {
+                        return; // 3D Rotate is locked!
+                      }
+                      if (isAltPressed) {
+                        // Alt + Right: Constrained turntable or pitch
+                        if (event.delta.dx.abs() > event.delta.dy.abs()) {
+                          _orbitCamera(event.delta.dx * 0.5, 0.0);
+                        } else {
+                          _orbitCamera(0.0, -event.delta.dy * 0.5);
+                        }
+                      } else {
+                        _orbitCamera(event.delta.dx * 0.5, -event.delta.dy * 0.5);
+                      }
+                    }
+                  },
+                  child: isPaintMode
+                      // --- 1st Generation: Pure Flutter Paint Canvas ---
+                      ? GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapUp: widget.isInteractionLocked ? null : (details) => _handlePrimaryTapUp(details, size, mesh),
+                          onSecondaryTapUp: widget.isInteractionLocked ? null : (details) => _handleSecondaryTapUp(details, size, mesh),
+                          onDoubleTap: _zoomToFit,
+                          child: RepaintBoundary(
+                            child: CustomPaint(
+                              size: Size.infinite,
+                              painter: FlutterPaint3dPainter(
+                                mesh: mesh,
+                                azimuthDeg: _paintAzimuthDeg,
+                                elevationDeg: _paintElevationDeg,
+                                zoom: _paintZoom,
+                                pan: _paintPan,
+                                showWireframe: _showWireframe && widget.viewModel.showBorderLines,
+                                isGlassMode: widget.viewModel.isGlassMode,
+                                isOrthoProjection: widget.viewModel.isOrthoProjection,
+                                isInteracting: _isUserInteracting,
+                                selectedBendId: widget.viewModel.selectedBendId,
+                                selectedPunchId: widget.viewModel.selectedPunchId,
+                                selectedFaceId: widget.viewModel.selectedFaceId,
+                                hoveredPunchId: widget.viewModel.hoveredPunchId,
+                                hoveredBendId: widget.viewModel.hoveredBendId,
+                                hoveredFaceId: widget.viewModel.hoveredFaceId,
+                                activePorts: widget.viewModel.activeCmsPorts,
+                                focusedPortId: widget.viewModel.cmsGuidedController.state.focus.activePortId,
+                              ),
                             ),
                           ),
+                        )
+                      // --- Next Generation: Flutter GPU SceneView ---
+                      : GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapUp: widget.isInteractionLocked ? null : (details) => _handlePrimaryTapUp(details, size, mesh),
+                          onSecondaryTapUp: widget.isInteractionLocked ? null : (details) => _handleSecondaryTapUp(details, size, mesh),
+                          onDoubleTap: _zoomToFit,
+                          child: SceneView(_scene!),
                         ),
-                      )
-                    // --- Next Generation: Flutter GPU SceneView ---
-                    : GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onDoubleTap: _zoomToFit,
-                        child: SceneView(_scene!),
-                      ),
+                ),
               ),
             ),
 
@@ -1135,6 +1879,11 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                   return StudioViewCube(
                     azimuthDeg: angles.$1,
                     elevationDeg: angles.$2,
+                    is3dRotateLocked: widget.viewModel.is3dRotateLocked,
+                    onToggle3dRotateLock: () {
+                      widget.viewModel.toggle3dRotateLock();
+                      setState(() {});
+                    },
                     renderMode: widget.viewModel.onshapeRenderMode,
                     onRenderModeChanged: (mode) {
                       widget.viewModel.onshapeRenderMode = mode;
@@ -1159,6 +1908,29 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                       }
                       setState(() {});
                     },
+                    highlightBoundaryEdges: widget.viewModel.graphicsPreferences.highlightBoundaryEdges,
+                    onToggleHighlightBoundaryEdges: () {
+                      widget.viewModel.updateGraphicsPreferences((p) => p.copyWith(
+                        highlightBoundaryEdges: !p.highlightBoundaryEdges,
+                      ));
+                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                        _rebuildCadMesh(preserveCamera: true);
+                      }
+                      setState(() {});
+                    },
+                    isSectionViewActive: widget.viewModel.sectionViewConfig.isEnabled,
+                    onToggleSectionView: () {
+                      widget.viewModel.toggleSectionView();
+                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                        _rebuildCadMesh(preserveCamera: true);
+                      }
+                      setState(() {});
+                    },
+                    hasPreviousView: widget.viewModel.hasPreviousCameraView,
+                    onPreviousView: _handlePreviousView,
+                    onOrientNormal: _orientNormalToSelectedFace,
+                    onZoomToSelection: _zoomToSelection,
+                    onNamedViews: _showNamedViewsDialog,
                     isPerspective: !widget.viewModel.isOrthoProjection,
                     onTogglePerspective: _toggleProjection,
                     onOpenGraphicsPreferences: () {
@@ -1179,6 +1951,17 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                 },
               ),
             ),
+
+            // Floating Section View Control Bar (when active)
+            if (widget.viewModel.sectionViewConfig.isEnabled)
+              Positioned(
+                bottom: 48,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _buildSectionViewControlBar(),
+                ),
+              ),
 
             // =================================================================
             // 9. BOTTOM-RIGHT LIVE BOUNDING DIMENSIONS BADGE

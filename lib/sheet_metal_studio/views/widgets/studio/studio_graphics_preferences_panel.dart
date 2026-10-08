@@ -169,6 +169,28 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                       tooltip: 'Color used for highlighting section interference cuts.',
                       onSelect: (c) => widget.onChanged(prefs.copyWith(sectionInterferenceColor: c)),
                     ),
+                    _buildToggleRow(
+                      label: 'Highlight boundary edges',
+                      value: prefs.highlightBoundaryEdges,
+                      tooltip: 'Visually highlight open boundary edges (sheet metal edges, open boundaries) with an accent color.',
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(highlightBoundaryEdges: val)),
+                    ),
+                    if (prefs.highlightBoundaryEdges)
+                      _buildColorRow(
+                        label: 'Boundary edge color',
+                        color: prefs.boundaryEdgeColor,
+                        tooltip: 'Color used for highlighted boundary edges.',
+                        onSelect: (c) => widget.onChanged(prefs.copyWith(boundaryEdgeColor: c)),
+                      ),
+                    _buildSliderRow(
+                      label: 'Translucent opacity',
+                      valueStr: '${(prefs.transparencyLevel * 100).round()}%',
+                      tooltip: 'Opacity percentage for parts or faces rendered in translucent mode.',
+                      value: prefs.transparencyLevel,
+                      min: 0.05,
+                      max: 0.95,
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(transparencyLevel: val)),
+                    ),
                   ],
 
                   const SizedBox(height: 6),
@@ -182,6 +204,18 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                     onToggle: () => setState(() => _phantomEdgesExpanded = !_phantomEdgesExpanded),
                   ),
                   if (_phantomEdgesExpanded) ...[
+                    _buildDropdownRow<OnshapeTangentEdgeMode>(
+                      label: 'Tangent edge display',
+                      value: prefs.tangentEdgeMode,
+                      valueLabel: prefs.tangentEdgeMode.label,
+                      tooltip: 'Controls how blend/fillet tangent edges are rendered (Visible solid, Phantom dashed, or Removed).',
+                      items: OnshapeTangentEdgeMode.values.map((mode) => PopupMenuItem<OnshapeTangentEdgeMode>(
+                        value: mode,
+                        height: 28,
+                        child: Text(mode.label, style: const TextStyle(fontSize: 11, color: Color(0xFF1E293B))),
+                      )).toList(),
+                      onSelected: (val) => widget.onChanged(prefs.copyWith(tangentEdgeMode: val)),
+                    ),
                     _buildSliderRow(
                       label: 'Phantom tangent edge width',
                       valueStr: '${prefs.phantomTangentEdgeWidth.toStringAsFixed(1)} px',
@@ -275,6 +309,17 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                     isExpanded: _meshBodiesExpanded,
                     onToggle: () => setState(() => _meshBodiesExpanded = !_meshBodiesExpanded),
                   ),
+                  if (_meshBodiesExpanded) ...[
+                    _buildSliderRow(
+                      label: 'Mesh line width',
+                      valueStr: prefs.meshLineWidth <= 0.05 ? 'Off' : '${prefs.meshLineWidth.toStringAsFixed(1)} px',
+                      tooltip: 'Thickness of mesh polygon wireframes and tessellation borders.',
+                      value: prefs.meshLineWidth,
+                      min: 0.0,
+                      max: 4.0,
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(meshLineWidth: val <= 0.05 ? 0.0 : val)),
+                    ),
+                  ],
                 ],
               ),
             ),

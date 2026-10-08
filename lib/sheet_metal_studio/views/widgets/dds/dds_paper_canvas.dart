@@ -41,7 +41,13 @@ import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../viewport_3d/flutter_scene_viewport_widget.dart';
 import 'dds_drawing_painters.dart';
 
-enum DdsViewportMode { presentation3D, transitionWipe }
+enum DdsViewportMode {
+  presentation3D,
+  multiView2D,
+  sectionView2D,
+  flatPattern2D,
+  transitionWipe,
+}
 
 class DdsPaperCanvas extends StatefulWidget {
   final DdsDocument document;
@@ -195,6 +201,14 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
   bool _showDimensionTags = false;
   bool _combinePortDimensions = true;
 
+  // Onshape 2D Drawing & Multi-View Projection State
+  DdsProjectionAngle _projectionAngle = DdsProjectionAngle.firstAngle;
+  bool _showHiddenLines = false;
+  bool _isIsometricShaded = true;
+  DdsMultiViewLayout _multiViewLayout = DdsMultiViewLayout.standard4View;
+  bool _showCenterlines = true;
+  OnshapeTangentEdgeMode _tangentEdgeMode = OnshapeTangentEdgeMode.phantom;
+
   void _onSheetVmChanged() {
     if (!mounted) return;
     final currentMeshHash = _sheetViewModel?.currentMesh.hashCode;
@@ -231,6 +245,18 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     _showDimensionTags = vs.showDimensionTags;
     _combinePortDimensions = vs.combinePortDimensions;
     _is3DModelLocked = vs.is3DModelLocked;
+
+    final d2 = vs.drawing2D;
+    _projectionAngle = d2.projectionAngle;
+    _showHiddenLines = d2.showHiddenLines;
+    _isIsometricShaded = d2.isIsometricShaded;
+    _multiViewLayout = d2.multiViewLayout;
+    _showCenterlines = d2.showCenterlines;
+    _tangentEdgeMode = d2.tangentEdgeMode == 'visible'
+        ? OnshapeTangentEdgeMode.visible
+        : (d2.tangentEdgeMode == 'removed'
+            ? OnshapeTangentEdgeMode.removed
+            : OnshapeTangentEdgeMode.phantom);
 
     if (_sheetViewModel != null) {
       if (_sheetViewModel!.isCoverVisible3D != vs.showCover3D) {
@@ -284,6 +310,14 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
       combinePortDimensions: _combinePortDimensions,
       is3DModelLocked: _is3DModelLocked,
       camera3D: cam,
+      drawing2D: widget.sheet.viewSettings.drawing2D.copyWith(
+        projectionAngle: _projectionAngle,
+        showHiddenLines: _showHiddenLines,
+        isIsometricShaded: _isIsometricShaded,
+        multiViewLayout: _multiViewLayout,
+        showCenterlines: _showCenterlines,
+        tangentEdgeMode: _tangentEdgeMode.name,
+      ),
     );
 
     if (updated != widget.sheet.viewSettings) {
@@ -1748,6 +1782,12 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                 children: [
                   _buildModeTab(mode: DdsViewportMode.presentation3D, icon: Icons.view_in_ar, label: '3D Presentation Model', badgeText: 'ISO 3D'),
                   const SizedBox(width: 4),
+                  _buildModeTab(mode: DdsViewportMode.multiView2D, icon: Icons.grid_view_rounded, label: '2D Multi-View', badgeText: '2D DOC'),
+                  const SizedBox(width: 4),
+                  _buildModeTab(mode: DdsViewportMode.sectionView2D, icon: Icons.content_cut_rounded, label: '2D Section A-A', badgeText: 'SECTION'),
+                  const SizedBox(width: 4),
+                  _buildModeTab(mode: DdsViewportMode.flatPattern2D, icon: Icons.crop_square_rounded, label: '2D Flat Blank', badgeText: 'BLANK'),
+                  const SizedBox(width: 4),
                   _buildModeTab(mode: DdsViewportMode.transitionWipe, icon: Icons.compare_arrows, label: '3D Wipe'),
                 ],
               ),
@@ -1900,6 +1940,141 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
                           style: const TextStyle(color: Color(0xFF0284C7), fontSize: 8.0, fontWeight: FontWeight.bold),
                         ),
                       ),
+                    ),
+                  ],
+                )
+              else if (_viewportMode == DdsViewportMode.multiView2D)
+                Row(
+                  children: [
+                    // Projection angle toggle (First Angle ISO vs Third Angle ANSI)
+                    _buildDisplayModeChip(
+                      label: _projectionAngle == DdsProjectionAngle.firstAngle ? '1st Angle (ISO)' : '3rd Angle (ANSI)',
+                      icon: Icons.architecture,
+                      active: true,
+                      onTap: () {
+                        setState(() {
+                          _projectionAngle = _projectionAngle == DdsProjectionAngle.firstAngle
+                              ? DdsProjectionAngle.thirdAngle
+                              : DdsProjectionAngle.firstAngle;
+                        });
+                        _persistSheetViewSettings();
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    // Hidden lines toggle
+                    _buildDisplayModeChip(
+                      label: _showHiddenLines ? 'Hidden Lines: On' : 'Hidden Lines: Off',
+                      icon: Icons.blur_linear,
+                      active: _showHiddenLines,
+                      onTap: () {
+                        setState(() {
+                          _showHiddenLines = !_showHiddenLines;
+                        });
+                        _persistSheetViewSettings();
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    // Isometric view shading toggle (Shaded vs Outline)
+                    _buildDisplayModeChip(
+                      label: _isIsometricShaded ? 'Iso: Shaded' : 'Iso: Wireframe',
+                      icon: Icons.wb_sunny_outlined,
+                      active: _isIsometricShaded,
+                      onTap: () {
+                        setState(() {
+                          _isIsometricShaded = !_isIsometricShaded;
+                        });
+                        _persistSheetViewSettings();
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    // Centerlines toggle
+                    _buildDisplayModeChip(
+                      label: _showCenterlines ? 'Centerlines: On' : 'Centerlines: Off',
+                      icon: Icons.center_focus_strong,
+                      active: _showCenterlines,
+                      onTap: () {
+                        setState(() {
+                          _showCenterlines = !_showCenterlines;
+                        });
+                        _persistSheetViewSettings();
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    // Tangent edges mode cycle (Phantom -> Visible -> Removed)
+                    _buildDisplayModeChip(
+                      label: _tangentEdgeMode == OnshapeTangentEdgeMode.phantom
+                          ? 'Tangent: Phantom'
+                          : (_tangentEdgeMode == OnshapeTangentEdgeMode.visible ? 'Tangent: Visible' : 'Tangent: Off'),
+                      icon: Icons.gesture,
+                      active: _tangentEdgeMode != OnshapeTangentEdgeMode.removed,
+                      onTap: () {
+                        setState(() {
+                          if (_tangentEdgeMode == OnshapeTangentEdgeMode.phantom) {
+                            _tangentEdgeMode = OnshapeTangentEdgeMode.visible;
+                          } else if (_tangentEdgeMode == OnshapeTangentEdgeMode.visible) {
+                            _tangentEdgeMode = OnshapeTangentEdgeMode.removed;
+                          } else {
+                            _tangentEdgeMode = OnshapeTangentEdgeMode.phantom;
+                          }
+                        });
+                        _persistSheetViewSettings();
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    // CAD Dimensions toggle
+                    _buildDisplayModeChip(
+                      label: 'CAD Dimensions',
+                      icon: Icons.straighten,
+                      active: _showCadDimensionLines,
+                      onTap: () {
+                        setState(() => _showCadDimensionLines = !_showCadDimensionLines);
+                        _persistSheetViewSettings();
+                      },
+                    ),
+                  ],
+                )
+              else if (_viewportMode == DdsViewportMode.sectionView2D)
+                Row(
+                  children: [
+                    _buildDisplayModeChip(
+                      label: 'YZ Cut (Side)',
+                      icon: Icons.splitscreen,
+                      active: (widget.viewModel?.sectionViewConfig.axis ?? SectionPlaneAxis.yz) == SectionPlaneAxis.yz,
+                      onTap: () {
+                        widget.viewModel?.setSectionViewAxis(SectionPlaneAxis.yz);
+                        setState(() {});
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    _buildDisplayModeChip(
+                      label: 'ZX Cut (Front)',
+                      icon: Icons.splitscreen,
+                      active: (widget.viewModel?.sectionViewConfig.axis ?? SectionPlaneAxis.yz) == SectionPlaneAxis.zx,
+                      onTap: () {
+                        widget.viewModel?.setSectionViewAxis(SectionPlaneAxis.zx);
+                        setState(() {});
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    _buildDisplayModeChip(
+                      label: 'XY Cut (Plan)',
+                      icon: Icons.splitscreen,
+                      active: (widget.viewModel?.sectionViewConfig.axis ?? SectionPlaneAxis.yz) == SectionPlaneAxis.xy,
+                      onTap: () {
+                        widget.viewModel?.setSectionViewAxis(SectionPlaneAxis.xy);
+                        setState(() {});
+                      },
+                    ),
+                  ],
+                )
+              else if (_viewportMode == DdsViewportMode.flatPattern2D)
+                Row(
+                  children: [
+                    _buildDisplayModeChip(
+                      label: 'Bend Annotations',
+                      icon: Icons.line_weight,
+                      active: true,
+                      onTap: () {},
                     ),
                   ],
                 )
@@ -2125,9 +2300,178 @@ class _DdsPaperCanvasState extends State<DdsPaperCanvas> with TickerProviderStat
     switch (_viewportMode) {
       case DdsViewportMode.presentation3D:
         return _build3DPresentationViewport(eval);
+      case DdsViewportMode.multiView2D:
+        return _buildMultiView2DViewport(eval);
+      case DdsViewportMode.sectionView2D:
+        return _buildSectionView2DViewport(eval);
+      case DdsViewportMode.flatPattern2D:
+        return _buildFlatPattern2DViewport(eval);
       case DdsViewportMode.transitionWipe:
         return _buildTransitionViewport(eval);
     }
+  }
+
+  Widget _buildMultiView2DViewport(EvaluatedDdsInstance? eval) {
+    final mesh = eval?.combinedMesh3D ?? _sheetViewModel?.currentMesh ?? widget.viewModel?.currentMesh;
+    final isFirstAngle = _projectionAngle == DdsProjectionAngle.firstAngle;
+
+    // In 1st Angle (ISO): Front is top-left, Left/End is top-right, Top is bottom-left (under front), Iso is bottom-right.
+    // In 3rd Angle (ANSI): Top is top-left (above front), Iso is top-right, Front is bottom-left, Right/End is bottom-right.
+    final topLeftType = isFirstAngle ? DdsOrthographicViewType.front : DdsOrthographicViewType.top;
+    final bottomLeftType = isFirstAngle ? DdsOrthographicViewType.top : DdsOrthographicViewType.front;
+    final bottomRightType = DdsOrthographicViewType.end;
+
+    return Container(
+      color: Colors.white,
+      child: Column(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                // Top-Left View
+                Expanded(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        right: BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
+                        bottom: BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
+                      ),
+                    ),
+                    child: CustomPaint(
+                      painter: DdsOrthographicViewPainter(
+                        mesh: mesh,
+                        viewType: topLeftType,
+                        showDimensions: _showCadDimensionLines,
+                        showCenterlines: _showCenterlines,
+                        showHiddenLines: _showHiddenLines,
+                        tangentEdgeMode: _tangentEdgeMode,
+                      ),
+                    ),
+                  ),
+                ),
+                // Top-Right: ISOMETRIC 3D VIEW (with border & projection badge)
+                Expanded(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
+                      ),
+                    ),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: DdsOrthographicViewPainter(
+                              mesh: mesh,
+                              viewType: DdsOrthographicViewType.isometric,
+                              showDimensions: false,
+                              showCenterlines: false,
+                              showHiddenLines: _showHiddenLines,
+                              isShaded: _isIsometricShaded,
+                              tangentEdgeMode: _tangentEdgeMode,
+                            ),
+                          ),
+                        ),
+                        // Projection angle badge in corner
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFFCBD5E1), width: 0.8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.architecture, size: 12, color: Color(0xFF0F172A)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isFirstAngle ? '1st ANGLE PROJ (ISO)' : '3rd ANGLE PROJ (ANSI)',
+                                  style: const TextStyle(fontSize: 8.0, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Row(
+              children: [
+                // Bottom-Left View
+                Expanded(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        right: BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
+                      ),
+                    ),
+                    child: CustomPaint(
+                      painter: DdsOrthographicViewPainter(
+                        mesh: mesh,
+                        viewType: bottomLeftType,
+                        showDimensions: _showCadDimensionLines,
+                        showCenterlines: _showCenterlines,
+                        showHiddenLines: _showHiddenLines,
+                        tangentEdgeMode: _tangentEdgeMode,
+                      ),
+                    ),
+                  ),
+                ),
+                // Bottom-Right View
+                Expanded(
+                  child: CustomPaint(
+                    painter: DdsOrthographicViewPainter(
+                      mesh: mesh,
+                      viewType: bottomRightType,
+                      showDimensions: _showCadDimensionLines,
+                      showCenterlines: _showCenterlines,
+                      showHiddenLines: _showHiddenLines,
+                      tangentEdgeMode: _tangentEdgeMode,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionView2DViewport(EvaluatedDdsInstance? eval) {
+    final mesh = eval?.combinedMesh3D ?? _sheetViewModel?.currentMesh ?? widget.viewModel?.currentMesh;
+    final thick = eval?.scaledBaseDocument.material.thicknessMm ?? 2.0;
+    return Container(
+      color: Colors.white,
+      child: CustomPaint(
+        painter: DdsSectionDrawingPainter(
+          mesh: mesh,
+          sectionConfig: widget.viewModel?.sectionViewConfig ?? const SectionViewConfig(isEnabled: true),
+          sheetThickness: thick,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFlatPattern2DViewport(EvaluatedDdsInstance? eval) {
+    final doc = eval?.scaledBaseDocument ?? _sheetViewModel?.document ?? widget.viewModel?.document;
+    return Container(
+      color: Colors.white,
+      child: CustomPaint(
+        painter: DdsFlatPatternDrawingPainter(
+          document: doc,
+        ),
+      ),
+    );
   }
 
   Widget _buildTransitionViewport(EvaluatedDdsInstance? eval) {

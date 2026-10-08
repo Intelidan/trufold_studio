@@ -492,6 +492,14 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   Cad3dCameraState? camera3dState;
 
+  bool _is3dRotateLocked = false;
+  final List<Cad3dCameraState> _cameraHistory = [];
+  final Map<String, Cad3dCameraState> _namedViews = {};
+  SectionViewConfig _sectionViewConfig = const SectionViewConfig();
+  final Set<String> _hiddenPartIds = {};
+  final Set<String> _isolatedPartIds = {};
+  final Set<String> _transparentPartIds = {};
+
   OnshapeRenderMode _onshapeRenderMode = OnshapeRenderMode.shadedWithEdges;
 
   bool _isGraphicsPreferencesOpen = false;
@@ -2238,6 +2246,161 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   void toggleOrthoProjection() {
     _isOrthoProjection = !_isOrthoProjection;
     notifyListeners();
+  }
+
+  // --- Onshape Model Visualization Tools: 3D Rotate Lock, History, Views, Section, Visibility ---
+
+  bool get is3dRotateLocked => _is3dRotateLocked;
+  set is3dRotateLocked(bool val) {
+    if (_is3dRotateLocked == val) return;
+    _is3dRotateLocked = val;
+    notifyListeners();
+  }
+  void toggle3dRotateLock() {
+    _is3dRotateLocked = !_is3dRotateLocked;
+    notifyListeners();
+  }
+
+  bool get hasPreviousCameraView => _cameraHistory.isNotEmpty;
+  void pushCameraHistory(Cad3dCameraState state) {
+    if (_cameraHistory.length >= 25) {
+      _cameraHistory.removeAt(0);
+    }
+    _cameraHistory.add(state);
+    notifyListeners();
+  }
+  Cad3dCameraState? popPreviousCameraState() {
+    if (_cameraHistory.isEmpty) return null;
+    final state = _cameraHistory.removeLast();
+    notifyListeners();
+    return state;
+  }
+
+  Map<String, Cad3dCameraState> get namedViews => Map.unmodifiable(_namedViews);
+  void saveNamedView(String name, Cad3dCameraState state) {
+    _namedViews[name] = state;
+    notifyListeners();
+  }
+  void deleteNamedView(String name) {
+    if (_namedViews.remove(name) != null) {
+      notifyListeners();
+    }
+  }
+
+  SectionViewConfig get sectionViewConfig => _sectionViewConfig;
+  set sectionViewConfig(SectionViewConfig config) {
+    _sectionViewConfig = config;
+    notifyListeners();
+  }
+  void toggleSectionView() {
+    _sectionViewConfig = _sectionViewConfig.copyWith(isEnabled: !_sectionViewConfig.isEnabled);
+    notifyListeners();
+  }
+  void setSectionViewOffset(double offsetMm) {
+    _sectionViewConfig = _sectionViewConfig.copyWith(distanceOffsetMm: offsetMm);
+    notifyListeners();
+  }
+  void setSectionViewAxis(SectionPlaneAxis axis) {
+    _sectionViewConfig = _sectionViewConfig.copyWith(axis: axis);
+    notifyListeners();
+  }
+
+  Set<String> get hiddenPartIds => Set.unmodifiable(_hiddenPartIds);
+  Set<String> get isolatedPartIds => Set.unmodifiable(_isolatedPartIds);
+  Set<String> get transparentPartIds => Set.unmodifiable(_transparentPartIds);
+
+  void hidePart(String partId) {
+    _hiddenPartIds.add(partId);
+    notifyListeners();
+  }
+  void showPart(String partId) {
+    _hiddenPartIds.remove(partId);
+    notifyListeners();
+  }
+  void togglePartVisibility(String partId) {
+    if (_hiddenPartIds.contains(partId)) {
+      _hiddenPartIds.remove(partId);
+    } else {
+      _hiddenPartIds.add(partId);
+    }
+    notifyListeners();
+  }
+  void hideOtherParts(String keepPartId) {
+    _hiddenPartIds.clear();
+    for (final poly in currentMesh.allPolygons) {
+      final pId = extractPartIdFromFaceId(poly.faceId);
+      if (pId != keepPartId) {
+        _hiddenPartIds.add(pId);
+      }
+    }
+    notifyListeners();
+  }
+  void showAllParts() {
+    _hiddenPartIds.clear();
+    _isolatedPartIds.clear();
+    _transparentPartIds.clear();
+    notifyListeners();
+  }
+  void isolatePart(String partId) {
+    _isolatedPartIds.clear();
+    _isolatedPartIds.add(partId);
+    notifyListeners();
+  }
+  void clearIsolation() {
+    _isolatedPartIds.clear();
+    notifyListeners();
+  }
+  void makePartTransparent(String partId) {
+    if (_transparentPartIds.contains(partId)) {
+      _transparentPartIds.remove(partId);
+    } else {
+      _transparentPartIds.add(partId);
+    }
+    notifyListeners();
+  }
+  bool isPartIsolated(String partId) => _isolatedPartIds.contains(partId);
+  bool isPartTransparent(String partId) => _transparentPartIds.contains(partId);
+  bool isPartHidden(String partId) => _hiddenPartIds.contains(partId);
+
+  void clearTransparency() {
+    _transparentPartIds.clear();
+    notifyListeners();
+  }
+
+  final Map<String, Color> _partColorOverrides = {};
+  Map<String, Color> get partColorOverrides => Map.unmodifiable(_partColorOverrides);
+
+  void setPartColor(String partId, Color color) {
+    _partColorOverrides[partId] = color;
+    notifyListeners();
+  }
+
+  void clearPartColor(String partId) {
+    _partColorOverrides.remove(partId);
+    notifyListeners();
+  }
+
+  void clearAllPartColors() {
+    _partColorOverrides.clear();
+    notifyListeners();
+  }
+
+  static String extractPartIdFromFaceId(String faceId) {
+    if (faceId.contains('rung_')) {
+      final match = RegExp(r'(rung_\d+)').firstMatch(faceId);
+      if (match != null) return match.group(1)!;
+    }
+    if (faceId.startsWith('outer_rail') || faceId.startsWith('rail_right') || faceId.contains('outer_rail')) return 'outer_rail';
+    if (faceId.startsWith('inner_rail') || faceId.startsWith('rail_left') || faceId.contains('inner_rail')) return 'inner_rail';
+    if (faceId.startsWith('rail_')) return 'rail';
+    if (faceId.startsWith('coupler_')) return 'coupler';
+
+    // Delimited suffixes: part_id:face_sub, part_id#face_sub, part_id__face_sub
+    if (faceId.contains(':')) return faceId.split(':').first;
+    if (faceId.contains('#')) return faceId.split('#').first;
+    if (faceId.contains('__')) return faceId.split('__').first;
+
+    return faceId;
   }
 
   bool get showDimensions => _showDimensions;

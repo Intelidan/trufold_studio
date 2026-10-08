@@ -225,28 +225,86 @@ class LadderAssemblyGenerator {
     required List<double> stations,
     required ({double width, double height}) slotDim,
     required SheetMetalMaterial material,
+    List<double>? miterBendStations,
+    bool hasFlangeVNotches = false,
+    double miterDeltaPhi = 0.0,
   }) {
     final geometries = <CadGeometry>[];
 
-    // 1. Outer perimeter rectangle
-    final outerContour = [
-      const CadPoint2D(0.0, 0.0),
-      CadPoint2D(railFlatLength, 0.0),
-      CadPoint2D(railFlatLength, railFlatWidth),
-      CadPoint2D(0.0, railFlatWidth),
-    ];
+    final double F = params.flangeWidth > 0 ? params.flangeWidth : 32.0;
+    final double H = params.height;
+    final double W = railFlatWidth; // 2 * F + H
+
+    final sortedStations = (miterBendStations != null && miterBendStations.isNotEmpty)
+        ? (List<double>.from(miterBendStations)..sort())
+        : <double>[];
+
+    final outerContour = <CadPoint2D>[];
+
+    if (hasFlangeVNotches && sortedStations.isNotEmpty && miterDeltaPhi > 1e-4) {
+      final double wNotch = F * math.tan(miterDeltaPhi / 2.0);
+
+      // Start at bottom-left corner
+      outerContour.add(const CadPoint2D(0.0, 0.0));
+
+      // 1. Bottom edge (Y = 0.0) with V-notches pointing up to apex (X_k, F)
+      for (final st in sortedStations) {
+        final double xStart = math.max(0.0, st - wNotch);
+        final double xEnd = math.min(railFlatLength, st + wNotch);
+        outerContour.add(CadPoint2D(xStart, 0.0));
+        outerContour.add(CadPoint2D(st, F));
+        outerContour.add(CadPoint2D(xEnd, 0.0));
+      }
+      outerContour.add(CadPoint2D(railFlatLength, 0.0));
+
+      // 2. Right edge
+      outerContour.add(CadPoint2D(railFlatLength, W));
+
+      // 3. Top edge (Y = W) with V-notches pointing down to apex (X_k, F + H)
+      // Traverse in descending order
+      for (final st in sortedStations.reversed) {
+        final double xEnd = math.min(railFlatLength, st + wNotch);
+        final double xStart = math.max(0.0, st - wNotch);
+        outerContour.add(CadPoint2D(xEnd, W));
+        outerContour.add(CadPoint2D(st, F + H));
+        outerContour.add(CadPoint2D(xStart, W));
+      }
+      outerContour.add(CadPoint2D(0.0, W));
+    } else {
+      outerContour.addAll([
+        const CadPoint2D(0.0, 0.0),
+        CadPoint2D(railFlatLength, 0.0),
+        CadPoint2D(railFlatLength, railFlatWidth),
+        CadPoint2D(0.0, railFlatWidth),
+      ]);
+    }
+
+    // Transverse bend lines across web at miter stations
+    if (sortedStations.isNotEmpty) {
+      for (int k = 0; k < sortedStations.length; k++) {
+        final double x = sortedStations[k];
+        geometries.add(
+          CadLine2D(
+            id: '${railSide}_miter_bend_$k',
+            p1: CadPoint2D(x, F),
+            p2: CadPoint2D(x, F + H),
+            layer: 'BEND_TRANSVERSE',
+          ),
+        );
+      }
+    }
 
     // 2. Longitudinal Bend Lines
     // Bottom flange bend line
     geometries.add(
-      CadLine2D(id: '${railSide}_bend_bottom', p1: CadPoint2D(0.0, params.flangeWidth), p2: CadPoint2D(railFlatLength, params.flangeWidth), layer: 'BEND_90'),
+      CadLine2D(id: '${railSide}_bend_bottom', p1: CadPoint2D(0.0, F), p2: CadPoint2D(railFlatLength, F), layer: 'BEND_90'),
     );
     // Top flange bend line
     geometries.add(
       CadLine2D(
         id: '${railSide}_bend_top',
-        p1: CadPoint2D(0.0, params.flangeWidth + params.height),
-        p2: CadPoint2D(railFlatLength, params.flangeWidth + params.height),
+        p1: CadPoint2D(0.0, F + H),
+        p2: CadPoint2D(railFlatLength, F + H),
         layer: 'BEND_90',
       ),
     );
@@ -460,6 +518,7 @@ class LadderAssemblyGenerator {
     final int slotCount = availableLength > slotLength ? (availableLength / slotPitch).floor() : 0;
     final double hwSlot = math.min(slotWidth, rungW - 10.0) / 2.0;
     final holes = <List<CadPoint3D>>[];
+    final holesInner = <List<CadPoint3D>>[];
 
     if (slotCount > 0) {
       final double actualPitch = availableLength / slotCount;
@@ -469,6 +528,7 @@ class LadderAssemblyGenerator {
       for (int k = 0; k < slotCount; k++) {
         final double slotCenterU = uIntStart + slotMargin + (k + 0.5) * actualPitch;
         final holeVertices = <CadPoint3D>[];
+        final holeVerticesInner = <CadPoint3D>[];
 
         // Semicircular cap at +U end (angles -pi/2 to pi/2)
         const int arcSteps = 16;
@@ -477,6 +537,7 @@ class LadderAssemblyGenerator {
           final double u = (slotCenterU + straightHalf) + (rSlot * math.cos(angle));
           final double v = rSlot * math.sin(angle);
           holeVertices.add(pWorld(u, v, 0.0));
+          holeVerticesInner.add(pWorld(u, v, -t));
         }
 
         // Semicircular cap at -U end (angles pi/2 to 3*pi/2)
@@ -485,9 +546,11 @@ class LadderAssemblyGenerator {
           final double u = (slotCenterU - straightHalf) + (rSlot * math.cos(angle));
           final double v = rSlot * math.sin(angle);
           holeVertices.add(pWorld(u, v, 0.0));
+          holeVerticesInner.add(pWorld(u, v, -t));
         }
 
         holes.add(holeVertices);
+        holesInner.add(holeVerticesInner);
       }
     }
 
@@ -626,7 +689,7 @@ class LadderAssemblyGenerator {
     ));
 
     // --- 5. PHYSICAL SHEET THICKNESS: INNER FACES & BOTTOM LIPS ---
-    // Inner top web
+    // Inner top web with matching cutout holes through sheet thickness
     polys.add(CadFoldedPolygon3D(
       faceId: '${rungId}_top_web_inner',
       vertices: [
@@ -637,7 +700,38 @@ class LadderAssemblyGenerator {
       ],
       normal: nWorld(0.0, 0.0, -1.0),
       color: color,
+      holes: holesInner,
     ));
+
+    // Cutout sidewalls for slots in the top web (physical sheet thickness through metal)
+    for (int hIdx = 0; hIdx < holes.length; hIdx++) {
+      final hVerts = holes[hIdx];
+      final hInner = holesInner[hIdx];
+      for (int v = 0; v < hVerts.length; v++) {
+        final pA = hVerts[v];
+        final pB = hVerts[(v + 1) % hVerts.length];
+        final pAInner = hInner[v];
+        final pBInner = hInner[(v + 1) % hInner.length];
+
+        final du = pB.x - pA.x;
+        final dv = pB.y - pA.y;
+        final dw = pB.z - pA.z;
+        final crossX = dv * (pAInner.z - pA.z) - dw * (pAInner.y - pA.y);
+        final crossY = dw * (pAInner.x - pA.x) - du * (pAInner.z - pA.z);
+        final crossZ = du * (pAInner.y - pA.y) - dv * (pAInner.x - pA.x);
+        final cLen = math.sqrt(crossX * crossX + crossY * crossY + crossZ * crossZ);
+        final norm = cLen > 1e-6 ? CadPoint3D(crossX / cLen, crossY / cLen, crossZ / cLen) : const CadPoint3D(0.0, 0.0, 1.0);
+
+        polys.add(
+          CadFoldedPolygon3D(
+            faceId: '${rungId}_slot_${hIdx}_wall_$v',
+            vertices: [pA, pB, pBInner, pAInner],
+            normal: norm,
+            color: color,
+          ),
+        );
+      }
+    }
 
     // Inner front flange
     polys.add(CadFoldedPolygon3D(
