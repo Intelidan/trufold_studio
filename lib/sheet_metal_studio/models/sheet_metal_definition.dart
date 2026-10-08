@@ -11,6 +11,8 @@
 // =============================================================================
 
 import 'dart:math' as math;
+import 'paint_coat_specification.dart';
+export 'paint_coat_specification.dart';
 
 /// Standard sheet metal material grades with metallurgical properties
 enum SheetMetalMaterialGrade {
@@ -213,6 +215,7 @@ class SheetMetalDefinition {
   final double kFactor;
   final ReliefRules reliefRules;
   final double edgeChamferMm;
+  final PaintCoatSpecification paintCoat;
 
   const SheetMetalDefinition({
     this.material = SheetMetalMaterialGrade.gi,
@@ -222,6 +225,7 @@ class SheetMetalDefinition {
     this.kFactor = 0.38,
     this.reliefRules = const ReliefRules(),
     this.edgeChamferMm = 0.0,
+    this.paintCoat = const PaintCoatSpecification(),
   });
 
   /// Material grade enum
@@ -290,6 +294,7 @@ class SheetMetalDefinition {
     double? kFactor,
     ReliefRules? reliefRules,
     double? edgeChamferMm,
+    PaintCoatSpecification? paintCoat,
   }) {
     return SheetMetalDefinition(
       material: material ?? this.material,
@@ -299,6 +304,7 @@ class SheetMetalDefinition {
       kFactor: kFactor ?? this.kFactor,
       reliefRules: reliefRules ?? this.reliefRules,
       edgeChamferMm: edgeChamferMm ?? this.edgeChamferMm,
+      paintCoat: paintCoat ?? this.paintCoat,
     );
   }
 
@@ -310,6 +316,7 @@ class SheetMetalDefinition {
         'kFactor': kFactor,
         'reliefRules': reliefRules.toJson(),
         'edgeChamferMm': edgeChamferMm,
+        'paintCoat': paintCoat.toJson(),
       };
 
   factory SheetMetalDefinition.fromJson(Map<String, dynamic> json) {
@@ -326,6 +333,9 @@ class SheetMetalDefinition {
           ? ReliefRules.fromJson(json['reliefRules'] as Map<String, dynamic>)
           : const ReliefRules(),
       edgeChamferMm: (json['edgeChamferMm'] as num?)?.toDouble() ?? 0.0,
+      paintCoat: json['paintCoat'] != null
+          ? PaintCoatSpecification.fromJson(json['paintCoat'] as Map<String, dynamic>)
+          : const PaintCoatSpecification(),
     );
   }
 }

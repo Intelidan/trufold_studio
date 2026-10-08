@@ -21,7 +21,27 @@ class CadPolygonTriangulator {
 
     // Fast-path: simple convex or planar polygon with NO holes and <= 4 vertices
     if (holes.isEmpty && outerVertices.length <= 4) {
-      builder.texCoord(_computeUv(outerVertices[0], normal));
+      var nz = normal;
+      final lenN = math.sqrt(nz.x * nz.x + nz.y * nz.y + nz.z * nz.z);
+      if (lenN > 1e-6) {
+        nz = CadPoint3D(nz.x / lenN, nz.y / lenN, nz.z / lenN);
+      } else {
+        nz = _computeNewellNormal(outerVertices);
+      }
+
+      // Check triangle orientation against face normal nz
+      final v0 = outerVertices[0];
+      final v1 = outerVertices[1];
+      final v2 = outerVertices[2];
+      final e1 = CadPoint3D(v1.x - v0.x, v1.y - v0.y, v1.z - v0.z);
+      final e2 = CadPoint3D(v2.x - v0.x, v2.y - v0.y, v2.z - v0.z);
+      final crossX = e1.y * e2.z - e1.z * e2.y;
+      final crossY = e1.z * e2.x - e1.x * e2.z;
+      final crossZ = e1.x * e2.y - e1.y * e2.x;
+      final dot = crossX * nz.x + crossY * nz.y + crossZ * nz.z;
+      final bool isFlipped = dot < 0;
+
+      builder.texCoord(_computeUv(outerVertices[0], nz));
       final p0 = vm.Vector3(
         outerVertices[0].x - pivot.x,
         outerVertices[0].y - pivot.y,
@@ -30,13 +50,13 @@ class CadPolygonTriangulator {
       final idx0 = builder.addVertex(p0);
 
       for (int i = 1; i < outerVertices.length - 1; i++) {
-        builder.texCoord(_computeUv(outerVertices[i], normal));
+        builder.texCoord(_computeUv(outerVertices[i], nz));
         final p1 = vm.Vector3(
           outerVertices[i].x - pivot.x,
           outerVertices[i].y - pivot.y,
           outerVertices[i].z - pivot.z,
         );
-        builder.texCoord(_computeUv(outerVertices[i + 1], normal));
+        builder.texCoord(_computeUv(outerVertices[i + 1], nz));
         final p2 = vm.Vector3(
           outerVertices[i + 1].x - pivot.x,
           outerVertices[i + 1].y - pivot.y,
@@ -44,7 +64,11 @@ class CadPolygonTriangulator {
         );
         final idx1 = builder.addVertex(p1);
         final idx2 = builder.addVertex(p2);
-        builder.addTriangle(idx0, idx1, idx2);
+        if (!isFlipped) {
+          builder.addTriangle(idx0, idx1, idx2);
+        } else {
+          builder.addTriangle(idx0, idx2, idx1);
+        }
       }
       return;
     }

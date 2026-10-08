@@ -81,7 +81,11 @@ class LadderAssemblyGenerator {
     final double railFlatLength = params.length;
 
     // Material spec
-    final material = SheetMetalMaterial(materialGrade: params.materialName, thicknessMm: params.thickness);
+    final material = SheetMetalMaterial(
+      materialGrade: params.materialName,
+      thicknessMm: params.thickness,
+      paintCoat: params.paintCoat,
+    );
 
     // 3. Generate Flat Blanks (CadPart) for CAM / Nesting
     final leftRailPart = generateCustomRailFlatBlank(
@@ -391,6 +395,304 @@ class LadderAssemblyGenerator {
   // ---------------------------------------------------------------------------
   // 3D KINEMATIC MESH GENERATION (ISOMETRIC / SOLID SHADED CANVAS)
   // ---------------------------------------------------------------------------
+
+  /// Builds 3D slotted C-channel rung polygons (40x20mm) oriented in 3D space with authentic
+  /// 25x14mm obround slots cut into its top web (+upDir), downward side flanges (-upDir),
+  /// pass-through outside weld projections with end caps, and clean steel color.
+  static List<CadFoldedPolygon3D> generateOrientedSlottedRung3DPolygons({
+    required String rungId,
+    required CadPoint3D centerTop,
+    required CadPoint3D lengthDir,
+    required CadPoint3D widthDir,
+    required CadPoint3D upDir,
+    required double interiorHalfSpan,
+    required double rungW,
+    required double rungDepth,
+    required double thickness,
+    required Color color,
+    required bool isPassThrough,
+    required double outsideProjection,
+    double slotLength = 25.0,
+    double slotWidth = 14.0,
+    double slotPitch = 50.0,
+    double slotMargin = 30.0,
+  }) {
+    final polys = <CadFoldedPolygon3D>[];
+
+    // Normalize orientation frame
+    final double lLen = math.sqrt(lengthDir.x * lengthDir.x + lengthDir.y * lengthDir.y + lengthDir.z * lengthDir.z);
+    final uDir = lLen > 1e-6 ? CadPoint3D(lengthDir.x / lLen, lengthDir.y / lLen, lengthDir.z / lLen) : const CadPoint3D(0.0, 1.0, 0.0);
+
+    final double wLen = math.sqrt(widthDir.x * widthDir.x + widthDir.y * widthDir.y + widthDir.z * widthDir.z);
+    final vDir = wLen > 1e-6 ? CadPoint3D(widthDir.x / wLen, widthDir.y / wLen, widthDir.z / wLen) : const CadPoint3D(1.0, 0.0, 0.0);
+
+    final double uUpLen = math.sqrt(upDir.x * upDir.x + upDir.y * upDir.y + upDir.z * upDir.z);
+    final wDir = uUpLen > 1e-6 ? CadPoint3D(upDir.x / uUpLen, upDir.y / uUpLen, upDir.z / uUpLen) : const CadPoint3D(0.0, 0.0, 1.0);
+
+    // Coordinate mapping helper from local (u, v, w) to 3D world space
+    CadPoint3D pWorld(double u, double v, double w) {
+      return CadPoint3D(
+        centerTop.x + (uDir.x * u) + (vDir.x * v) + (wDir.x * w),
+        centerTop.y + (uDir.y * u) + (vDir.y * v) + (wDir.y * w),
+        centerTop.z + (uDir.z * u) + (vDir.z * v) + (wDir.z * w),
+      );
+    }
+
+    CadPoint3D nWorld(double nu, double nv, double nw) {
+      return CadPoint3D(
+        (uDir.x * nu) + (vDir.x * nv) + (wDir.x * nw),
+        (uDir.y * nu) + (vDir.y * nv) + (wDir.y * nw),
+        (uDir.z * nu) + (vDir.z * nv) + (wDir.z * nw),
+      );
+    }
+
+    final double t = (thickness > 0.1 && thickness < (rungW / 3)) ? thickness : 1.5;
+    final double v1 = -rungW / 2.0;
+    final double v2 = rungW / 2.0;
+
+    final double uIntStart = -interiorHalfSpan;
+    final double uIntEnd = interiorHalfSpan;
+    final double uStart = isPassThrough ? (uIntStart - t - outsideProjection) : uIntStart;
+    final double uEnd = isPassThrough ? (uIntEnd + t + outsideProjection) : uIntEnd;
+
+    // --- 1. OBROUND SLOTS CUTOUTS (25x14mm) ALONG U-AXIS ON TOP WEB ---
+    final double availableLength = (uIntEnd - uIntStart) - (2.0 * slotMargin);
+    final int slotCount = availableLength > slotLength ? (availableLength / slotPitch).floor() : 0;
+    final double hwSlot = math.min(slotWidth, rungW - 10.0) / 2.0;
+    final holes = <List<CadPoint3D>>[];
+
+    if (slotCount > 0) {
+      final double actualPitch = availableLength / slotCount;
+      final double rSlot = hwSlot; // 7mm radius
+      final double straightHalf = math.max(0.0, (slotLength / 2.0) - rSlot); // (25-14)/2 = 5.5mm
+
+      for (int k = 0; k < slotCount; k++) {
+        final double slotCenterU = uIntStart + slotMargin + (k + 0.5) * actualPitch;
+        final holeVertices = <CadPoint3D>[];
+
+        // Semicircular cap at +U end (angles -pi/2 to pi/2)
+        const int arcSteps = 16;
+        for (int a = 0; a <= arcSteps; a++) {
+          final double angle = -math.pi / 2.0 + (math.pi * a / arcSteps);
+          final double u = (slotCenterU + straightHalf) + (rSlot * math.cos(angle));
+          final double v = rSlot * math.sin(angle);
+          holeVertices.add(pWorld(u, v, 0.0));
+        }
+
+        // Semicircular cap at -U end (angles pi/2 to 3*pi/2)
+        for (int a = 0; a <= arcSteps; a++) {
+          final double angle = math.pi / 2.0 + (math.pi * a / arcSteps);
+          final double u = (slotCenterU - straightHalf) + (rSlot * math.cos(angle));
+          final double v = rSlot * math.sin(angle);
+          holeVertices.add(pWorld(u, v, 0.0));
+        }
+
+        holes.add(holeVertices);
+      }
+    }
+
+    final bool hasLeftProj = isPassThrough && (outsideProjection > 0.01 || t > 0.01);
+    final bool hasRightProj = isPassThrough && (outsideProjection > 0.01 || t > 0.01);
+
+    // --- 2. LEFT PASS-THROUGH PROJECTION ---
+    if (hasLeftProj) {
+      // Top web
+      polys.add(CadFoldedPolygon3D(
+        faceId: '${rungId}_proj_left_top',
+        vertices: [pWorld(uStart, v1, 0.0), pWorld(uIntStart, v1, 0.0), pWorld(uIntStart, v2, 0.0), pWorld(uStart, v2, 0.0)],
+        normal: nWorld(0.0, 0.0, 1.0),
+        color: color,
+      ));
+      // Front flange
+      polys.add(CadFoldedPolygon3D(
+        faceId: '${rungId}_proj_left_front',
+        vertices: [pWorld(uStart, v1, 0.0), pWorld(uStart, v1, -rungDepth), pWorld(uIntStart, v1, -rungDepth), pWorld(uIntStart, v1, 0.0)],
+        normal: nWorld(0.0, -1.0, 0.0),
+        color: color,
+      ));
+      // Back flange
+      polys.add(CadFoldedPolygon3D(
+        faceId: '${rungId}_proj_left_back',
+        vertices: [pWorld(uStart, v2, 0.0), pWorld(uIntStart, v2, 0.0), pWorld(uIntStart, v2, -rungDepth), pWorld(uStart, v2, -rungDepth)],
+        normal: nWorld(0.0, 1.0, 0.0),
+        color: color,
+      ));
+      // Open C-channel tip wall profile rims (y = uStart) - NO solid cap
+      polys.add(CadFoldedPolygon3D(
+        faceId: 'RIM_${rungId}_cap_left_top',
+        vertices: [pWorld(uStart, v1, -t), pWorld(uStart, v2, -t), pWorld(uStart, v2, 0.0), pWorld(uStart, v1, 0.0)],
+        normal: nWorld(-1.0, 0.0, 0.0),
+        color: color,
+      ));
+      polys.add(CadFoldedPolygon3D(
+        faceId: 'RIM_${rungId}_cap_left_front',
+        vertices: [pWorld(uStart, v1, -rungDepth), pWorld(uStart, v1 + t, -rungDepth), pWorld(uStart, v1 + t, -t), pWorld(uStart, v1, -t)],
+        normal: nWorld(-1.0, 0.0, 0.0),
+        color: color,
+      ));
+      polys.add(CadFoldedPolygon3D(
+        faceId: 'RIM_${rungId}_cap_left_back',
+        vertices: [pWorld(uStart, v2 - t, -rungDepth), pWorld(uStart, v2, -rungDepth), pWorld(uStart, v2, -t), pWorld(uStart, v2 - t, -t)],
+        normal: nWorld(-1.0, 0.0, 0.0),
+        color: color,
+      ));
+    }
+
+    // --- 3. RIGHT PASS-THROUGH PROJECTION ---
+    if (hasRightProj) {
+      // Top web
+      polys.add(CadFoldedPolygon3D(
+        faceId: '${rungId}_proj_right_top',
+        vertices: [pWorld(uIntEnd, v1, 0.0), pWorld(uEnd, v1, 0.0), pWorld(uEnd, v2, 0.0), pWorld(uIntEnd, v2, 0.0)],
+        normal: nWorld(0.0, 0.0, 1.0),
+        color: color,
+      ));
+      // Front flange
+      polys.add(CadFoldedPolygon3D(
+        faceId: '${rungId}_proj_right_front',
+        vertices: [pWorld(uIntEnd, v1, 0.0), pWorld(uIntEnd, v1, -rungDepth), pWorld(uEnd, v1, -rungDepth), pWorld(uEnd, v1, 0.0)],
+        normal: nWorld(0.0, -1.0, 0.0),
+        color: color,
+      ));
+      // Back flange
+      polys.add(CadFoldedPolygon3D(
+        faceId: '${rungId}_proj_right_back',
+        vertices: [pWorld(uIntEnd, v2, 0.0), pWorld(uEnd, v2, 0.0), pWorld(uEnd, v2, -rungDepth), pWorld(uIntEnd, v2, -rungDepth)],
+        normal: nWorld(0.0, 1.0, 0.0),
+        color: color,
+      ));
+      // Open C-channel tip wall profile rims (y = uEnd) - NO solid cap
+      polys.add(CadFoldedPolygon3D(
+        faceId: 'RIM_${rungId}_cap_right_top',
+        vertices: [pWorld(uEnd, v1, 0.0), pWorld(uEnd, v2, 0.0), pWorld(uEnd, v2, -t), pWorld(uEnd, v1, -t)],
+        normal: nWorld(1.0, 0.0, 0.0),
+        color: color,
+      ));
+      polys.add(CadFoldedPolygon3D(
+        faceId: 'RIM_${rungId}_cap_right_front',
+        vertices: [pWorld(uEnd, v1, -rungDepth), pWorld(uEnd, v1, -t), pWorld(uEnd, v1 + t, -t), pWorld(uEnd, v1 + t, -rungDepth)],
+        normal: nWorld(1.0, 0.0, 0.0),
+        color: color,
+      ));
+      polys.add(CadFoldedPolygon3D(
+        faceId: 'RIM_${rungId}_cap_right_back',
+        vertices: [pWorld(uEnd, v2 - t, -rungDepth), pWorld(uEnd, v2 - t, -t), pWorld(uEnd, v2, -t), pWorld(uEnd, v2, -rungDepth)],
+        normal: nWorld(1.0, 0.0, 0.0),
+        color: color,
+      ));
+    }
+
+    // --- 4. INTERIOR RUNG SPAN ---
+    // Outer top web with true obround slots
+    final topBoundaryLines = <List<CadPoint3D>>[
+      [pWorld(uIntStart, v1, 0.0), pWorld(uIntEnd, v1, 0.0)],
+      [pWorld(uIntEnd, v2, 0.0), pWorld(uIntStart, v2, 0.0)],
+      if (!hasLeftProj) [pWorld(uIntStart, v1, 0.0), pWorld(uIntStart, v2, 0.0)],
+      if (!hasRightProj) [pWorld(uIntEnd, v1, 0.0), pWorld(uIntEnd, v2, 0.0)],
+      for (final h in holes)
+        for (int i = 0; i < h.length; i++)
+          [h[i], h[(i + 1) % h.length]],
+    ];
+
+    polys.add(CadFoldedPolygon3D(
+      faceId: '${rungId}_top_web',
+      vertices: [pWorld(uIntStart, v1, 0.0), pWorld(uIntEnd, v1, 0.0), pWorld(uIntEnd, v2, 0.0), pWorld(uIntStart, v2, 0.0)],
+      normal: nWorld(0.0, 0.0, 1.0),
+      color: color,
+      holes: holes,
+      boundaryLines: topBoundaryLines,
+    ));
+
+    // Front flange
+    polys.add(CadFoldedPolygon3D(
+      faceId: '${rungId}_flange_front',
+      vertices: [pWorld(uIntStart, v1, 0.0), pWorld(uIntStart, v1, -rungDepth), pWorld(uIntEnd, v1, -rungDepth), pWorld(uIntEnd, v1, 0.0)],
+      normal: nWorld(0.0, -1.0, 0.0),
+      color: color,
+      boundaryLines: [
+        [pWorld(uIntStart, v1, -rungDepth), pWorld(uIntEnd, v1, -rungDepth)],
+      ],
+    ));
+
+    // Back flange
+    polys.add(CadFoldedPolygon3D(
+      faceId: '${rungId}_flange_back',
+      vertices: [pWorld(uIntStart, v2, 0.0), pWorld(uIntEnd, v2, 0.0), pWorld(uIntEnd, v2, -rungDepth), pWorld(uIntStart, v2, -rungDepth)],
+      normal: nWorld(0.0, 1.0, 0.0),
+      color: color,
+      boundaryLines: [
+        [pWorld(uIntStart, v2, -rungDepth), pWorld(uIntEnd, v2, -rungDepth)],
+      ],
+    ));
+
+    // --- 5. PHYSICAL SHEET THICKNESS: INNER FACES & BOTTOM LIPS ---
+    // Inner top web
+    polys.add(CadFoldedPolygon3D(
+      faceId: '${rungId}_top_web_inner',
+      vertices: [
+        pWorld(uStart, v1 + t, -t),
+        pWorld(uStart, v2 - t, -t),
+        pWorld(uEnd, v2 - t, -t),
+        pWorld(uEnd, v1 + t, -t),
+      ],
+      normal: nWorld(0.0, 0.0, -1.0),
+      color: color,
+    ));
+
+    // Inner front flange
+    polys.add(CadFoldedPolygon3D(
+      faceId: '${rungId}_flange_front_inner',
+      vertices: [
+        pWorld(uStart, v1 + t, -rungDepth),
+        pWorld(uEnd, v1 + t, -rungDepth),
+        pWorld(uEnd, v1 + t, -t),
+        pWorld(uStart, v1 + t, -t),
+      ],
+      normal: nWorld(0.0, 1.0, 0.0),
+      color: color,
+    ));
+
+    // Inner back flange
+    polys.add(CadFoldedPolygon3D(
+      faceId: '${rungId}_flange_back_inner',
+      vertices: [
+        pWorld(uStart, v2 - t, -t),
+        pWorld(uEnd, v2 - t, -t),
+        pWorld(uEnd, v2 - t, -rungDepth),
+        pWorld(uStart, v2 - t, -rungDepth),
+      ],
+      normal: nWorld(0.0, -1.0, 0.0),
+      color: color,
+    ));
+
+    // Bottom lip on front flange (thickness t)
+    polys.add(CadFoldedPolygon3D(
+      faceId: 'RIM_${rungId}_front_lip',
+      vertices: [
+        pWorld(uStart, v1, -rungDepth),
+        pWorld(uStart, v1 + t, -rungDepth),
+        pWorld(uEnd, v1 + t, -rungDepth),
+        pWorld(uEnd, v1, -rungDepth),
+      ],
+      normal: nWorld(0.0, 0.0, -1.0),
+      color: color,
+    ));
+
+    // Bottom lip on back flange (thickness t)
+    polys.add(CadFoldedPolygon3D(
+      faceId: 'RIM_${rungId}_back_lip',
+      vertices: [
+        pWorld(uStart, v2 - t, -rungDepth),
+        pWorld(uStart, v2, -rungDepth),
+        pWorld(uEnd, v2, -rungDepth),
+        pWorld(uEnd, v2 - t, -rungDepth),
+      ],
+      normal: nWorld(0.0, 0.0, -1.0),
+      color: color,
+    ));
+
+    return polys;
+  }
 
   /// Builds 3D slotted C-channel rung polygons with top slotted web, downward side flanges,
   /// flange rims and end caps in clean galvanized steel color.
@@ -1069,7 +1371,7 @@ class LadderAssemblyGenerator {
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'left_rail_bottom_flange_$s',
-          vertices: [CadPoint3D(xStart, yL, 0.0), CadPoint3D(xEnd, yL, 0.0), CadPoint3D(xEnd, yLBottomFlange, 0.0), CadPoint3D(xStart, yLBottomFlange, 0.0)],
+          vertices: [CadPoint3D(xStart, yL, 0.0), CadPoint3D(xStart, yLBottomFlange, 0.0), CadPoint3D(xEnd, yLBottomFlange, 0.0), CadPoint3D(xEnd, yL, 0.0)],
           normal: const CadPoint3D(0.0, 0.0, -1.0),
           color: railColor,
           boundaryLines: [
@@ -1083,7 +1385,7 @@ class LadderAssemblyGenerator {
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'left_rail_top_flange_$s',
-          vertices: [CadPoint3D(xStart, yL, H), CadPoint3D(xStart, yLTopFlange, H), CadPoint3D(xEnd, yLTopFlange, H), CadPoint3D(xEnd, yL, H)],
+          vertices: [CadPoint3D(xStart, yL, H), CadPoint3D(xEnd, yL, H), CadPoint3D(xEnd, yLTopFlange, H), CadPoint3D(xStart, yLTopFlange, H)],
           normal: const CadPoint3D(0.0, 0.0, 1.0),
           color: railColor,
           boundaryLines: [
@@ -1199,7 +1501,7 @@ class LadderAssemblyGenerator {
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'right_rail_bottom_flange_$s',
-          vertices: [CadPoint3D(xStart, yR, 0.0), CadPoint3D(xStart, yRBottomFlange, 0.0), CadPoint3D(xEnd, yRBottomFlange, 0.0), CadPoint3D(xEnd, yR, 0.0)],
+          vertices: [CadPoint3D(xStart, yR, 0.0), CadPoint3D(xEnd, yR, 0.0), CadPoint3D(xEnd, yRBottomFlange, 0.0), CadPoint3D(xStart, yRBottomFlange, 0.0)],
           normal: const CadPoint3D(0.0, 0.0, -1.0),
           color: railColor,
           boundaryLines: [
@@ -1213,7 +1515,7 @@ class LadderAssemblyGenerator {
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'right_rail_top_flange_$s',
-          vertices: [CadPoint3D(xStart, yR, H), CadPoint3D(xEnd, yR, H), CadPoint3D(xEnd, yRTopFlange, H), CadPoint3D(xStart, yRTopFlange, H)],
+          vertices: [CadPoint3D(xStart, yR, H), CadPoint3D(xStart, yRTopFlange, H), CadPoint3D(xEnd, yRTopFlange, H), CadPoint3D(xEnd, yR, H)],
           normal: const CadPoint3D(0.0, 0.0, 1.0),
           color: railColor,
           boundaryLines: [
@@ -1889,6 +2191,7 @@ class LadderAssemblyGenerator {
         intermediateTargetPitch: targetPitch,
         includeCover: (doc.parameters['include_cover'] ?? doc.parameters['includeCover'] ?? 0.0) > 0.5,
         materialName: doc.material.materialGrade.isNotEmpty ? doc.material.materialGrade : 'HDG',
+        paintCoat: doc.material.paintCoat,
       );
     }
 

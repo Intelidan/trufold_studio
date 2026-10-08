@@ -8,12 +8,14 @@
 
 import 'package:flutter/material.dart';
 import '../../../models/cad_primitives.dart';
+import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 
 class StudioGraphicsPreferencesPanel extends StatefulWidget {
   final OnshapeGraphicsPreferences preferences;
   final ValueChanged<OnshapeGraphicsPreferences> onChanged;
   final VoidCallback onClose;
   final VoidCallback onResetToDefault;
+  final SheetMetalStudioViewModel? viewModel;
 
   const StudioGraphicsPreferencesPanel({
     super.key,
@@ -21,6 +23,7 @@ class StudioGraphicsPreferencesPanel extends StatefulWidget {
     required this.onChanged,
     required this.onClose,
     required this.onResetToDefault,
+    this.viewModel,
   });
 
   @override
@@ -29,6 +32,7 @@ class StudioGraphicsPreferencesPanel extends StatefulWidget {
 
 class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferencesPanel> {
   int _activeTab = 0; // 0 = General, 1 = Sketch
+  bool _uiDensityExpanded = true;
   bool _viewportExpanded = true;
   bool _shadedBodiesExpanded = true;
   bool _phantomEdgesExpanded = true;
@@ -71,6 +75,20 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Section: UI Scale & Density Setting
+                  _buildSectionHeader(
+                    title: 'UI Scale & Density',
+                    isExpanded: _uiDensityExpanded,
+                    onToggle: () => setState(() => _uiDensityExpanded = !_uiDensityExpanded),
+                  ),
+                  if (_uiDensityExpanded) ...[
+                    _buildUiDensitySection(),
+                  ],
+
+                  const SizedBox(height: 6),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 6),
+
                   // Section: Viewport
                   _buildSectionHeader(
                     title: 'Viewport',
@@ -750,25 +768,93 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
             )),
           ),
 
-          // 4. Custom Pigment Tint Swatches (for Plastic or Custom)
-          if (mat.isPlastic || mat.preset == CadMaterialPresetType.custom) ...[
+          // 4. Custom Pigment & Universal RAL Swatches (for Paint, Plastic, or Custom)
+          if (mat.isPlastic || mat.preset == CadMaterialPresetType.custom || mat.preset == CadMaterialPresetType.paint) ...[
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Pigment tint: ', style: TextStyle(fontSize: 11, color: Color(0xFF475569))),
-                  const SizedBox(width: 6),
+                  Row(
+                    children: [
+                      Text(
+                        mat.preset == CadMaterialPresetType.paint ? 'Universal RAL Coat:' : 'Pigment tint:',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF475569)),
+                      ),
+                      const SizedBox(width: 6),
+                      if (mat.preset == CadMaterialPresetType.paint) ...[
+                        PopupMenuButton<RalColor>(
+                          tooltip: 'Select RAL Classic Color',
+                          onSelected: (ral) {
+                            widget.onChanged(prefs.copyWith(
+                              materialSettings: mat.copyWith(baseColor: ral.color),
+                            ));
+                          },
+                          itemBuilder: (ctx) => [
+                            for (final c in RalColor.topCMSColors)
+                              PopupMenuItem(
+                                value: c,
+                                height: 26,
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: c.color,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.black26, width: 0.5),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(c.displayName, style: const TextStyle(fontSize: 10.5, color: Color(0xFF1E293B))),
+                                  ],
+                                ),
+                              ),
+                          ],
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(color: const Color(0xFF0284C7), width: 0.8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: mat.baseColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Text('RAL Chart', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0284C7))),
+                                const Icon(Icons.arrow_drop_down, size: 14, color: Color(0xFF0284C7)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 5),
                   Wrap(
                     spacing: 6,
-                    children: [
-                      const Color(0xFF1E88E5), // Blue
-                      const Color(0xFFE53935), // Red
-                      const Color(0xFF43A047), // Green
-                      const Color(0xFFFB8C00), // Orange
-                      const Color(0xFF8E24AA), // Purple
-                      const Color(0xFF263238), // Dark Slate
-                      const Color(0xFFF5F5F5), // White
-                    ].map((color) {
+                    children: (mat.preset == CadMaterialPresetType.paint
+                            ? RalColor.topCMSColors.map((r) => r.color).toList()
+                            : const [
+                                Color(0xFF1E88E5), // Blue
+                                Color(0xFFE53935), // Red
+                                Color(0xFF43A047), // Green
+                                Color(0xFFFB8C00), // Orange
+                                Color(0xFF8E24AA), // Purple
+                                Color(0xFF263238), // Dark Slate
+                                Color(0xFFF5F5F5), // White
+                              ])
+                        .map((color) {
                       final isSelected = mat.baseColor.toARGB32() == color.toARGB32();
                       return InkWell(
                         onTap: () => widget.onChanged(prefs.copyWith(
@@ -934,6 +1020,98 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUiDensitySection() {
+    final vm = widget.viewModel;
+    final currentMode = vm?.uiDensityMode ?? UiDensityMode.auto;
+    final scale = vm?.uiScaleFactor ?? 0.85;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('Density Preset', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0284C7).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Active: ${(scale * 100).toInt()}% Scale',
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              for (final mode in UiDensityMode.values) ...[
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                    child: InkWell(
+                      onTap: () {
+                        if (vm != null) {
+                          vm.setUiDensityMode(mode);
+                          setState(() {});
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        decoration: BoxDecoration(
+                          color: currentMode == mode ? const Color(0xFFE0F2FE) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: currentMode == mode ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
+                            width: currentMode == mode ? 1.2 : 0.8,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(
+                              mode.icon,
+                              size: 14,
+                              color: currentMode == mode ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              mode.label,
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: currentMode == mode ? FontWeight.bold : FontWeight.normal,
+                                color: currentMode == mode ? const Color(0xFF0284C7) : const Color(0xFF475569),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            currentMode == UiDensityMode.auto
+                ? '• Auto: Automatically switches to Compact (85%) when screen width < 1600px.'
+                : (currentMode == UiDensityMode.compact
+                    ? '• Compact (85%): Scales down icons (24->18px), buttons, and paddings for laptops.'
+                    : '• Standard (100%): Full-size layout for large desktop monitors (> 24").'),
+            style: const TextStyle(fontSize: 10, color: Color(0xFF64748B), fontStyle: FontStyle.italic),
           ),
         ],
       ),

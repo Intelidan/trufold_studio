@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 export 'cad_geometry.dart' show CadArc2D;
 export 'cad_material_preset.dart';
+export 'paint_coat_specification.dart';
 
 import 'cad_material_preset.dart';
 
@@ -410,4 +411,54 @@ class OnshapeGraphicsPreferences {
         materialSettings,
       );
 }
+
+/// Viewport workspace presentation layout for responsive desktop CAD screens.
+enum ViewportLayoutMode {
+  split('Split (50/50)', Icons.vertical_split_rounded),
+  canvas2D('2D Flat Blank', Icons.crop_square_rounded),
+  viewport3D('3D Folded Mesh', Icons.view_in_ar_rounded);
+
+  final String label;
+  final IconData icon;
+  const ViewportLayoutMode(this.label, this.icon);
+
+  bool get isSplit => this == ViewportLayoutMode.split;
+  bool get is2DOnly => this == ViewportLayoutMode.canvas2D;
+  bool get is3DOnly => this == ViewportLayoutMode.viewport3D;
+}
+
+/// Workspace UI scaling density mode for desktop displays & laptops.
+enum UiDensityMode {
+  auto('Auto (Laptop Detect)', Icons.laptop_mac_rounded),
+  compact('Compact (85%)', Icons.zoom_in_map_rounded),
+  standard('Standard (100%)', Icons.zoom_out_map_rounded);
+
+  final String label;
+  final IconData icon;
+  const UiDensityMode(this.label, this.icon);
+
+  bool get isAuto => this == UiDensityMode.auto;
+  bool get isCompact => this == UiDensityMode.compact;
+  bool get isStandard => this == UiDensityMode.standard;
+}
+
+/// Docking position for the CAD action ribbon and tool palette.
+enum ToolbarDockPosition {
+  top('Top (Horizontal)', Icons.vertical_align_top),
+  left('Left (Vertical)', Icons.align_horizontal_left),
+  right('Right (Vertical)', Icons.align_horizontal_right),
+  detached('Detached (Floating)', Icons.open_in_new);
+
+  final String label;
+  final IconData icon;
+  const ToolbarDockPosition(this.label, this.icon);
+
+  bool get isTop => this == ToolbarDockPosition.top;
+  bool get isLeft => this == ToolbarDockPosition.left;
+  bool get isRight => this == ToolbarDockPosition.right;
+  bool get isDetached => this == ToolbarDockPosition.detached;
+  bool get isVertical => this == ToolbarDockPosition.left || this == ToolbarDockPosition.right;
+}
+
+
 

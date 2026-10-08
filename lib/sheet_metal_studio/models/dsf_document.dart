@@ -7,6 +7,7 @@
 // =============================================================================
 
 import 'dart:convert';
+
 import 'cad_primitives.dart';
 import 'sheet_metal_material.dart';
 import 'fold_bend_line.dart';
@@ -85,31 +86,24 @@ class DsfDocument {
 
   /// Returns all active visible punches, combining standalone punches and expanded perforation pattern holes
   List<CncPunchPrimitive> get allPunches => [
-        ...punches.where((p) => p.isVisible),
-        ...perforationPatterns
-            .where((p) {
-              if (!p.isVisible) return false;
-              if (p.targetFaceId != null) {
-                final f = faces.cast<PlanarSheetFace?>().firstWhere(
-                      (face) => face?.id == p.targetFaceId,
-                      orElse: () => null,
-                    );
-                if (f != null && !f.isVisible) return false;
-              }
-              return true;
-            })
-            .expand((p) => p.expandToPunches().where((hp) => hp.isVisible)),
-      ];
+    ...punches.where((p) => p.isVisible),
+    ...perforationPatterns
+        .where((p) {
+          if (!p.isVisible) return false;
+          if (p.targetFaceId != null) {
+            final f = faces.cast<PlanarSheetFace?>().firstWhere((face) => face?.id == p.targetFaceId, orElse: () => null);
+            if (f != null && !f.isVisible) return false;
+          }
+          return true;
+        })
+        .expand((p) => p.expandToPunches().where((hp) => hp.isVisible)),
+  ];
 
   /// Raw unfiltered punches including suppressed entities
-  List<CncPunchPrimitive> get allPunchesRaw => [
-        ...punches,
-        ...perforationPatterns.expand((p) => p.expandToPunches()),
-      ];
+  List<CncPunchPrimitive> get allPunchesRaw => [...punches, ...perforationPatterns.expand((p) => p.expandToPunches())];
 
   /// Returns active layer list or default sheet metal CAD layers
-  List<DsfLayer> get effectiveLayers =>
-      layers.isNotEmpty ? layers : DsfLayer.defaultLayers();
+  List<DsfLayer> get effectiveLayers => layers.isNotEmpty ? layers : DsfLayer.defaultLayers();
 
   String get productTypeName => productType;
   String get partNumber => itemName;
@@ -219,17 +213,21 @@ class DsfDocument {
       surfaceAreaMm2 = blankAreaMm2;
     }
 
-    return material.calculateWeightKg(
-      areaMm2: surfaceAreaMm2,
-      holesAreaMm2: totalHolesAreaMm2,
-    );
+    return material.calculateWeightKg(areaMm2: surfaceAreaMm2, holesAreaMm2: totalHolesAreaMm2);
   }
 
   /// Part weight in kg (defaulting to net weight sans holes)
   double get weightKg => netWeightKg;
 
   /// Creates a ready-to-test sample: Cable Tray 100x50x3000mm with 15mm 45° return flanges.
-  factory DsfDocument.sampleCableTray({double width = 100.0, double height = 50.0, double length = 3000.0, double flange = 15.0, double thickness = 1.5}) {
+  factory DsfDocument.sampleCableTray({
+    double width = 100.0,
+    double height = 50.0,
+    double length = 3000.0,
+    double flange = 15.0,
+    double thickness = 1.5,
+    SheetMetalMaterial? material,
+  }) {
     // Cross-section development along X axis:
     // Left Flange (15) | Left Wall (50) | Bed Floor (100) | Right Wall (50) | Right Flange (15)
     final totalW = (flange * 2) + (height * 2) + width; // 15 + 50 + 100 + 50 + 15 = 230mm
@@ -327,7 +325,7 @@ class DsfDocument {
     return DsfDocument(
       productType: 'Perforated Cable Tray',
       itemName: 'CT-${width.round()}x${height.round()}x${length.round()}',
-      material: SheetMetalMaterial(thicknessMm: thickness),
+      material: material ?? SheetMetalMaterial(thicknessMm: thickness),
       outerContour: outerContour,
       bends: bends,
       faces: faces,
@@ -411,12 +409,9 @@ class DsfDocument {
     'arcs': arcs.map((a) => a.toJson()).toList(),
     'dimensions': dimensions.map((d) => d.toJson()).toList(),
     'constraints': constraints.map((c) => c.toJson()).toList(),
-    'constraintDefinitions':
-        constraintDefinitions.map((c) => c.toJson()).toList(),
-    'referenceGeometries':
-        referenceGeometries.map((r) => r.toJson()).toList(),
-    'templateParameters':
-        templateParameters.map((t) => t.toJson()).toList(),
+    'constraintDefinitions': constraintDefinitions.map((c) => c.toJson()).toList(),
+    'referenceGeometries': referenceGeometries.map((r) => r.toJson()).toList(),
+    'templateParameters': templateParameters.map((t) => t.toJson()).toList(),
     'layers': effectiveLayers.map((l) => l.toJson()).toList(),
     'baseFaceId': baseFaceId,
     'edgeChamfers': edgeChamfers,
@@ -444,11 +439,9 @@ class DsfDocument {
       final raw = (json['punches'] as List? ?? []).map((e) => CncPunchPrimitive.fromJson(e as Map<String, dynamic>)).toList();
       final baseFaceId = json['baseFaceId'] as String? ?? '';
       final facesList = (json['faces'] as List? ?? []).map((e) => PlanarSheetFace.fromJson(e as Map<String, dynamic>)).toList();
-      final floorFace = facesList.where((f) =>
-          f.id == baseFaceId ||
-          f.role == FaceRole.baseFloor ||
-          f.id.toUpperCase().contains('FLOOR') ||
-          f.id.toUpperCase().contains('BASE')).firstOrNull;
+      final floorFace = facesList
+          .where((f) => f.id == baseFaceId || f.role == FaceRole.baseFloor || f.id.toUpperCase().contains('FLOOR') || f.id.toUpperCase().contains('BASE'))
+          .firstOrNull;
 
       return raw.map((p) {
         final isOnFloor = floorFace != null && PlanarFaceDecomposer.isPointInsidePolygon(p.center, floorFace.vertices);
@@ -471,15 +464,9 @@ class DsfDocument {
     arcs: (json['arcs'] as List? ?? []).map((e) => CadArc2D.fromJson(e as Map<String, dynamic>)).toList(),
     dimensions: (json['dimensions'] as List? ?? []).map((e) => CadDimension.fromJson(e as Map<String, dynamic>)).toList(),
     constraints: (json['constraints'] as List? ?? []).map((e) => CadConstraint.fromJson(e as Map<String, dynamic>)).toList(),
-    constraintDefinitions: (json['constraintDefinitions'] as List? ?? [])
-        .map((e) => ConstraintDefinition.fromJson(e as Map<String, dynamic>))
-        .toList(),
-    referenceGeometries: (json['referenceGeometries'] as List? ?? [])
-        .map((e) => ReferenceGeometry.fromJson(e as Map<String, dynamic>))
-        .toList(),
-    templateParameters: (json['templateParameters'] as List? ?? [])
-        .map((e) => TemplateParameterDefinition.fromJson(e as Map<String, dynamic>))
-        .toList(),
+    constraintDefinitions: (json['constraintDefinitions'] as List? ?? []).map((e) => ConstraintDefinition.fromJson(e as Map<String, dynamic>)).toList(),
+    referenceGeometries: (json['referenceGeometries'] as List? ?? []).map((e) => ReferenceGeometry.fromJson(e as Map<String, dynamic>)).toList(),
+    templateParameters: (json['templateParameters'] as List? ?? []).map((e) => TemplateParameterDefinition.fromJson(e as Map<String, dynamic>)).toList(),
     layers: (json['layers'] as List? ?? []).map((e) => DsfLayer.fromJson(e as Map<String, dynamic>)).toList(),
     baseFaceId: json['baseFaceId'] as String? ?? '',
     edgeChamfers: (json['edgeChamfers'] as Map<String, dynamic>? ?? {}).map((k, v) => MapEntry(k, (v as num).toDouble())),
@@ -503,10 +490,7 @@ class DsfDocument {
   List<Map<String, dynamic>> get featureHistory {
     final list = metadata['featureHistory'];
     if (list is List) {
-      return list
-          .whereType<Map<dynamic, dynamic>>()
-          .map((m) => Map<String, dynamic>.from(m))
-          .toList();
+      return list.whereType<Map<dynamic, dynamic>>().map((m) => Map<String, dynamic>.from(m)).toList();
     }
     return const [];
   }
@@ -534,10 +518,7 @@ class DsfDocument {
   List<Map<String, dynamic>> get undoDeltas {
     final list = metadata['undoDeltas'];
     if (list is List) {
-      return list
-          .whereType<Map<dynamic, dynamic>>()
-          .map((m) => Map<String, dynamic>.from(m))
-          .toList();
+      return list.whereType<Map<dynamic, dynamic>>().map((m) => Map<String, dynamic>.from(m)).toList();
     }
     return const [];
   }
@@ -579,9 +560,8 @@ class DsfDocument {
     }
 
     // 3. Document productType / itemName maps to a known CMS Product Contract
-    final contract = CmsProductContract.lookup(productType, itemName) ??
-        CmsProductContract.lookup(null, itemName) ??
-        CmsProductContract.lookup(null, productType);
+    final contract =
+        CmsProductContract.lookup(productType, itemName) ?? CmsProductContract.lookup(null, itemName) ?? CmsProductContract.lookup(null, productType);
     if (contract != null) {
       return true;
     }

@@ -6,6 +6,7 @@
 // =============================================================================
 
 import 'dart:math' as math;
+
 import 'sheet_metal_definition.dart';
 export 'sheet_metal_definition.dart';
 
@@ -39,6 +40,7 @@ class SheetMetalMaterial {
   final double kFactor;
   final double defaultBendRadius;
   final double edgeChamferMm;
+  final PaintCoatSpecification paintCoat;
 
   const SheetMetalMaterial({
     this.thicknessMm = 1.5,
@@ -48,6 +50,7 @@ class SheetMetalMaterial {
     this.kFactor = 0.40,
     this.defaultBendRadius = 1.5,
     this.edgeChamferMm = 0.0,
+    this.paintCoat = const PaintCoatSpecification(),
   });
 
   /// Material grade display name
@@ -132,14 +135,14 @@ class SheetMetalMaterial {
       defaultBendRadiusMm: defaultBendRadius,
       kFactor: kFactor,
       edgeChamferMm: edgeChamferMm,
+      paintCoat: paintCoat,
     );
   }
 
   /// Creates a SheetMetalMaterial from a semantic SheetMetalDefinition
   factory SheetMetalMaterial.fromDefinition(SheetMetalDefinition def) {
     SheetMaterialType mType = SheetMaterialType.mildSteel;
-    if (def.material == SheetMetalMaterialGrade.ss304 ||
-        def.material == SheetMetalMaterialGrade.ss316) {
+    if (def.material == SheetMetalMaterialGrade.ss304 || def.material == SheetMetalMaterialGrade.ss316) {
       mType = SheetMaterialType.stainlessSteel;
     } else if (def.material == SheetMetalMaterialGrade.aluminium) {
       mType = SheetMaterialType.aluminium;
@@ -161,6 +164,7 @@ class SheetMetalMaterial {
       kFactor: def.kFactor,
       defaultBendRadius: def.defaultBendRadiusMm,
       edgeChamferMm: def.edgeChamferMm,
+      paintCoat: def.paintCoat,
     );
   }
 
@@ -172,6 +176,7 @@ class SheetMetalMaterial {
     double? kFactor,
     double? defaultBendRadius,
     double? edgeChamferMm,
+    PaintCoatSpecification? paintCoat,
   }) {
     return SheetMetalMaterial(
       thicknessMm: thicknessMm ?? this.thicknessMm,
@@ -181,6 +186,7 @@ class SheetMetalMaterial {
       kFactor: kFactor ?? this.kFactor,
       defaultBendRadius: defaultBendRadius ?? this.defaultBendRadius,
       edgeChamferMm: edgeChamferMm ?? this.edgeChamferMm,
+      paintCoat: paintCoat ?? this.paintCoat,
     );
   }
 
@@ -192,18 +198,14 @@ class SheetMetalMaterial {
     'kFactor': kFactor,
     'defaultBendRadius': defaultBendRadius,
     'edgeChamferMm': edgeChamferMm,
+    'paintCoat': paintCoat.toJson(),
   };
 
-  factory SheetMetalMaterial.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory SheetMetalMaterial.fromJson(Map<String, dynamic> json) {
     SheetMaterialType type = SheetMaterialType.mildSteel;
     if (json['materialType'] != null) {
       final typeStr = json['materialType'] as String;
-      type = SheetMaterialType.values.firstWhere(
-        (v) => v.name == typeStr,
-        orElse: () => SheetMaterialType.mildSteel,
-      );
+      type = SheetMaterialType.values.firstWhere((v) => v.name == typeStr, orElse: () => SheetMaterialType.mildSteel);
     } else if (json['materialGrade'] != null) {
       final g = (json['materialGrade'] as String).toLowerCase();
       if (g.contains('stainless')) {
@@ -216,10 +218,7 @@ class SheetMetalMaterial {
     SurfaceFinish finish = SurfaceFinish.electroGalvanized;
     if (json['finish'] != null) {
       final finishStr = json['finish'] as String;
-      finish = SurfaceFinish.values.firstWhere(
-        (f) => f.name == finishStr,
-        orElse: () => SurfaceFinish.electroGalvanized,
-      );
+      finish = SurfaceFinish.values.firstWhere((f) => f.name == finishStr, orElse: () => SurfaceFinish.electroGalvanized);
     }
 
     return SheetMetalMaterial(
@@ -230,6 +229,7 @@ class SheetMetalMaterial {
       kFactor: (json['kFactor'] as num?)?.toDouble() ?? 0.40,
       defaultBendRadius: (json['defaultBendRadius'] as num?)?.toDouble() ?? 1.5,
       edgeChamferMm: (json['edgeChamferMm'] as num?)?.toDouble() ?? 0.0,
+      paintCoat: json['paintCoat'] != null ? PaintCoatSpecification.fromJson(json['paintCoat'] as Map<String, dynamic>) : const PaintCoatSpecification(),
     );
   }
 }

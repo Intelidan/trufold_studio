@@ -17,6 +17,7 @@ import 'package:flutter/services.dart';
 
 import '../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../models/dsf_document.dart';
+import '../models/cad_primitives.dart';
 import 'widgets/unfolded_canvas_widget.dart';
 import 'widgets/viewport_3d/flutter_scene_viewport_widget.dart';
 import 'widgets/split_pane_divider.dart';
@@ -44,6 +45,7 @@ import '../models/cms/cms_product_contract.dart';
 import '../models/dds/dds_document.dart';
 import 'widgets/dds/dds_workspace_screen.dart';
 import 'widgets/dds/dds_cms_parameter_inspector.dart';
+import 'widgets/studio/studio_cad_tool_palette.dart';
 
 
 class SheetMetalStudioScreen extends StatefulWidget {
@@ -63,13 +65,13 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
   late final List<StudioTab> _tabs;
   int _activeTabIndex = 0;
   final FocusNode _focusNode = FocusNode();
-  bool _showPartsTree = true;
+  bool _showPartsTree = false;
   double _browserWidth = 260.0;
   Offset _browserPosition = const Offset(16, 16);
   Offset? _fittingInspectorOffset;
   Offset? _fittingInspectorDragStart;
 
-  Offset _inspectorPosition = const Offset(320, 80);
+  Offset? _inspectorPosition;
   bool _isInspectorCollapsed = false;
   Offset? _inspectorDragStartGlobal;
   Offset? _inspectorDragStartPanel;
@@ -87,7 +89,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
 
   bool _isCmsInspectorOpen = false;
   bool _isCmsInspectorDetached = false;
-  bool _isCmsInspectorCollapsed = false;
+  bool _isCmsInspectorCollapsed = true;
   Offset _cmsInspectorPosition = const Offset(280, 50);
   Offset? _cmsInspectorDragStart;
 
@@ -198,6 +200,17 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
       context,
       viewModel: _viewModel,
       onOpenInEditor: (dsfDoc) => _openDocumentInNewTab(dsfDoc),
+    );
+  }
+
+  void _finishSketchAction() {
+    _viewModel.setToolMode(StudioToolMode.select);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('✓ Sketch1 Finished. Profile & Features updated.'),
+        backgroundColor: Color(0xFF16A34A),
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 
@@ -833,8 +846,24 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
           _viewModel.togglePropertyInspector();
           setState(() {});
         },
+        const SingleActivator(LogicalKeyboardKey.f1): () {
+          _viewModel.toggleRibbonCollapsed();
+          setState(() {});
+        },
+        const SingleActivator(LogicalKeyboardKey.keyR, control: true, shift: true): () {
+          _viewModel.toggleRibbonCollapsed();
+          setState(() {});
+        },
+        const SingleActivator(LogicalKeyboardKey.f2): () {
+          _viewModel.setViewportLayoutMode(ViewportLayoutMode.canvas2D);
+          setState(() {});
+        },
+        const SingleActivator(LogicalKeyboardKey.f3): () {
+          _viewModel.setViewportLayoutMode(ViewportLayoutMode.split);
+          setState(() {});
+        },
         const SingleActivator(LogicalKeyboardKey.f4): () {
-          _viewModel.togglePropertyInspector();
+          _viewModel.setViewportLayoutMode(ViewportLayoutMode.viewport3D);
           setState(() {});
         },
       },
@@ -905,12 +934,34 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
               return KeyEventResult.handled;
             }
 
-            // Toggle CAD Properties Inspector (Ctrl+1 / Ctrl+I / F4)
-            if ((isCtrl &&
+            // Toggle CAD Properties Inspector (Ctrl+1 / Ctrl+I)
+            if (isCtrl &&
                     (event.logicalKey == LogicalKeyboardKey.digit1 ||
-                        event.logicalKey == LogicalKeyboardKey.keyI)) ||
-                event.logicalKey == LogicalKeyboardKey.f4) {
+                        event.logicalKey == LogicalKeyboardKey.keyI)) {
               _viewModel.togglePropertyInspector();
+              setState(() {});
+              return KeyEventResult.handled;
+            }
+
+            // Viewport Layout & Ribbon Shortcuts
+            if (event.logicalKey == LogicalKeyboardKey.f1 ||
+                (isCtrl && isShift && event.logicalKey == LogicalKeyboardKey.keyR)) {
+              _viewModel.toggleRibbonCollapsed();
+              setState(() {});
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.f2) {
+              _viewModel.setViewportLayoutMode(ViewportLayoutMode.canvas2D);
+              setState(() {});
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.f3) {
+              _viewModel.setViewportLayoutMode(ViewportLayoutMode.split);
+              setState(() {});
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.f4) {
+              _viewModel.setViewportLayoutMode(ViewportLayoutMode.viewport3D);
               setState(() {});
               return KeyEventResult.handled;
             }
@@ -1017,6 +1068,18 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                       final screenW = screenConstraints.maxWidth;
                       final screenH = screenConstraints.maxHeight;
 
+                      // Auto-detect Laptop / small screen (< 1600px) and resolve UI scale
+                      if (_viewModel.uiDensityMode == UiDensityMode.auto) {
+                        final expectedScale = screenW < 1600.0 ? 0.85 : 1.0;
+                        if ((_viewModel.uiScaleFactor - expectedScale).abs() > 0.001) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              _viewModel.resolveUiDensity(screenWidth: screenW);
+                            }
+                          });
+                        }
+                      }
+
                       return Stack(
                         children: [
                           // Base CAD Application Window
@@ -1045,16 +1108,7 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                         }),
                         onOpenTemplateLibrary: _openTemplateLibrary,
                         onOpenCmsInspector: _toggleCmsInspector,
-                        onFinishSketch: () {
-                          _viewModel.setToolMode(StudioToolMode.select);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('✓ Sketch1 Finished. Profile & Features updated.'),
-                              backgroundColor: Color(0xFF16A34A),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        },
+                        onFinishSketch: _finishSketchAction,
                       ),
 
                       // 2. Main Workspace (Draggable Dual-Viewport + Floating Glass Browser)
@@ -1063,8 +1117,12 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                           builder: (context, constraints) {
                             final totalW = constraints.maxWidth;
                             final totalH = constraints.maxHeight;
+                            final dockW = _viewModel.toolbarDockPosition.isVertical
+                                ? (_viewModel.isCompactMode ? 44.0 : 48.0)
+                                : 0.0;
+                            final workspaceW = (totalW - dockW).clamp(200.0, double.infinity);
                             const dividerW = 14.0;
-                            final availableW = (totalW - dividerW).clamp(200.0, double.infinity);
+                            final availableW = (workspaceW - dividerW).clamp(200.0, double.infinity);
 
                             final leftW = (availableW * _viewModel.splitRatio).clamp(100.0, availableW - 100.0);
                             final rightW = availableW - leftW;
@@ -1073,37 +1131,49 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                               children: [
                                 Row(
                                   children: [
+                                    // Docked Left Tool Palette
+                                    if (_viewModel.toolbarDockPosition.isLeft)
+                                      StudioCadToolPalette(
+                                        viewModel: _viewModel,
+                                        isVertical: true,
+                                        onFinishSketch: _finishSketchAction,
+                                        onOpenTemplateLibrary: _openTemplateLibrary,
+                                      ),
+
                                     if (_isTdsWindowOpen && !_isTdsWindowMinimized && _isTdsWindowDockedSplit) ...[
                                       // Docked Split View: Left half CAD (2D + 3D)
                                       SizedBox(
-                                        width: (totalW * 0.50).clamp(320.0, totalW - 350.0),
+                                        width: (workspaceW * 0.50).clamp(320.0, workspaceW - 350.0),
                                         child: Row(
                                           children: [
-                                            Expanded(
-                                              child: ClipRect(
-                                                child: Stack(
-                                                  children: [
-                                                    UnfoldedCanvasWidget(
-                                                      key: const ValueKey('unfolded_canvas_viewport'),
-                                                      viewModel: _viewModel,
-                                                      renderFloatingInspectors: false,
-                                                      showInCanvasToolRibbon: false,
-                                                    ),
-                                                    _buildCanvasTopTipBanner(_viewModel),
-                                                  ],
+                                            if (!_viewModel.viewportLayoutMode.is3DOnly)
+                                              Expanded(
+                                                child: ClipRect(
+                                                  child: Stack(
+                                                    children: [
+                                                      UnfoldedCanvasWidget(
+                                                        key: const ValueKey('unfolded_canvas_viewport'),
+                                                        viewModel: _viewModel,
+                                                        renderFloatingInspectors: false,
+                                                        showInCanvasToolRibbon: false,
+                                                      ),
+                                                      _buildCanvasTopTipBanner(_viewModel),
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
-                                            ),
-                                            SplitPaneDivider(
-                                              splitRatio: 0.5,
-                                              onRatioChanged: (_) {},
-                                              onDoubleTapReset: () {},
-                                            ),
-                                            Expanded(
-                                              child: ClipRect(
-                                                child: FlutterSceneViewportWidget(viewModel: _viewModel),
+                                            if (_viewModel.viewportLayoutMode.isSplit)
+                                              SplitPaneDivider(
+                                                splitRatio: 0.5,
+                                                onRatioChanged: (_) {},
+                                                onDoubleTapReset: () {},
                                               ),
-                                            ),
+                                            if (!_viewModel.viewportLayoutMode.is2DOnly)
+                                              Expanded(
+                                                child: ClipRect(
+                                                  child: FlutterSceneViewportWidget(viewModel: _viewModel),
+                                                ),
+                                              ),
                                           ],
                                         ),
                                       ),
@@ -1132,8 +1202,9 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                       ),
                                     ] else ...[
                                       // Left Viewport: 2D Unfolded Flat Pattern (CAD Sketch View) + Docked CMS Inspector
-                                      SizedBox(
-                                        width: leftW,
+                                      if (!_viewModel.viewportLayoutMode.is3DOnly)
+                                        SizedBox(
+                                          width: _viewModel.viewportLayoutMode.is2DOnly ? workspaceW : leftW,
                                         child: ClipRect(
                                           child: Row(
                                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1156,7 +1227,11 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                                   _buildCollapsedCmsRightRail()
                                                 else
                                                   SizedBox(
-                                                    width: math.min(360.0, (leftW - 120.0).clamp(260.0, 360.0)),
+                                                    width: math.min(
+                                                      _viewModel.isCompactMode ? 250.0 : 360.0,
+                                                      ((_viewModel.viewportLayoutMode.is2DOnly ? workspaceW : leftW) - 120.0)
+                                                          .clamp(200.0, _viewModel.isCompactMode ? 250.0 : 360.0),
+                                                    ),
                                                     child: Container(
                                                       decoration: const BoxDecoration(
                                                         border: Border(
@@ -1184,22 +1259,56 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                       ),
 
                                       // Draggable Split Divider
-                                      SplitPaneDivider(
-                                        splitRatio: _viewModel.splitRatio,
-                                        onRatioChanged: _viewModel.setSplitRatio,
-                                        onDoubleTapReset: () => _viewModel.setSplitRatio(0.50),
-                                      ),
+                                      if (_viewModel.viewportLayoutMode.isSplit)
+                                        SplitPaneDivider(
+                                          splitRatio: _viewModel.splitRatio,
+                                          onRatioChanged: _viewModel.setSplitRatio,
+                                          onDoubleTapReset: () => _viewModel.setSplitRatio(0.50),
+                                        ),
 
                                       // Right Viewport: Modern Impeller 3D CAD Mesh
-                                      SizedBox(
-                                        width: rightW,
-                                        child: ClipRect(
-                                          child: FlutterSceneViewportWidget(viewModel: _viewModel),
+                                      if (!_viewModel.viewportLayoutMode.is2DOnly)
+                                        SizedBox(
+                                          width: _viewModel.viewportLayoutMode.is3DOnly ? workspaceW : rightW,
+                                          child: ClipRect(
+                                            child: FlutterSceneViewportWidget(viewModel: _viewModel),
+                                          ),
                                         ),
-                                      ),
                                     ],
+
+                                    // Docked Right Tool Palette
+                                    if (_viewModel.toolbarDockPosition.isRight)
+                                      StudioCadToolPalette(
+                                        viewModel: _viewModel,
+                                        isVertical: true,
+                                        onFinishSketch: _finishSketchAction,
+                                        onOpenTemplateLibrary: _openTemplateLibrary,
+                                      ),
                                   ],
                                 ),
+
+                                // Floating Detached CAD Tool Palette (When detached)
+                                if (_viewModel.toolbarDockPosition.isDetached)
+                                  Positioned(
+                                    left: _viewModel.floatingToolbarPosition.dx.clamp(8.0, math.max(8.0, totalW - 65.0)),
+                                    top: _viewModel.floatingToolbarPosition.dy.clamp(8.0, math.max(8.0, totalH - 120.0)),
+                                    child: StudioCadToolPalette(
+                                      viewModel: _viewModel,
+                                      isVertical: true,
+                                      isFloating: true,
+                                      onFinishSketch: _finishSketchAction,
+                                      onOpenTemplateLibrary: _openTemplateLibrary,
+                                      onPositionChanged: (delta) {
+                                        _viewModel.setFloatingToolbarPosition(
+                                          Offset(
+                                            (_viewModel.floatingToolbarPosition.dx + delta.dx).clamp(0.0, math.max(0.0, totalW - 60)),
+                                            (_viewModel.floatingToolbarPosition.dy + delta.dy).clamp(0.0, math.max(0.0, totalH - 60)),
+                                          ),
+                                        );
+                                      },
+                                      onClose: () => _viewModel.setToolbarDockPosition(ToolbarDockPosition.top),
+                                    ),
+                                  ),
 
                                 // Floating Transparent Draggable BROWSER Panel
                                 if (_showPartsTree)
@@ -1350,48 +1459,56 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                                 ),
 
                                 // Draggable Floating CAD Property Inspector (Spans across 2D and 3D viewports)
-                                if (_viewModel.isPropertyInspectorOpen)
-                                  Positioned(
-                                    left: _inspectorPosition.dx.clamp(8.0, math.max(8.0, totalW - 290.0)),
-                                    top: _inspectorPosition.dy.clamp(8.0, math.max(8.0, totalH - 120.0)),
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onPanStart: (details) {
-                                        _inspectorDragStartGlobal = details.globalPosition;
-                                        _inspectorDragStartPanel = _inspectorPosition;
-                                      },
-                                      onPanUpdate: (details) {
-                                        if (_inspectorDragStartGlobal != null && _inspectorDragStartPanel != null) {
-                                          setState(() {
-                                            _inspectorPosition = _inspectorDragStartPanel! + (details.globalPosition - _inspectorDragStartGlobal!);
-                                          });
-                                        }
-                                      },
-                                      child: CadPropertyInspector(
-                                        viewModel: _viewModel,
-                                        isCollapsed: _isInspectorCollapsed,
-                                        onToggleCollapse: () {
-                                          setState(() {
-                                            _isInspectorCollapsed = !_isInspectorCollapsed;
-                                          });
-                                        },
-                                        onClose: () {
-                                          _viewModel.setPropertyInspectorOpen(false);
-                                        },
-                                        onDragStartHeader: (details) {
+                                if (_viewModel.isPropertyInspectorOpen) ...[
+                                  () {
+                                    final inspPos = _inspectorPosition ?? Offset(math.max(20.0, totalW - 295.0), 32.0);
+                                    final clampedX = inspPos.dx.clamp(8.0, math.max(8.0, totalW - 290.0)).toDouble();
+                                    final clampedY = inspPos.dy.clamp(8.0, math.max(8.0, totalH - 120.0)).toDouble();
+                                    final effectivePos = Offset(clampedX, clampedY);
+
+                                    return Positioned(
+                                      left: effectivePos.dx,
+                                      top: effectivePos.dy,
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onPanStart: (details) {
                                           _inspectorDragStartGlobal = details.globalPosition;
-                                          _inspectorDragStartPanel = _inspectorPosition;
+                                          _inspectorDragStartPanel = effectivePos;
                                         },
-                                        onDragHeader: (details) {
+                                        onPanUpdate: (details) {
                                           if (_inspectorDragStartGlobal != null && _inspectorDragStartPanel != null) {
                                             setState(() {
                                               _inspectorPosition = _inspectorDragStartPanel! + (details.globalPosition - _inspectorDragStartGlobal!);
                                             });
                                           }
                                         },
+                                        child: CadPropertyInspector(
+                                          viewModel: _viewModel,
+                                          isCollapsed: _isInspectorCollapsed,
+                                          onToggleCollapse: () {
+                                            setState(() {
+                                              _isInspectorCollapsed = !_isInspectorCollapsed;
+                                            });
+                                          },
+                                          onClose: () {
+                                            _viewModel.setPropertyInspectorOpen(false);
+                                          },
+                                          onDragStartHeader: (details) {
+                                            _inspectorDragStartGlobal = details.globalPosition;
+                                            _inspectorDragStartPanel = effectivePos;
+                                          },
+                                          onDragHeader: (details) {
+                                            if (_inspectorDragStartGlobal != null && _inspectorDragStartPanel != null) {
+                                              setState(() {
+                                                _inspectorPosition = _inspectorDragStartPanel! + (details.globalPosition - _inspectorDragStartGlobal!);
+                                              });
+                                            }
+                                          },
+                                        ),
                                       ),
-                                    ),
-                                  ),
+                                    );
+                                  }(),
+                                ],
 
                                 // Floating Reopen Button if Inspector is closed
                                 if (!_viewModel.isPropertyInspectorOpen)
@@ -1516,9 +1633,14 @@ class _SheetMetalStudioScreenState extends State<SheetMetalStudioScreen> {
                         ),
                       ),
 
-                      // 3. Bottom Fold Progression Dock (0% Flat to 100% Folded) - shown when in CAD or Split mode
-                      if (!_isTdsWindowOpen || _isTdsWindowMinimized || _isTdsWindowDockedSplit)
-                        FoldProgressSlider(viewModel: _viewModel),
+                      // 3. Bottom Fold Progression Dock (0% Flat to 100% Folded) - hidden in 2D Only mode to reclaim vertical space
+                      if ((!_isTdsWindowOpen || _isTdsWindowMinimized || _isTdsWindowDockedSplit) &&
+                          !_viewModel.viewportLayoutMode.is2DOnly)
+                        FoldProgressSlider(
+                          viewModel: _viewModel,
+                          isCollapsed: _viewModel.isFoldSliderCollapsed,
+                          onToggleCollapse: _viewModel.toggleFoldSliderCollapsed,
+                        ),
                     ],
                   ),
 

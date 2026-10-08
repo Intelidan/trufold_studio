@@ -211,7 +211,7 @@ class FlutterSceneCadMeshBuilder {
           ..metallicFactor = 0.12
           ..roughnessFactor = 0.55;
       } else if (customMaterial != null) {
-        material = customMaterial;
+        material = customMaterial..doubleSided = true;
       } else {
         // Shaded mode: apply active materialSettings (PGI, HDG, Plastic, Metals)
         final matSettings = preferences.materialSettings;

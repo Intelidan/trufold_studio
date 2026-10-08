@@ -12,6 +12,7 @@ enum CadMaterialPresetType {
   copper('copper', 'Copper'),
   aluminum('aluminum', 'Aluminum'),
   ironSteel('ironSteel', 'Iron / Steel'),
+  paint('paint', 'Painted / Powder Coated (Dielectric)'),
   custom('custom', 'Custom Shader');
 
   final String id;
@@ -44,7 +45,7 @@ class CadMaterialSettings {
   });
 
   /// Factory constructors matching precise PBR / Voronoi specifications
-  factory CadMaterialSettings.preset(CadMaterialPresetType type, {Color? customColor}) {
+  factory CadMaterialSettings.preset(CadMaterialPresetType type, {Color? customColor, double? customRoughness}) {
     switch (type) {
       case CadMaterialPresetType.hdg:
         // Darker gray, weathered crystalline silver, high roughness, procedural Voronoi spangles
@@ -145,11 +146,22 @@ class CadMaterialSettings {
           spangleScale: 45.0,
         );
 
+      case CadMaterialPresetType.paint:
+        // Dielectric polymer coating with universal RAL or custom pigment (metallic 0.0)
+        return CadMaterialSettings(
+          preset: type,
+          baseColor: customColor ?? const Color(0xFFC5C7C4), // Default RAL 7035 Light Grey
+          roughness: customRoughness ?? 0.30,
+          isPlastic: true,
+          useSpangles: false,
+          spangleScale: 45.0,
+        );
+
       case CadMaterialPresetType.custom:
         return CadMaterialSettings(
           preset: type,
           baseColor: customColor ?? const Color(0xFF70A5C2),
-          roughness: 0.35,
+          roughness: customRoughness ?? 0.35,
           isPlastic: false,
           useSpangles: false,
           spangleScale: 45.0,
@@ -164,12 +176,14 @@ class CadMaterialSettings {
       return CadMaterialPresetType.hdg;
     } else if (upper.contains('GI') || upper.contains('GALV') || upper.contains('DX51D')) {
       return CadMaterialPresetType.pgi;
-    } else if (upper.contains('AL') || upper.contains('ALUM') || upper.contains('5052')) {
+    } else if (upper.contains('ALUM') || RegExp(r'\bAL\b').hasMatch(upper) || upper.contains('5052')) {
       return CadMaterialPresetType.aluminum;
     } else if (upper.contains('SS') || upper.contains('304') || upper.contains('316') || upper.contains('STAINLESS')) {
       return CadMaterialPresetType.silver;
     } else if (upper.contains('MS') || upper.contains('HR') || upper.contains('CRCA') || upper.contains('STEEL')) {
       return CadMaterialPresetType.ironSteel;
+    } else if (upper.contains('PAINT') || upper.contains('POWDER') || upper.contains('EPOXY') || upper.contains('RAL')) {
+      return CadMaterialPresetType.paint;
     } else if (upper.contains('PLASTIC') || upper.contains('PVC') || upper.contains('POLY')) {
       return CadMaterialPresetType.plastic;
     } else if (upper.contains('COPPER')) {
@@ -203,6 +217,8 @@ class CadMaterialSettings {
         return 'AL';
       case CadMaterialPresetType.ironSteel:
         return 'MS';
+      case CadMaterialPresetType.paint:
+        return 'PAINT';
       case CadMaterialPresetType.custom:
         return 'GI';
     }

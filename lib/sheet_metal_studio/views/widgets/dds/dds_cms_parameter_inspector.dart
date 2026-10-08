@@ -74,6 +74,15 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   final Map<String, double> _localParams = {};
   bool? _localCoverIncluded;
   String? _localMaterial;
+  PaintCoatType _localPaintType = PaintCoatType.none;
+  RalColor _localRalColor = RalColor.defaultRal;
+
+  PaintCoatSpecification get _activePaintCoat =>
+      widget.viewModel?.paintCoat ??
+      PaintCoatSpecification(
+        type: _localPaintType,
+        ralColor: _localRalColor,
+      );
 
   FocusNode _getFocusNode(String key) {
     return _focusNodes.putIfAbsent(key, () => FocusNode());
@@ -154,6 +163,13 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     if (widget.viewModel == null) return;
     final vm = widget.viewModel!;
 
+    if (preset == CadMaterialPresetType.paint) {
+      _updatePaintType(PaintCoatType.powderCoat);
+      return;
+    }
+
+    _updatePaintType(PaintCoatType.none);
+
     vm.updateGraphicsPreferences((prefs) => prefs.copyWith(
       materialSettings: CadMaterialSettings.preset(preset),
     ));
@@ -176,6 +192,42 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     }
   }
 
+  void _updatePaintType(PaintCoatType type) {
+    setState(() {
+      _localPaintType = type;
+    });
+
+    if (widget.viewModel != null) {
+      widget.viewModel!.setPaintCoatType(type);
+    }
+
+    if (widget.instance != null && widget.onInstanceChanged != null) {
+      final finishStr = type.isPainted
+          ? '${type.displayName} (${_activePaintCoat.ralColor.displayName})'
+          : 'Natural Mill Galvanized';
+      widget.onInstanceChanged!(widget.instance!.copyWith(finish: finishStr));
+    }
+  }
+
+  void _updateRalColor(RalColor ral) {
+    setState(() {
+      _localRalColor = ral;
+      if (_localPaintType == PaintCoatType.none) {
+        _localPaintType = PaintCoatType.powderCoat;
+      }
+    });
+
+    if (widget.viewModel != null) {
+      widget.viewModel!.setPaintRalColor(ral);
+    }
+
+    if (widget.instance != null && widget.onInstanceChanged != null) {
+      final type = _activePaintCoat.type.isPainted ? _activePaintCoat.type : PaintCoatType.powderCoat;
+      final finishStr = '${type.displayName} (${ral.displayName})';
+      widget.onInstanceChanged!(widget.instance!.copyWith(finish: finishStr));
+    }
+  }
+
   String? _lastDocFingerprint;
 
   void _resetLocalStateIfDocChanged() {
@@ -188,6 +240,8 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       _localParams.clear();
       _localCoverIncluded = null;
       _localMaterial = null;
+      _localPaintType = widget.viewModel?.paintCoat.type ?? PaintCoatType.none;
+      _localRalColor = widget.viewModel?.paintCoat.ralColor ?? RalColor.defaultRal;
       final scLinked = widget.viewModel?.scalingController?.isLinkedPorts;
       final pType = _productType;
       final isUnequal = pType == 'unequalCross' || pType == 'unequalTee' || pType == 'reducer';
@@ -202,6 +256,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   void initState() {
     super.initState();
     _controllers = {};
+    if (widget.viewModel != null) {
+      _localPaintType = widget.viewModel!.paintCoat.type;
+      _localRalColor = widget.viewModel!.paintCoat.ralColor;
+    }
     _resetLocalStateIfDocChanged();
     if (widget.instance == null) {
       widget.viewModel?.addListener(_onViewModelChanged);
@@ -868,69 +926,71 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     final borderCol = isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155);
     final pType = _productType;
 
+    final isCompact = widget.viewModel?.isCompactMode ?? false;
+
     final scrollBody = SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: isCompact ? 6 : 10, vertical: isCompact ? 5 : 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // --- Section 1: All Port's Dimensions & Bend Geometry ---
-          _buildSectionHeader('1. PORT DIMENSIONS & BEND GEOMETRY', Icons.open_in_full, pType, hasLinkToggle: true),
-          const SizedBox(height: 6),
+          _buildSectionHeader(isCompact ? '1. PORTS & BEND GEOMETRY' : '1. PORT DIMENSIONS & BEND GEOMETRY', Icons.open_in_full, pType, hasLinkToggle: true),
+          SizedBox(height: isCompact ? 4 : 6),
           _buildDynamicPortEditors(pType),
-          const SizedBox(height: 12),
+          SizedBox(height: isCompact ? 8 : 12),
 
           // --- Section 2: Coupler Slots & Flaps (Common Size) ---
           // Coupler slots and flaps are only required for Cable tray items and no other categories
           if (_isCableTray) ...[
-            _buildSectionHeader('2. COUPLER SLOTS & FLAPS', Icons.more_horiz, null),
-            const SizedBox(height: 6),
+            _buildSectionHeader(isCompact ? '2. COUPLER SLOTS' : '2. COUPLER SLOTS & FLAPS', Icons.more_horiz, null),
+            SizedBox(height: isCompact ? 4 : 6),
             _buildCouplerSlotsSection(),
-            const SizedBox(height: 12),
+            SizedBox(height: isCompact ? 8 : 12),
           ],
 
           // --- Section 3: Floor Bed Perforations OR Ladder Rungs & Joints ---
           if (_isLadder) ...[
-            _buildSectionHeader('3. LADDER RUNGS & WELDING JOINT', Icons.format_line_spacing, null),
-            const SizedBox(height: 6),
+            _buildSectionHeader(isCompact ? '3. RUNGS & JOINTS' : '3. LADDER RUNGS & WELDING JOINT', Icons.format_line_spacing, null),
+            SizedBox(height: isCompact ? 4 : 6),
             _buildLadderRungAndJointSection(),
-            const SizedBox(height: 12),
+            SizedBox(height: isCompact ? 8 : 12),
           ] else ...[
-            _buildSectionHeader('3. FLOOR PERFORATIONS & STAMPING', Icons.grid_view, null),
-            const SizedBox(height: 6),
+            _buildSectionHeader(isCompact ? '3. PERFORATIONS' : '3. FLOOR PERFORATIONS & STAMPING', Icons.grid_view, null),
+            SizedBox(height: isCompact ? 4 : 6),
             _buildFloorPerforationsSection(),
-            const SizedBox(height: 12),
+            SizedBox(height: isCompact ? 8 : 12),
           ],
 
           // --- Section 4: Flange Direction Toggle ---
-          _buildSectionHeader('4. BASE FLANGE DIRECTION', Icons.compare_arrows, null),
-          const SizedBox(height: 6),
+          _buildSectionHeader(isCompact ? '4. FLANGE DIRECTION' : '4. BASE FLANGE DIRECTION', Icons.compare_arrows, null),
+          SizedBox(height: isCompact ? 4 : 6),
           _buildFlangeDirectionToggle(),
-          const SizedBox(height: 12),
+          SizedBox(height: isCompact ? 8 : 12),
 
           // --- Section 5: Parametric Cover & Flange ---
-          _buildSectionHeader('5. PARAMETRIC COVER & FLANGE', Icons.layers_clear, null),
-          const SizedBox(height: 6),
+          _buildSectionHeader(isCompact ? '5. COVER & FLANGE' : '5. PARAMETRIC COVER & FLANGE', Icons.layers_clear, null),
+          SizedBox(height: isCompact ? 4 : 6),
           _buildFlangeSizesSection(),
-          const SizedBox(height: 12),
+          SizedBox(height: isCompact ? 8 : 12),
 
           // --- Section 6: Sheet Gauge, Material & Finish ---
-          _buildSectionHeader('6. SPECIFICATIONS & GAUGE', Icons.straighten, null),
-          const SizedBox(height: 6),
+          _buildSectionHeader(isCompact ? '6. SPECS & GAUGE' : '6. SPECIFICATIONS & GAUGE', Icons.straighten, null),
+          SizedBox(height: isCompact ? 4 : 6),
           _buildSpecificationsSection(),
-          const SizedBox(height: 12),
+          SizedBox(height: isCompact ? 8 : 12),
 
           // --- Section 7: Standard Size Quick Presets ---
           _buildPresetsBar(),
-          const SizedBox(height: 10),
+          SizedBox(height: isCompact ? 6 : 10),
 
           // --- Section 8: Live Physical Takeoff HUD ---
           _buildTakeoffHUD(),
-          const SizedBox(height: 10),
+          SizedBox(height: isCompact ? 6 : 10),
 
           // Action Button: Apply / Sync
           SizedBox(
             width: double.infinity,
-            height: 40,
+            height: isCompact ? 26 : 40,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0284C7),
@@ -938,10 +998,13 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                 padding: EdgeInsets.zero,
                 elevation: 3,
                 shadowColor: const Color(0xFF0284C7).withValues(alpha: 0.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
               ),
-              icon: const Icon(Icons.sync, size: 16),
-              label: const Text('Bake & Sync Dimensions', style: TextStyle(fontSize: 13.0, fontWeight: FontWeight.bold, letterSpacing: 0.4)),
+              icon: Icon(Icons.sync, size: isCompact ? 12 : 16),
+              label: Text(
+                isCompact ? 'Bake & Sync' : 'Bake & Sync Dimensions',
+                style: TextStyle(fontSize: isCompact ? 9.5 : 13.0, fontWeight: FontWeight.bold, letterSpacing: 0.4),
+              ),
               onPressed: () {
                 if (widget.instance != null && widget.onInstanceChanged != null) {
                   widget.onInstanceChanged!(widget.instance!.copyWith(instanceParameters: _currentParams));
@@ -966,7 +1029,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       builder: (context, constraints) {
         final hasFiniteWidth = constraints.maxWidth.isFinite;
         final hasFiniteHeight = constraints.maxHeight.isFinite;
-        final panelWidth = widget.isDetached ? 400.0 : (hasFiniteWidth ? double.infinity : 395.0);
+        final panelWidth = widget.isDetached ? (isCompact ? 320.0 : 400.0) : (hasFiniteWidth ? double.infinity : (isCompact ? 250.0 : 395.0));
 
         return Container(
           width: panelWidth,
@@ -995,7 +1058,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                 onPanStart: widget.onDragStart,
                 onPanUpdate: widget.onDragUpdate,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 12, vertical: isCompact ? 6 : 9),
                   decoration: BoxDecoration(
                     color: const Color(0xFF0F172A),
                     borderRadius: widget.isDetached
@@ -1006,29 +1069,38 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                   child: Row(
                     children: [
                       Container(
-                        width: 28,
-                        height: 28,
+                        width: isCompact ? 22 : 28,
+                        height: isCompact ? 22 : 28,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: const Color(0xFF0284C7).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(5),
                           border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.4), width: 1.0),
                         ),
-                        child: const Icon(Icons.tune, size: 17, color: Color(0xFF38BDF8)),
+                        child: Icon(Icons.tune, size: isCompact ? 12 : 17, color: const Color(0xFF38BDF8)),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'CMS PARAMETER INSPECTOR',
-                              style: TextStyle(color: Colors.white, fontSize: 13.0, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                            Text(
+                              isCompact ? 'CMS INSPECTOR' : 'CMS PARAMETER INSPECTOR',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: isCompact ? 9.5 : 13.0,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8,
+                              ),
                             ),
                             const SizedBox(height: 1),
                             Text(
-                              '${_formatProductTitle(pType)} • Live Morph Engine',
-                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11.0, fontWeight: FontWeight.w500),
+                              '${_formatProductTitle(pType)} • Live Morph',
+                              style: TextStyle(
+                                color: const Color(0xFF94A3B8),
+                                fontSize: isCompact ? 8.0 : 11.0,
+                                fontWeight: FontWeight.w500,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -1108,15 +1180,16 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
 
   Widget _buildSectionHeader(String title, IconData icon, String? productType, {bool hasLinkToggle = false}) {
     final isLight = widget.isLightTheme;
+    final isCompact = widget.viewModel?.isCompactMode ?? false;
     return Row(
       children: [
-        Icon(icon, size: 18, color: const Color(0xFF0284C7)),
-        const SizedBox(width: 7),
+        Icon(icon, size: isCompact ? 13 : 18, color: const Color(0xFF0284C7)),
+        const SizedBox(width: 6),
         Expanded(
           child: Text(
             title,
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: isCompact ? 9.5 : 12.5,
               fontWeight: FontWeight.bold,
               color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
               letterSpacing: 0.4,
@@ -1134,20 +1207,20 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
             child: Tooltip(
               message: 'Reset (W, H) to baseline',
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: EdgeInsets.symmetric(horizontal: isCompact ? 5 : 8, vertical: isCompact ? 2 : 4),
                 decoration: BoxDecoration(
                   color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF334155),
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.8),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.restart_alt, size: 13, color: Color(0xFF0284C7)),
-                    SizedBox(width: 3),
+                    Icon(Icons.restart_alt, size: isCompact ? 11 : 13, color: const Color(0xFF0284C7)),
+                    const SizedBox(width: 3),
                     Text(
                       'RESET',
-                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+                      style: TextStyle(fontSize: isCompact ? 8.5 : 10.5, fontWeight: FontWeight.bold, color: const Color(0xFF0284C7)),
                     ),
                   ],
                 ),
@@ -1651,11 +1724,12 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
 
   Widget _buildPortRow(String badge, String title, String widthKey, String heightKey, Color color) {
     final isLight = widget.isLightTheme;
+    final isCompact = widget.viewModel?.isCompactMode ?? false;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: isCompact ? 6 : 8, vertical: isCompact ? 4 : 6),
       decoration: BoxDecoration(
         color: isLight ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A).withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(5),
         border: Border.all(color: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155), width: 0.8),
       ),
       child: Column(
@@ -1664,18 +1738,18 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+                padding: EdgeInsets.symmetric(horizontal: isCompact ? 3.5 : 6, vertical: isCompact ? 1.0 : 2),
+                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
                 child: Text(
                   badge,
-                  style: const TextStyle(color: Colors.white, fontSize: 10.0, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: Colors.white, fontSize: isCompact ? 7.5 : 10.0, fontWeight: FontWeight.bold),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+                  style: TextStyle(fontSize: isCompact ? 9.5 : 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1687,13 +1761,13 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                   message: 'Reset (W, H) to baseline',
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    child: Icon(Icons.restart_alt, size: 15, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                    child: Icon(Icons.restart_alt, size: isCompact ? 12 : 15, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: isCompact ? 4 : 6),
           Row(
             children: [
               // Width field with standard width presets
@@ -1738,42 +1812,78 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
 
   Widget _buildStepperField(String label, String key, double min, double max, {double step = 10.0, int decimals = 0, List<double>? presetSizes}) {
     final isLight = widget.isLightTheme;
+    final isCompact = widget.viewModel?.isCompactMode ?? false;
     final ctrl = _controllers[key] ?? TextEditingController(text: '100');
 
-    // Clean, compact badge text
+    // Clean, compact badge text with comprehensive abbreviation dictionary
     String badgeText = label;
     if (label.contains('(')) {
       badgeText = label.split('(').first.trim();
     }
-    if (badgeText.toLowerCase() == 'thickness') badgeText = 'THK';
-    if (badgeText.toLowerCase() == 'cover flange') badgeText = 'FLG';
+    final lower = badgeText.toLowerCase().trim();
+    if (lower == 'thickness' || lower == 'thk') {
+      badgeText = 'THK';
+    } else if (lower == 'width' || lower == 'w') {
+      badgeText = 'W';
+    } else if (lower == 'height' || lower == 'h') {
+      badgeText = 'H';
+    } else if (lower == 'length' || lower == 'l') {
+      badgeText = 'L';
+    } else if (lower == 'radius' || lower == 'r') {
+      badgeText = 'R';
+    } else if (lower == 'angle' || lower == 'ang') {
+      badgeText = 'ANG';
+    } else if (lower == 'pitch' || lower == 'p') {
+      badgeText = 'P';
+    } else if (lower == 'slot l' || lower == 'slot length') {
+      badgeText = 'SL-L';
+    } else if (lower == 'slot w' || lower == 'slot width') {
+      badgeText = 'SL-W';
+    } else if (lower == 'cover flange' || lower == 'flange') {
+      badgeText = 'FLG';
+    } else if (lower == 'flap length') {
+      badgeText = 'FLP-L';
+    } else if (lower == 'coupler length') {
+      badgeText = 'CPL-L';
+    } else if (lower == 'margin') {
+      badgeText = 'M';
+    } else if (lower == 'offset') {
+      badgeText = 'OFF';
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final showBadge = constraints.maxWidth >= 70;
-        final showSteppers = constraints.maxWidth >= 135;
-        final showPresets = constraints.maxWidth >= 105 && presetSizes != null && presetSizes.isNotEmpty;
+        final showBadge = constraints.maxWidth >= (isCompact ? 50 : 70);
+        final showSteppers = constraints.maxWidth >= (isCompact ? 110 : 135);
+        final showPresets = constraints.maxWidth >= (isCompact ? 90 : 105) && presetSizes != null && presetSizes.isNotEmpty;
 
         return ClipRRect(
-          borderRadius: BorderRadius.circular(5),
+          borderRadius: BorderRadius.circular(4),
           child: Container(
-            height: 34,
+            height: isCompact ? 24.0 : 34.0,
             decoration: BoxDecoration(
               color: isLight ? Colors.white : const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.9),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.8),
             ),
             child: Row(
               children: [
                 // Integrated prefix badge inside container
                 if (showBadge)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                    margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-                    decoration: BoxDecoration(color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF334155), borderRadius: BorderRadius.circular(3)),
+                    padding: EdgeInsets.symmetric(horizontal: isCompact ? 2.5 : 4, vertical: isCompact ? 1.0 : 3),
+                    margin: EdgeInsets.symmetric(horizontal: 2, vertical: isCompact ? 1.0 : 3),
+                    decoration: BoxDecoration(
+                      color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF334155),
+                      borderRadius: BorderRadius.circular(2.5),
+                    ),
                     child: Text(
                       badgeText,
-                      style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                      style: TextStyle(
+                        fontSize: isCompact ? 7.5 : 10.0,
+                        fontWeight: FontWeight.bold,
+                        color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                      ),
                     ),
                   ),
                 Expanded(
@@ -1781,7 +1891,11 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                     controller: ctrl,
                     focusNode: _getFocusNode(key),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF0F172A) : Colors.white),
+                    style: TextStyle(
+                      fontSize: isCompact ? 9.5 : 12.0,
+                      fontWeight: FontWeight.bold,
+                      color: isLight ? const Color(0xFF0F172A) : Colors.white,
+                    ),
                     textAlign: TextAlign.center,
                     decoration: const InputDecoration(contentPadding: EdgeInsets.zero, isDense: true, border: InputBorder.none),
                     onChanged: (val) {
@@ -1808,10 +1922,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                       _updateParam(key, next);
                     },
                     child: Container(
-                      width: 18,
-                      height: 32,
+                      width: isCompact ? 12 : 18,
+                      height: isCompact ? 22 : 32,
                       alignment: Alignment.center,
-                      child: Icon(Icons.remove, size: 13, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                      child: Icon(Icons.remove, size: isCompact ? 9 : 13, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
                     ),
                   ),
                   // Stepper +
@@ -1823,10 +1937,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                       _updateParam(key, next);
                     },
                     child: Container(
-                      width: 18,
-                      height: 32,
+                      width: isCompact ? 12 : 18,
+                      height: isCompact ? 22 : 32,
                       alignment: Alignment.center,
-                      child: Icon(Icons.add, size: 13, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                      child: Icon(Icons.add, size: isCompact ? 9 : 13, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
                     ),
                   ),
                 ],
@@ -1836,10 +1950,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                     tooltip: 'Common standard sizes',
                     padding: EdgeInsets.zero,
                     child: Container(
-                      width: 16,
-                      height: 32,
+                      width: isCompact ? 12 : 16,
+                      height: isCompact ? 22 : 32,
                       alignment: Alignment.center,
-                      child: const Icon(Icons.arrow_drop_down, size: 15, color: Color(0xFF0284C7)),
+                      child: Icon(Icons.arrow_drop_down, size: isCompact ? 11 : 15, color: const Color(0xFF0284C7)),
                     ),
                     onSelected: (selectedVal) {
                       ctrl.text = decimals == 0 ? selectedVal.toStringAsFixed(0) : selectedVal.toStringAsFixed(decimals);
@@ -1849,10 +1963,10 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                       return presetSizes.map((sz) {
                         return PopupMenuItem<double>(
                           value: sz,
-                          height: 32,
+                          height: isCompact ? 22 : 32,
                           child: Text(
                             decimals == 0 ? '${sz.toStringAsFixed(0)} mm' : '${sz.toStringAsFixed(decimals)} mm',
-                            style: const TextStyle(fontSize: 12.0, fontWeight: FontWeight.w600),
+                            style: TextStyle(fontSize: isCompact ? 9.5 : 12.0, fontWeight: FontWeight.w600),
                           ),
                         );
                       }).toList();
@@ -1869,6 +1983,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   // --- Section 2: Coupler Slots & Flaps ---
   Widget _buildCouplerSlotsSection() {
     final isLight = widget.isLightTheme;
+    final isCompact = widget.viewModel?.isCompactMode ?? false;
     final hasFlaps = (_currentParams['include_coupler_flaps'] ?? 0.0) > 0.5;
     final flapLen = _currentParams['coupler_flap_length'] ?? 30.0;
 
@@ -1898,7 +2013,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               Expanded(child: _buildStepperField('Pitch', 'coupler_slot_pitch', 15.0, 50.0, step: 5.0, presetSizes: const [20, 25, 30, 35, 40])),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                padding: EdgeInsets.symmetric(horizontal: isCompact ? 6 : 8, vertical: isCompact ? 3 : 5),
                 decoration: BoxDecoration(
                   color: const Color(0xFF0284C7).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
@@ -1906,7 +2021,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                 ),
                 child: Text(
                   '3 VERTICAL SLOTS ($dynamicSlotLen×8mm)',
-                  style: const TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+                  style: TextStyle(fontSize: isCompact ? 8.5 : 10.0, fontWeight: FontWeight.bold, color: const Color(0xFF0284C7)),
                 ),
               ),
             ],
@@ -1922,7 +2037,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               borderRadius: BorderRadius.circular(6),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: EdgeInsets.symmetric(horizontal: isCompact ? 6 : 10, vertical: isCompact ? 5 : 8),
                 decoration: BoxDecoration(
                   color: hasFlaps ? const Color(0xFF4F46E5).withValues(alpha: 0.18) : (isLight ? Colors.white : const Color(0xFF1E293B)),
                   borderRadius: BorderRadius.circular(6),
@@ -1936,7 +2051,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                   children: [
                     Icon(
                       hasFlaps ? Icons.check_circle : Icons.add_circle_outline,
-                      size: 20,
+                      size: isCompact ? 16 : 20,
                       color: hasFlaps ? const Color(0xFF818CF8) : const Color(0xFF6366F1),
                     ),
                     const SizedBox(width: 8),
@@ -1947,7 +2062,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                           Text(
                             hasFlaps ? 'Coupler Flaps Active' : 'Add Coupler Flaps',
                             style: TextStyle(
-                              fontSize: 12.5,
+                              fontSize: isCompact ? 10.5 : 12.5,
                               fontWeight: FontWeight.bold,
                               color: hasFlaps
                                   ? (isLight ? const Color(0xFF4338CA) : const Color(0xFFE0E7FF))
@@ -1958,20 +2073,20 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                             hasFlaps
                                 ? 'Integrated cheek tabs with 3× vertical slots • ${flapLen.toStringAsFixed(0)} mm'
                                 : 'Add integrated folding connection flaps to port cheek walls',
-                            style: TextStyle(fontSize: 10.0, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                            style: TextStyle(fontSize: isCompact ? 8.5 : 10.0, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
                           ),
                         ],
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                      padding: EdgeInsets.symmetric(horizontal: isCompact ? 6 : 8, vertical: isCompact ? 2.5 : 3.5),
                       decoration: BoxDecoration(
                         color: hasFlaps ? const Color(0xFF6366F1) : const Color(0xFF6366F1).withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         hasFlaps ? 'ACTIVE' : '+ ADD',
-                        style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, color: hasFlaps ? Colors.white : const Color(0xFF6366F1)),
+                        style: TextStyle(fontSize: isCompact ? 8.5 : 10.0, fontWeight: FontWeight.bold, color: hasFlaps ? Colors.white : const Color(0xFF6366F1)),
                       ),
                     ),
                   ],
@@ -2417,6 +2532,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   // --- Section 3: Floor Bed Perforations & Stamping ---
   Widget _buildFloorPerforationsSection() {
     final isLight = widget.isLightTheme;
+    final isCompact = widget.viewModel?.isCompactMode ?? false;
     final hasPerf = (_currentParams['has_perforations'] ?? 1.0) > 0.5;
     final curPitch = _currentParams['perforation_pitch'] ?? 100.0;
     final isStaggered = (_currentParams['perforation_staggered'] ?? 1.0) > 0.5;
@@ -2435,18 +2551,18 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                padding: EdgeInsets.symmetric(horizontal: isCompact ? 5 : 7, vertical: isCompact ? 1.5 : 2.5),
                 decoration: BoxDecoration(color: hasPerf ? const Color(0xFF059669) : const Color(0xFF64748B), borderRadius: BorderRadius.circular(4)),
                 child: Text(
                   hasPerf ? 'ACTIVE' : 'SOLID',
-                  style: const TextStyle(color: Colors.white, fontSize: 10.0, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: Colors.white, fontSize: isCompact ? 8.5 : 10.0, fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Floor Bed Perforations',
-                  style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+                  style: TextStyle(fontSize: isCompact ? 10.5 : 12.0, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
                 ),
               ),
               Switch(
@@ -2460,19 +2576,19 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
             ],
           ),
           if (hasPerf) ...[
-            const SizedBox(height: 8),
+            SizedBox(height: isCompact ? 5 : 8),
             // Row 2: Perforation Pitch Presets (50, 75, 80, 100, 150 mm)
             Row(
               children: [
                 Expanded(
                   child: Text(
                     'Pitch (Center-to-Center)',
-                    style: TextStyle(fontSize: 11.0, fontWeight: FontWeight.w600, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                    style: TextStyle(fontSize: isCompact ? 9.5 : 11.0, fontWeight: FontWeight.w600, color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
                   ),
                 ),
                 Text(
                   '${curPitch.toStringAsFixed(0)} mm',
-                  style: const TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
+                  style: TextStyle(fontSize: isCompact ? 10.5 : 12.0, fontWeight: FontWeight.bold, color: const Color(0xFF059669)),
                 ),
               ],
             ),
@@ -2488,7 +2604,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                         onTap: () => _updateParam('perforation_pitch', pitchPreset),
                         borderRadius: BorderRadius.circular(4),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 5.5),
+                          padding: EdgeInsets.symmetric(vertical: isCompact ? 3.5 : 5.5),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: (curPitch - pitchPreset).abs() < 1e-3
@@ -2505,7 +2621,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                           child: Text(
                             pitchPreset.toStringAsFixed(0),
                             style: TextStyle(
-                              fontSize: 10.5,
+                              fontSize: isCompact ? 9.0 : 10.5,
                               fontWeight: (curPitch - pitchPreset).abs() < 1e-3 ? FontWeight.bold : FontWeight.w600,
                               color: (curPitch - pitchPreset).abs() < 1e-3
                                   ? const Color(0xFF059669)
@@ -2780,6 +2896,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     required VoidCallback onTap,
   }) {
     final isLight = widget.isLightTheme;
+    final isCompact = widget.viewModel?.isCompactMode ?? false;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -2787,7 +2904,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         borderRadius: BorderRadius.circular(6),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: isCompact ? 7 : 10, vertical: isCompact ? 5 : 8),
           decoration: BoxDecoration(
             gradient: isSelected
                 ? const LinearGradient(colors: [Color(0xFF0284C7), Color(0xFF0369A1)], begin: Alignment.topLeft, end: Alignment.bottomRight)
@@ -2805,13 +2922,13 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
             children: [
               Row(
                 children: [
-                  Icon(icon, size: 16, color: isSelected ? Colors.white : const Color(0xFF0284C7)),
-                  const SizedBox(width: 6),
+                  Icon(icon, size: isCompact ? 14 : 16, color: isSelected ? Colors.white : const Color(0xFF0284C7)),
+                  SizedBox(width: isCompact ? 4 : 6),
                   Expanded(
                     child: Text(
                       title,
                       style: TextStyle(
-                        fontSize: 12.0,
+                        fontSize: isCompact ? 10.0 : 12.0,
                         fontWeight: FontWeight.bold,
                         color: isSelected ? Colors.white : (isLight ? const Color(0xFF0F172A) : Colors.white),
                       ),
@@ -2819,14 +2936,14 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (isSelected) const Icon(Icons.check_circle, size: 14, color: Colors.white),
+                  if (isSelected) Icon(Icons.check_circle, size: isCompact ? 12 : 14, color: Colors.white),
                 ],
               ),
-              const SizedBox(height: 3),
+              SizedBox(height: isCompact ? 2 : 3),
               Text(
                 subtitle,
                 style: TextStyle(
-                  fontSize: 9.5,
+                  fontSize: isCompact ? 8.5 : 9.5,
                   fontWeight: FontWeight.w500,
                   color: isSelected ? Colors.white.withValues(alpha: 0.85) : (isLight ? const Color(0xFF64748B) : Colors.white60),
                 ),
@@ -3148,143 +3265,391 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
             ],
           ),
           const SizedBox(height: 8),
-          // 3D Shader Material Preset link row
-          Builder(builder: (ctx) {
-            final activeSettings = widget.viewModel?.graphicsPreferences.materialSettings ??
-                CadMaterialSettings.preset(CadMaterialSettings.presetFromMaterialGrade(_currentMaterial));
-            final preset = activeSettings.preset;
 
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-              decoration: BoxDecoration(
-                color: isLight ? Colors.white : const Color(0xFF1E293B).withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
-                  width: 0.8,
+          // Secondary Paint Coat (PC / EX) Section
+          _buildSecondaryPaintCoatSection(),
+
+          const SizedBox(height: 8),
+
+          // Active 3D Render Status Row
+          _buildActiveShaderStatusRow(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSecondaryPaintCoatSection() {
+    final isLight = widget.isLightTheme;
+    final paint = _activePaintCoat;
+    final isPainted = paint.isPainted;
+
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: isLight ? const Color(0xFFF1F5F9).withValues(alpha: 0.6) : const Color(0xFF1E293B).withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(
+          color: isPainted
+              ? (isLight ? const Color(0xFF0284C7).withValues(alpha: 0.4) : const Color(0xFF38BDF8).withValues(alpha: 0.4))
+              : (isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
+          width: 0.8,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.format_paint,
+                size: 13,
+                color: isPainted ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'Secondary Coat:',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.bold,
+                  color: isLight ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                 ),
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: activeSettings.baseColor,
-                      border: Border.all(
-                        color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
-                        width: 1.0,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '3D Shader:',
-                    style: TextStyle(
-                      fontSize: 10.0,
-                      fontWeight: FontWeight.w700,
-                      color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text(
-                      preset.label,
-                      style: TextStyle(
-                        fontSize: 10.0,
-                        fontWeight: FontWeight.w600,
-                        color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (activeSettings.useSpangles) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(color: Colors.amber[700]!, width: 0.5),
-                      ),
-                      child: Text(
-                        'SPANGLE',
-                        style: TextStyle(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w800,
-                          color: isLight ? Colors.amber[900] : Colors.amber[300],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                  ] else if (activeSettings.isPlastic) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(color: Colors.teal[600]!, width: 0.5),
-                      ),
-                      child: Text(
-                        'DIELECTRIC',
-                        style: TextStyle(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w800,
-                          color: isLight ? Colors.teal[900] : Colors.teal[300],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
+              const SizedBox(width: 6),
+              // Paint Type Selector Chips
+              Expanded(
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    _buildPaintTypeChip(PaintCoatType.none, 'None'),
+                    _buildPaintTypeChip(PaintCoatType.powderCoat, 'Powder (PC)'),
+                    _buildPaintTypeChip(PaintCoatType.epoxy, 'Epoxy (EX)'),
                   ],
-                  PopupMenuButton<CadMaterialPresetType>(
-                    tooltip: 'Change 3D Shader Preset',
-                    onSelected: (val) => _updateShaderPreset(val),
-                    itemBuilder: (ctx) => [
-                      for (final p in CadMaterialPresetType.values)
-                        PopupMenuItem(
-                          value: p,
-                          height: 28,
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: CadMaterialSettings.preset(p).baseColor,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                p.label,
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: p == preset ? FontWeight.bold : FontWeight.w500,
-                                  color: const Color(0xFF1E293B),
-                                ),
-                              ),
-                            ],
+                ),
+              ),
+            ],
+          ),
+          if (isPainted) ...[
+            const SizedBox(height: 6),
+            // Active RAL Color + Quick Swatches Row
+            Row(
+              children: [
+                // Active Color indicator & full RAL popup trigger
+                PopupMenuButton<RalColor>(
+                  tooltip: 'Select Universal RAL Color',
+                  onSelected: (ral) => _updateRalColor(ral),
+                  itemBuilder: (ctx) => [
+                    for (final category in ['Grey', 'White', 'Black', 'Blue', 'Yellow', 'Red', 'Green', 'Metallic', 'Standard']) ...[
+                      if (RalColor.classicColors.any((c) => c.category == category)) ...[
+                        PopupMenuItem<RalColor>(
+                          enabled: false,
+                          height: 22,
+                          child: Text(
+                            category.toUpperCase(),
+                            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
                           ),
                         ),
+                        for (final c in RalColor.classicColors.where((c) => c.category == category))
+                          PopupMenuItem<RalColor>(
+                            value: c,
+                            height: 28,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: c.color,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.black26, width: 0.5),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  c.displayName,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: c == paint.ralColor ? FontWeight.bold : FontWeight.w500,
+                                    color: const Color(0xFF1E293B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ],
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF334155),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Icon(
-                        Icons.tune,
-                        size: 13,
-                        color: isLight ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
-                      ),
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isLight ? Colors.white : const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFF0284C7), width: 1.0),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: paint.ralColor.color,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.black26, width: 0.5),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          paint.ralColor.code,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isLight ? const Color(0xFF0284C7) : const Color(0xFF38BDF8),
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down, size: 14, color: Color(0xFF0284C7)),
+                      ],
                     ),
                   ),
-                ],
+                ),
+                const SizedBox(width: 6),
+                // Quick Universal RAL Color Palette Swatches
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final ral in RalColor.topCMSColors) ...[
+                          Tooltip(
+                            message: ral.displayName,
+                            child: InkWell(
+                              onTap: () => _updateRalColor(ral),
+                              borderRadius: BorderRadius.circular(9),
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 2),
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: ral.color,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: ral == paint.ralColor
+                                        ? const Color(0xFF0284C7)
+                                        : (isLight ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+                                    width: ral == paint.ralColor ? 2.0 : 0.8,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaintTypeChip(PaintCoatType type, String label) {
+    final isSelected = _activePaintCoat.type == type;
+    final isLight = widget.isLightTheme;
+    final isCompact = widget.viewModel?.isCompactMode ?? false;
+
+    return InkWell(
+      onTap: () => _updatePaintType(type),
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: isCompact ? 4 : 5, vertical: isCompact ? 1.5 : 2),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (type == PaintCoatType.none
+                  ? const Color(0xFF64748B).withValues(alpha: 0.2)
+                  : const Color(0xFF0284C7).withValues(alpha: 0.2))
+              : (isLight ? Colors.white : const Color(0xFF0F172A)),
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(
+            color: isSelected
+                ? (type == PaintCoatType.none ? const Color(0xFF64748B) : const Color(0xFF0284C7))
+                : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+            width: isSelected ? 1.0 : 0.6,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: isCompact ? 8.5 : 9.5,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? (type == PaintCoatType.none
+                    ? (isLight ? const Color(0xFF334155) : const Color(0xFFE2E8F0))
+                    : const Color(0xFF0284C7))
+                : (isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveShaderStatusRow() {
+    final isLight = widget.isLightTheme;
+    final activeSettings = widget.viewModel?.graphicsPreferences.materialSettings ??
+        CadMaterialSettings.preset(CadMaterialSettings.presetFromMaterialGrade(_currentMaterial));
+    final paint = _activePaintCoat;
+    final isPainted = paint.isPainted;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+      decoration: BoxDecoration(
+        color: isLight ? Colors.white : const Color(0xFF1E293B).withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: isLight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: activeSettings.baseColor,
+              border: Border.all(
+                color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                width: 1.0,
               ),
-            );
-          }),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isPainted ? '3D Render (Top Coat):' : '3D Render (Primary):',
+            style: TextStyle(
+              fontSize: 10.0,
+              fontWeight: FontWeight.w700,
+              color: isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              isPainted
+                  ? '${paint.type.displayName} [${paint.ralColor.displayName}] over $_currentMaterial'
+                  : '${activeSettings.preset.label} [$_currentMaterial]',
+              style: TextStyle(
+                fontSize: 10.0,
+                fontWeight: FontWeight.w600,
+                color: isLight ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (activeSettings.useSpangles && !isPainted) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: Colors.amber[700]!, width: 0.5),
+              ),
+              child: Text(
+                'SPANGLE',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800,
+                  color: isLight ? Colors.amber[900] : Colors.amber[300],
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ] else if (isPainted) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: Colors.cyan.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: Colors.cyan[700]!, width: 0.5),
+              ),
+              child: Text(
+                'PAINTED',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800,
+                  color: isLight ? Colors.cyan[900] : Colors.cyan[300],
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ] else if (activeSettings.isPlastic) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: Colors.teal.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: Colors.teal[600]!, width: 0.5),
+              ),
+              child: Text(
+                'DIELECTRIC',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800,
+                  color: isLight ? Colors.teal[900] : Colors.teal[300],
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
+          PopupMenuButton<CadMaterialPresetType>(
+            tooltip: 'Change 3D Shader Preset',
+            onSelected: (val) => _updateShaderPreset(val),
+            itemBuilder: (ctx) => [
+              for (final p in CadMaterialPresetType.values)
+                PopupMenuItem(
+                  value: p,
+                  height: 28,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: CadMaterialSettings.preset(p).baseColor,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        p.label,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: p == activeSettings.preset ? FontWeight.bold : FontWeight.w500,
+                          color: const Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF334155),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Icon(
+                Icons.tune,
+                size: 13,
+                color: isLight ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -3293,6 +3658,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   // --- Section 7: Quick Dimension Presets ---
   Widget _buildPresetsBar() {
     final isLight = widget.isLightTheme;
+    final isCompact = widget.viewModel?.isCompactMode ?? false;
     final presets = ['50×50', '100×50', '100×100', '150×100', '200×100', '300×100'];
     final curW = _currentParams['width'] ?? 100.0;
     final curH = _currentParams['height'] ?? 50.0;
@@ -3302,12 +3668,12 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       children: [
         Row(
           children: [
-            Icon(Icons.dashboard_customize, size: 14, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+            Icon(Icons.dashboard_customize, size: isCompact ? 12 : 14, color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
             const SizedBox(width: 4),
             Text(
               'STANDARD NEMA / BS PRESETS',
               style: TextStyle(
-                fontSize: 10.5,
+                fontSize: isCompact ? 9.0 : 10.5,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0.4,
                 color: isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
@@ -3317,8 +3683,8 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         ),
         const SizedBox(height: 5),
         Wrap(
-          spacing: 5,
-          runSpacing: 5,
+          spacing: isCompact ? 4 : 5,
+          runSpacing: isCompact ? 4 : 5,
           children: presets.map((ps) {
             final parts = ps.split('×');
             final pw = double.tryParse(parts[0]) ?? 100.0;
@@ -3344,7 +3710,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
               borderRadius: BorderRadius.circular(4),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
+                padding: EdgeInsets.symmetric(horizontal: isCompact ? 6 : 8, vertical: isCompact ? 3.0 : 4.5),
                 decoration: BoxDecoration(
                   color: isMatch ? const Color(0xFF0284C7).withValues(alpha: 0.2) : (isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B)),
                   borderRadius: BorderRadius.circular(4),
@@ -3356,7 +3722,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
                 child: Text(
                   ps,
                   style: TextStyle(
-                    fontSize: 11.0,
+                    fontSize: isCompact ? 9.5 : 11.0,
                     fontWeight: isMatch ? FontWeight.bold : FontWeight.w600,
                     color: isMatch ? const Color(0xFF0284C7) : (isLight ? const Color(0xFF1E293B) : Colors.white),
                   ),
@@ -3412,8 +3778,9 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
     // 2. ALWAYS calculate live net weight dynamically from active area, active thickness, and active material density!
     final netWeightKg = blankAreaM2 * (thickness / 1000.0) * density;
 
+    final isCompact = widget.viewModel?.isCompactMode ?? false;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: isCompact ? 6 : 10, vertical: isCompact ? 5 : 8),
       decoration: BoxDecoration(
         color: const Color(0xFF0A0F1D),
         borderRadius: BorderRadius.circular(6),
@@ -3424,9 +3791,9 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _buildTakeoffItem('BLANK AREA', '${blankAreaM2.toStringAsFixed(3)} m²'),
-          Container(width: 1, height: 26, color: const Color(0xFF1E293B)),
+          Container(width: 1, height: isCompact ? 20 : 26, color: const Color(0xFF1E293B)),
           _buildTakeoffItem('NET WEIGHT', '${netWeightKg.toStringAsFixed(2)} kg'),
-          Container(width: 1, height: 26, color: const Color(0xFF1E293B)),
+          Container(width: 1, height: isCompact ? 20 : 26, color: const Color(0xFF1E293B)),
           _buildTakeoffItem('GAUGE', '${thickness.toStringAsFixed(2)} mm'),
         ],
       ),
@@ -3434,17 +3801,18 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   }
 
   Widget _buildTakeoffItem(String label, String value) {
+    final isCompact = widget.viewModel?.isCompactMode ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 9.5, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold, letterSpacing: 0.5),
+          style: TextStyle(fontSize: isCompact ? 7.5 : 9.5, color: const Color(0xFF94A3B8), fontWeight: FontWeight.bold, letterSpacing: 0.5),
         ),
-        const SizedBox(height: 2),
+        SizedBox(height: isCompact ? 1 : 2),
         Text(
           value,
-          style: const TextStyle(fontSize: 13.0, color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+          style: TextStyle(fontSize: isCompact ? 10.5 : 13.0, color: const Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontFamily: 'monospace'),
         ),
       ],
     );

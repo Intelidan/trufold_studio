@@ -6,6 +6,7 @@ import 'package:trufold_studio/sheet_metal_studio/viewmodels/sheet_metal_studio_
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/viewport_3d/flutter_scene_viewport_widget.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 import 'package:trufold_studio/sheet_metal_studio/engine/flutter_scene_cad_mesh_builder.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/cad_polygon_triangulator.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/dsf_document.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cnc_punch_primitive.dart';
@@ -450,9 +451,9 @@ void main() {
 
       // 5. Linear RGB Vector conversion
       final vec = hdg.toLinearRgbVector4();
-      expect(vec.x, closeTo(hdg.baseColor.red / 255.0, 1e-4));
-      expect(vec.y, closeTo(hdg.baseColor.green / 255.0, 1e-4));
-      expect(vec.z, closeTo(hdg.baseColor.blue / 255.0, 1e-4));
+      expect(vec.x, closeTo(hdg.baseColor.r, 1e-4));
+      expect(vec.y, closeTo(hdg.baseColor.g, 1e-4));
+      expect(vec.z, closeTo(hdg.baseColor.b, 1e-4));
       expect(vec.w, equals(1.0));
     });
 
@@ -484,6 +485,229 @@ void main() {
         materialSettings: CadMaterialSettings.preset(CadMaterialPresetType.plastic),
       );
       expect(vm.document.material.materialGrade, contains('Plastic'));
+    });
+
+    test('PaintCoatSpecification and RalColor models behave correctly', () {
+      final ral7035 = RalColor.fromCode('RAL 7035');
+      expect(ral7035, isNotNull);
+      expect(ral7035.name, equals('Light Grey'));
+      expect(RalColor.topCMSColors.isNotEmpty, isTrue);
+      expect(RalColor.topCMSColors.any((c) => c.code == 'RAL 7035'), isTrue);
+
+      const unpainted = PaintCoatSpecification();
+      expect(unpainted.isPainted, isFalse);
+      expect(unpainted.displayLabel, equals('None (Unpainted Mill/Galv)'));
+
+      const powder = PaintCoatSpecification(
+        type: PaintCoatType.powderCoat,
+        ralColor: RalColor.ral7035,
+      );
+      expect(powder.isPainted, isTrue);
+      expect(powder.displayLabel, contains('Powder Coated [RAL 7035 Light Grey]'));
+
+      final powderCadSettings = powder.toCadMaterialSettings();
+      expect(powderCadSettings.preset, equals(CadMaterialPresetType.paint));
+      expect(powderCadSettings.isPlastic, isTrue);
+      expect(powderCadSettings.useSpangles, isFalse);
+      expect(powderCadSettings.roughness, closeTo(0.30, 0.01));
+      expect(powderCadSettings.baseColor, equals(RalColor.ral7035.color));
+
+      const epoxy = PaintCoatSpecification(
+        type: PaintCoatType.epoxy,
+        ralColor: RalColor.ral5012,
+        roughness: 0.20,
+      );
+      expect(epoxy.isPainted, isTrue);
+      expect(epoxy.displayLabel, contains('Epoxy Painted [RAL 5012 Light Blue]'));
+      final epoxyCadSettings = epoxy.toCadMaterialSettings();
+      expect(epoxyCadSettings.roughness, closeTo(0.20, 0.01));
+
+      // Serialization roundtrip
+      final json = powder.toJson();
+      final restored = PaintCoatSpecification.fromJson(json);
+      expect(restored.type, equals(PaintCoatType.powderCoat));
+      expect(restored.ralColor.code, equals('RAL 7035'));
+    });
+
+    test('ViewModel switches 3D material to secondary paint coat and reverts on removal', () {
+      final vm = SheetMetalStudioViewModel();
+
+      // Start with HDG Hot Dip Galvanized
+      vm.setMaterialGrade('HDG Hot Dip Galvanized');
+      expect(vm.graphicsPreferences.materialSettings.preset, equals(CadMaterialPresetType.hdg));
+      expect(vm.graphicsPreferences.materialSettings.useSpangles, isTrue);
+      expect(vm.paintCoat.isPainted, isFalse);
+
+      // Apply Powder Coat paint
+      vm.setPaintCoatType(PaintCoatType.powderCoat);
+      expect(vm.paintCoat.isPainted, isTrue);
+      expect(vm.paintCoat.type, equals(PaintCoatType.powderCoat));
+      // Base substrate material grade is retained in document
+      expect(vm.document.material.materialGrade, contains('HDG'));
+      // 3D graphics material is replaced by paint preset
+      expect(vm.graphicsPreferences.materialSettings.preset, equals(CadMaterialPresetType.paint));
+      expect(vm.graphicsPreferences.materialSettings.useSpangles, isFalse);
+      expect(vm.graphicsPreferences.materialSettings.isPlastic, isTrue);
+      expect(vm.graphicsPreferences.materialSettings.baseColor, equals(RalColor.ral7035.color));
+
+      // Change paint color to RAL 5012 Light Blue
+      vm.setPaintRalColor(RalColor.ral5012);
+      expect(vm.paintCoat.ralColor, equals(RalColor.ral5012));
+      expect(vm.graphicsPreferences.materialSettings.baseColor, equals(RalColor.ral5012.color));
+
+      // Revert paint to none -> 3D material restores HDG substrate
+      vm.setPaintCoatType(PaintCoatType.none);
+      expect(vm.paintCoat.isPainted, isFalse);
+      expect(vm.graphicsPreferences.materialSettings.preset, equals(CadMaterialPresetType.hdg));
+      expect(vm.graphicsPreferences.materialSettings.useSpangles, isTrue);
+
+      // Now set base material to Pre-Galvanized DX51D (GI)
+      vm.setMaterialGrade('Pre-Galvanized DX51D');
+      expect(vm.graphicsPreferences.materialSettings.preset, equals(CadMaterialPresetType.pgi));
+      expect(vm.paintCoat.isPainted, isFalse);
+
+      // Apply Epoxy paint over GI
+      vm.setPaintCoatType(PaintCoatType.epoxy);
+      expect(vm.paintCoat.isPainted, isTrue);
+      expect(vm.graphicsPreferences.materialSettings.preset, equals(CadMaterialPresetType.paint));
+
+      // Remove paint -> 3D material restores GI substrate
+      vm.setPaintCoatType(PaintCoatType.none);
+      expect(vm.graphicsPreferences.materialSettings.preset, equals(CadMaterialPresetType.pgi));
+    });
+
+    test('DSF file format incorporates secondary paintCoat with backward compatibility', () {
+      // 1. Create a DsfDocument with a Powder Coated top coat over Pre-Galvanized DX51D
+      const paintedMaterial = SheetMetalMaterial(
+        thicknessMm: 1.5,
+        materialGrade: 'Pre-Galvanized DX51D',
+        materialType: SheetMaterialType.mildSteel,
+        finish: SurfaceFinish.electroGalvanized,
+        paintCoat: PaintCoatSpecification(
+          type: PaintCoatType.powderCoat,
+          ralColor: RalColor.ral7035,
+          roughness: 0.30,
+        ),
+      );
+
+      final originalDoc = DsfDocument.sampleCableTray(material: paintedMaterial);
+
+      // 2. Serialize to DSF JSON structure
+      final dsfJson = originalDoc.toJson();
+      expect(dsfJson.containsKey('material'), isTrue);
+
+      final materialJson = dsfJson['material'] as Map<String, dynamic>;
+      expect(materialJson.containsKey('paintCoat'), isTrue);
+
+      final paintCoatJson = materialJson['paintCoat'] as Map<String, dynamic>;
+      expect(paintCoatJson['type'], equals('powderCoat'));
+      expect(paintCoatJson['roughness'], equals(0.30));
+
+      final ralJson = paintCoatJson['ralColor'] as Map<String, dynamic>;
+      expect(ralJson['code'], equals('RAL 7035'));
+      expect(ralJson['name'], equals('Light Grey'));
+      expect(ralJson['category'], equals('Grey'));
+
+      // 3. Roundtrip through JSON String (file write/read simulation)
+      final jsonString = originalDoc.toJsonString();
+      final loadedDoc = DsfDocument.parseJsonString(jsonString);
+
+      expect(loadedDoc.material.paintCoat.isPainted, isTrue);
+      expect(loadedDoc.material.paintCoat.type, equals(PaintCoatType.powderCoat));
+      expect(loadedDoc.material.paintCoat.ralColor.code, equals('RAL 7035'));
+      expect(loadedDoc.material.paintCoat.ralColor.name, equals('Light Grey'));
+      expect(loadedDoc.material.paintCoat.roughness, closeTo(0.30, 1e-4));
+      expect(loadedDoc.material.materialGrade, equals('Pre-Galvanized DX51D'));
+
+      // 4. Backward Compatibility: Legacy DSF JSON without 'paintCoat' property
+      final legacyJson = Map<String, dynamic>.from(dsfJson);
+      final legacyMaterialJson = Map<String, dynamic>.from(materialJson)..remove('paintCoat');
+      legacyJson['material'] = legacyMaterialJson;
+
+      final legacyDoc = DsfDocument.fromJson(legacyJson);
+      expect(legacyDoc.material.paintCoat.isPainted, isFalse);
+      expect(legacyDoc.material.paintCoat.type, equals(PaintCoatType.none));
+      expect(legacyDoc.material.paintCoat.displayLabel, contains('None'));
+
+      // 5. LadderAssemblyParameters serialization roundtrip
+      const ladderParams = LadderAssemblyParameters(
+        materialName: 'HDG Hot Dip Galvanized',
+        thickness: 2.0,
+        paintCoat: PaintCoatSpecification(
+          type: PaintCoatType.epoxy,
+          ralColor: RalColor.ral5012,
+          roughness: 0.20,
+        ),
+      );
+
+      final ladderJson = ladderParams.toJson();
+      expect(ladderJson.containsKey('paintCoat'), isTrue);
+
+      final restoredLadder = LadderAssemblyParameters.fromJson(ladderJson);
+      expect(restoredLadder.paintCoat.isPainted, isTrue);
+      expect(restoredLadder.paintCoat.type, equals(PaintCoatType.epoxy));
+      expect(restoredLadder.paintCoat.ralColor.code, equals('RAL 5012'));
+    });
+
+    test('CadPolygonTriangulator fast-path ensures correct counter-clockwise winding against normal', () {
+      final builder = GeometryBuilder();
+
+      // Reversed/clockwise quad vertices relative to +Z normal (0, 0, 1)
+      final reversedVertices = [
+        const CadPoint3D(0.0, 0.0, 10.0),
+        const CadPoint3D(0.0, 30.0, 10.0),
+        const CadPoint3D(50.0, 30.0, 10.0),
+        const CadPoint3D(50.0, 0.0, 10.0),
+      ];
+
+      CadPolygonTriangulator.triangulateToBuilder(
+        outerVertices: reversedVertices,
+        holes: const [],
+        normal: const CadPoint3D(0.0, 0.0, 1.0),
+        pivot: const CadPoint3D(0.0, 0.0, 0.0),
+        builder: builder,
+      );
+
+      expect(builder.triangleCount, equals(2));
+      expect(builder.vertexCount, greaterThanOrEqualTo(4));
+    });
+
+    test('Fold engine constructs solid model with sheet thickness for painted metal', () {
+      final controller = VectorCadController();
+      final baseDoc = controller.toDsfDocument();
+      final doc = baseDoc.copyWith(
+        material: const SheetMetalMaterial(
+          materialGrade: 'GI Galvanized Iron',
+          thicknessMm: 2.0,
+          paintCoat: PaintCoatSpecification(
+            type: PaintCoatType.powderCoat,
+            ralColor: RalColor.ral7035,
+            roughness: 0.30,
+          ),
+        ),
+      );
+
+      final foldedMesh = KinematicFoldEngine.foldDocument(doc, foldProgress: 1.0);
+      expect(foldedMesh.thicknessPolygons, isNotEmpty);
+      expect(foldedMesh.allPolygons.any((p) => p.faceId.endsWith('_BOT')), isTrue);
+      expect(foldedMesh.allPolygons.any((p) => p.faceId.startsWith('RIM_')), isTrue);
+
+      final builder = GeometryBuilder();
+      for (final poly in foldedMesh.allPolygons) {
+        CadPolygonTriangulator.triangulateToBuilder(
+          outerVertices: poly.vertices,
+          holes: poly.holes,
+          normal: poly.normal,
+          pivot: const CadPoint3D(0, 0, 0),
+          builder: builder,
+        );
+      }
+      expect(builder.triangleCount, greaterThan(0));
+      expect(builder.vertexCount, greaterThan(0));
+
+      final prefs = doc.material.paintCoat.toCadMaterialSettings();
+      expect(prefs.baseColor, equals(RalColor.ral7035.color));
+      expect(prefs.isPlastic, isTrue);
     });
   });
 }

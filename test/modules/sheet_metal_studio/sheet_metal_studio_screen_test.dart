@@ -933,5 +933,104 @@ void main() {
       vm.setCurveResolution(4);
       expect(vm.curveResolution, equals(12));
     });
+
+    test('33. ViewportLayoutMode, Ribbon collapse, and Compact UI Scale state transitions', () {
+      final vm = SheetMetalStudioViewModel();
+
+      // 1. Initial defaults
+      expect(vm.viewportLayoutMode, equals(ViewportLayoutMode.split));
+      expect(vm.viewportLayoutMode.isSplit, isTrue);
+      expect(vm.viewportLayoutMode.is2DOnly, isFalse);
+      expect(vm.viewportLayoutMode.is3DOnly, isFalse);
+      expect(vm.isRibbonCollapsed, isFalse);
+      expect(vm.uiScaleFactor, equals(1.0));
+      expect(vm.isCompactMode, isFalse);
+
+      // 2. Viewport layout switching
+      vm.setViewportLayoutMode(ViewportLayoutMode.canvas2D);
+      expect(vm.viewportLayoutMode, equals(ViewportLayoutMode.canvas2D));
+      expect(vm.viewportLayoutMode.is2DOnly, isTrue);
+      expect(vm.viewportLayoutMode.isSplit, isFalse);
+
+      vm.setViewportLayoutMode(ViewportLayoutMode.viewport3D);
+      expect(vm.viewportLayoutMode, equals(ViewportLayoutMode.viewport3D));
+      expect(vm.viewportLayoutMode.is3DOnly, isTrue);
+      expect(vm.viewportLayoutMode.is2DOnly, isFalse);
+
+      vm.setViewportLayoutMode(ViewportLayoutMode.split);
+      expect(vm.viewportLayoutMode.isSplit, isTrue);
+
+      // 3. Ribbon minimize and expand
+      vm.toggleRibbonCollapsed();
+      expect(vm.isRibbonCollapsed, isTrue);
+
+      vm.toggleRibbonCollapsed();
+      expect(vm.isRibbonCollapsed, isFalse);
+
+      vm.setRibbonCollapsed(true);
+      expect(vm.isRibbonCollapsed, isTrue);
+
+      // 4. Compact laptop UI scale factor
+      vm.toggleCompactMode();
+      expect(vm.isCompactMode, isTrue);
+      expect(vm.uiScaleFactor, closeTo(0.85, 1e-3));
+
+      vm.toggleCompactMode();
+      expect(vm.isCompactMode, isFalse);
+      expect(vm.uiScaleFactor, equals(1.0));
+
+      vm.setUiScaleFactor(0.80);
+      expect(vm.uiScaleFactor, closeTo(0.80, 1e-3));
+      expect(vm.isCompactMode, isTrue);
+    });
+
+    test('34. Toolbar dock positions (top, left, right, detached) and fold slider collapse', () {
+      final vm = SheetMetalStudioViewModel();
+
+      // 1. Initial Toolbar dock state
+      expect(vm.toolbarDockPosition, equals(ToolbarDockPosition.top));
+      expect(vm.toolbarDockPosition.isTop, isTrue);
+      expect(vm.toolbarDockPosition.isVertical, isFalse);
+      expect(vm.toolbarDockPosition.isLeft, isFalse);
+      expect(vm.toolbarDockPosition.isRight, isFalse);
+      expect(vm.toolbarDockPosition.isDetached, isFalse);
+
+      // 2. Dock Left
+      vm.setToolbarDockPosition(ToolbarDockPosition.left);
+      expect(vm.toolbarDockPosition, equals(ToolbarDockPosition.left));
+      expect(vm.toolbarDockPosition.isLeft, isTrue);
+      expect(vm.toolbarDockPosition.isVertical, isTrue);
+      expect(vm.toolbarDockPosition.isTop, isFalse);
+
+      // 3. Dock Right
+      vm.setToolbarDockPosition(ToolbarDockPosition.right);
+      expect(vm.toolbarDockPosition, equals(ToolbarDockPosition.right));
+      expect(vm.toolbarDockPosition.isRight, isTrue);
+      expect(vm.toolbarDockPosition.isVertical, isTrue);
+
+      // 4. Detached (Floating window)
+      vm.setToolbarDockPosition(ToolbarDockPosition.detached);
+      expect(vm.toolbarDockPosition, equals(ToolbarDockPosition.detached));
+      expect(vm.toolbarDockPosition.isDetached, isTrue);
+      expect(vm.toolbarDockPosition.isVertical, isFalse);
+
+      // Floating position update
+      vm.setFloatingToolbarPosition(const Offset(150, 220));
+      expect(vm.floatingToolbarPosition, equals(const Offset(150, 220)));
+
+      // Dock back to Top
+      vm.setToolbarDockPosition(ToolbarDockPosition.top);
+      expect(vm.toolbarDockPosition.isTop, isTrue);
+
+      // 5. Fold progress slider collapse state
+      expect(vm.isFoldSliderCollapsed, isFalse);
+      vm.toggleFoldSliderCollapsed();
+      expect(vm.isFoldSliderCollapsed, isTrue);
+      vm.toggleFoldSliderCollapsed();
+      expect(vm.isFoldSliderCollapsed, isFalse);
+      vm.setFoldSliderCollapsed(true);
+      expect(vm.isFoldSliderCollapsed, isTrue);
+    });
   });
 }
+

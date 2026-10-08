@@ -1,3 +1,5 @@
+import '../paint_coat_specification.dart';
+
 /// Manufacturing method for joining each rung to the side rails.
 enum LadderRungJointMethod {
   directInsideWeld,
@@ -94,6 +96,7 @@ class LadderAssemblyParameters {
   final double coverHeight; // default 12.0mm
   final bool includeSpliceHoles;
   final String materialName;
+  final PaintCoatSpecification paintCoat;
 
   const LadderAssemblyParameters({
     this.width = 600.0,
@@ -113,6 +116,7 @@ class LadderAssemblyParameters {
     this.coverHeight = 12.0,
     this.includeSpliceHoles = true,
     this.materialName = 'HDG',
+    this.paintCoat = const PaintCoatSpecification(),
   });
 
   /// Calculates the physical cut length of a straight C-channel rung blank.
@@ -153,6 +157,7 @@ class LadderAssemblyParameters {
     double? coverHeight,
     bool? includeSpliceHoles,
     String? materialName,
+    PaintCoatSpecification? paintCoat,
   }) {
     return LadderAssemblyParameters(
       width: width ?? this.width,
@@ -172,6 +177,7 @@ class LadderAssemblyParameters {
       coverHeight: coverHeight ?? this.coverHeight,
       includeSpliceHoles: includeSpliceHoles ?? this.includeSpliceHoles,
       materialName: materialName ?? this.materialName,
+      paintCoat: paintCoat ?? this.paintCoat,
     );
   }
 
@@ -194,6 +200,7 @@ class LadderAssemblyParameters {
       'coverHeight': coverHeight,
       'includeSpliceHoles': includeSpliceHoles,
       'materialName': materialName,
+      'paintCoat': paintCoat.toJson(),
     };
   }
 
@@ -217,6 +224,9 @@ class LadderAssemblyParameters {
       coverHeight: (json['coverHeight'] as num?)?.toDouble() ?? 12.0,
       includeSpliceHoles: json['includeSpliceHoles'] as bool? ?? true,
       materialName: json['materialName'] as String? ?? 'HDG',
+      paintCoat: json['paintCoat'] != null
+          ? PaintCoatSpecification.fromJson(json['paintCoat'] as Map<String, dynamic>)
+          : const PaintCoatSpecification(),
     );
   }
 }

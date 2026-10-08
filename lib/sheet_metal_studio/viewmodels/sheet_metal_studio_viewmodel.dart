@@ -353,6 +353,13 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   double _foldProgress = 1.0; // 0.0 (Flat) to 1.0 (Folded)
 
   double _splitRatio = 0.50; // 50% 2D canvas, 50% 3D viewport
+  ViewportLayoutMode _viewportLayoutMode = ViewportLayoutMode.split;
+  bool _isRibbonCollapsed = false;
+  UiDensityMode _uiDensityMode = UiDensityMode.auto;
+  double _uiScaleFactor = 1.0;
+  bool _isFoldSliderCollapsed = false;
+  ToolbarDockPosition _toolbarDockPosition = ToolbarDockPosition.top;
+  Offset _floatingToolbarPosition = const Offset(60, 60);
 
   StudioToolMode _toolMode = StudioToolMode.select;
 
@@ -426,8 +433,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   bool get isDynamicInputActive => dynamicInputState.hasValue;
 
   bool get isDrawingInProgress =>
-      (_toolMode != StudioToolMode.select && _toolMode != StudioToolMode.pan) &&
-      (_pendingBendStart != null || _pendingMultiPoints.isNotEmpty);
+      (_toolMode != StudioToolMode.select && _toolMode != StudioToolMode.pan) && (_pendingBendStart != null || _pendingMultiPoints.isNotEmpty);
 
   String? _pendingDimensionEntityAId;
 
@@ -498,7 +504,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   bool _isPlayingAnimation = false;
 
-  bool _isPropertyInspectorOpen = true;
+  bool _isPropertyInspectorOpen = false; // Auto-hide on app start to keep canvas clear
 
   bool _isFittingInspectorOpen = false;
 
@@ -868,7 +874,9 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     final cmsTemplate = _document.metadata['cmsTemplate'] as Map<String, dynamic>?;
     final int portCount = _persistentCmsPorts.isNotEmpty ? _persistentCmsPorts.length : cmsGuidedController.state.discoveredPorts.length;
 
-    final docTypeLower = '${_document.productType} ${_document.itemName} ${_document.metadata['appliedTemplate']} ${_document.metadata['fittingVariant']} ${_document.metadata['variantName']} ${cmsTemplate?['variation']}'.toLowerCase();
+    final docTypeLower =
+        '${_document.productType} ${_document.itemName} ${_document.metadata['appliedTemplate']} ${_document.metadata['fittingVariant']} ${_document.metadata['variantName']} ${cmsTemplate?['variation']}'
+            .toLowerCase();
     final hasUnequalFlag = docTypeLower.contains('unequal');
     bool portsAreUnequal = false;
     if (_persistentCmsPorts.length >= 2) {
@@ -886,12 +894,12 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         (TrayUnequalCrossScaler.isTrayUnequalCross(_document)
             ? CmsProductContract.unequalCross
             : TrayEqualCrossScaler.isTrayEqualCross(_document)
-                ? CmsProductContract.equalCross
-                : TrayUnequalTeeScaler.isTrayUnequalTee(_document)
-                    ? CmsProductContract.unequalTee
-                    : TrayEqualTeeScaler.isTrayEqualTee(_document)
-                        ? CmsProductContract.equalTee
-                        : null) ??
+            ? CmsProductContract.equalCross
+            : TrayUnequalTeeScaler.isTrayUnequalTee(_document)
+            ? CmsProductContract.unequalTee
+            : TrayEqualTeeScaler.isTrayEqualTee(_document)
+            ? CmsProductContract.equalTee
+            : null) ??
         (cmsTemplate != null
             ? CmsProductContract.lookup(cmsTemplate['productType'] as String?, cmsTemplate['variation'] as String? ?? cmsTemplate['variationName'] as String?)
             : null) ??
@@ -913,13 +921,13 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         CmsProductContract.lookup(null, _document.itemName) ??
         (CmsScalingController.isInsideRiserGeometry(_document)
             ? (docTypeLower.contains('90') || _document.bends.where((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0).length >= 2
-                ? CmsProductContract.insideRiser90
-                : CmsProductContract.insideRiser45)
+                  ? CmsProductContract.insideRiser90
+                  : CmsProductContract.insideRiser45)
             : CmsScalingController.isOutsideRiserGeometry(_document)
-                ? (docTypeLower.contains('90') || _document.bends.where((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0).length >= 2
-                    ? CmsProductContract.outsideRiser90
-                    : CmsProductContract.outsideRiser45)
-                : CmsProductContract.bend45);
+            ? (docTypeLower.contains('90') || _document.bends.where((b) => (b.targetAngleDeg.abs() - 45.0).abs() < 15.0).length >= 2
+                  ? CmsProductContract.outsideRiser90
+                  : CmsProductContract.outsideRiser45)
+            : CmsProductContract.bend45);
 
     if ((cmsGuidedController.state.phase == CmsUxPhase.complete || cmsGuidedController.state.discoveredPorts.isNotEmpty) &&
         !_document.metadata.containsKey('cmsTemplate')) {
@@ -939,9 +947,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
           ..remove('width')
           ..remove('height')
           ..removeWhere((k, _) => k.startsWith('port'));
-        baselineDoc = baselineDoc.copyWith(
-          parameters: Map<String, double>.from(baselineDoc.parameters)..addAll(nonGeometricParams),
-        );
+        baselineDoc = baselineDoc.copyWith(parameters: Map<String, double>.from(baselineDoc.parameters)..addAll(nonGeometricParams));
       } catch (_) {
         baselineDoc = _document;
       }
@@ -1124,8 +1130,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         _scalingController!.selectParameter('port1_height');
         _scalingController!.evaluateMorph(value);
         _document.parameters['port1_height'] = value;
-      } else if ((key.endsWith('_width') || (key.startsWith('port') && key.contains('width'))) &&
-          _scalingController!.model.parameters.containsKey('width')) {
+      } else if ((key.endsWith('_width') || (key.startsWith('port') && key.contains('width'))) && _scalingController!.model.parameters.containsKey('width')) {
         _scalingController!.selectParameter('width');
         _scalingController!.evaluateMorph(value);
         _document.parameters['width'] = value;
@@ -1154,14 +1159,10 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
       // Handle reducer alignment live update and sync metadata variantName
       if (key == 'reducer_alignment') {
-        final align = value == 1.0
-            ? ReducerAlignment.left
-            : (value == 2.0 ? ReducerAlignment.right : ReducerAlignment.straight);
+        final align = value == 1.0 ? ReducerAlignment.left : (value == 2.0 ? ReducerAlignment.right : ReducerAlignment.straight);
         _scalingController?.setReducerAlignment(align);
 
-        final variantName = value == 1.0
-            ? 'Left Reducer'
-            : (value == 2.0 ? 'Right Reducer' : 'Reducer (straight)');
+        final variantName = value == 1.0 ? 'Left Reducer' : (value == 2.0 ? 'Right Reducer' : 'Reducer (straight)');
         if (_detectedFittingMetadata != null) {
           _detectedFittingMetadata = _detectedFittingMetadata!.copyWith(variantName: variantName);
           final metaMap = Map<String, dynamic>.from(_document.metadata);
@@ -1177,9 +1178,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
           if (_detectedFittingMetadata != null) {
             updatedBaseMeta['fittingMetadata'] = _detectedFittingMetadata!.toJson();
           }
-          final updatedBase = _scalingController!.baselineDocument.copyWith(
-            metadata: updatedBaseMeta,
-          );
+          final updatedBase = _scalingController!.baselineDocument.copyWith(metadata: updatedBaseMeta);
           _scalingController!.updateBaselineDocument(updatedBase);
         }
       }
@@ -1538,6 +1537,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }
     return document.cover != null;
   }
+
   bool get isCoverVisible2D => document.cover?.isVisible2D ?? false;
   bool get isCoverVisible3D {
     if (isLadderAssembly) {
@@ -1545,6 +1545,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }
     return document.cover?.isVisible3D ?? false;
   }
+
   TrunkingCoverData? get cover => document.cover;
   CoverPlacementMode2D get coverPlacementMode2D => document.cover?.placementMode2D ?? CoverPlacementMode2D.besideBase;
   CoverPlacementMode3D get coverPlacementMode3D => document.cover?.placementMode3D ?? CoverPlacementMode3D.snappedToBase;
@@ -1900,6 +1901,108 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
   double get splitRatio => _splitRatio;
 
+  ViewportLayoutMode get viewportLayoutMode => _viewportLayoutMode;
+  bool get isRibbonCollapsed => _isRibbonCollapsed;
+  UiDensityMode get uiDensityMode => _uiDensityMode;
+  double get uiScaleFactor => _uiScaleFactor;
+  bool get isCompactMode => _uiScaleFactor < 0.95;
+  bool get isFoldSliderCollapsed => _isFoldSliderCollapsed;
+  ToolbarDockPosition get toolbarDockPosition => _toolbarDockPosition;
+  Offset get floatingToolbarPosition => _floatingToolbarPosition;
+
+  void setToolbarDockPosition(ToolbarDockPosition pos) {
+    if (_toolbarDockPosition != pos) {
+      _toolbarDockPosition = pos;
+      notifyListeners();
+    }
+  }
+
+  void setFloatingToolbarPosition(Offset pos) {
+    _floatingToolbarPosition = pos;
+    notifyListeners();
+  }
+
+  void setViewportLayoutMode(ViewportLayoutMode mode) {
+    if (_viewportLayoutMode == mode) return;
+    _viewportLayoutMode = mode;
+    notifyListeners();
+  }
+
+  void setRibbonCollapsed(bool val) {
+    if (_isRibbonCollapsed == val) return;
+    _isRibbonCollapsed = val;
+    notifyListeners();
+  }
+
+  void toggleRibbonCollapsed() {
+    _isRibbonCollapsed = !_isRibbonCollapsed;
+    notifyListeners();
+  }
+
+  void setFoldSliderCollapsed(bool val) {
+    if (_isFoldSliderCollapsed == val) return;
+    _isFoldSliderCollapsed = val;
+    notifyListeners();
+  }
+
+  void toggleFoldSliderCollapsed() {
+    _isFoldSliderCollapsed = !_isFoldSliderCollapsed;
+    notifyListeners();
+  }
+
+  void setUiDensityMode(UiDensityMode mode, {double? screenWidth}) {
+    if (_uiDensityMode == mode) return;
+    _uiDensityMode = mode;
+    resolveUiDensity(screenWidth: screenWidth);
+  }
+
+  void cycleUiDensityMode({double? screenWidth}) {
+    switch (_uiDensityMode) {
+      case UiDensityMode.auto:
+        setUiDensityMode(UiDensityMode.compact, screenWidth: screenWidth);
+        break;
+      case UiDensityMode.compact:
+        setUiDensityMode(UiDensityMode.standard, screenWidth: screenWidth);
+        break;
+      case UiDensityMode.standard:
+        setUiDensityMode(UiDensityMode.auto, screenWidth: screenWidth);
+        break;
+    }
+  }
+
+  void resolveUiDensity({double? screenWidth}) {
+    double target;
+    switch (_uiDensityMode) {
+      case UiDensityMode.compact:
+        target = 0.85;
+        break;
+      case UiDensityMode.standard:
+        target = 1.0;
+        break;
+      case UiDensityMode.auto:
+        if (screenWidth != null) {
+          target = (screenWidth < 1600.0) ? 0.85 : 1.0;
+        } else {
+          target = 0.85; // Auto defaults to 0.85 for laptop screens
+        }
+        break;
+    }
+    if ((_uiScaleFactor - target).abs() > 0.001) {
+      _uiScaleFactor = target;
+      notifyListeners();
+    }
+  }
+
+  void setUiScaleFactor(double scale) {
+    _uiScaleFactor = scale.clamp(0.75, 1.25);
+    notifyListeners();
+  }
+
+  void toggleCompactMode() {
+    _uiScaleFactor = isCompactMode ? 1.0 : 0.85;
+    notifyListeners();
+  }
+
   StudioToolMode get toolMode => _toolMode;
 
   PerforationPattern? get previewPerforationPattern => _previewPerforationPattern;
@@ -1925,10 +2028,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   void updateRubberBand(CadPoint2D? pt) {
     dynamicInputState.setCursorPoint(pt);
     if (dynamicInputState.hasValue && _pendingBendStart != null) {
-      _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(
-        toolMode: _toolMode,
-        toolConfig: toolConfig,
-      );
+      _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig);
     } else {
       _rubberBandEndpoint = pt;
     }
@@ -2030,19 +2130,40 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         break;
       case CadMaterialPresetType.plastic:
         _document = _document.copyWith(material: _document.material.copyWith(materialGrade: 'Plastic (Dielectric)'));
+        _recomputeMesh();
         return;
       case CadMaterialPresetType.chrome:
         _document = _document.copyWith(material: _document.material.copyWith(materialGrade: 'Chrome'));
+        _recomputeMesh();
         return;
       case CadMaterialPresetType.copper:
         _document = _document.copyWith(material: _document.material.copyWith(materialGrade: 'Copper'));
+        _recomputeMesh();
         return;
       case CadMaterialPresetType.gold:
         _document = _document.copyWith(material: _document.material.copyWith(materialGrade: 'Brass/Gold'));
+        _recomputeMesh();
+        return;
+      case CadMaterialPresetType.paint:
+        final currentCoat = _document.material.paintCoat;
+        final newType = currentCoat.isPainted ? currentCoat.type : PaintCoatType.powderCoat;
+        _document = _document.copyWith(
+          material: _document.material.copyWith(
+            paintCoat: currentCoat.copyWith(
+              type: newType,
+              ralColor: RalColor('RAL Custom', 'Custom Paint', _graphicsPreferences.materialSettings.baseColor),
+              roughness: _graphicsPreferences.materialSettings.roughness,
+            ),
+          ),
+        );
+        _recomputeMesh();
         return;
       case CadMaterialPresetType.custom:
         return;
     }
+
+    // When an explicit primary base preset is chosen, remove secondary paint coat
+    _document = _document.copyWith(material: _document.material.copyWith(paintCoat: const PaintCoatSpecification()));
 
     SheetMaterialType type = SheetMaterialType.mildSteel;
     if (grade == SheetMetalMaterialGrade.ss304 || grade == SheetMetalMaterialGrade.ss316) {
@@ -2058,13 +2179,34 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     }
 
     _document = _document.copyWith(
-      material: _document.material.copyWith(
-        materialType: type,
-        materialGrade: grade.code,
-        kFactor: grade.defaultKFactor,
-        finish: surfaceFinish,
-      ),
+      material: _document.material.copyWith(materialType: type, materialGrade: grade.code, kFactor: grade.defaultKFactor, finish: surfaceFinish),
     );
+    _recomputeMesh();
+  }
+
+  void _syncGraphicsPreferencesWithMaterial() {
+    final mat = _document.material;
+    if (mat.paintCoat.isPainted) {
+      _graphicsPreferences = _graphicsPreferences.copyWith(materialSettings: mat.paintCoat.toCadMaterialSettings());
+    } else {
+      CadMaterialPresetType presetType;
+      final finish = mat.finish;
+      final gradeUpper = mat.materialGrade.toUpperCase();
+
+      if (finish == SurfaceFinish.hotDipGalvanized || gradeUpper.contains('HDG') || gradeUpper.contains('HOT DIP')) {
+        presetType = CadMaterialPresetType.hdg;
+      } else if (gradeUpper.contains('GI') || gradeUpper.contains('GALV') || gradeUpper.contains('DX51D')) {
+        presetType = CadMaterialPresetType.pgi;
+      } else if (mat.materialType == SheetMaterialType.aluminium || gradeUpper.contains('ALUM') || RegExp(r'\bAL\b').hasMatch(gradeUpper)) {
+        presetType = CadMaterialPresetType.aluminum;
+      } else if (mat.materialType == SheetMaterialType.stainlessSteel || gradeUpper.contains('SS')) {
+        presetType = CadMaterialPresetType.silver;
+      } else {
+        presetType = CadMaterialSettings.presetFromMaterialGrade(mat.materialGrade);
+      }
+
+      _graphicsPreferences = _graphicsPreferences.copyWith(materialSettings: CadMaterialSettings.preset(presetType));
+    }
   }
 
   OnshapeRenderMode get onshapeRenderMode => _onshapeRenderMode;
@@ -2635,8 +2777,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     try {
       final binding = WidgetsBinding.instance;
-      if (binding.buildOwner?.debugBuilding == true ||
-          binding.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      if (binding.buildOwner?.debugBuilding == true || binding.schedulerPhase == SchedulerPhase.persistentCallbacks) {
         binding.addPostFrameCallback((_) {
           _commitPendingHistoryDelta();
           super.notifyListeners();
@@ -3284,10 +3425,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     dynamicInputState.setAnchorPoint(anchor);
     dynamicInputState.setCursorPoint(_activeSnap?.point ?? candidate);
     if (dynamicInputState.hasValue && anchor != null) {
-      _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(
-        toolMode: _toolMode,
-        toolConfig: toolConfig,
-      );
+      _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig);
     } else {
       _rubberBandEndpoint = _activeSnap?.point ?? candidate;
     }
@@ -3429,9 +3567,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       } else {
         final p1 = _pendingBendStart!;
 
-        final p2 = dynamicInputState.hasValue
-            ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig)
-            : effectivePoint;
+        final p2 = dynamicInputState.hasValue ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig) : effectivePoint;
 
         _pendingBendStart = null;
 
@@ -3457,9 +3593,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       } else {
         final p1 = _pendingBendStart!;
 
-        final p2 = dynamicInputState.hasValue
-            ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig)
-            : effectivePoint;
+        final p2 = dynamicInputState.hasValue ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig) : effectivePoint;
 
         _pendingBendStart = null;
 
@@ -3481,9 +3615,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       } else {
         final c1 = _pendingBendStart!;
 
-        final c2 = dynamicInputState.hasValue
-            ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig)
-            : effectivePoint;
+        final c2 = dynamicInputState.hasValue ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig) : effectivePoint;
 
         _pendingBendStart = null;
 
@@ -3813,9 +3945,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       } else {
         // CLICK 2: Select Entity B & Place Dimension
         var pA = _pendingBendStart!;
-        var pB = dynamicInputState.hasValue
-            ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig)
-            : effectivePoint;
+        var pB = dynamicInputState.hasValue ? dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig) : effectivePoint;
         final customDimVal = dynamicInputState.primaryValue;
         final entityAId = _pendingDimensionEntityAId;
         final entityBId = clickedEntityId;
@@ -3904,7 +4034,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
           drivenEntityId = null;
           resolvedEntityBId = null;
         } else if ((isEdgeA && resolvedEntityBId != null && (resolvedEntityBId.startsWith('CONTOUR_VERTEX_') || resolvedEntityBId.startsWith('contour_'))) ||
-                   (isEdgeB && resolvedEntityAId != null && (resolvedEntityAId.startsWith('CONTOUR_VERTEX_') || resolvedEntityAId.startsWith('contour_')))) {
+            (isEdgeB && resolvedEntityAId != null && (resolvedEntityAId.startsWith('CONTOUR_VERTEX_') || resolvedEntityAId.startsWith('contour_')))) {
           final edgeId = isEdgeA ? resolvedEntityAId : resolvedEntityBId;
           final edgeSeg = _resolveEdgeSegment(edgeId);
           if (edgeSeg != null) {
@@ -3941,15 +4071,13 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
           final segA = _resolveEdgeSegment(resolvedEntityAId);
           final segB = _resolveEdgeSegment(resolvedEntityBId);
           if (segA != null && segB != null) {
-            final angle = AssociativeDimensionEngine.calculateAngleBetweenSegments(
-              segA.$1, segA.$2, segB.$1, segB.$2,
-            );
-            final isSharingEndpoint = segA.$1.distanceTo(segB.$1) < 1.0 ||
+            final angle = AssociativeDimensionEngine.calculateAngleBetweenSegments(segA.$1, segA.$2, segB.$1, segB.$2);
+            final isSharingEndpoint =
+                segA.$1.distanceTo(segB.$1) < 1.0 ||
                 segA.$1.distanceTo(segB.$2) < 1.0 ||
                 segA.$2.distanceTo(segB.$1) < 1.0 ||
                 segA.$2.distanceTo(segB.$2) < 1.0;
-            if (toolConfig.activeDimensionType == CadDimensionType.angular ||
-                (isSharingEndpoint && (angle - 0.0).abs() > 0.5 && (angle - 180.0).abs() > 0.5)) {
+            if (toolConfig.activeDimensionType == CadDimensionType.angular || (isSharingEndpoint && (angle - 0.0).abs() > 0.5 && (angle - 180.0).abs() > 0.5)) {
               categorizedType = CadDimensionType.angular;
               allowedMotion = CadAllowedMotion.structuralParameter;
               refEntityId = resolvedEntityAId;
@@ -4196,10 +4324,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     final anchor = _pendingBendStart ?? (_pendingMultiPoints.isNotEmpty ? _pendingMultiPoints.last : null);
     if (anchor == null) return;
 
-    final effectiveEnd = dynamicInputState.computeEffectiveEndpoint(
-      toolMode: _toolMode,
-      toolConfig: toolConfig,
-    );
+    final effectiveEnd = dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig);
 
     final primaryVal = dynamicInputState.primaryValue;
     final secondaryVal = dynamicInputState.secondaryValue;
@@ -4327,10 +4452,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       if (dynamicInputState.hasValue) {
         dynamicInputState.backspace();
         if (dynamicInputState.hasValue) {
-          _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(
-            toolMode: _toolMode,
-            toolConfig: toolConfig,
-          );
+          _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig);
         } else {
           _rubberBandEndpoint = _currentCursorMm ?? anchor;
         }
@@ -4389,10 +4511,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       dynamicInputState.setAnchorPoint(anchor);
       dynamicInputState.setCursorPoint(_currentCursorMm ?? anchor);
       dynamicInputState.appendChar(charToAppend);
-      _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(
-        toolMode: _toolMode,
-        toolConfig: toolConfig,
-      );
+      _rubberBandEndpoint = dynamicInputState.computeEffectiveEndpoint(toolMode: _toolMode, toolConfig: toolConfig);
       notifyListeners();
       return true;
     }
@@ -4446,7 +4565,6 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         return CadAnchorType.endpoint;
     }
   }
-
 
   (CadPoint2D, CadPoint2D)? _resolveEdgeSegment(String? edgeId) {
     return AssociativeDimensionEngine.resolveEdgeSegment(edgeId, _document);
@@ -5421,10 +5539,9 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     _document = _document.copyWith(material: _document.material.copyWith(materialGrade: grade));
 
-    final presetType = CadMaterialSettings.presetFromMaterialGrade(grade);
-    _graphicsPreferences = _graphicsPreferences.copyWith(
-      materialSettings: CadMaterialSettings.preset(presetType),
-    );
+    _syncGraphicsPreferencesWithMaterial();
+
+    _recomputeMesh();
 
     notifyListeners();
   }
@@ -5479,21 +5596,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       material: _document.material.copyWith(materialType: type, materialGrade: grade.code, kFactor: grade.defaultKFactor, finish: surfaceFinish),
     );
 
-    CadMaterialPresetType presetType;
-    if (finish == CoatingFinish.hdg || finish == CoatingFinish.twoHdg || finish == CoatingFinish.threeHdg) {
-      presetType = CadMaterialPresetType.hdg;
-    } else if (grade == SheetMetalMaterialGrade.aluminium) {
-      presetType = CadMaterialPresetType.aluminum;
-    } else if (grade == SheetMetalMaterialGrade.ss304 || grade == SheetMetalMaterialGrade.ss316) {
-      presetType = CadMaterialPresetType.silver;
-    } else if (grade == SheetMetalMaterialGrade.gi) {
-      presetType = CadMaterialPresetType.pgi;
-    } else {
-      presetType = CadMaterialSettings.presetFromMaterialGrade(grade.code);
-    }
-    _graphicsPreferences = _graphicsPreferences.copyWith(
-      materialSettings: CadMaterialSettings.preset(presetType),
-    );
+    _syncGraphicsPreferencesWithMaterial();
 
     _recomputeMesh();
 
@@ -5540,17 +5643,33 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     _document = _document.copyWith(material: _document.material.copyWith(finish: surfaceFinish));
 
-    if (finish == CoatingFinish.hdg || finish == CoatingFinish.twoHdg || finish == CoatingFinish.threeHdg) {
-      _graphicsPreferences = _graphicsPreferences.copyWith(
-        materialSettings: CadMaterialSettings.preset(CadMaterialPresetType.hdg),
-      );
-    } else if (finish == CoatingFinish.none && _document.material.materialGrade.toUpperCase().contains('GI')) {
-      _graphicsPreferences = _graphicsPreferences.copyWith(
-        materialSettings: CadMaterialSettings.preset(CadMaterialPresetType.pgi),
-      );
-    }
+    _syncGraphicsPreferencesWithMaterial();
 
     notifyListeners();
+  }
+
+  // --- Secondary Paint Coat Management ---
+
+  PaintCoatSpecification get paintCoat => _document.material.paintCoat;
+
+  void setPaintCoat(PaintCoatSpecification paintCoat) {
+    _recordHistory();
+    _document = _document.copyWith(material: _document.material.copyWith(paintCoat: paintCoat));
+    _syncGraphicsPreferencesWithMaterial();
+    _recomputeMesh();
+    notifyListeners();
+  }
+
+  void setPaintCoatType(PaintCoatType type) {
+    final current = _document.material.paintCoat;
+    final roughness = type == PaintCoatType.epoxy ? 0.20 : 0.30;
+    setPaintCoat(current.copyWith(type: type, roughness: roughness));
+  }
+
+  void setPaintRalColor(RalColor ralColor) {
+    final current = _document.material.paintCoat;
+    final type = current.isPainted ? current.type : PaintCoatType.powderCoat;
+    setPaintCoat(current.copyWith(type: type, ralColor: ralColor));
   }
 
   // --- Perforation Pattern Management ---
@@ -6737,9 +6856,9 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     } else if (isEdgeA && isEdgeB) {
       if (idA == idB) {
         final edgeSeg = _resolveEdgeSegment(idA);
-        final spansFullEdge = edgeSeg != null &&
-            ((pA.distanceTo(edgeSeg.$1) < 0.5 && pB.distanceTo(edgeSeg.$2) < 0.5) ||
-             (pA.distanceTo(edgeSeg.$2) < 0.5 && pB.distanceTo(edgeSeg.$1) < 0.5));
+        final spansFullEdge =
+            edgeSeg != null &&
+            ((pA.distanceTo(edgeSeg.$1) < 0.5 && pB.distanceTo(edgeSeg.$2) < 0.5) || (pA.distanceTo(edgeSeg.$2) < 0.5 && pB.distanceTo(edgeSeg.$1) < 0.5));
         if (spansFullEdge) {
           type = CadDimensionType.aligned;
           effPA = edgeSeg.$1;
@@ -6986,11 +7105,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   }
 
   /// Creates and adds an angular dimension between two reference entities (lines, bends, cuts, or dimensions).
-  CadDimension? addAngularDimension({
-    required String referenceAId,
-    required String referenceBId,
-    double? customAngle,
-  }) {
+  CadDimension? addAngularDimension({required String referenceAId, required String referenceBId, double? customAngle}) {
     _recordHistory();
 
     final segA = AssociativeDimensionEngine.resolveEdgeSegment(referenceAId, _document);
@@ -6998,9 +7113,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     if (segA == null || segB == null) return null;
 
-    final calculatedAngle = AssociativeDimensionEngine.calculateAngleBetweenSegments(
-      segA.$1, segA.$2, segB.$1, segB.$2,
-    );
+    final calculatedAngle = AssociativeDimensionEngine.calculateAngleBetweenSegments(segA.$1, segA.$2, segB.$1, segB.$2);
 
     final angleVal = customAngle ?? calculatedAngle;
     final dimId = 'dim_ang_${DateTime.now().millisecondsSinceEpoch}_${_document.dimensions.length + 1}';
@@ -8492,11 +8605,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     // 2. Fallback: Edge offset projection for arbitrary points / custom offsets
 
-    final targetOffset =
-        customOffset ??
-        (isFlange
-            ? (toolConfig.flangeOffsetMm > 0 ? toolConfig.flangeOffsetMm : 13.0)
-            : toolConfig.bendOffsetMm);
+    final targetOffset = customOffset ?? (isFlange ? (toolConfig.flangeOffsetMm > 0 ? toolConfig.flangeOffsetMm : 13.0) : toolConfig.bendOffsetMm);
 
     // 1. Find closest edge segment on the outer contour
 
@@ -9667,7 +9776,8 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
   void updateBend(FoldBendLine updated) {
     _recordHistory();
 
-    final isFlange = updated.role == BendLineRole.flange ||
+    final isFlange =
+        updated.role == BendLineRole.flange ||
         updated.layer.toUpperCase().contains('FLANGE') ||
         updated.id.toUpperCase().startsWith('FL') ||
         updated.parentFaceId.toUpperCase().contains('FLANGE') ||
@@ -9677,7 +9787,10 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
     // comes from the scaled preview, so match by ID; otherwise check ID and geometry.
     bool replaced = false;
     final newBends = _document.bends.map((b) {
-      final isTarget = (!replaced && b.id == updated.id && (b.p1 == updated.p1 && b.p2 == updated.p2 || _isTeachScalingActive || _document.bends.where((x) => x.id == updated.id).length == 1));
+      final isTarget =
+          (!replaced &&
+          b.id == updated.id &&
+          (b.p1 == updated.p1 && b.p2 == updated.p2 || _isTeachScalingActive || _document.bends.where((x) => x.id == updated.id).length == 1));
       if (isTarget) {
         replaced = true;
         return b.copyWith(
@@ -9701,13 +9814,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       return b;
     }).toList();
 
-    _document = _document.copyWith(
-      bends: newBends,
-      parameters: {
-        ..._document.parameters,
-        if (isFlange) 'flange_angle': updated.targetAngleDeg,
-      },
-    );
+    _document = _document.copyWith(bends: newBends, parameters: {..._document.parameters, if (isFlange) 'flange_angle': updated.targetAngleDeg});
 
     if (_scalingController != null) {
       final updatedParams = Map<String, double>.from(_scalingController!.baselineDocument.parameters);
@@ -10039,9 +10146,7 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
 
     _initCmsStateFromDocument();
 
-    if (doc.metadata['isLadderAssembly'] == true ||
-        doc.productType == 'cable_ladder' ||
-        doc.itemName.toLowerCase().contains('ladder')) {
+    if (doc.metadata['isLadderAssembly'] == true || doc.productType == 'cable_ladder' || doc.itemName.toLowerCase().contains('ladder')) {
       _activeLadderAssembly = LadderAssemblyGenerator.generateFromDocument(doc);
     } else {
       _activeLadderAssembly = null;

@@ -316,6 +316,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
       if (!mounted) return;
       try {
         _masterShaderMaterial = await loadFmatMaterial('assets/materials/master_materials.fmat');
+        _masterShaderMaterial?.doubleSided = true;
       } catch (e) {
         debugPrint('FlutterSceneViewport: master_materials.fmat fallback: $e');
       }
@@ -417,15 +418,21 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
 
     // Bind active PBR & Voronoi uniforms to procedural shader
     final matSettings = widget.viewModel.graphicsPreferences.materialSettings;
-    if (_masterShaderMaterial != null) {
+    PreprocessedMaterial? activeShaderMaterial;
+
+    // Use procedural Voronoi shader specifically for HDG spangles, while using
+    // double-sided PhysicallyBasedMaterial with vertex color sheet thickness for all other materials (Paint, GI, SS, etc.)
+    if (matSettings.useSpangles && _masterShaderMaterial != null) {
       _masterShaderMaterial!.parameters.setVec4(
         'baseColorFactor',
         matSettings.toLinearRgbVector4(),
       );
       _masterShaderMaterial!.parameters.setFloat('roughnessFactor', matSettings.roughness);
       _masterShaderMaterial!.parameters.setFloat('isPlastic', matSettings.isPlastic ? 1.0 : 0.0);
-      _masterShaderMaterial!.parameters.setFloat('materialMode', matSettings.useSpangles ? 1.0 : 0.0);
+      _masterShaderMaterial!.parameters.setFloat('materialMode', 1.0);
       _masterShaderMaterial!.parameters.setFloat('spangleScale', matSettings.spangleScale);
+      _masterShaderMaterial!.doubleSided = true;
+      activeShaderMaterial = _masterShaderMaterial;
     }
 
     _cadModelNode = FlutterSceneCadMeshBuilder.buildCadModel(
@@ -433,7 +440,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
       selectedFaceId: widget.viewModel.selectedFaceId,
       hoveredFaceId: widget.viewModel.hoveredFaceId,
       showWireframe: _showWireframe && widget.viewModel.showBorderLines,
-      customMaterial: _masterShaderMaterial,
+      customMaterial: activeShaderMaterial,
       preferences: widget.viewModel.graphicsPreferences,
       renderMode: widget.viewModel.onshapeRenderMode,
     );
@@ -1090,6 +1097,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                 top: 56,
                 right: 146,
                 child: StudioGraphicsPreferencesPanel(
+                  viewModel: widget.viewModel,
                   preferences: widget.viewModel.graphicsPreferences,
                   onChanged: (prefs) {
                     widget.viewModel.graphicsPreferences = prefs;

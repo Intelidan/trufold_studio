@@ -868,5 +868,104 @@ void main() {
       expect(vm.coverMesh, isNotNull);
       expect(vm.currentMesh.polygons.isNotEmpty, isTrue);
     });
+
+    test('Cable Ladder 90 deg and 45 deg bends & risers compliance (5 Key Industrial Criteria)', () {
+      // 1. Rungs should have obround holes
+      const passThroughParams = LadderAssemblyParameters(
+        width: 400.0,
+        height: 100.0,
+        jointMethod: LadderRungJointMethod.passThroughOutsideWeld,
+        outsideWeldProjection: 5.0,
+        accessoryStyle: LadderAccessoryStyle.segmented,
+      );
+
+      final bend90 = LadderAssemblyGenerator.generateHorizontalBend(
+        angleDeg: 90.0,
+        radiusMm: 300.0,
+        params: passThroughParams,
+      );
+
+      // Verify obround holes on rungs
+      final bendRungWebs = bend90.assembledMesh3D.polygons.where((p) => p.faceId.contains('bend_rung') && p.faceId.endsWith('_top_web')).toList();
+      expect(bendRungWebs.isNotEmpty, isTrue);
+      for (final web in bendRungWebs) {
+        expect(web.holes.isNotEmpty, isTrue); // obround slots cut out
+      }
+
+      // 2. Continuous flanges present on all rails (inner & outer, top & bottom)
+      expect(bend90.assembledMesh3D.polygons.any((p) => p.faceId.startsWith('inner_rail_bottom_flange')), isTrue);
+      expect(bend90.assembledMesh3D.polygons.any((p) => p.faceId.startsWith('inner_rail_top_flange')), isTrue);
+      expect(bend90.assembledMesh3D.polygons.any((p) => p.faceId.startsWith('outer_rail_bottom_flange')), isTrue);
+      expect(bend90.assembledMesh3D.polygons.any((p) => p.faceId.startsWith('outer_rail_top_flange')), isTrue);
+
+      // 3. Side rail and rung solid endcaps eliminated; open port rims and physical sheet thickness present
+      expect(bend90.assembledMesh3D.allPolygons.any((p) => p.faceId == 'RIM_inner_rail_lead_in'), isFalse);
+      expect(bend90.assembledMesh3D.allPolygons.any((p) => p.faceId.contains('_port1_cap') || p.faceId.contains('_port2_cap')), isFalse);
+      expect(bend90.assembledMesh3D.thicknessPolygons.any((p) => p.faceId == 'RIM_inner_port1_web'), isTrue);
+      expect(bend90.assembledMesh3D.thicknessPolygons.any((p) => p.faceId == 'RIM_outer_port1_web'), isTrue);
+      expect(bend90.assembledMesh3D.thicknessPolygons.any((p) => p.faceId == 'RIM_inner_port2_web'), isTrue);
+      expect(bend90.assembledMesh3D.thicknessPolygons.any((p) => p.faceId == 'RIM_outer_port2_web'), isTrue);
+
+      // Verify physical sheet thickness in 3D model (inner webs, inner flanges, flange lips, inner rung web)
+      expect(bend90.assembledMesh3D.polygons.any((p) => p.faceId.startsWith('inner_rail_web_inner')), isTrue);
+      expect(bend90.assembledMesh3D.polygons.any((p) => p.faceId.startsWith('outer_rail_web_inner')), isTrue);
+      expect(bend90.assembledMesh3D.thicknessPolygons.any((p) => p.faceId.contains('inner_top_flange_lip')), isTrue);
+      expect(bend90.assembledMesh3D.thicknessPolygons.any((p) => p.faceId.contains('outer_top_flange_lip')), isTrue);
+      expect(bend90.assembledMesh3D.polygons.any((p) => p.faceId.contains('bend_rung') && p.faceId.endsWith('_top_web_inner')), isTrue);
+
+      // 4. Snug pass-through slot holes punched in rail webs & visible rung outside weld projections
+      final innerWebsWithHoles = bend90.assembledMesh3D.polygons.where((p) => p.faceId.startsWith('inner_rail_web') && p.holes.isNotEmpty);
+      expect(innerWebsWithHoles.isNotEmpty, isTrue);
+      final outerWebsWithHoles = bend90.assembledMesh3D.polygons.where((p) => p.faceId.startsWith('outer_rail_web') && p.holes.isNotEmpty);
+      expect(outerWebsWithHoles.isNotEmpty, isTrue);
+      expect(bend90.assembledMesh3D.polygons.any((p) => p.faceId.contains('_proj_left_top')), isTrue);
+      expect(bend90.assembledMesh3D.polygons.any((p) => p.faceId.contains('_proj_right_top')), isTrue);
+
+      // 5. V-Notch cut out (V) on flange: shifts from outer rail (inside flange) to inner rail (outside flange)
+      // Inside flange: V-notch is on the outer rail top and bottom flanges
+      expect(bend90.assembledMesh3D.thicknessPolygons.any((p) => p.faceId.contains('RIM_outer_top_notch')), isTrue);
+      expect(bend90.assembledMesh3D.thicknessPolygons.any((p) => p.faceId.contains('RIM_inner_top_notch')), isFalse);
+
+      // Outside flange: V-notch shifts to the inner rail
+      final bend90Outside = LadderAssemblyGenerator.generateHorizontalBend(
+        angleDeg: 90.0,
+        radiusMm: 300.0,
+        params: passThroughParams.copyWith(flangeDirection: LadderFlangeDirection.outside),
+      );
+      expect(bend90Outside.assembledMesh3D.thicknessPolygons.any((p) => p.faceId.contains('RIM_inner_top_notch')), isTrue);
+      expect(bend90Outside.assembledMesh3D.thicknessPolygons.any((p) => p.faceId.contains('RIM_outer_top_notch')), isFalse);
+
+      // 6. Rungs are squarely on the straight segments, not intersecting miter bend lines
+      expect(bend90.rungs.length, equals(4)); // 4 straight segments for 90° bend
+      final bend45 = LadderAssemblyGenerator.generateHorizontalBend(
+        angleDeg: 45.0,
+        radiusMm: 300.0,
+        params: passThroughParams,
+      );
+      expect(bend45.rungs.length, equals(3)); // 3 straight segments for 45° bend
+
+      // Verify inside & outside risers have full physical sheet thickness and open port profile rims (no solid caps)
+      final insideRiser90 = LadderAssemblyGenerator.generateRiser(
+        angleDeg: 90.0,
+        radiusMm: 300.0,
+        isInsideRiser: true,
+        params: passThroughParams,
+      );
+      expect(insideRiser90.rungs.length, equals(4));
+      expect(insideRiser90.assembledMesh3D.polygons.any((p) => p.faceId.startsWith('riser_rail_bottom_flange_l')), isTrue);
+      expect(insideRiser90.assembledMesh3D.polygons.any((p) => p.faceId.startsWith('riser_rail_top_flange_l')), isTrue);
+      expect(insideRiser90.assembledMesh3D.polygons.any((p) => p.faceId.startsWith('riser_rail_web_l_inner')), isTrue);
+      expect(insideRiser90.assembledMesh3D.allPolygons.any((p) => p.faceId == 'RIM_riser_left_port1'), isFalse); // No solid cap
+      expect(insideRiser90.assembledMesh3D.thicknessPolygons.any((p) => p.faceId == 'RIM_riser_left_port1_web'), isTrue); // Open 2mm profile rim
+
+      final outsideRiser45 = LadderAssemblyGenerator.generateRiser(
+        angleDeg: 45.0,
+        radiusMm: 300.0,
+        isInsideRiser: false,
+        params: passThroughParams,
+      );
+      expect(outsideRiser45.rungs.length, equals(3));
+      expect(outsideRiser45.assembledMesh3D.polygons.any((p) => p.faceId.contains('riser_rung') && p.faceId.endsWith('_top_web')), isTrue);
+    });
   });
 }

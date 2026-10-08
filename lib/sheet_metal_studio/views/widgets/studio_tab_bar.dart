@@ -7,6 +7,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import '../../models/cad_primitives.dart';
 import '../../models/studio_tab_model.dart';
 import '../../services/studio_clipboard_service.dart';
 
@@ -21,6 +22,15 @@ class StudioTabBar extends StatelessWidget {
   final VoidCallback onSaveDdsProject;
   final VoidCallback? onCopySelection;
   final VoidCallback? onPasteClipboard;
+  final ViewportLayoutMode viewportLayoutMode;
+  final ValueChanged<ViewportLayoutMode>? onViewportLayoutModeChanged;
+  final bool isRibbonCollapsed;
+  final VoidCallback? onToggleRibbon;
+  final bool isCompactMode;
+  final VoidCallback? onToggleCompactMode;
+  final UiDensityMode uiDensityMode;
+  final String? activeToolLabel;
+  final IconData? activeToolIcon;
 
   const StudioTabBar({
     super.key,
@@ -34,6 +44,15 @@ class StudioTabBar extends StatelessWidget {
     required this.onSaveDdsProject,
     this.onCopySelection,
     this.onPasteClipboard,
+    this.viewportLayoutMode = ViewportLayoutMode.split,
+    this.onViewportLayoutModeChanged,
+    this.isRibbonCollapsed = false,
+    this.onToggleRibbon,
+    this.isCompactMode = false,
+    this.onToggleCompactMode,
+    this.uiDensityMode = UiDensityMode.auto,
+    this.activeToolLabel,
+    this.activeToolIcon,
   });
 
   IconData _iconForFileName(String name) {
@@ -236,10 +255,160 @@ class StudioTabBar extends StatelessWidget {
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                   ),
+
+                // Active tool indicator when ribbon is collapsed
+                if (isRibbonCollapsed && activeToolLabel != null) ...[
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFCBD5E1), width: 0.8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (activeToolIcon != null) ...[
+                          Icon(activeToolIcon, size: 12, color: const Color(0xFF0284C7)),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          activeToolLabel!,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF334155),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Vertical Divider
+                Container(
+                  height: 18,
+                  width: 1,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  color: const Color(0xFFCBD5E1),
+                ),
+
+                // Viewport Layout Mode Selector Pill
+                if (onViewportLayoutModeChanged != null) ...[
+                  Container(
+                    height: 25,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: const Color(0xFFCBD5E1), width: 0.8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildLayoutPill(
+                          mode: ViewportLayoutMode.canvas2D,
+                          icon: Icons.crop_square_rounded,
+                          label: '2D',
+                          tooltip: '2D Flat Pattern Only (F2)',
+                        ),
+                        _buildLayoutPill(
+                          mode: ViewportLayoutMode.split,
+                          icon: Icons.vertical_split_rounded,
+                          label: 'Split',
+                          tooltip: 'Dual Split Viewport (F3)',
+                        ),
+                        _buildLayoutPill(
+                          mode: ViewportLayoutMode.viewport3D,
+                          icon: Icons.view_in_ar_rounded,
+                          label: '3D',
+                          tooltip: '3D Folded Mesh Only (F4)',
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+
+                // UI Density / Scale Preset Button
+                if (onToggleCompactMode != null)
+                  Tooltip(
+                    message: 'UI Density: ${uiDensityMode.label} (${(isCompactMode ? 85 : 100)}% scale) - Click to cycle',
+                    child: IconButton(
+                      icon: Icon(
+                        uiDensityMode == UiDensityMode.compact
+                            ? Icons.compress_rounded
+                            : (uiDensityMode == UiDensityMode.auto ? Icons.laptop_chromebook_rounded : Icons.desktop_windows_rounded),
+                        size: 15,
+                        color: isCompactMode ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                      ),
+                      onPressed: onToggleCompactMode,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                    ),
+                  ),
+
+                // Minimize / Expand Ribbon Chevron Button
+                if (onToggleRibbon != null)
+                  IconButton(
+                    icon: Icon(
+                      isRibbonCollapsed ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_up_rounded,
+                      size: 18,
+                      color: isRibbonCollapsed ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                    ),
+                    tooltip: isRibbonCollapsed
+                        ? 'Expand Ribbon Toolbar (F1 / Ctrl+Shift+R)'
+                        : 'Minimize Ribbon Toolbar (F1 / Ctrl+Shift+R)',
+                    onPressed: onToggleRibbon,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                  ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLayoutPill({
+    required ViewportLayoutMode mode,
+    required IconData icon,
+    required String label,
+    required String tooltip,
+  }) {
+    final isSelected = viewportLayoutMode == mode;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: () => onViewportLayoutModeChanged?.call(mode),
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF0284C7) : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 12,
+                color: isSelected ? Colors.white : const Color(0xFF475569),
+              ),
+              const SizedBox(width: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? Colors.white : const Color(0xFF475569),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

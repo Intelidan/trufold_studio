@@ -10,6 +10,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import '../../../models/cad_primitives.dart';
 import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../../../services/studio_clipboard_service.dart';
 import '../press_brake_machine_dialog.dart';
@@ -906,6 +907,36 @@ class StudioMenuBar extends StatelessWidget {
         shortcut: 'Ctrl+,',
         themeColor: col,
         onTap: () => showCanvasDisplaySettingsDialog(context, vm),
+      ),
+      const PopupMenuDivider(),
+      _buildMenuHeader('CAD Toolbar Docking', col),
+      _buildItem(
+        icon: Icons.vertical_align_top,
+        title: 'Dock Toolbar to Top (Horizontal)',
+        subtitle: vm.toolbarDockPosition.isTop ? '✓ Currently docked at top' : 'Place horizontal toolbar below tabs',
+        themeColor: col,
+        onTap: () => vm.setToolbarDockPosition(ToolbarDockPosition.top),
+      ),
+      _buildItem(
+        icon: Icons.border_left,
+        title: 'Dock Toolbar to Left (Vertical)',
+        subtitle: vm.toolbarDockPosition.isLeft ? '✓ Currently docked at left' : 'Place vertical palette on left side (saves height)',
+        themeColor: col,
+        onTap: () => vm.setToolbarDockPosition(ToolbarDockPosition.left),
+      ),
+      _buildItem(
+        icon: Icons.border_right,
+        title: 'Dock Toolbar to Right (Vertical)',
+        subtitle: vm.toolbarDockPosition.isRight ? '✓ Currently docked at right' : 'Place vertical palette on right side (saves height)',
+        themeColor: col,
+        onTap: () => vm.setToolbarDockPosition(ToolbarDockPosition.right),
+      ),
+      _buildItem(
+        icon: Icons.open_in_new,
+        title: 'Detach Toolbar (Floating Window)',
+        subtitle: vm.toolbarDockPosition.isDetached ? '✓ Currently floating' : 'Undock toolbar into movable draggable palette',
+        themeColor: col,
+        onTap: () => vm.setToolbarDockPosition(ToolbarDockPosition.detached),
       ),
     ];
   }
