@@ -29,9 +29,10 @@ class FlutterSceneCadMeshBuilder {
     Set<String> transparentPartIds = const {},
     SectionViewConfig sectionViewConfig = const SectionViewConfig(),
     Map<String, Color> partColorOverrides = const {},
+    CadPoint3D? pivotOverride,
   }) {
     final rootNode = Node(name: 'CadModelRoot');
-    final pivot = meshResult.center;
+    final pivot = pivotOverride ?? meshResult.center;
 
     final opaqueBuilder = GeometryBuilder(deduplicate: true);
     final translucentBuilder = GeometryBuilder(deduplicate: true);
@@ -83,17 +84,28 @@ class FlutterSceneCadMeshBuilder {
       }
 
       final isPartIsolated = isolatedPartIds.isNotEmpty;
+      final isWeld = poly.faceId.startsWith('weld_');
       final isTranslucent = (renderMode == OnshapeRenderMode.translucent) ||
           transparentPartIds.contains(partId) ||
-          (isPartIsolated && !isolatedPartIds.contains(partId));
+          (isPartIsolated && !isolatedPartIds.contains(partId)) ||
+          (isWeld && poly.color.a < 0.99);
       final currentBuilder = isTranslucent ? translucentBuilder : opaqueBuilder;
 
-      final isSelected = (poly.faceId == selectedFaceId);
+      final isSelected = (poly.faceId == selectedFaceId) ||
+          (selectedFaceId != null && poly.faceId.startsWith(selectedFaceId));
       final isHovered = (poly.faceId == hoveredFaceId);
 
       // Resolve color for this face
       vm.Vector4 faceColor;
-      if (isSelected) {
+      if (isWeld) {
+        // Fillet weld bead: preserve poly.color (selection cyan / translucent amber gold / solid steel)
+        faceColor = vm.Vector4(
+          poly.color.r,
+          poly.color.g,
+          poly.color.b,
+          poly.color.a,
+        );
+      } else if (isSelected) {
         faceColor = vm.Vector4(0.22, 0.74, 0.97, 1.0); // Sky blue #38BDF8
       } else if (isHovered) {
         faceColor = vm.Vector4(0.73, 0.90, 0.99, 1.0); // Cyan hover #BAE6FD
@@ -146,25 +158,51 @@ class FlutterSceneCadMeshBuilder {
         builder: currentBuilder,
       );
 
-      // Requirement 1: Only 1 border line per segment (skip bottom/inner/wall/rim duplicates)
+      // Requirement 1: Only 1 border line per segment (skip bottom/inner/wall/rim duplicates and welds)
       final isInternalFace = poly.faceId.endsWith('_BOT') ||
           poly.faceId.endsWith('_inner') ||
           poly.faceId.contains('_slot_') ||
           poly.faceId.contains('_wall_') ||
           poly.faceId.startsWith('BORE_') ||
           poly.faceId.startsWith('RIM_') ||
-          poly.faceId.startsWith('CHAMFER_');
+          poly.faceId.startsWith('CHAMFER_') ||
+          poly.faceId.startsWith('weld_');
 
       if (shouldDrawWireframe && poly.drawWireframe && !isInternalFace) {
         final lenN = math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
-        final nx = lenN > 1e-4 ? (n.x / lenN) * 0.02 : 0.0;
-        final ny = lenN > 1e-4 ? (n.y / lenN) * 0.02 : 0.0;
-        final nz = lenN > 1e-4 ? (n.z / lenN) * 0.02 : 0.0;
-        for (final seg in poly.boundaryLines) {
-          if (seg.length >= 2) {
-            for (int i = 0; i < seg.length - 1; i++) {
-              final p1 = CadPoint3D(seg[i].x + nx, seg[i].y + ny, seg[i].z + nz);
-              final p2 = CadPoint3D(seg[i + 1].x + nx, seg[i + 1].y + ny, seg[i + 1].z + nz);
+        final nx = lenN > 1e-4 ? (n.x / lenN) * 0.05 : 0.0;
+        final ny = lenN > 1e-4 ? (n.y / lenN) * 0.05 : 0.0;
+        final nz = lenN > 1e-4 ? (n.z / lenN) * 0.05 : 0.0;
+
+        // 1. Boundary lines from SheetMetal unfold if available, otherwise from polygon vertices
+        if (poly.boundaryLines.isNotEmpty) {
+          for (final seg in poly.boundaryLines) {
+            if (seg.length >= 2) {
+              for (int i = 0; i < seg.length - 1; i++) {
+                final p1 = CadPoint3D(seg[i].x + nx, seg[i].y + ny, seg[i].z + nz);
+                final p2 = CadPoint3D(seg[i + 1].x + nx, seg[i + 1].y + ny, seg[i + 1].z + nz);
+                rawBoundarySegs.add((p1, p2));
+              }
+            }
+          }
+        } else if (poly.vertices.length >= 3) {
+          for (int i = 0; i < poly.vertices.length; i++) {
+            final v1 = poly.vertices[i];
+            final v2 = poly.vertices[(i + 1) % poly.vertices.length];
+            final p1 = CadPoint3D(v1.x + nx, v1.y + ny, v1.z + nz);
+            final p2 = CadPoint3D(v2.x + nx, v2.y + ny, v2.z + nz);
+            rawBoundarySegs.add((p1, p2));
+          }
+        }
+
+        // 2. Cutout holes and voids outline loops (punch holes, slots, coupler cuts)
+        for (final hole in poly.holes) {
+          if (hole.length >= 3) {
+            for (int i = 0; i < hole.length; i++) {
+              final h1 = hole[i];
+              final h2 = hole[(i + 1) % hole.length];
+              final p1 = CadPoint3D(h1.x + nx, h1.y + ny, h1.z + nz);
+              final p2 = CadPoint3D(h2.x + nx, h2.y + ny, h2.z + nz);
               rawBoundarySegs.add((p1, p2));
             }
           }
@@ -257,17 +295,11 @@ class FlutterSceneCadMeshBuilder {
       } else {
         // Shaded mode: apply active materialSettings (PGI, HDG, Plastic, Metals)
         final matSettings = preferences.materialSettings;
-        final c = matSettings.baseColor;
         material = PhysicallyBasedMaterial()
           ..doubleSided = true
-          ..metallicFactor = matSettings.isPlastic ? 0.0 : 1.0
-          ..roughnessFactor = (1.0 - (preferences.shininess / 100.0) * 0.95).clamp(0.04, 0.98)
-          ..baseColorFactor = vm.Vector4(
-            c.r,
-            c.g,
-            c.b,
-            1.0,
-          );
+          ..metallicFactor = matSettings.isPlastic ? 0.0 : 0.85
+          ..roughnessFactor = (1.0 - (preferences.shininess / 100.0) * 0.95).clamp(0.08, 0.95)
+          ..baseColorFactor = vm.Vector4(1.0, 1.0, 1.0, 1.0);
       }
 
       final bodyMesh = Mesh(geometry, material);
@@ -295,8 +327,8 @@ class FlutterSceneCadMeshBuilder {
       final lineData = LineSegmentData(
         positions: Float32List.fromList(edgePositions),
       );
-      final computedLineWidth = (preferences.lineWidth * 0.50).clamp(0.25, 2.5);
-      final lineGeometry = LineSegmentsGeometry(lineData, width: computedLineWidth);
+      final computedLineWidth = (preferences.lineWidth * 2.0).clamp(1.0, 3.5);
+      final lineGeometry = LineSegmentsGeometry(lineData, width: computedLineWidth, normalOffset: 0.05);
       final boundaryColor = preferences.highlightBoundaryEdges
           ? preferences.boundaryEdgeColor
           : const Color(0xFF0F172A); // Slate 900

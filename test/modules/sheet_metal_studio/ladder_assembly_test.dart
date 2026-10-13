@@ -1081,5 +1081,373 @@ void main() {
       final innerNotchRims = bendOutsideFlange.assembledMesh3D.thicknessPolygons.where((p) => p.faceId.contains('RIM_inner_top_notch_'));
       expect(innerNotchRims.isNotEmpty, isTrue, reason: 'Inner rail in 3D must have V-notch opening rims for outside flange');
     });
+
+    test('Cable Ladder Reducer, Tee, and Cross C-Channel Flanges, Coupler Holes, and Sheet Thickness Compliance', () {
+      const standardParams = LadderAssemblyParameters(
+        width: 600.0,
+        height: 100.0,
+        thickness: 2.0,
+        flangeWidth: 32.0,
+        flangeDirection: LadderFlangeDirection.inside,
+        accessoryStyle: LadderAccessoryStyle.segmented,
+        jointMethod: LadderRungJointMethod.passThroughOutsideWeld,
+      );
+
+      // =========================================================================
+      // 1. Reducer Verification
+      // =========================================================================
+      final reducer = LadderAssemblyGenerator.generateReducer(
+        width1: 600.0,
+        width2: 300.0,
+        length: 600.0,
+        alignment: 'straight',
+        params: standardParams,
+      );
+
+      // Verify C-channel polygons: outer web, inner web, outer flanges, inner flanges
+      final redPolys = reducer.assembledMesh3D.polygons;
+      final redOuterWebs = redPolys.where((p) => p.faceId.contains('_outer_web'));
+      final redInnerWebs = redPolys.where((p) => p.faceId.contains('_inner_web'));
+      final redOuterFlanges = redPolys.where((p) => p.faceId.contains('_outer_top_flange') || p.faceId.contains('_outer_bottom_flange'));
+      final redInnerFlanges = redPolys.where((p) => p.faceId.contains('_inner_top_flange') || p.faceId.contains('_inner_bottom_flange'));
+
+      expect(redOuterWebs.isNotEmpty, isTrue, reason: 'Reducer must have outer web polygons');
+      expect(redInnerWebs.isNotEmpty, isTrue, reason: 'Reducer must have inner web polygons with sheet thickness');
+      expect(redOuterFlanges.isNotEmpty, isTrue, reason: 'Reducer must have top and bottom outer flanges');
+      expect(redInnerFlanges.isNotEmpty, isTrue, reason: 'Reducer must have top and bottom inner flanges');
+
+      // Verify thickness rims (lip thickness faces) and hole sidewalls
+      final redRims = reducer.assembledMesh3D.thicknessPolygons.where((p) => p.faceId.startsWith('RIM_'));
+      expect(redRims.isNotEmpty, isTrue, reason: 'Reducer side rails must have flange lip rim thickness faces');
+
+      // Verify coupler splice holes (2x Ø10mm octagons) at ends
+      final webWithCouplerHoles = redOuterWebs.where((p) => p.holes.any((h) => h.length == 8));
+      expect(webWithCouplerHoles.isNotEmpty, isTrue, reason: 'Reducer end rails must have 8-point coupler holes');
+
+      // Verify pass-through 40x20mm rung slots (4-point rectangular holes)
+      final webWithRungSlots = redOuterWebs.where((p) => p.holes.any((h) => h.length == 4));
+      expect(webWithRungSlots.isNotEmpty, isTrue, reason: 'Reducer rails must have pass-through rung slots');
+
+      // Verify rungs have top web and flanges
+      expect(reducer.rungs.length, greaterThanOrEqualTo(2));
+      expect(reducer.splicePorts.length, equals(2));
+      expect(reducer.splicePorts[0].width, equals(600.0));
+      expect(reducer.splicePorts[1].width, equals(300.0));
+
+      // Test Left-aligned reducer
+      final leftReducer = LadderAssemblyGenerator.generateReducer(
+        width1: 600.0,
+        width2: 400.0,
+        length: 500.0,
+        alignment: 'left',
+        params: standardParams,
+      );
+      expect(leftReducer.assembledMesh3D.polygons.isNotEmpty, isTrue);
+
+      // =========================================================================
+      // 2. Equal & Unequal Tee Verification
+      // =========================================================================
+      // 2a. Equal Tee
+      final equalTee = LadderAssemblyGenerator.generateTee(
+        mainWidth: 600.0,
+        branchWidth: 600.0,
+        radiusMm: 300.0,
+        params: standardParams,
+      );
+
+      expect(equalTee.productName.contains('Tee 600×600×100mm'), isTrue);
+      expect(equalTee.splicePorts.length, equals(3));
+      expect(equalTee.splicePorts[0].width, equals(600.0));
+      expect(equalTee.splicePorts[1].width, equals(600.0));
+      expect(equalTee.splicePorts[2].width, equals(600.0));
+      expect(equalTee.hardwareBOM.spliceCouplerCount, equals(3));
+      expect(equalTee.hardwareBOM.couplerBoltCount, equals(12));
+
+      // Verify Tee C-Channel rails: back rail and mitered corner rails
+      final teePolys = equalTee.assembledMesh3D.polygons;
+      final teeOuterWebs = teePolys.where((p) => p.faceId.contains('_outer_web'));
+      final teeFlanges = teePolys.where((p) => p.faceId.contains('_flange'));
+      expect(teeOuterWebs.length, greaterThanOrEqualTo(5), reason: 'Tee must have back rail and corner rail segments');
+      expect(teeFlanges.isNotEmpty, isTrue, reason: 'Tee rails must have top and bottom C-channel flanges');
+
+      // Verify coupler holes at ports
+      final teeWebsWithHoles = teeOuterWebs.where((p) => p.holes.any((h) => h.length == 8));
+      expect(teeWebsWithHoles.isNotEmpty, isTrue, reason: 'Tee ports must have 2x Ø10mm coupler holes');
+
+      // 2b. Unequal Tee
+      final unequalTee = LadderAssemblyGenerator.generateTee(
+        mainWidth: 600.0,
+        branchWidth: 300.0,
+        runWidth: 450.0,
+        radiusMm: 300.0,
+        params: standardParams,
+      );
+
+      expect(unequalTee.productName.contains('Unequal Tee'), isTrue);
+      // In TruFold standard, Port 1 is Branch (P1 in UI), Port 2 is Main Out / Right (P2 in UI), Port 3 is Main In (P3 in UI)
+      expect(unequalTee.splicePorts[0].width, equals(300.0));
+      expect(unequalTee.splicePorts[1].width, equals(450.0));
+      expect(unequalTee.splicePorts[2].width, equals(600.0));
+      expect(unequalTee.assembledMesh3D.polygons.isNotEmpty, isTrue);
+
+      // =========================================================================
+      // 3. Equal & Unequal Cross Verification
+      // =========================================================================
+      // 3a. Equal Cross
+      final equalCross = LadderAssemblyGenerator.generateCross(
+        mainWidth: 600.0,
+        branchWidth: 600.0,
+        radiusMm: 300.0,
+        params: standardParams,
+      );
+
+      expect(equalCross.productName.contains('Cross 600×600×100mm'), isTrue);
+      expect(equalCross.splicePorts.length, equals(4));
+      expect(equalCross.splicePorts.every((p) => p.width == 600.0), isTrue);
+      expect(equalCross.hardwareBOM.spliceCouplerCount, equals(4));
+      expect(equalCross.hardwareBOM.couplerBoltCount, equals(16));
+
+      // Verify 4 corner C-channel rails
+      final crossPolys = equalCross.assembledMesh3D.polygons;
+      final crossFlanges = crossPolys.where((p) => p.faceId.contains('_flange'));
+      expect(crossFlanges.isNotEmpty, isTrue, reason: 'Cross must have C-channel flanges on all 4 corners');
+
+      // 3b. Unequal Cross
+      final unequalCross = LadderAssemblyGenerator.generateCross(
+        mainWidth: 600.0,
+        branchWidth: 400.0,
+        eastWidth: 500.0,
+        southWidth: 300.0,
+        radiusMm: 300.0,
+        params: standardParams,
+      );
+
+      expect(unequalCross.productName.contains('Unequal Cross'), isTrue);
+      expect(unequalCross.splicePorts[0].width, equals(600.0)); // West
+      expect(unequalCross.splicePorts[1].width, equals(500.0)); // East
+      expect(unequalCross.splicePorts[2].width, equals(400.0)); // North
+      expect(unequalCross.splicePorts[3].width, equals(300.0)); // South
+      expect(unequalCross.assembledMesh3D.polygons.isNotEmpty, isTrue);
+
+      // =========================================================================
+      // 4. DDS Evaluator Integration with Unequal Variants
+      // =========================================================================
+      const teeInstance = DdsProductInstance(
+        instanceId: 'inst_unequal_tee',
+        productName: 'Cable Ladder Unequal Tee',
+        productCode: 'LAD-TEE-UNEQUAL',
+        templateReference: DdsTemplateReference(templateId: 'ladder_tee', baselineFileName: 'ladder_tee.dsf'),
+        instanceParameters: {
+          'width': 600.0,
+          'run_width': 450.0,
+          'branch_width': 300.0,
+          'height': 100.0,
+          'radius': 300.0,
+          'flange_width': 32.0,
+        },
+        coverConfiguration: DdsCoverConfig(included: false),
+      );
+      final baselineDoc = DsfDocument.sampleCableTray();
+      final evaluatedTee = DdsInstanceEvaluator.evaluate(instance: teeInstance, baselineDoc: baselineDoc);
+      expect(evaluatedTee.calculatedTakeoff.estimatedNetWeightKg, greaterThan(0.0));
+      expect(evaluatedTee.baseMesh3D.polygons.isNotEmpty, isTrue);
+
+      const crossInstance = DdsProductInstance(
+        instanceId: 'inst_unequal_cross',
+        productName: 'Cable Ladder Unequal Cross',
+        productCode: 'LAD-CROSS-UNEQUAL',
+        templateReference: DdsTemplateReference(templateId: 'ladder_cross', baselineFileName: 'ladder_cross.dsf'),
+        instanceParameters: {
+          'width': 600.0,
+          'east_width': 500.0,
+          'branch_width': 400.0,
+          'south_width': 300.0,
+          'height': 100.0,
+          'radius': 300.0,
+          'flange_width': 32.0,
+        },
+        coverConfiguration: DdsCoverConfig(included: false),
+      );
+      final evaluatedCross = DdsInstanceEvaluator.evaluate(instance: crossInstance, baselineDoc: baselineDoc);
+      expect(evaluatedCross.calculatedTakeoff.estimatedNetWeightKg, greaterThan(0.0));
+      expect(evaluatedCross.baseMesh3D.polygons.isNotEmpty, isTrue);
+
+      // =========================================================================
+      // 5. Template Resolver Disambiguation for Separate Products
+      // =========================================================================
+      expect(DdsTemplateResolver.templateDisplayNames['ladder_equal_tee'], equals('Cable Ladder Equal Tee'));
+      expect(DdsTemplateResolver.templateDisplayNames['ladder_unequal_tee'], equals('Cable Ladder Unequal Tee'));
+      expect(DdsTemplateResolver.templateDisplayNames['ladder_equal_cross'], equals('Cable Ladder Equal Cross'));
+      expect(DdsTemplateResolver.templateDisplayNames['ladder_unequal_cross'], equals('Cable Ladder Unequal Cross'));
+
+      expect(DdsTemplateResolver.matchByDescription('CABLE LADDER EQUAL TEE 600X100 R300')?.templateId, equals('ladder_equal_tee'));
+      expect(DdsTemplateResolver.matchByDescription('CABLE LADDER UNEQUAL TEE 600X450X300X100')?.templateId, equals('ladder_unequal_tee'));
+      expect(DdsTemplateResolver.matchByDescription('CABLE LADDER EQUAL CROSS 600X100')?.templateId, equals('ladder_equal_cross'));
+      expect(DdsTemplateResolver.matchByDescription('CABLE LADDER UNEQUAL CROSS 600X500X400X300')?.templateId, equals('ladder_unequal_cross'));
+
+      // =========================================================================
+      // 6. DDS Evaluator with Independent Port Parameters (port1_width..port4_width)
+      // =========================================================================
+      const separateUnequalTeeInst = DdsProductInstance(
+        instanceId: 'inst_sep_ut',
+        productName: 'Cable Ladder Unequal Tee',
+        productCode: 'LAD-UTEE-PORT',
+        templateReference: DdsTemplateReference(templateId: 'ladder_unequal_tee', baselineFileName: 'ladder_unequal_tee.dsf'),
+        instanceParameters: {
+          'port1_width': 600.0,
+          'port2_width': 450.0,
+          'port3_width': 300.0,
+          'height': 100.0,
+          'radius': 300.0,
+          'flange_width': 32.0,
+        },
+        coverConfiguration: DdsCoverConfig(included: false),
+      );
+      final evalSepUT = DdsInstanceEvaluator.evaluate(instance: separateUnequalTeeInst, baselineDoc: baselineDoc);
+      expect(evalSepUT.baseMesh3D.polygons.isNotEmpty, isTrue);
+
+      const separateUnequalCrossInst = DdsProductInstance(
+        instanceId: 'inst_sep_ux',
+        productName: 'Cable Ladder Unequal Cross',
+        productCode: 'LAD-UCROSS-PORT',
+        templateReference: DdsTemplateReference(templateId: 'ladder_unequal_cross', baselineFileName: 'ladder_unequal_cross.dsf'),
+        instanceParameters: {
+          'port1_width': 600.0,
+          'port2_width': 500.0,
+          'port3_width': 400.0,
+          'port4_width': 300.0,
+          'height': 100.0,
+          'radius': 300.0,
+          'flange_width': 32.0,
+        },
+        coverConfiguration: DdsCoverConfig(included: false),
+      );
+      final evalSepUX = DdsInstanceEvaluator.evaluate(instance: separateUnequalCrossInst, baselineDoc: baselineDoc);
+      expect(evalSepUX.baseMesh3D.polygons.isNotEmpty, isTrue);
+    });
+
+    test('Cable Ladder Unequal Tee SS1-SS4 Compliance: throat rung, independent port scaling, and 2D blanks', () {
+      // 1. Verify Tee Rung Placement (SS1 datasheet):
+      // Main In: 750mm, Main Out: 500mm, Branch: 300mm
+      const teeParams = LadderAssemblyParameters(
+        width: 600.0,
+        height: 100.0,
+        length: 3000.0,
+        thickness: 2.0,
+        flangeWidth: 32.0,
+        accessoryStyle: LadderAccessoryStyle.segmented,
+        jointMethod: LadderRungJointMethod.passThroughOutsideWeld,
+      );
+
+      final unequalTee = LadderAssemblyGenerator.generateUnequalTee(
+        mainInWidth: 750.0,
+        mainOutWidth: 500.0,
+        branchWidth: 300.0,
+        radiusMm: 300.0,
+        params: teeParams,
+      );
+
+      // Verify Port convention:
+      // Port 1 = Branch (300mm), Port 2 = Main Out (500mm), Port 3 = Main In (750mm)
+      expect(unequalTee.splicePorts[0].width, equals(300.0));
+      expect(unequalTee.splicePorts[1].width, equals(500.0));
+      expect(unequalTee.splicePorts[2].width, equals(750.0));
+
+      // Verify throat rung presence:
+      // A rung with cutLength for branch (300mm + projection) oriented horizontally across the branch throat
+      final throatY = math.max(750.0, 500.0) + 300.0;
+      final throatRung = unequalTee.rungs.where((r) => r.orientationAngleRad != 0.0 && (r.stationX - throatY).abs() < 1.0);
+      expect(throatRung.isNotEmpty, isTrue, reason: 'Throat rung must exist at branch junction per SS1 datasheet');
+
+      // Verify distinct rungs:
+      // Branch rungs (300mm span), Main In rungs (750mm span), Main Out rungs (500mm span)
+      final dsfDoc = LadderAssemblyGenerator.createAssemblyDsfDocument(unequalTee);
+      expect(dsfDoc.productType, equals('ladder_unequal_tee'));
+      expect(dsfDoc.dimensions.isNotEmpty, isTrue, reason: '2D sketch must have dimensions');
+
+      // Check unique rung blanks in faces:
+      final rungFaces = dsfDoc.faces.where((f) => f.id.startsWith('rung_blank'));
+      expect(rungFaces.length, greaterThanOrEqualTo(2), reason: 'Multiple distinct rung blanks must be generated');
+
+      // Check distinct corner rails in additionalRailBlanks:
+      expect(unequalTee.additionalRailBlanks.isNotEmpty, isTrue, reason: 'Additional corner rail blanks must exist');
+
+      // 2. Curved vs Segmented style toggle verification:
+      final curvedParams = teeParams.copyWith(accessoryStyle: LadderAccessoryStyle.curved);
+      final curvedTee = LadderAssemblyGenerator.generateUnequalTee(
+        mainInWidth: 750.0,
+        mainOutWidth: 500.0,
+        branchWidth: 300.0,
+        radiusMm: 300.0,
+        params: curvedParams,
+      );
+      // Segmented has 2 corner segments per miter; curved has 16 segments
+      final segmentedPolyCount = unequalTee.assembledMesh3D.polygons.length;
+      final curvedPolyCount = curvedTee.assembledMesh3D.polygons.length;
+      expect(curvedPolyCount, greaterThan(segmentedPolyCount), reason: 'Curved tee must have smooth high-facet count (16 segs vs 2)');
+
+      // 3. Independent Port Scaling via generateFromDocument:
+      final morphedDoc = dsfDoc.copyWith(
+        parameters: {
+          ...dsfDoc.parameters,
+          'port1_width': 250.0, // branch
+          'port2_width': 400.0, // right / out
+          'port3_width': 900.0, // main in
+          'accessory_style': 0.0, // curved
+        },
+      );
+      final morphedAssembly = LadderAssemblyGenerator.generateFromDocument(morphedDoc);
+      expect(morphedAssembly.splicePorts[0].width, equals(250.0));
+      expect(morphedAssembly.splicePorts[1].width, equals(400.0));
+      expect(morphedAssembly.splicePorts[2].width, equals(900.0));
+      expect(morphedAssembly.parameters.accessoryStyle, equals(LadderAccessoryStyle.curved));
+    });
+
+    test('Cable Ladder Unequal Tee - Center rungs, throat length, segmented extension, and inside flange', () {
+      final paramsInside = LadderAssemblyParameters(
+        width: 300.0,
+        height: 100.0,
+        length: 1000.0,
+        thickness: 2.0,
+        flangeWidth: 32.0,
+        flangeDirection: LadderFlangeDirection.inside,
+        accessoryStyle: LadderAccessoryStyle.segmented,
+        intermediateTargetPitch: 250.0,
+      );
+
+      final tee = LadderAssemblyGenerator.generateUnequalTee(
+        mainInWidth: 300.0,
+        mainOutWidth: 250.0,
+        branchWidth: 200.0,
+        radiusMm: 300.0,
+        params: paramsInside,
+      );
+
+      final r = 300.0;
+      const leadIn = 75.0;
+      final throatY = 300.0 + r; // max(300, 250) + 300 = 600
+
+      // 1. Branch port reach is throatY (ends directly at throatY)
+      expect(tee.splicePorts[0].center.y, closeTo(throatY, 1e-3));
+
+      // 2. Throat rung exists across branch opening
+      final throatRung = tee.rungs.firstWhere((rg) => rg.orientationAngleRad == math.pi / 2.0);
+      expect(throatRung.center3D.y, closeTo(throatY, 1e-3));
+
+      // 3. Inside corner rung exists at branchRightX extending to throatY connecting to horizontal inner rung
+      final cornerRungs = tee.rungs.where((rg) =>
+          rg.orientationAngleRad == 0.0 &&
+          (rg.stationX - (leadIn + r + 200.0)).abs() < 1.0);
+      expect(cornerRungs.isNotEmpty, isTrue, reason: 'Inside corner rung must exist at branch junction');
+      expect(cornerRungs.first.cutLength, closeTo(throatY, 15.0));
+
+      // 4. Exactly 1 horizontal branch rung exists (at throatY)
+      final branchRungs = tee.rungs.where((rg) => rg.orientationAngleRad == math.pi / 2.0);
+      expect(branchRungs.length, equals(1), reason: 'Only 1 horizontal branch rung exists at throatY');
+
+      // 5. 3D Mesh includes valid polygons and exact boundLength
+      expect(tee.assembledMesh3D.polygons.isNotEmpty, isTrue);
+      expect(tee.assembledMesh3D.boundLength, closeTo(throatY, 1e-3));
+    });
   });
 }

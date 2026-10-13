@@ -1016,6 +1016,52 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
               ],
             ),
           ),
+          const SizedBox(height: 10),
+
+          // 3D Welding Seam Overlay Setting (SS1 / SS2)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: prefs.showWeldOverlay ? const Color(0xFFFEF3C7) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: prefs.showWeldOverlay ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.blur_linear_rounded,
+                      size: 15,
+                      color: prefs.showWeldOverlay ? const Color(0xFFD97706) : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Translucent Weld Overlay',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: prefs.showWeldOverlay ? const Color(0xFF92400E) : const Color(0xFF475569),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(
+                  height: 20,
+                  width: 34,
+                  child: Switch(
+                    value: prefs.showWeldOverlay,
+                    activeThumbColor: const Color(0xFFD97706),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (active) {
+                      widget.onChanged(prefs.copyWith(showWeldOverlay: active));
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

@@ -55,3 +55,18 @@ This document sets mandatory guidelines for all Antigravity agent sessions opera
 - **CAD Primitives & Models**: `lib/sheet_metal_studio/models/cad_primitives.dart`, `cad_geometry.dart`, `cad_dimension.dart`, `cad_constraint.dart`
 - **Solvers & Engines**: `lib/sheet_metal_studio/engine/`
 - **Module Tests**: `test/modules/sheet_metal_studio/`
+
+---
+
+## 5. MVVM Architecture & Component Modularization Rules (Mandatory)
+
+- **Strict Separation of Concerns (MVVM)**:
+  - **Models**: Plain Dart data structures (`AssemblyDocument`, `AssemblyPart`, `AssemblyWeldJoint`, CAD primitives). No UI dependencies.
+  - **ViewModels**: State containers and business/CAD logic (`AssemblyStudioViewModel`). Holds commands, undo/redo history, selection sets, and math transformations.
+  - **Views & Viewports**: Pure UI layers. Must NOT exceed manageable file sizes (aim for < 600–800 lines per widget file).
+- **No Monolithic Single-File Viewports**:
+  - Never place all custom painters, floating HUDs, context menus, and interaction math into a single massive file.
+  - **Custom Painters**: Extract into dedicated `views/widgets/viewport/painters/` files (e.g. cursor painters, weld painters, protractor overlay, magnetic spots).
+  - **HUD & Overlay Widgets**: Extract into dedicated `views/widgets/viewport/overlays/` files (e.g. VCB HUD, selection toolbar, weld badge).
+  - **Gesture & Tool Handlers**: Extract tool-specific pointer calculations into reusable controllers/handlers (e.g. `AssemblyViewportMoveHandler`, `AssemblyViewportRotateHandler`, `AssemblyViewportWeldHandler`).
+

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../models/cad_dimension.dart';
 import '../../models/cad_geometry.dart';
 import '../../models/cad_part.dart';
 import '../../models/cad_primitives.dart';
@@ -48,21 +49,71 @@ class LadderAssemblyGenerator {
     required LadderAssemblyParameters params,
   }) => LadderAccessoryGenerator.generateReducer(width1: width1, width2: width2, length: length, alignment: alignment, params: params);
 
-  /// Generates an equal or unequal tee ladder assembly.
+  /// Generates a 3-way equal tee ladder assembly.
+  static DsfLadderAssembly generateEqualTee({required double width, double radiusMm = 300.0, required LadderAssemblyParameters params}) =>
+      LadderAccessoryGenerator.generateEqualTee(width: width, radiusMm: radiusMm, params: params);
+
+  /// Generates a 3-way unequal tee ladder assembly with 3 independently scalable ports.
+  static DsfLadderAssembly generateUnequalTee({
+    required double mainInWidth,
+    required double mainOutWidth,
+    required double branchWidth,
+    double radiusMm = 300.0,
+    required LadderAssemblyParameters params,
+  }) => LadderAccessoryGenerator.generateUnequalTee(
+    mainInWidth: mainInWidth,
+    mainOutWidth: mainOutWidth,
+    branchWidth: branchWidth,
+    radiusMm: radiusMm,
+    params: params,
+  );
+
+  /// Generates an equal or unequal tee ladder assembly (backward compatibility wrapper).
   static DsfLadderAssembly generateTee({
     required double mainWidth,
     required double branchWidth,
+    double? runWidth,
     double radiusMm = 300.0,
     required LadderAssemblyParameters params,
-  }) => LadderAccessoryGenerator.generateTee(mainWidth: mainWidth, branchWidth: branchWidth, radiusMm: radiusMm, params: params);
+  }) => LadderAccessoryGenerator.generateTee(mainWidth: mainWidth, branchWidth: branchWidth, runWidth: runWidth, radiusMm: radiusMm, params: params);
 
-  /// Generates an equal or unequal cross ladder assembly.
+  /// Generates a 4-way equal cross ladder assembly.
+  static DsfLadderAssembly generateEqualCross({required double width, double radiusMm = 300.0, required LadderAssemblyParameters params}) =>
+      LadderAccessoryGenerator.generateEqualCross(width: width, radiusMm: radiusMm, params: params);
+
+  /// Generates a 4-way unequal cross ladder assembly with 4 independently scalable ports.
+  static DsfLadderAssembly generateUnequalCross({
+    required double westWidth,
+    required double eastWidth,
+    required double northWidth,
+    required double southWidth,
+    double radiusMm = 300.0,
+    required LadderAssemblyParameters params,
+  }) => LadderAccessoryGenerator.generateUnequalCross(
+    westWidth: westWidth,
+    eastWidth: eastWidth,
+    northWidth: northWidth,
+    southWidth: southWidth,
+    radiusMm: radiusMm,
+    params: params,
+  );
+
+  /// Generates an equal or unequal cross ladder assembly (backward compatibility wrapper).
   static DsfLadderAssembly generateCross({
     required double mainWidth,
     required double branchWidth,
+    double? eastWidth,
+    double? southWidth,
     double radiusMm = 300.0,
     required LadderAssemblyParameters params,
-  }) => LadderAccessoryGenerator.generateCross(mainWidth: mainWidth, branchWidth: branchWidth, radiusMm: radiusMm, params: params);
+  }) => LadderAccessoryGenerator.generateCross(
+    mainWidth: mainWidth,
+    branchWidth: branchWidth,
+    eastWidth: eastWidth,
+    southWidth: southWidth,
+    radiusMm: radiusMm,
+    params: params,
+  );
 
   /// Generates a complete straight cable ladder assembly.
   static DsfLadderAssembly generateStraightLadder(LadderAssemblyParameters params) {
@@ -81,11 +132,7 @@ class LadderAssemblyGenerator {
     final double railFlatLength = params.length;
 
     // Material spec
-    final material = SheetMetalMaterial(
-      materialGrade: params.materialName,
-      thicknessMm: params.thickness,
-      paintCoat: params.paintCoat,
-    );
+    final material = SheetMetalMaterial(materialGrade: params.materialName, thicknessMm: params.thickness, paintCoat: params.paintCoat);
 
     // 3. Generate Flat Blanks (CadPart) for CAM / Nesting
     final leftRailPart = generateCustomRailFlatBlank(
@@ -235,9 +282,7 @@ class LadderAssemblyGenerator {
     final double H = params.height;
     final double W = railFlatWidth; // 2 * F + H
 
-    final sortedStations = (miterBendStations != null && miterBendStations.isNotEmpty)
-        ? (List<double>.from(miterBendStations)..sort())
-        : <double>[];
+    final sortedStations = (miterBendStations != null && miterBendStations.isNotEmpty) ? (List<double>.from(miterBendStations)..sort()) : <double>[];
 
     final outerContour = <CadPoint2D>[];
 
@@ -283,31 +328,15 @@ class LadderAssemblyGenerator {
     if (sortedStations.isNotEmpty) {
       for (int k = 0; k < sortedStations.length; k++) {
         final double x = sortedStations[k];
-        geometries.add(
-          CadLine2D(
-            id: '${railSide}_miter_bend_$k',
-            p1: CadPoint2D(x, F),
-            p2: CadPoint2D(x, F + H),
-            layer: 'BEND_TRANSVERSE',
-          ),
-        );
+        geometries.add(CadLine2D(id: '${railSide}_miter_bend_$k', p1: CadPoint2D(x, F), p2: CadPoint2D(x, F + H), layer: 'BEND_TRANSVERSE'));
       }
     }
 
     // 2. Longitudinal Bend Lines
     // Bottom flange bend line
-    geometries.add(
-      CadLine2D(id: '${railSide}_bend_bottom', p1: CadPoint2D(0.0, F), p2: CadPoint2D(railFlatLength, F), layer: 'BEND_90'),
-    );
+    geometries.add(CadLine2D(id: '${railSide}_bend_bottom', p1: CadPoint2D(0.0, F), p2: CadPoint2D(railFlatLength, F), layer: 'BEND_90'));
     // Top flange bend line
-    geometries.add(
-      CadLine2D(
-        id: '${railSide}_bend_top',
-        p1: CadPoint2D(0.0, F + H),
-        p2: CadPoint2D(railFlatLength, F + H),
-        layer: 'BEND_90',
-      ),
-    );
+    geometries.add(CadLine2D(id: '${railSide}_bend_top', p1: CadPoint2D(0.0, F + H), p2: CadPoint2D(railFlatLength, F + H), layer: 'BEND_90'));
 
     // 3. Coupler Splice Holes (4x Ø10mm at both ends)
     if (params.includeSpliceHoles) {
@@ -560,89 +589,113 @@ class LadderAssemblyGenerator {
     // --- 2. LEFT PASS-THROUGH PROJECTION ---
     if (hasLeftProj) {
       // Top web
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_left_top',
-        vertices: [pWorld(uStart, v1, 0.0), pWorld(uIntStart, v1, 0.0), pWorld(uIntStart, v2, 0.0), pWorld(uStart, v2, 0.0)],
-        normal: nWorld(0.0, 0.0, 1.0),
-        color: color,
-      ));
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_left_top',
+          vertices: [pWorld(uStart, v1, 0.0), pWorld(uIntStart, v1, 0.0), pWorld(uIntStart, v2, 0.0), pWorld(uStart, v2, 0.0)],
+          normal: nWorld(0.0, 0.0, 1.0),
+          color: color,
+        ),
+      );
       // Front flange
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_left_front',
-        vertices: [pWorld(uStart, v1, 0.0), pWorld(uStart, v1, -rungDepth), pWorld(uIntStart, v1, -rungDepth), pWorld(uIntStart, v1, 0.0)],
-        normal: nWorld(0.0, -1.0, 0.0),
-        color: color,
-      ));
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_left_front',
+          vertices: [pWorld(uStart, v1, 0.0), pWorld(uStart, v1, -rungDepth), pWorld(uIntStart, v1, -rungDepth), pWorld(uIntStart, v1, 0.0)],
+          normal: nWorld(0.0, -1.0, 0.0),
+          color: color,
+        ),
+      );
       // Back flange
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_left_back',
-        vertices: [pWorld(uStart, v2, 0.0), pWorld(uIntStart, v2, 0.0), pWorld(uIntStart, v2, -rungDepth), pWorld(uStart, v2, -rungDepth)],
-        normal: nWorld(0.0, 1.0, 0.0),
-        color: color,
-      ));
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_left_back',
+          vertices: [pWorld(uStart, v2, 0.0), pWorld(uIntStart, v2, 0.0), pWorld(uIntStart, v2, -rungDepth), pWorld(uStart, v2, -rungDepth)],
+          normal: nWorld(0.0, 1.0, 0.0),
+          color: color,
+        ),
+      );
       // Open C-channel tip wall profile rims (y = uStart) - NO solid cap
-      polys.add(CadFoldedPolygon3D(
-        faceId: 'RIM_${rungId}_cap_left_top',
-        vertices: [pWorld(uStart, v1, -t), pWorld(uStart, v2, -t), pWorld(uStart, v2, 0.0), pWorld(uStart, v1, 0.0)],
-        normal: nWorld(-1.0, 0.0, 0.0),
-        color: color,
-      ));
-      polys.add(CadFoldedPolygon3D(
-        faceId: 'RIM_${rungId}_cap_left_front',
-        vertices: [pWorld(uStart, v1, -rungDepth), pWorld(uStart, v1 + t, -rungDepth), pWorld(uStart, v1 + t, -t), pWorld(uStart, v1, -t)],
-        normal: nWorld(-1.0, 0.0, 0.0),
-        color: color,
-      ));
-      polys.add(CadFoldedPolygon3D(
-        faceId: 'RIM_${rungId}_cap_left_back',
-        vertices: [pWorld(uStart, v2 - t, -rungDepth), pWorld(uStart, v2, -rungDepth), pWorld(uStart, v2, -t), pWorld(uStart, v2 - t, -t)],
-        normal: nWorld(-1.0, 0.0, 0.0),
-        color: color,
-      ));
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_left_top',
+          vertices: [pWorld(uStart, v1, -t), pWorld(uStart, v2, -t), pWorld(uStart, v2, 0.0), pWorld(uStart, v1, 0.0)],
+          normal: nWorld(-1.0, 0.0, 0.0),
+          color: color,
+        ),
+      );
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_left_front',
+          vertices: [pWorld(uStart, v1, -rungDepth), pWorld(uStart, v1 + t, -rungDepth), pWorld(uStart, v1 + t, -t), pWorld(uStart, v1, -t)],
+          normal: nWorld(-1.0, 0.0, 0.0),
+          color: color,
+        ),
+      );
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_left_back',
+          vertices: [pWorld(uStart, v2 - t, -rungDepth), pWorld(uStart, v2, -rungDepth), pWorld(uStart, v2, -t), pWorld(uStart, v2 - t, -t)],
+          normal: nWorld(-1.0, 0.0, 0.0),
+          color: color,
+        ),
+      );
     }
 
     // --- 3. RIGHT PASS-THROUGH PROJECTION ---
     if (hasRightProj) {
       // Top web
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_right_top',
-        vertices: [pWorld(uIntEnd, v1, 0.0), pWorld(uEnd, v1, 0.0), pWorld(uEnd, v2, 0.0), pWorld(uIntEnd, v2, 0.0)],
-        normal: nWorld(0.0, 0.0, 1.0),
-        color: color,
-      ));
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_right_top',
+          vertices: [pWorld(uIntEnd, v1, 0.0), pWorld(uEnd, v1, 0.0), pWorld(uEnd, v2, 0.0), pWorld(uIntEnd, v2, 0.0)],
+          normal: nWorld(0.0, 0.0, 1.0),
+          color: color,
+        ),
+      );
       // Front flange
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_right_front',
-        vertices: [pWorld(uIntEnd, v1, 0.0), pWorld(uIntEnd, v1, -rungDepth), pWorld(uEnd, v1, -rungDepth), pWorld(uEnd, v1, 0.0)],
-        normal: nWorld(0.0, -1.0, 0.0),
-        color: color,
-      ));
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_right_front',
+          vertices: [pWorld(uIntEnd, v1, 0.0), pWorld(uIntEnd, v1, -rungDepth), pWorld(uEnd, v1, -rungDepth), pWorld(uEnd, v1, 0.0)],
+          normal: nWorld(0.0, -1.0, 0.0),
+          color: color,
+        ),
+      );
       // Back flange
-      polys.add(CadFoldedPolygon3D(
-        faceId: '${rungId}_proj_right_back',
-        vertices: [pWorld(uIntEnd, v2, 0.0), pWorld(uEnd, v2, 0.0), pWorld(uEnd, v2, -rungDepth), pWorld(uIntEnd, v2, -rungDepth)],
-        normal: nWorld(0.0, 1.0, 0.0),
-        color: color,
-      ));
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: '${rungId}_proj_right_back',
+          vertices: [pWorld(uIntEnd, v2, 0.0), pWorld(uEnd, v2, 0.0), pWorld(uEnd, v2, -rungDepth), pWorld(uIntEnd, v2, -rungDepth)],
+          normal: nWorld(0.0, 1.0, 0.0),
+          color: color,
+        ),
+      );
       // Open C-channel tip wall profile rims (y = uEnd) - NO solid cap
-      polys.add(CadFoldedPolygon3D(
-        faceId: 'RIM_${rungId}_cap_right_top',
-        vertices: [pWorld(uEnd, v1, 0.0), pWorld(uEnd, v2, 0.0), pWorld(uEnd, v2, -t), pWorld(uEnd, v1, -t)],
-        normal: nWorld(1.0, 0.0, 0.0),
-        color: color,
-      ));
-      polys.add(CadFoldedPolygon3D(
-        faceId: 'RIM_${rungId}_cap_right_front',
-        vertices: [pWorld(uEnd, v1, -rungDepth), pWorld(uEnd, v1, -t), pWorld(uEnd, v1 + t, -t), pWorld(uEnd, v1 + t, -rungDepth)],
-        normal: nWorld(1.0, 0.0, 0.0),
-        color: color,
-      ));
-      polys.add(CadFoldedPolygon3D(
-        faceId: 'RIM_${rungId}_cap_right_back',
-        vertices: [pWorld(uEnd, v2 - t, -rungDepth), pWorld(uEnd, v2 - t, -t), pWorld(uEnd, v2, -t), pWorld(uEnd, v2, -rungDepth)],
-        normal: nWorld(1.0, 0.0, 0.0),
-        color: color,
-      ));
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_right_top',
+          vertices: [pWorld(uEnd, v1, 0.0), pWorld(uEnd, v2, 0.0), pWorld(uEnd, v2, -t), pWorld(uEnd, v1, -t)],
+          normal: nWorld(1.0, 0.0, 0.0),
+          color: color,
+        ),
+      );
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_right_front',
+          vertices: [pWorld(uEnd, v1, -rungDepth), pWorld(uEnd, v1, -t), pWorld(uEnd, v1 + t, -t), pWorld(uEnd, v1 + t, -rungDepth)],
+          normal: nWorld(1.0, 0.0, 0.0),
+          color: color,
+        ),
+      );
+      polys.add(
+        CadFoldedPolygon3D(
+          faceId: 'RIM_${rungId}_cap_right_back',
+          vertices: [pWorld(uEnd, v2 - t, -rungDepth), pWorld(uEnd, v2 - t, -t), pWorld(uEnd, v2, -t), pWorld(uEnd, v2, -rungDepth)],
+          normal: nWorld(1.0, 0.0, 0.0),
+          color: color,
+        ),
+      );
     }
 
     // --- 4. INTERIOR RUNG SPAN ---
@@ -653,55 +706,57 @@ class LadderAssemblyGenerator {
       if (!hasLeftProj) [pWorld(uIntStart, v1, 0.0), pWorld(uIntStart, v2, 0.0)],
       if (!hasRightProj) [pWorld(uIntEnd, v1, 0.0), pWorld(uIntEnd, v2, 0.0)],
       for (final h in holes)
-        for (int i = 0; i < h.length; i++)
-          [h[i], h[(i + 1) % h.length]],
+        for (int i = 0; i < h.length; i++) [h[i], h[(i + 1) % h.length]],
     ];
 
-    polys.add(CadFoldedPolygon3D(
-      faceId: '${rungId}_top_web',
-      vertices: [pWorld(uIntStart, v1, 0.0), pWorld(uIntEnd, v1, 0.0), pWorld(uIntEnd, v2, 0.0), pWorld(uIntStart, v2, 0.0)],
-      normal: nWorld(0.0, 0.0, 1.0),
-      color: color,
-      holes: holes,
-      boundaryLines: topBoundaryLines,
-    ));
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_top_web',
+        vertices: [pWorld(uIntStart, v1, 0.0), pWorld(uIntEnd, v1, 0.0), pWorld(uIntEnd, v2, 0.0), pWorld(uIntStart, v2, 0.0)],
+        normal: nWorld(0.0, 0.0, 1.0),
+        color: color,
+        holes: holes,
+        boundaryLines: topBoundaryLines,
+      ),
+    );
 
     // Front flange
-    polys.add(CadFoldedPolygon3D(
-      faceId: '${rungId}_flange_front',
-      vertices: [pWorld(uIntStart, v1, 0.0), pWorld(uIntStart, v1, -rungDepth), pWorld(uIntEnd, v1, -rungDepth), pWorld(uIntEnd, v1, 0.0)],
-      normal: nWorld(0.0, -1.0, 0.0),
-      color: color,
-      boundaryLines: [
-        [pWorld(uIntStart, v1, -rungDepth), pWorld(uIntEnd, v1, -rungDepth)],
-      ],
-    ));
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_flange_front',
+        vertices: [pWorld(uIntStart, v1, 0.0), pWorld(uIntStart, v1, -rungDepth), pWorld(uIntEnd, v1, -rungDepth), pWorld(uIntEnd, v1, 0.0)],
+        normal: nWorld(0.0, -1.0, 0.0),
+        color: color,
+        boundaryLines: [
+          [pWorld(uIntStart, v1, -rungDepth), pWorld(uIntEnd, v1, -rungDepth)],
+        ],
+      ),
+    );
 
     // Back flange
-    polys.add(CadFoldedPolygon3D(
-      faceId: '${rungId}_flange_back',
-      vertices: [pWorld(uIntStart, v2, 0.0), pWorld(uIntEnd, v2, 0.0), pWorld(uIntEnd, v2, -rungDepth), pWorld(uIntStart, v2, -rungDepth)],
-      normal: nWorld(0.0, 1.0, 0.0),
-      color: color,
-      boundaryLines: [
-        [pWorld(uIntStart, v2, -rungDepth), pWorld(uIntEnd, v2, -rungDepth)],
-      ],
-    ));
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_flange_back',
+        vertices: [pWorld(uIntStart, v2, 0.0), pWorld(uIntEnd, v2, 0.0), pWorld(uIntEnd, v2, -rungDepth), pWorld(uIntStart, v2, -rungDepth)],
+        normal: nWorld(0.0, 1.0, 0.0),
+        color: color,
+        boundaryLines: [
+          [pWorld(uIntStart, v2, -rungDepth), pWorld(uIntEnd, v2, -rungDepth)],
+        ],
+      ),
+    );
 
     // --- 5. PHYSICAL SHEET THICKNESS: INNER FACES & BOTTOM LIPS ---
     // Inner top web with matching cutout holes through sheet thickness
-    polys.add(CadFoldedPolygon3D(
-      faceId: '${rungId}_top_web_inner',
-      vertices: [
-        pWorld(uStart, v1 + t, -t),
-        pWorld(uStart, v2 - t, -t),
-        pWorld(uEnd, v2 - t, -t),
-        pWorld(uEnd, v1 + t, -t),
-      ],
-      normal: nWorld(0.0, 0.0, -1.0),
-      color: color,
-      holes: holesInner,
-    ));
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_top_web_inner',
+        vertices: [pWorld(uStart, v1 + t, -t), pWorld(uStart, v2 - t, -t), pWorld(uEnd, v2 - t, -t), pWorld(uEnd, v1 + t, -t)],
+        normal: nWorld(0.0, 0.0, -1.0),
+        color: color,
+        holes: holesInner,
+      ),
+    );
 
     // Cutout sidewalls for slots in the top web (physical sheet thickness through metal)
     for (int hIdx = 0; hIdx < holes.length; hIdx++) {
@@ -722,68 +777,49 @@ class LadderAssemblyGenerator {
         final cLen = math.sqrt(crossX * crossX + crossY * crossY + crossZ * crossZ);
         final norm = cLen > 1e-6 ? CadPoint3D(crossX / cLen, crossY / cLen, crossZ / cLen) : const CadPoint3D(0.0, 0.0, 1.0);
 
-        polys.add(
-          CadFoldedPolygon3D(
-            faceId: '${rungId}_slot_${hIdx}_wall_$v',
-            vertices: [pA, pB, pBInner, pAInner],
-            normal: norm,
-            color: color,
-          ),
-        );
+        polys.add(CadFoldedPolygon3D(faceId: '${rungId}_slot_${hIdx}_wall_$v', vertices: [pA, pB, pBInner, pAInner], normal: norm, color: color));
       }
     }
 
     // Inner front flange
-    polys.add(CadFoldedPolygon3D(
-      faceId: '${rungId}_flange_front_inner',
-      vertices: [
-        pWorld(uStart, v1 + t, -rungDepth),
-        pWorld(uEnd, v1 + t, -rungDepth),
-        pWorld(uEnd, v1 + t, -t),
-        pWorld(uStart, v1 + t, -t),
-      ],
-      normal: nWorld(0.0, 1.0, 0.0),
-      color: color,
-    ));
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_flange_front_inner',
+        vertices: [pWorld(uStart, v1 + t, -rungDepth), pWorld(uEnd, v1 + t, -rungDepth), pWorld(uEnd, v1 + t, -t), pWorld(uStart, v1 + t, -t)],
+        normal: nWorld(0.0, 1.0, 0.0),
+        color: color,
+      ),
+    );
 
     // Inner back flange
-    polys.add(CadFoldedPolygon3D(
-      faceId: '${rungId}_flange_back_inner',
-      vertices: [
-        pWorld(uStart, v2 - t, -t),
-        pWorld(uEnd, v2 - t, -t),
-        pWorld(uEnd, v2 - t, -rungDepth),
-        pWorld(uStart, v2 - t, -rungDepth),
-      ],
-      normal: nWorld(0.0, -1.0, 0.0),
-      color: color,
-    ));
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: '${rungId}_flange_back_inner',
+        vertices: [pWorld(uStart, v2 - t, -t), pWorld(uEnd, v2 - t, -t), pWorld(uEnd, v2 - t, -rungDepth), pWorld(uStart, v2 - t, -rungDepth)],
+        normal: nWorld(0.0, -1.0, 0.0),
+        color: color,
+      ),
+    );
 
     // Bottom lip on front flange (thickness t)
-    polys.add(CadFoldedPolygon3D(
-      faceId: 'RIM_${rungId}_front_lip',
-      vertices: [
-        pWorld(uStart, v1, -rungDepth),
-        pWorld(uStart, v1 + t, -rungDepth),
-        pWorld(uEnd, v1 + t, -rungDepth),
-        pWorld(uEnd, v1, -rungDepth),
-      ],
-      normal: nWorld(0.0, 0.0, -1.0),
-      color: color,
-    ));
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: 'RIM_${rungId}_front_lip',
+        vertices: [pWorld(uStart, v1, -rungDepth), pWorld(uStart, v1 + t, -rungDepth), pWorld(uEnd, v1 + t, -rungDepth), pWorld(uEnd, v1, -rungDepth)],
+        normal: nWorld(0.0, 0.0, -1.0),
+        color: color,
+      ),
+    );
 
     // Bottom lip on back flange (thickness t)
-    polys.add(CadFoldedPolygon3D(
-      faceId: 'RIM_${rungId}_back_lip',
-      vertices: [
-        pWorld(uStart, v2 - t, -rungDepth),
-        pWorld(uStart, v2, -rungDepth),
-        pWorld(uEnd, v2, -rungDepth),
-        pWorld(uEnd, v2 - t, -rungDepth),
-      ],
-      normal: nWorld(0.0, 0.0, -1.0),
-      color: color,
-    ));
+    polys.add(
+      CadFoldedPolygon3D(
+        faceId: 'RIM_${rungId}_back_lip',
+        vertices: [pWorld(uStart, v2 - t, -rungDepth), pWorld(uStart, v2, -rungDepth), pWorld(uEnd, v2, -rungDepth), pWorld(uEnd, v2 - t, -rungDepth)],
+        normal: nWorld(0.0, 0.0, -1.0),
+        color: color,
+      ),
+    );
 
     return polys;
   }
@@ -1030,8 +1066,7 @@ class LadderAssemblyGenerator {
           if (!hasLeftProj) [CadPoint3D(x1, yIntStart, zTop), CadPoint3D(x2, yIntStart, zTop)],
           if (!hasRightProj) [CadPoint3D(x1, yIntEnd, zTop), CadPoint3D(x2, yIntEnd, zTop)],
           for (final h in holes)
-            for (int i = 0; i < h.length; i++)
-              [CadPoint3D(h[i].x, h[i].y, zTop), CadPoint3D(h[(i + 1) % h.length].x, h[(i + 1) % h.length].y, zTop)],
+            for (int i = 0; i < h.length; i++) [CadPoint3D(h[i].x, h[i].y, zTop), CadPoint3D(h[(i + 1) % h.length].x, h[(i + 1) % h.length].y, zTop)],
         ],
       ),
     );
@@ -1538,12 +1573,7 @@ class LadderAssemblyGenerator {
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'left_rail_web_inner_$s',
-          vertices: [
-            CadPoint3D(xStart, yLInner, T),
-            CadPoint3D(xStart, yLInner, H - T),
-            CadPoint3D(xEnd, yLInner, H - T),
-            CadPoint3D(xEnd, yLInner, T),
-          ],
+          vertices: [CadPoint3D(xStart, yLInner, T), CadPoint3D(xStart, yLInner, H - T), CadPoint3D(xEnd, yLInner, H - T), CadPoint3D(xEnd, yLInner, T)],
           normal: CadPoint3D(0.0, innerSignL, 0.0),
           color: railColor,
           holes: leftInnerHoles,
@@ -1555,12 +1585,7 @@ class LadderAssemblyGenerator {
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'left_rail_bottom_flange_inner_$s',
-          vertices: [
-            CadPoint3D(xStart, yLInner, T),
-            CadPoint3D(xEnd, yLInner, T),
-            CadPoint3D(xEnd, yLBottomFlange, T),
-            CadPoint3D(xStart, yLBottomFlange, T),
-          ],
+          vertices: [CadPoint3D(xStart, yLInner, T), CadPoint3D(xEnd, yLInner, T), CadPoint3D(xEnd, yLBottomFlange, T), CadPoint3D(xStart, yLBottomFlange, T)],
           normal: const CadPoint3D(0.0, 0.0, 1.0),
           color: railColor,
           boundaryLines: const [],
@@ -1668,12 +1693,7 @@ class LadderAssemblyGenerator {
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'right_rail_web_inner_$s',
-          vertices: [
-            CadPoint3D(xStart, yRInner, T),
-            CadPoint3D(xEnd, yRInner, T),
-            CadPoint3D(xEnd, yRInner, H - T),
-            CadPoint3D(xStart, yRInner, H - T),
-          ],
+          vertices: [CadPoint3D(xStart, yRInner, T), CadPoint3D(xEnd, yRInner, T), CadPoint3D(xEnd, yRInner, H - T), CadPoint3D(xStart, yRInner, H - T)],
           normal: CadPoint3D(0.0, innerSignR, 0.0),
           color: railColor,
           holes: rightInnerHoles,
@@ -1685,12 +1705,7 @@ class LadderAssemblyGenerator {
       polygons.add(
         CadFoldedPolygon3D(
           faceId: 'right_rail_bottom_flange_inner_$s',
-          vertices: [
-            CadPoint3D(xStart, yRInner, T),
-            CadPoint3D(xStart, yRBottomFlange, T),
-            CadPoint3D(xEnd, yRBottomFlange, T),
-            CadPoint3D(xEnd, yRInner, T),
-          ],
+          vertices: [CadPoint3D(xStart, yRInner, T), CadPoint3D(xStart, yRBottomFlange, T), CadPoint3D(xEnd, yRBottomFlange, T), CadPoint3D(xEnd, yRInner, T)],
           normal: const CadPoint3D(0.0, 0.0, 1.0),
           color: railColor,
           boundaryLines: const [],
@@ -1947,6 +1962,13 @@ class LadderAssemblyGenerator {
       parts.add(rightRail);
     }
 
+    for (final addRail in assembly.additionalRailBlanks) {
+      final alreadyExists = parts.any((p) => areBlanksIdentical(p, addRail));
+      if (!alreadyExists) {
+        parts.add(addRail);
+      }
+    }
+
     // Rungs deduplication:
     final uniqueRungLengths = <double, int>{};
     for (final r in assembly.rungs) {
@@ -2002,6 +2024,7 @@ class LadderAssemblyGenerator {
     final allBends = <FoldBendLine>[];
     final allPunches = <CncPunchPrimitive>[];
     final allFaces = <PlanarSheetFace>[];
+    final allDimensions = <CadDimension>[];
 
     double currentOffsetX = 0.0;
     double maxPartHeight = 0.0;
@@ -2089,6 +2112,28 @@ class LadderAssemblyGenerator {
         allCutLines.add(CadLineSegment(id: '${part.id}_${cl.id}', p1: transformPt(cl.p1), p2: transformPt(cl.p2), layer: cl.layer));
       }
 
+      // Blank Overall Dimensions for 2D Technical Drawing
+      allDimensions.add(
+        CadDimension(
+          id: 'dim_${part.id}_len',
+          type: CadDimensionType.vertical,
+          pointA: CadPoint2D(currentOffsetX + placedW + 15.0, 0.0),
+          pointB: CadPoint2D(currentOffsetX + placedW + 15.0, placedH),
+          measuredValue: placedH,
+          overrideText: '${part.name}: ${placedH.toStringAsFixed(1)}mm',
+        ),
+      );
+      allDimensions.add(
+        CadDimension(
+          id: 'dim_${part.id}_w',
+          type: CadDimensionType.horizontal,
+          pointA: CadPoint2D(currentOffsetX, placedH + 15.0),
+          pointB: CadPoint2D(currentOffsetX + placedW, placedH + 15.0),
+          measuredValue: placedW,
+          overrideText: '${placedW.toStringAsFixed(1)}mm',
+        ),
+      );
+
       if (part.id == 'rung_blank' || part.id.startsWith('rung_blank')) {
         // Draw the authentic C-Channel Cross-Section profile (40x20mm) next to the rung top view (per ISO Datasheet)
         final double csX = currentOffsetX + placedW + 25.0;
@@ -2155,31 +2200,78 @@ class LadderAssemblyGenerator {
                     ? FittingProductType.insideRiser
                     : (assembly.id.contains('OUT-RISER')
                           ? FittingProductType.outsideRiser
-                          : (assembly.id.contains('TEE')
-                                ? FittingProductType.tee
-                                : (assembly.id.contains('CROSS')
-                                      ? FittingProductType.cross
-                                      : (assembly.id.contains('REDUCER') ? FittingProductType.reducer : 'Ladder'))))));
+                          : (assembly.id.contains('UNEQUAL-TEE')
+                                ? FittingProductType.unequalTee
+                                : (assembly.id.contains('TEE')
+                                      ? FittingProductType.tee
+                                      : (assembly.id.contains('UNEQUAL-CROSS')
+                                            ? FittingProductType.unequalCross
+                                            : (assembly.id.contains('CROSS')
+                                                  ? FittingProductType.cross
+                                                  : (assembly.id.contains('REDUCER') ? FittingProductType.reducer : 'Ladder'))))))));
+
+    final String docProductType = assembly.id.contains('UNEQUAL-TEE')
+        ? 'ladder_unequal_tee'
+        : (assembly.id.contains('TEE')
+              ? 'ladder_equal_tee'
+              : (assembly.id.contains('UNEQUAL-CROSS')
+                    ? 'ladder_unequal_cross'
+                    : (assembly.id.contains('CROSS')
+                          ? 'ladder_equal_cross'
+                          : (assembly.id.contains('BEND')
+                                ? 'ladder_horizontal_bend'
+                                : (assembly.id.contains('IN-RISER')
+                                      ? 'ladder_inside_riser'
+                                      : (assembly.id.contains('OUT-RISER')
+                                            ? 'ladder_outside_riser'
+                                            : (assembly.id.contains('REDUCER') ? 'ladder_reducer' : 'cable_ladder')))))));
+
+    final docParameters = <String, double>{
+      'width': assembly.parameters.width,
+      'height': assembly.parameters.height,
+      'length': assembly.parameters.length,
+      'thickness': assembly.parameters.thickness,
+      'flange_width': assembly.parameters.flangeWidth,
+      'flange_direction': assembly.parameters.flangeDirection == LadderFlangeDirection.outside ? 1.0 : 0.0,
+      'accessory_style': assembly.parameters.accessoryStyle == LadderAccessoryStyle.segmented ? 1.0 : 0.0,
+      'rung_cut_length': assembly.parameters.physicalRungCutLength,
+      'rung_joint_method': assembly.parameters.jointMethod == LadderRungJointMethod.passThroughOutsideWeld ? 1.0 : 0.0,
+      'outside_weld_projection': assembly.parameters.outsideWeldProjection,
+      'end_margin_pitch': assembly.parameters.endMarginPitch,
+      'rung_pitch': assembly.parameters.intermediateTargetPitch,
+      'rung_count': assembly.hardwareBOM.rungCount.toDouble(),
+      'total_weight_kg': assembly.hardwareBOM.totalSteelWeightKg,
+    };
+
+    // Store all physical port dimensions
+    for (int i = 0; i < assembly.splicePorts.length; i++) {
+      final port = assembly.splicePorts[i];
+      docParameters['port${i + 1}_width'] = port.width;
+      docParameters['port${i + 1}_height'] = port.height;
+    }
+
+    if (assembly.splicePorts.length >= 3) {
+      docParameters['branch_width'] = assembly.splicePorts[0].width;
+      docParameters['main_out_width'] = assembly.splicePorts[1].width;
+      docParameters['main_in_width'] = assembly.splicePorts[2].width;
+    }
+    if (assembly.splicePorts.length >= 4) {
+      docParameters['west_width'] = assembly.splicePorts[0].width;
+      docParameters['north_width'] = assembly.splicePorts[1].width;
+      docParameters['east_width'] = assembly.splicePorts[2].width;
+      docParameters['south_width'] = assembly.splicePorts[3].width;
+    }
 
     final fittingMeta = DxfFittingMetadata(
       category: category,
       product: product,
       variantName: assembly.productName,
       flangeMm: assembly.parameters.flangeWidth,
-      parameters: {
-        'width': assembly.parameters.width,
-        'height': assembly.parameters.height,
-        'length': assembly.parameters.length,
-        'thickness': assembly.parameters.thickness,
-        'flange_width': assembly.parameters.flangeWidth,
-        'rung_cut_length': assembly.parameters.physicalRungCutLength,
-        'end_margin_pitch': assembly.parameters.endMarginPitch,
-        'rung_pitch': assembly.parameters.intermediateTargetPitch,
-      },
+      parameters: Map<String, double>.from(docParameters),
     );
 
     return DsfDocument(
-      productType: 'cable_ladder',
+      productType: docProductType,
       itemName: assembly.productName,
       material: assembly.leftRailBlank.material,
       outerContour: outerContour,
@@ -2188,22 +2280,8 @@ class LadderAssemblyGenerator {
       bends: allBends,
       punches: allPunches,
       cutLines: allCutLines,
-      parameters: {
-        'width': assembly.parameters.width,
-        'height': assembly.parameters.height,
-        'length': assembly.parameters.length,
-        'thickness': assembly.parameters.thickness,
-        'flange_width': assembly.parameters.flangeWidth,
-        'flange_direction': assembly.parameters.flangeDirection == LadderFlangeDirection.outside ? 1.0 : 0.0,
-        'accessory_style': assembly.parameters.accessoryStyle == LadderAccessoryStyle.segmented ? 1.0 : 0.0,
-        'rung_cut_length': assembly.parameters.physicalRungCutLength,
-        'rung_joint_method': assembly.parameters.jointMethod == LadderRungJointMethod.passThroughOutsideWeld ? 1.0 : 0.0,
-        'outside_weld_projection': assembly.parameters.outsideWeldProjection,
-        'end_margin_pitch': assembly.parameters.endMarginPitch,
-        'rung_pitch': assembly.parameters.intermediateTargetPitch,
-        'rung_count': assembly.hardwareBOM.rungCount.toDouble(),
-        'total_weight_kg': assembly.hardwareBOM.totalSteelWeightKg,
-      },
+      dimensions: allDimensions,
+      parameters: docParameters,
       metadata: {
         'isLadderAssembly': true,
         'assemblyId': assembly.id,
@@ -2221,6 +2299,19 @@ class LadderAssemblyGenerator {
         'passThroughSlotCount': assembly.hardwareBOM.passThroughSlotCount,
         'weldJointCount': assembly.hardwareBOM.weldJointCount,
         'totalWeldLengthMm': assembly.hardwareBOM.totalWeldLengthMm,
+        'cmsTemplate': {
+          'productType': docProductType,
+          'variation': assembly.parameters.accessoryStyle.name,
+          'ports': assembly.splicePorts.map((p) => p.toJson()).toList(),
+        },
+        'cms_product_contract': {
+          'productType': assembly.id.contains('UNEQUAL-TEE')
+              ? 'unequalTee'
+              : (assembly.id.contains('TEE')
+                    ? 'equalTee'
+                    : (assembly.id.contains('UNEQUAL-CROSS') ? 'unequalCross' : (assembly.id.contains('CROSS') ? 'equalCross' : 'straight'))),
+          'variationName': assembly.productName,
+        },
       },
     );
   }
@@ -2240,7 +2331,7 @@ class LadderAssemblyGenerator {
         mergedMap['flangeDirection'] = doc.parameters['flange_direction']! > 0.5 ? 'outside' : 'inside';
       }
       if (doc.parameters.containsKey('accessory_style')) {
-        mergedMap['accessoryStyle'] = doc.parameters['accessory_style'] == 1.0 ? 'segmented' : 'curved';
+        mergedMap['accessoryStyle'] = doc.parameters['accessory_style'] == 0.0 ? 'curved' : 'segmented';
       }
       if (doc.parameters.containsKey('rung_joint_method')) {
         mergedMap['jointMethod'] = doc.parameters['rung_joint_method']! > 0.5 ? 'passThroughOutsideWeld' : 'directInsideWeld';
@@ -2276,7 +2367,9 @@ class LadderAssemblyGenerator {
         thickness: (doc.parameters['thickness'] ?? doc.material.thicknessMm).toDouble(),
         flangeWidth: (doc.parameters['flange_width'] ?? doc.parameters['flangeWidth'] ?? 32.0).toDouble(),
         flangeDirection: (doc.parameters['flange_direction'] ?? 0.0) > 0.5 ? LadderFlangeDirection.outside : LadderFlangeDirection.inside,
-        accessoryStyle: (doc.parameters['accessory_style'] == 0.0 || (doc.metadata['accessoryStyle']?.toString().contains('curve') ?? false))
+        accessoryStyle:
+            ((doc.parameters['accessory_style'] != null && doc.parameters['accessory_style'] == 0.0) ||
+                (doc.metadata['accessoryStyle']?.toString().contains('curve') ?? false))
             ? LadderAccessoryStyle.curved
             : LadderAccessoryStyle.segmented,
         jointMethod: (doc.parameters['rung_joint_method'] ?? 1.0) > 0.5 ? LadderRungJointMethod.passThroughOutsideWeld : LadderRungJointMethod.directInsideWeld,
@@ -2304,14 +2397,52 @@ class LadderAssemblyGenerator {
       final angle = (doc.parameters['angle'] ?? (name.contains('45') ? 45.0 : 90.0)).toDouble();
       final radius = (doc.parameters['radius'] ?? 300.0).toDouble();
       return generateRiser(angleDeg: angle, radiusMm: radius, isInsideRiser: false, params: params);
+    } else if (id.contains('UNEQUAL-TEE') || (name.contains('unequal') && name.contains('tee'))) {
+      final branchW = (doc.parameters['port1_width'] ?? doc.parameters['branch_width'] ?? doc.parameters['width1'] ?? params.width).toDouble();
+      final mainOutW =
+          (doc.parameters['port2_width'] ?? doc.parameters['main_out_width'] ?? doc.parameters['run_width'] ?? doc.parameters['width2'] ?? params.width)
+              .toDouble();
+      final mainInW = (doc.parameters['port3_width'] ?? doc.parameters['main_in_width'] ?? doc.parameters['width3'] ?? params.width).toDouble();
+      final radius = (doc.parameters['radius'] ?? 300.0).toDouble();
+      return generateUnequalTee(mainInWidth: mainInW, mainOutWidth: mainOutW, branchWidth: branchW, radiusMm: radius, params: params);
     } else if (id.contains('TEE') || name.contains('tee')) {
-      final branchW = (doc.parameters['branch_width'] ?? doc.parameters['port3_width'] ?? params.width).toDouble();
+      final isUnequal =
+          doc.parameters.containsKey('run_width') ||
+          doc.parameters.containsKey('main_out_width') ||
+          (doc.parameters.containsKey('port2_width') && (doc.parameters['port2_width']! - (doc.parameters['port1_width'] ?? params.width)).abs() > 0.5) ||
+          (doc.parameters.containsKey('port3_width') && (doc.parameters['port3_width']! - (doc.parameters['port1_width'] ?? params.width)).abs() > 0.5);
+      if (isUnequal) {
+        final branchW = (doc.parameters['port1_width'] ?? doc.parameters['branch_width'] ?? params.width).toDouble();
+        final mainOutW = (doc.parameters['port2_width'] ?? doc.parameters['main_out_width'] ?? doc.parameters['run_width'] ?? params.width).toDouble();
+        final mainInW = (doc.parameters['port3_width'] ?? doc.parameters['main_in_width'] ?? params.width).toDouble();
+        final radius = (doc.parameters['radius'] ?? 300.0).toDouble();
+        return generateUnequalTee(mainInWidth: mainInW, mainOutWidth: mainOutW, branchWidth: branchW, radiusMm: radius, params: params);
+      }
       final radius = (doc.parameters['radius'] ?? 300.0).toDouble();
-      return generateTee(mainWidth: params.width, branchWidth: branchW, radiusMm: radius, params: params);
+      return generateEqualTee(width: params.width, radiusMm: radius, params: params);
+    } else if (id.contains('UNEQUAL-CROSS') || (name.contains('unequal') && name.contains('cross'))) {
+      final westW = (doc.parameters['port1_width'] ?? doc.parameters['west_width'] ?? doc.parameters['width1'] ?? params.width).toDouble();
+      final northW = (doc.parameters['port2_width'] ?? doc.parameters['north_width'] ?? doc.parameters['width2'] ?? params.width).toDouble();
+      final eastW = (doc.parameters['port3_width'] ?? doc.parameters['east_width'] ?? doc.parameters['width3'] ?? params.width).toDouble();
+      final southW = (doc.parameters['port4_width'] ?? doc.parameters['south_width'] ?? doc.parameters['width4'] ?? params.width).toDouble();
+      final radius = (doc.parameters['radius'] ?? 300.0).toDouble();
+      return generateUnequalCross(westWidth: westW, eastWidth: eastW, northWidth: northW, southWidth: southW, radiusMm: radius, params: params);
     } else if (id.contains('CROSS') || name.contains('cross')) {
-      final branchW = (doc.parameters['branch_width'] ?? doc.parameters['port4_width'] ?? params.width).toDouble();
+      final isUnequal =
+          doc.parameters.containsKey('north_width') ||
+          (doc.parameters.containsKey('port2_width') && (doc.parameters['port2_width']! - (doc.parameters['port1_width'] ?? params.width)).abs() > 0.5) ||
+          (doc.parameters.containsKey('port3_width') && (doc.parameters['port3_width']! - (doc.parameters['port1_width'] ?? params.width)).abs() > 0.5) ||
+          (doc.parameters.containsKey('port4_width') && (doc.parameters['port4_width']! - (doc.parameters['port1_width'] ?? params.width)).abs() > 0.5);
+      if (isUnequal) {
+        final westW = (doc.parameters['port1_width'] ?? doc.parameters['west_width'] ?? params.width).toDouble();
+        final northW = (doc.parameters['port2_width'] ?? doc.parameters['north_width'] ?? params.width).toDouble();
+        final eastW = (doc.parameters['port3_width'] ?? doc.parameters['east_width'] ?? params.width).toDouble();
+        final southW = (doc.parameters['port4_width'] ?? doc.parameters['south_width'] ?? params.width).toDouble();
+        final radius = (doc.parameters['radius'] ?? 300.0).toDouble();
+        return generateUnequalCross(westWidth: westW, eastWidth: eastW, northWidth: northW, southWidth: southW, radiusMm: radius, params: params);
+      }
       final radius = (doc.parameters['radius'] ?? 300.0).toDouble();
-      return generateCross(mainWidth: params.width, branchWidth: branchW, radiusMm: radius, params: params);
+      return generateEqualCross(width: params.width, radiusMm: radius, params: params);
     } else if (id.contains('REDUCER') || name.contains('reducer')) {
       final w2 = (doc.parameters['width2'] ?? doc.parameters['port2_width'] ?? params.width / 2.0).toDouble();
       final len = (doc.parameters['length'] ?? 500.0).toDouble();

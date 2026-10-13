@@ -18,6 +18,7 @@ import 'studio_cad_tool_palette.dart';
 import 'studio_menu_bar.dart';
 import '../branding/trufold_3d_icon.dart';
 import '../dds/dds_workspace_screen.dart';
+import '../../../../assembly_studio/views/assembly_studio_screen.dart';
 
 class StudioRibbonToolbar extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
@@ -271,6 +272,48 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
             ),
           ),
 
+          const SizedBox(width: 6),
+
+          // 3D Assembly Studio Action Button
+          Tooltip(
+            message: '3D Assembly Studio (Modular Ladder Parts, Welds, Segments & WYSIWYG Face Sketch)',
+            child: InkWell(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AssemblyStudioScreen(),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.view_in_ar_rounded, size: 13, color: Colors.white),
+                    SizedBox(width: 4),
+                    Text(
+                      'Assembly Studio',
+                      style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
 
 
           if (widget.onMaterialDialog != null) ...[

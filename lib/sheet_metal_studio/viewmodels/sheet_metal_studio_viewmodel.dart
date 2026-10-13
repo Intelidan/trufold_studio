@@ -1048,17 +1048,43 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
       _scalingController = null;
       final updatedParams = Map<String, double>.from(_document.parameters);
       updatedParams[key] = value;
-      if (key == 'port1_width' || key == 'port2_width' || key == 'width') {
-        updatedParams['width'] = value;
-        updatedParams['port1_width'] = value;
-        updatedParams['port2_width'] = value;
+      final docId = (_document.metadata['assemblyId']?.toString() ?? _document.itemName).toUpperCase();
+      final docName = _document.itemName.toLowerCase();
+      final isUnequal = docId.contains('UNEQUAL') || docName.contains('unequal') || _document.productType.contains('unequal');
+
+      if (isUnequal) {
+        if (key == 'port1_width') {
+          updatedParams['port1_width'] = value;
+          updatedParams['branch_width'] = value;
+        } else if (key == 'port2_width') {
+          updatedParams['port2_width'] = value;
+          updatedParams['main_out_width'] = value;
+        } else if (key == 'port3_width') {
+          updatedParams['port3_width'] = value;
+          updatedParams['main_in_width'] = value;
+        } else if (key == 'port4_width') {
+          updatedParams['port4_width'] = value;
+          updatedParams['south_width'] = value;
+        } else if (key == 'port1_height' || key == 'port2_height' || key == 'port3_height' || key == 'port4_height') {
+          updatedParams[key] = value;
+          updatedParams['height'] = value;
+        }
+      } else {
+        if (key == 'port1_width' || key == 'port2_width' || key == 'port3_width' || key == 'port4_width' || key == 'width') {
+          updatedParams['width'] = value;
+          updatedParams['port1_width'] = value;
+          updatedParams['port2_width'] = value;
+          updatedParams['port3_width'] = value;
+          updatedParams['port4_width'] = value;
+        }
+        if (key == 'port1_height' || key == 'port2_height' || key == 'port3_height' || key == 'port4_height' || key == 'height') {
+          updatedParams['height'] = value;
+          updatedParams['port1_height'] = value;
+          updatedParams['port2_height'] = value;
+          updatedParams['port3_height'] = value;
+          updatedParams['port4_height'] = value;
+        }
       }
-      if (key == 'port1_height' || key == 'port2_height' || key == 'height') {
-        updatedParams['height'] = value;
-        updatedParams['port1_height'] = value;
-        updatedParams['port2_height'] = value;
-      }
-      if (key == 'port3_width') updatedParams['branch_width'] = value;
       if (key == 'length' || key == 'straight_length') updatedParams['length'] = value;
       if (key == 'radius') updatedParams['radius'] = value;
       final updatedMetadata = Map<String, dynamic>.from(_document.metadata);
@@ -1091,18 +1117,33 @@ class SheetMetalStudioViewModel extends ChangeNotifier with ReferenceGeometryMix
         ladderMetaParams['includeCover'] = value > 0.5;
       }
 
+      if (key == 'flange_direction' || key == 'flangeDirection') {
+        updatedParams['flange_direction'] = value;
+        final dirStr = value > 0.5 ? 'outside' : 'inside';
+        ladderMetaParams['flangeDirection'] = dirStr;
+        updatedMetadata['flangeDirection'] = dirStr;
+      }
+      if (key == 'flange_angle') {
+        updatedParams['flange_angle'] = value;
+        ladderMetaParams['flangeAngle'] = value;
+      }
+
       for (final e in updatedParams.entries) {
         ladderMetaParams[e.key] = e.value;
       }
       if (key == 'accessory_style') {
-        ladderMetaParams['accessoryStyle'] = value == 1.0 ? 'segmented' : 'curved';
+        updatedParams['accessory_style'] = value;
+        ladderMetaParams['accessoryStyle'] = value == 0.0 ? 'curved' : 'segmented';
+        updatedMetadata['accessoryStyle'] = value == 0.0 ? 'curved' : 'segmented';
       }
       updatedMetadata['ladderParameters'] = ladderMetaParams;
 
       _document = _document.copyWith(parameters: updatedParams, metadata: updatedMetadata);
       _activeLadderAssembly = LadderAssemblyGenerator.generateFromDocument(_document);
       final newDoc = LadderAssemblyGenerator.createAssemblyDsfDocument(_activeLadderAssembly!);
-      _document = newDoc;
+      final mergedParams = Map<String, double>.from(newDoc.parameters)..addAll(updatedParams);
+      final mergedMeta = Map<String, dynamic>.from(newDoc.metadata)..addAll(updatedMetadata);
+      _document = newDoc.copyWith(parameters: mergedParams, metadata: mergedMeta);
       _cachedMesh = _activeLadderAssembly!.assembledMesh3D;
       _cachedCoverMesh = _activeLadderAssembly!.coverMesh3D;
       _detectedFittingMetadata = DxfFittingMetadata.fromDocument(_document);

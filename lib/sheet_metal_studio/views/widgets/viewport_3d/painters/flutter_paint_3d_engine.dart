@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import '../../../../models/cad_primitives.dart';
 import '../../../../models/cms/cms_physical_port.dart';
 import '../../../../engine/kinematic_fold_engine.dart';
+import '../../../../engine/matrix4_math_helper.dart';
 
 typedef _DrawFacet = ({
   Path fillPath,
@@ -60,6 +61,7 @@ class FlutterPaint3dPainter extends CustomPainter {
   final String? hoveredFaceId;
   final List<CmsPhysicalPort> activePorts;
   final String? focusedPortId;
+  final TransformMatrix4? modelTransform;
 
   FlutterPaint3dPainter({
     required this.mesh,
@@ -79,6 +81,7 @@ class FlutterPaint3dPainter extends CustomPainter {
     this.hoveredFaceId,
     this.activePorts = const [],
     this.focusedPortId,
+    this.modelTransform,
   });
 
   @override
@@ -97,6 +100,13 @@ class FlutterPaint3dPainter extends CustomPainter {
     final cosEl = math.cos(elRad);
     final sinEl = math.sin(elRad);
 
+    final List<double> m = modelTransform?.m ?? [
+      cosAz, sinAz, 0.0, 0.0,
+      -sinEl * sinAz, sinEl * cosAz, cosEl, 0.0,
+      cosEl * sinAz, -cosEl * cosAz, sinEl, 0.0,
+      0.0, 0.0, 0.0, 1.0,
+    ];
+
     // Directional virtual light source
     const lightDir = CadPoint3D(0.577, 0.577, 0.577);
 
@@ -112,15 +122,15 @@ class FlutterPaint3dPainter extends CustomPainter {
     // Camera perspective distance: 2.5x the model extent gives a natural 3D CAD perspective
     final cameraDist = math.max(fitDim * 2.5, 1000.0);
 
-    // Transform a 3D point to camera space and project to screen (Z-up turntable CAD coordinates)
+    // Transform a 3D point to camera space and project to screen (Z-up turntable / trackball CAD coordinates)
     ({Offset pt, double depth, CadPoint3D camPt}) project(CadPoint3D p) {
       final rx = p.x - pivot.x;
       final ry = p.y - pivot.y;
       final rz = p.z - pivot.z;
 
-      final x2 = rx * cosAz + ry * sinAz;
-      final y2 = -rx * sinEl * sinAz + ry * sinEl * cosAz + rz * cosEl;
-      final z2 = rx * cosEl * sinAz - ry * cosEl * cosAz + rz * sinEl;
+      final x2 = rx * m[0] + ry * m[1] + rz * m[2];
+      final y2 = rx * m[4] + ry * m[5] + rz * m[6];
+      final z2 = rx * m[8] + ry * m[9] + rz * m[10];
 
       final persp = isOrthoProjection ? 1.0 : (cameraDist / math.max(cameraDist - z2, cameraDist * 0.15));
 
@@ -137,11 +147,13 @@ class FlutterPaint3dPainter extends CustomPainter {
     for (final poly in mesh.allPolygons) {
       if (poly.vertices.length < 3) continue;
 
+      final isWeld = poly.faceId.startsWith('weld_');
       final isFillet = poly.faceId.startsWith('FILLET_');
       final isBore = poly.faceId.startsWith('BORE_') || poly.faceId.contains('_slot_') || poly.faceId.contains('_wall_');
       final isInner = poly.faceId.endsWith('_inner') || poly.faceId.endsWith('_BOT');
       final isRim = poly.faceId.startsWith('RIM_') || poly.faceId.startsWith('FILLET_CAP') || poly.faceId.startsWith('CHAMFER_');
-      final isFaceSelected = (poly.faceId == selectedFaceId);
+      final isFaceSelected = (poly.faceId == selectedFaceId) ||
+          (selectedFaceId != null && poly.faceId.startsWith(selectedFaceId!));
       final isFaceHovered = (poly.faceId == hoveredFaceId);
       final isBendHighlighted =
           (selectedBendId != null && poly.faceId.contains(selectedBendId!)) || (hoveredBendId != null && poly.faceId.contains(hoveredBendId!));
@@ -151,12 +163,15 @@ class FlutterPaint3dPainter extends CustomPainter {
 
       final n = poly.normal;
 
-      // Camera-space outward normal vector (Z-up turntable CAD coordinates)
-      final nx2 = n.x * cosAz + n.y * sinAz;
-      final ny2 = -n.x * sinEl * sinAz + n.y * sinEl * cosAz + n.z * cosEl;
-      final nz2 = n.x * cosEl * sinAz - n.y * cosEl * cosAz + n.z * sinEl;
+      // Camera-space outward normal vector
+      final nx2 = n.x * m[0] + n.y * m[1] + n.z * m[2];
+      final ny2 = n.x * m[4] + n.y * m[5] + n.z * m[6];
+      final nz2 = n.x * m[8] + n.y * m[9] + n.z * m[10];
       final camNormalZ = nz2;
       final polyCamNormal = CadPoint3D(nx2, ny2, nz2);
+
+      // Back-face culling for welds: never render weld bead facets facing away from camera (prevents see-through)
+      if (isWeld && camNormalZ <= 0.0) continue;
 
       // Solid/Glass Opaque Mode: Selective back-face culling
       // Thickness shell (RIM, CHAMFER, FILLET_CAP) is culled when back-facing in solid mode.
@@ -192,10 +207,16 @@ class FlutterPaint3dPainter extends CustomPainter {
         }
       }
 
-      // Symmetric two-sided diffuse CAD lighting:
-      // Prevents sharp dark-patch discontinuities when inner and outer sheet metal walls swap depth
+      // Dual-light CAD illumination (Key light + subtle Fill light) + Blinn-Phong specular glints:
       final dotLight = (n.x * lightDir.x + n.y * lightDir.y + n.z * lightDir.z).abs().clamp(0.0, 1.0);
-      final lightFactor = 0.65 + 0.35 * dotLight;
+      final fillDot = (n.x * (-0.3) + n.y * (-0.5) + n.z * 0.8).abs().clamp(0.0, 1.0);
+      final diffuseFactor = 0.70 + 0.25 * dotLight + 0.10 * fillDot;
+
+      // View direction towards screen: CadPoint3D(0, 0, 1)
+      // Half-vector between lightDir (0.577, 0.577, 0.577) and viewDir (0, 0, 1)
+      const halfDir = CadPoint3D(0.325, 0.325, 0.888);
+      final dotHalf = (n.x * halfDir.x + n.y * halfDir.y + n.z * halfDir.z).abs().clamp(0.0, 1.0);
+      final specular = math.pow(dotHalf, 18.0) * (isWeld ? 0.38 : 0.28);
 
       final baseColor = poly.color;
       Color shadedColor;
@@ -210,9 +231,9 @@ class FlutterPaint3dPainter extends CustomPainter {
       } else {
         shadedColor = Color.from(
           alpha: 1.0,
-          red: (baseColor.r * lightFactor).clamp(0.0, 1.0),
-          green: (baseColor.g * lightFactor).clamp(0.0, 1.0),
-          blue: (baseColor.b * lightFactor).clamp(0.0, 1.0),
+          red: (baseColor.r * diffuseFactor + specular).clamp(0.0, 1.0),
+          green: (baseColor.g * diffuseFactor + specular).clamp(0.0, 1.0),
+          blue: (baseColor.b * diffuseFactor + specular).clamp(0.0, 1.0),
         );
       }
 
@@ -328,9 +349,9 @@ class FlutterPaint3dPainter extends CustomPainter {
             }
           }
         }
-      } else if (isFillet || isBore || isInner || isRim || !poly.drawWireframe) {
-        // Suppress wireframe borders on curved fillets, bore hole walls
-        // (no radial chord segments around arcs!), and internal / thickness shell faces.
+      } else if (isFillet || isBore || isInner || isRim || isWeld || !poly.drawWireframe) {
+        // Suppress wireframe borders on curved fillets, bore hole walls, welds,
+        // and internal / thickness shell faces.
         strokePath = null;
       } else if (showWireframe) {
         // Fallback for models without explicit boundaryLines: deduplicate outer perimeter edges
@@ -348,6 +369,26 @@ class FlutterPaint3dPainter extends CustomPainter {
           final prjB = project(pB).pt;
           strokePath.moveTo(prjA.dx, prjA.dy);
           strokePath.lineTo(prjB.dx, prjB.dy);
+        }
+
+        // Holes / cutouts outline loops
+        for (final hole in poly.holes) {
+          if (hole.length >= 2) {
+            for (int i = 0; i < hole.length; i++) {
+              final pA = hole[i];
+              final pB = hole[(i + 1) % hole.length];
+              final kA = '${(pA.x * 5).round()}_${(pA.y * 5).round()}_${(pA.z * 5).round()}';
+              final kB = '${(pB.x * 5).round()}_${(pB.y * 5).round()}_${(pB.z * 5).round()}';
+              if (kA == kB) continue;
+              final edgeKey = kA.compareTo(kB) <= 0 ? '$kA--$kB' : '$kB--$kA';
+              if (!addedWireframeEdgeKeys.add(edgeKey)) continue;
+
+              final prjA = project(pA).pt;
+              final prjB = project(pB).pt;
+              strokePath.moveTo(prjA.dx, prjA.dy);
+              strokePath.lineTo(prjB.dx, prjB.dy);
+            }
+          }
         }
       }
 
@@ -450,10 +491,10 @@ class FlutterPaint3dPainter extends CustomPainter {
           final len = math.sqrt(cx * cx + cy * cy + cz * cz);
           if (len > 1e-4) n = CadPoint3D(cx / len, cy / len, cz / len);
         }
-        final nx1 = n.x * cosAz - n.y * sinAz;
-        final ny1 = n.x * sinAz + n.y * cosAz;
-        final camNormalZ = ny1 * sinEl + n.z * cosEl;
-        final polyCamNormal = CadPoint3D(nx1, ny1 * cosEl - n.z * sinEl, camNormalZ);
+        final pCamX = n.x * m[0] + n.y * m[1] + n.z * m[2];
+        final pCamY = n.x * m[4] + n.y * m[5] + n.z * m[6];
+        final pCamZ = n.x * m[8] + n.y * m[9] + n.z * m[10];
+        final polyCamNormal = CadPoint3D(pCamX, pCamY, pCamZ);
 
         final sumDepth = prjVerts.fold(0.0, (acc, p) => acc + p.depth);
         final avgDepth = sumDepth / prjVerts.length;
@@ -944,6 +985,7 @@ class FlutterPaint3dPainter extends CustomPainter {
     return oldDelegate.mesh != mesh ||
         oldDelegate.azimuthDeg != azimuthDeg ||
         oldDelegate.elevationDeg != elevationDeg ||
+        oldDelegate.modelTransform != modelTransform ||
         oldDelegate.zoom != zoom ||
         oldDelegate.pan != pan ||
         oldDelegate.showWireframe != showWireframe ||

@@ -90,6 +90,7 @@ class DsfLadderAssembly {
   // Constituent manufacturable flat blanks for CAM / Turret Punching / Nesting
   final CadPart leftRailBlank;
   final CadPart rightRailBlank;
+  final List<CadPart> additionalRailBlanks;
   final CadPart rungBlank;
   final CadPart? coverBlank;
 
@@ -111,6 +112,7 @@ class DsfLadderAssembly {
     required this.parameters,
     required this.leftRailBlank,
     required this.rightRailBlank,
+    this.additionalRailBlanks = const [],
     required this.rungBlank,
     this.coverBlank,
     required this.rungs,

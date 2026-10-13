@@ -89,21 +89,23 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
     );
 
     // Start 3D Engine Preloading immediately as the splash screen mounts
-    TruFold3dEnginePreloader.instance.preload(
-      onProgress: (status, progress) {
-        if (!mounted) return;
-        setState(() {
-          _activeStatusMessage = status;
-          _engineProgress = progress;
+    TruFold3dEnginePreloader.instance
+        .preload(
+          onProgress: (status, progress) {
+            if (!mounted) return;
+            setState(() {
+              _activeStatusMessage = status;
+              _engineProgress = progress;
+            });
+          },
+        )
+        .then((_) {
+          if (!mounted) return;
+          setState(() {
+            _enginePreloadComplete = true;
+          });
+          _checkAndComplete();
         });
-      },
-    ).then((_) {
-      if (!mounted) return;
-      setState(() {
-        _enginePreloadComplete = true;
-      });
-      _checkAndComplete();
-    });
 
     _mainController.forward();
 

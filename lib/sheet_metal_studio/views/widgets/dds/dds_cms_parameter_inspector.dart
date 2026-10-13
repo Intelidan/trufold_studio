@@ -233,8 +233,8 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
   void _resetLocalStateIfDocChanged() {
     final doc = widget.viewModel?.document;
     final fingerprint = widget.instance != null
-        ? 'INSTANCE_${widget.instance!.instanceId}_${widget.instance!.productName}'
-        : (doc != null ? 'DOC_${doc.itemName}_${doc.productType}_${identityHashCode(doc)}' : null);
+        ? 'INSTANCE_${widget.instance!.instanceId}'
+        : (doc != null ? 'DOC_${doc.productType}_${doc.metadata['assemblyId'] ?? doc.itemName}' : null);
 
     if (_lastDocFingerprint != null && _lastDocFingerprint != fingerprint) {
       _localParams.clear();
@@ -244,8 +244,12 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       _localRalColor = widget.viewModel?.paintCoat.ralColor ?? RalColor.defaultRal;
       final scLinked = widget.viewModel?.scalingController?.isLinkedPorts;
       final pType = _productType;
-      final isUnequal = pType == 'unequalCross' || pType == 'unequalTee' || pType == 'reducer';
-      _arePortsLinked = scLinked ?? !isUnequal;
+      final isUnequal = pType == 'unequalCross' ||
+          pType == 'unequalTee' ||
+          pType == 'reducer' ||
+          (doc?.metadata['assemblyId']?.toString().toLowerCase().contains('unequal') ?? false) ||
+          (doc?.itemName.toLowerCase().contains('unequal') ?? false);
+      _arePortsLinked = isUnequal ? false : (scLinked ?? true);
       _isFolded = false;
       _controllers.clear();
     }
@@ -474,20 +478,25 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         );
         if (c != null) return c;
       }
+      final docName = vm.document.itemName.toLowerCase();
+      final docId = (vm.document.metadata['assemblyId']?.toString() ?? '').toLowerCase();
+      final docPType = vm.document.productType.toLowerCase();
+      final isUnequalByName = docName.contains('unequal') || docId.contains('unequal') || docPType.contains('unequal');
+
       // Check physical ports from verifiedCmsPorts
       final ports = vm.verifiedCmsPorts;
       if (ports.length == 3) {
-        final isUnequal =
+        final isUnequal = isUnequalByName ||
             (ports[0].width - ports[1].width).abs() > 2 ||
             (ports[0].width - ports[2].width).abs() > 2 ||
             (ports[0].height - ports[1].height).abs() > 2 ||
             (ports[0].height - ports[2].height).abs() > 2;
         return isUnequal ? CmsProductContract.unequalTee : CmsProductContract.equalTee;
       } else if (ports.length == 4) {
-        final isUnequal = ports.any((p) => (p.width - ports.first.width).abs() > 2 || (p.height - ports.first.height).abs() > 2);
+        final isUnequal = isUnequalByName || ports.any((p) => (p.width - ports.first.width).abs() > 2 || (p.height - ports.first.height).abs() > 2);
         return isUnequal ? CmsProductContract.unequalCross : CmsProductContract.equalCross;
       } else if (ports.length == 2) {
-        if ((ports[0].width - ports[1].width).abs() > 2 || (ports[0].height - ports[1].height).abs() > 2) {
+        if (isUnequalByName || (ports[0].width - ports[1].width).abs() > 2 || (ports[0].height - ports[1].height).abs() > 2) {
           return CmsProductContract.straightReducer;
         }
       }
@@ -533,6 +542,17 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       if (params.containsKey('port3_width') || params.containsKey('branch_width')) return 'unequalTee';
       if (params.containsKey('port2_width') || params.containsKey('width2')) return 'reducer';
       return 'straight';
+    }
+
+    final vmDoc = widget.viewModel?.document;
+    if (vmDoc != null) {
+      final docId = (vmDoc.metadata['assemblyId']?.toString() ?? '').toLowerCase();
+      final docName = vmDoc.itemName.toLowerCase();
+      final docType = vmDoc.productType.toLowerCase();
+      if (docId.contains('unequal') || docName.contains('unequal') || docType.contains('unequal')) {
+        if (docId.contains('cross') || docName.contains('cross') || docType.contains('cross')) return 'unequalCross';
+        if (docId.contains('tee') || docName.contains('tee') || docType.contains('tee')) return 'unequalTee';
+      }
     }
 
     final contract = _detectedContract;
@@ -699,8 +719,11 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
 
   void _syncControllers() {
     final sc = widget.viewModel?.scalingController;
-    if (sc != null && sc.isLinkedPorts != _arePortsLinked) {
+    final isUnequal = _productType.contains('unequal') || _productType == 'reducer';
+    if (!isUnequal && sc != null && sc.isLinkedPorts != _arePortsLinked) {
       _arePortsLinked = sc.isLinkedPorts;
+    } else if (isUnequal) {
+      _arePortsLinked = false;
     }
     final p = _currentParams;
     final ports = widget.viewModel?.verifiedCmsPorts ?? [];
@@ -798,7 +821,8 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
       updated['outside_weld_projection'] = value;
     }
 
-    if (_arePortsLinked) {
+    final isUnequal = _productType.contains('unequal') || _productType == 'reducer';
+    if (_arePortsLinked && !isUnequal) {
       if (key.endsWith('_width') || key == 'width') {
         for (final k in ['port1_width', 'port2_width', 'port3_width', 'port4_width', 'width']) {
           _localParams[k] = value;
@@ -850,7 +874,7 @@ class _DdsCmsParameterInspectorState extends State<DdsCmsParameterInspector> {
         vm.scalingController?.setReducerAlignment(align);
       }
 
-      if (_arePortsLinked) {
+      if (_arePortsLinked && !isUnequal) {
         if (key.endsWith('_width') || key == 'width') {
           vm.applyCmsMorphParameter('width', value);
         } else if (key.endsWith('_height') || key == 'height') {

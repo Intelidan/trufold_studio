@@ -25,6 +25,7 @@ import 'package:vector_math/vector_math.dart' as vm;
 import '../../../engine/flutter_scene_cad_mesh_builder.dart';
 import '../../../engine/kinematic_fold_engine.dart';
 import '../../../engine/trufold_3d_engine_preloader.dart';
+import '../../../engine/matrix4_math_helper.dart';
 import '../../../models/cad_primitives.dart';
 import '../../../models/cms/cms_physical_port.dart';
 import '../../../models/cnc_punch_primitive.dart';
@@ -72,10 +73,23 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
   bool _showModelDetails = false;
 
   // --- Mouse & Navigation States ---
-  bool _isTurntableOrbit = true;
+  bool _isTurntableOrbit = false; // Default: 360° Free Virtual Globe Trackball
   bool _isPanToolActive = false;
   bool _isUserInteracting = false;
   late final ValueNotifier<(double, double)> _viewCubeNotifier;
+
+  // --- 360° Virtual Globe / Arcball & Model Transform State ---
+  late TransformMatrix4 _modelTransform;
+  CadPoint3D? _lastSphereVector;
+  Offset? _dragStartPos;
+  Offset? _currentDragPos;
+  bool _isRotatingModel = false;
+
+  // --- Pinned Pivot Model Rotation State ---
+  bool _isPinnedPivotMode = true; // Rotates model with opposite side pinned/anchored
+  CadPoint3D? _pinnedPivotPoint;
+  Offset? _pinnedScreenAnchor;
+  Size? _lastKnownViewportSize;
 
   // --- Flutter Paint (1st Engine Software Fallback) Camera State ---
   double _paintAzimuthDeg = 45.0;
@@ -98,6 +112,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     final initialElDeg = (savedState != null && savedState.isInitialized) ? savedState.elevationDeg : 35.264;
     _paintAzimuthDeg = initialAzDeg;
     _paintElevationDeg = initialElDeg;
+    _modelTransform = _matrixFromAngles(initialAzDeg, initialElDeg);
     if (savedState != null && savedState.isInitialized) {
       _paintZoom = savedState.zoom;
       _paintPan = savedState.pan;
@@ -163,6 +178,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     _paintPan = state.pan;
     _orbitDistance = state.orbitDistance;
     _orbitTarget = state.orbitTarget;
+    _modelTransform = _matrixFromAngles(_paintAzimuthDeg, _paintElevationDeg);
     _viewCubeNotifier.value = (_paintAzimuthDeg, _paintElevationDeg);
 
     if (_isCameraReady && _scene != null && _isGpuAvailable) {
@@ -240,6 +256,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     _paintPan = currentPan;
     _orbitDistance = currentDist;
     _orbitTarget = CadPoint3D(currentTargetX, currentTargetY, currentTargetZ);
+    _modelTransform = _matrixFromAngles(currentAzimuth, currentElevation);
     _viewCubeNotifier.value = (currentAzimuth, currentElevation);
 
     if (_isCameraReady && _scene != null && _isGpuAvailable) {
@@ -279,6 +296,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     }
 
     final scene = _scene!;
+    scene.fitNearPlane = false;
     final prefs = widget.viewModel.graphicsPreferences;
     final savedState = widget.viewModel.camera3dState;
     if (savedState != null && savedState.isInitialized) {
@@ -294,11 +312,11 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     _cameraNode = Node(name: 'MainCamera');
     _cameraComponent = CameraComponent(
       projection: widget.viewModel.isOrthoProjection
-          ? OrthographicProjection(zoom: 1.0, near: 1.0, far: 10000.0)
+          ? OrthographicProjection(zoom: 1.0, near: 0.5, far: 50000.0)
           : PerspectiveProjection(
               fovRadiansY: (prefs.fieldOfView * vm.degrees2Radians).clamp(15.0 * vm.degrees2Radians, 90.0 * vm.degrees2Radians),
-              near: 1.0,
-              far: 10000.0,
+              near: 0.5,
+              far: 50000.0,
             ),
       activateOnMount: true,
     );
@@ -370,8 +388,8 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     if (_isCameraReady && !widget.viewModel.isOrthoProjection) {
       _cameraComponent.projection = PerspectiveProjection(
         fovRadiansY: (prefs.fieldOfView * vm.degrees2Radians).clamp(15.0 * vm.degrees2Radians, 90.0 * vm.degrees2Radians),
-        near: 1.0,
-        far: 10000.0,
+        near: 0.5,
+        far: 50000.0,
       );
     }
   }
@@ -487,14 +505,12 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
   void _updateGpuCamera() {
     if (!_isCameraReady || _scene == null || !_isGpuAvailable) return;
 
-    final azRad = _paintAzimuthDeg * vm.degrees2Radians;
-    final elRad = _paintElevationDeg * vm.degrees2Radians;
-
-    final d = vm.Vector3(
-      -math.sin(azRad) * math.cos(elRad),
-      math.sin(elRad),
-      -math.cos(azRad) * math.cos(elRad),
-    );
+    final m = _modelTransform.m;
+    // Map CAD world coordinates to FlutterScene coordinate frame:
+    // Row 2 is camera view direction in CAD (towards eye): (m[8], m[9], m[10])
+    // Row 1 is camera up direction in CAD: (m[4], m[5], m[6])
+    final d = vm.Vector3(-m[8], m[10], m[9]);
+    final up = vm.Vector3(-m[4], m[6], m[5]);
 
     final pivot = widget.viewModel.currentMesh.center;
     final target = vm.Vector3(
@@ -503,13 +519,242 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
       _orbitTarget.z - pivot.z,
     );
     final eye = target + d * _orbitDistance;
-    final up = vm.Vector3(
-      math.sin(azRad) * math.sin(elRad),
-      math.cos(elRad),
-      math.cos(azRad) * math.sin(elRad),
-    );
 
     _cameraNode.lookAtFrom(eye, target, up: up);
+  }
+
+  static TransformMatrix4 _matrixFromAngles(double azDeg, double elDeg) {
+    final azRad = azDeg * math.pi / 180.0;
+    final elRad = elDeg * math.pi / 180.0;
+    final cosAz = math.cos(azRad);
+    final sinAz = math.sin(azRad);
+    final cosEl = math.cos(elRad);
+    final sinEl = math.sin(elRad);
+
+    return TransformMatrix4.fromList([
+      cosAz, sinAz, 0.0, 0.0,
+      -sinEl * sinAz, sinEl * cosAz, cosEl, 0.0,
+      cosEl * sinAz, -cosEl * cosAz, sinEl, 0.0,
+      0.0, 0.0, 0.0, 1.0,
+    ]);
+  }
+
+  void _syncCameraAnglesFromTransform() {
+    final m = _modelTransform.m;
+    final sinEl = m[10].clamp(-1.0, 1.0);
+    final elRad = math.asin(sinEl);
+    final azRad = math.atan2(m[8], -m[9]);
+
+    _paintElevationDeg = _normalizeAngle(elRad * 180.0 / math.pi);
+    _paintAzimuthDeg = _normalizeAngle(azRad * 180.0 / math.pi);
+    _viewCubeNotifier.value = (_paintAzimuthDeg, _paintElevationDeg);
+  }
+
+  void _orthonormalizeModelTransform() {
+    final m = _modelTransform.m;
+    var r0 = CadPoint3D(m[0], m[1], m[2]).normalized();
+    var r1 = CadPoint3D(m[4], m[5], m[6]);
+    final dot01 = r1.x * r0.x + r1.y * r0.y + r1.z * r0.z;
+    r1 = CadPoint3D(r1.x - dot01 * r0.x, r1.y - dot01 * r0.y, r1.z - dot01 * r0.z).normalized();
+    final r2 = CadPoint3D(
+      r0.y * r1.z - r0.z * r1.y,
+      r0.z * r1.x - r0.x * r1.z,
+      r0.x * r1.y - r0.y * r1.x,
+    ).normalized();
+
+    _modelTransform = TransformMatrix4.fromList([
+      r0.x, r0.y, r0.z, 0.0,
+      r1.x, r1.y, r1.z, 0.0,
+      r2.x, r2.y, r2.z, 0.0,
+      0.0,  0.0,  0.0,  1.0,
+    ]);
+  }
+
+  Offset _projectOffsetFromCenter(CadPoint3D p, Size size) {
+    if (size.width <= 0 || size.height <= 0) return Offset.zero;
+    final mesh = widget.viewModel.currentMesh;
+    final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+    final fitDim = maxDim > 0 ? maxDim : 200.0;
+    final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
+    final scale = baseScale * _paintZoom;
+
+    final pivot = mesh.center;
+    final cameraDist = math.max(fitDim * 2.5, 1000.0);
+
+    final rx = p.x - pivot.x;
+    final ry = p.y - pivot.y;
+    final rz = p.z - pivot.z;
+
+    final m = _modelTransform.m;
+    final x2 = rx * m[0] + ry * m[1] + rz * m[2];
+    final y2 = rx * m[4] + ry * m[5] + rz * m[6];
+    final z2 = rx * m[8] + ry * m[9] + rz * m[10];
+
+    final isOrtho = widget.viewModel.isOrthoProjection;
+    final persp = isOrtho ? 1.0 : (cameraDist / math.max(cameraDist - z2, cameraDist * 0.15));
+
+    final ux = (x2 * persp) * scale;
+    final uy = -(y2 * persp) * scale;
+
+    return Offset(ux, uy);
+  }
+
+  CadPoint3D? _computeOppositePinnedPivot(Offset cursorLocalPos, Size size, FoldedMeshResult mesh) {
+    if (mesh.polygons.isEmpty) return null;
+
+    final poly = _findFrontmostPolygonUnderCursor(cursorLocalPos, size, mesh);
+    CadPoint3D hitPt;
+
+    if (poly != null && poly.vertices.isNotEmpty) {
+      double sx = 0.0, sy = 0.0, sz = 0.0;
+      for (final v in poly.vertices) {
+        sx += v.x;
+        sy += v.y;
+        sz += v.z;
+      }
+      hitPt = CadPoint3D(sx / poly.vertices.length, sy / poly.vertices.length, sz / poly.vertices.length);
+    } else {
+      CadPoint3D? closestVertex;
+      double minScreenDist = 60.0;
+      for (final p in mesh.allPolygons) {
+        for (final v in p.vertices) {
+          final sPos = projectPointToScreenPaint(v, size);
+          final d = (sPos - cursorLocalPos).distance;
+          if (d < minScreenDist) {
+            minScreenDist = d;
+            closestVertex = v;
+          }
+        }
+      }
+      if (closestVertex == null) return null;
+      hitPt = closestVertex;
+    }
+
+    final center = mesh.center;
+    final dir = CadPoint3D(center.x - hitPt.x, center.y - hitPt.y, center.z - hitPt.z);
+    if (dir.length < 1.0) {
+      return center;
+    }
+
+    final normDir = dir.normalized();
+    CadPoint3D bestOpposite = center;
+    double maxProj = double.negativeInfinity;
+
+    for (final p in mesh.allPolygons) {
+      for (final v in p.vertices) {
+        final rel = CadPoint3D(v.x - center.x, v.y - center.y, v.z - center.z);
+        final proj = rel.x * normDir.x + rel.y * normDir.y + rel.z * normDir.z;
+        if (proj > maxProj) {
+          maxProj = proj;
+          bestOpposite = v;
+        }
+      }
+    }
+
+    return bestOpposite;
+  }
+
+  void _maintainPinnedAnchor(Size size) {
+    if (_pinnedPivotPoint != null && _pinnedScreenAnchor != null && size.width > 0 && size.height > 0) {
+      final u = _projectOffsetFromCenter(_pinnedPivotPoint!, size);
+      _paintPan = Offset(
+        _pinnedScreenAnchor!.dx - size.width / 2.0 - u.dx,
+        _pinnedScreenAnchor!.dy - size.height / 2.0 - u.dy,
+      );
+    }
+  }
+
+  CadPoint3D _projectToSphere(Offset localPos, Size size) {
+    final cx = size.width / 2.0 + _paintPan.dx;
+    final cy = size.height / 2.0 + _paintPan.dy;
+    final r = math.min(size.width, size.height) * 0.45;
+    if (r <= 0) return const CadPoint3D(0.0, 0.0, 1.0);
+
+    // Negative u aligns horizontal model drag with mouse drag direction (vertical v is already confirmed correct)
+    final double u = -(localPos.dx - cx) / r;
+    final double v = -(localPos.dy - cy) / r;
+    final double dSq = u * u + v * v;
+
+    double w;
+    if (dSq <= 0.5) {
+      w = math.sqrt(math.max(0.0, 1.0 - dSq));
+    } else {
+      w = 0.5 / math.sqrt(dSq);
+    }
+
+    final len = math.sqrt(u * u + v * v + w * w);
+    if (len < 1e-6) return const CadPoint3D(0.0, 0.0, 1.0);
+    return CadPoint3D(u / len, v / len, w / len);
+  }
+
+  void _rotateModelTrackball(Offset currentPos, Size size, {bool isAltPressed = false, Offset? delta}) {
+    if (_cameraAnimationController.isAnimating) {
+      _cameraAnimationController.stop();
+    }
+
+    final currVec = _projectToSphere(currentPos, size);
+    if (_lastSphereVector == null) {
+      _lastSphereVector = currVec;
+      return;
+    }
+
+    final prevVec = _lastSphereVector!;
+    _lastSphereVector = currVec;
+
+    if (isAltPressed && delta != null) {
+      final double dX = delta.dx;
+      final double dY = delta.dy;
+      TransformMatrix4 dRot;
+      if (dX.abs() > dY.abs()) {
+        final double angle = (-dX / (size.width * 0.45)) * 1.8;
+        dRot = TransformMatrix4.rotationAxis(const CadPoint3D(0.0, 1.0, 0.0), angle);
+      } else {
+        final double angle = (-dY / (size.height * 0.45)) * 1.8;
+        dRot = TransformMatrix4.rotationAxis(const CadPoint3D(-1.0, 0.0, 0.0), angle);
+      }
+      _modelTransform = dRot.multiply(_modelTransform);
+    } else {
+      // 360° Virtual Globe Arcball rotation (direction of the dragging pointer)
+      final axisX = prevVec.y * currVec.z - prevVec.z * currVec.y;
+      final axisY = prevVec.z * currVec.x - prevVec.x * currVec.z;
+      final axisZ = prevVec.x * currVec.y - prevVec.y * currVec.x;
+      final axisLen = math.sqrt(axisX * axisX + axisY * axisY + axisZ * axisZ);
+
+      if (axisLen > 1e-6) {
+        final dot = (prevVec.x * currVec.x + prevVec.y * currVec.y + prevVec.z * currVec.z).clamp(-1.0, 1.0);
+        final angleRad = math.atan2(axisLen, dot) * 1.8;
+
+        final normAxis = CadPoint3D(axisX / axisLen, axisY / axisLen, axisZ / axisLen);
+        final dRot = TransformMatrix4.rotationAxis(normAxis, angleRad);
+        _modelTransform = dRot.multiply(_modelTransform);
+      }
+    }
+
+    _orthonormalizeModelTransform();
+    _syncCameraAnglesFromTransform();
+    _maintainPinnedAnchor(size);
+
+    if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable && _isCameraReady && _scene != null) {
+      _updateGpuCamera();
+    }
+    _saveCameraStateToViewModel(widget.viewModel);
+    if (mounted) setState(() {});
+  }
+
+  void _rollCamera(double degrees) {
+    if (_cameraAnimationController.isAnimating) {
+      _cameraAnimationController.stop();
+    }
+    final dRot = TransformMatrix4.rotationAxis(const CadPoint3D(0.0, 0.0, 1.0), degrees * math.pi / 180.0);
+    _modelTransform = dRot.multiply(_modelTransform);
+    _orthonormalizeModelTransform();
+    _syncCameraAnglesFromTransform();
+    if (_lastKnownViewportSize != null) _maintainPinnedAnchor(_lastKnownViewportSize!);
+    if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable && _isCameraReady && _scene != null) {
+      _updateGpuCamera();
+    }
+    _saveCameraStateToViewModel(widget.viewModel);
+    if (mounted) setState(() {});
   }
 
   void _setCameraFromAngles(double azimuthDeg, double elevationDeg, {bool animate = true}) {
@@ -536,7 +781,9 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     }
     _paintAzimuthDeg = _normalizeAngle(_paintAzimuthDeg + dAzimuth);
     _paintElevationDeg = _normalizeAngle(_paintElevationDeg + dElevation);
+    _modelTransform = _matrixFromAngles(_paintAzimuthDeg, _paintElevationDeg);
     _viewCubeNotifier.value = (_paintAzimuthDeg, _paintElevationDeg);
+    if (_lastKnownViewportSize != null) _maintainPinnedAnchor(_lastKnownViewportSize!);
 
     if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable && _isCameraReady && _scene != null) {
       _updateGpuCamera();
@@ -601,11 +848,11 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
       final isOrtho = widget.viewModel.isOrthoProjection;
       final prefs = widget.viewModel.graphicsPreferences;
       _cameraComponent.projection = isOrtho
-          ? OrthographicProjection(zoom: 1.0, near: 1.0, far: 10000.0)
+          ? OrthographicProjection(zoom: 1.0, near: 0.5, far: 50000.0)
           : PerspectiveProjection(
               fovRadiansY: (prefs.fieldOfView * vm.degrees2Radians).clamp(15.0 * vm.degrees2Radians, 90.0 * vm.degrees2Radians),
-              near: 1.0,
-              far: 10000.0,
+              near: 0.5,
+              far: 50000.0,
             );
       _updateGpuCamera();
     }
@@ -770,13 +1017,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
 
     CadFoldedPolygon3D? bestPoly;
     double closestDist = double.infinity;
-
-    final azRad = _paintAzimuthDeg * vm.degrees2Radians;
-    final elRad = _paintElevationDeg * vm.degrees2Radians;
-    final cosAz = math.cos(azRad);
-    final sinAz = math.sin(azRad);
-    final cosEl = math.cos(elRad);
-    final sinEl = math.sin(elRad);
+    final m = _modelTransform.m;
     final mCenter = mesh.center;
 
     for (final poly in mesh.allPolygons) {
@@ -799,7 +1040,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
           final dx = v.x - mCenter.x;
           final dy = v.y - mCenter.y;
           final dz = v.z - mCenter.z;
-          final depth = dx * cosEl * sinAz - dy * cosEl * cosAz + dz * sinEl;
+          final depth = dx * m[8] + dy * m[9] + dz * m[10];
           polyDepth += depth;
         }
         polyDepth /= poly.vertices.length;
@@ -1270,14 +1511,6 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     final cx = size.width / 2.0 + _paintPan.dx;
     final cy = size.height / 2.0 + _paintPan.dy;
 
-    final azRad = _paintAzimuthDeg * vm.degrees2Radians;
-    final elRad = _paintElevationDeg * vm.degrees2Radians;
-
-    final cosAz = math.cos(azRad);
-    final sinAz = math.sin(azRad);
-    final cosEl = math.cos(elRad);
-    final sinEl = math.sin(elRad);
-
     final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
     final fitDim = maxDim > 0 ? maxDim : 200.0;
     final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
@@ -1290,9 +1523,10 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     final ry = p.y - pivot.y;
     final rz = p.z - pivot.z;
 
-    final x2 = rx * cosAz + ry * sinAz;
-    final y2 = -rx * sinEl * sinAz + ry * sinEl * cosAz + rz * cosEl;
-    final z2 = rx * cosEl * sinAz - ry * cosEl * cosAz + rz * sinEl;
+    final m = _modelTransform.m;
+    final x2 = rx * m[0] + ry * m[1] + rz * m[2];
+    final y2 = rx * m[4] + ry * m[5] + rz * m[6];
+    final z2 = rx * m[8] + ry * m[9] + rz * m[10];
 
     final isOrtho = widget.viewModel.isOrthoProjection;
     final persp = isOrtho ? 1.0 : (cameraDist / math.max(cameraDist - z2, cameraDist * 0.15));
@@ -1362,6 +1596,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
+        _lastKnownViewportSize = size;
 
         return Stack(
           children: [
@@ -1380,6 +1615,12 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                   }
                   if (key == LogicalKeyboardKey.keyN) {
                     _orientNormalToSelectedFace();
+                    return KeyEventResult.handled;
+                  }
+                  if (key == LogicalKeyboardKey.keyP && !HardwareKeyboard.instance.isShiftPressed) {
+                    setState(() {
+                      _isPinnedPivotMode = !_isPinnedPivotMode;
+                    });
                     return KeyEventResult.handled;
                   }
                   if (key == LogicalKeyboardKey.keyY) {
@@ -1426,11 +1667,59 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                 },
                 child: Listener(
                   behavior: HitTestBehavior.opaque,
-                  onPointerDown: (_) {
+                  onPointerDown: (event) {
                     widget.viewModel.pushCameraHistory(_getCurrentCameraState());
-                    setState(() => _isUserInteracting = true);
+                    final isPrimary = (event.buttons & kPrimaryMouseButton) != 0;
+                    final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
+                    final isMiddle = (event.buttons & kTertiaryButton) != 0 || (event.buttons & kMiddleMouseButton) != 0;
+                    bool isCtrlPressed = false;
+                    try {
+                      isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
+                    } catch (_) {}
+
+                    setState(() {
+                      _isUserInteracting = true;
+                      if (!isMiddle && (isPrimary || isSecondary) && !_isPanToolActive) {
+                        _isRotatingModel = true;
+                        _dragStartPos = event.localPosition;
+                        _currentDragPos = event.localPosition;
+                        _lastSphereVector = _projectToSphere(event.localPosition, size);
+
+                        // If Pinned Pivot mode is active (or Ctrl pressed), pin the opposite side
+                        if (_isPinnedPivotMode || isCtrlPressed) {
+                          final pinPt = _computeOppositePinnedPivot(event.localPosition, size, mesh);
+                          if (pinPt != null) {
+                            _pinnedPivotPoint = pinPt;
+                            _pinnedScreenAnchor = projectPointToScreenPaint(pinPt, size);
+                          } else {
+                            _pinnedPivotPoint = null;
+                            _pinnedScreenAnchor = null;
+                          }
+                        } else {
+                          _pinnedPivotPoint = null;
+                          _pinnedScreenAnchor = null;
+                        }
+                      }
+                    });
                   },
-                  onPointerUp: (_) => setState(() => _isUserInteracting = false),
+                  onPointerUp: (_) => setState(() {
+                    _isUserInteracting = false;
+                    _isRotatingModel = false;
+                    _dragStartPos = null;
+                    _currentDragPos = null;
+                    _lastSphereVector = null;
+                    _pinnedPivotPoint = null;
+                    _pinnedScreenAnchor = null;
+                  }),
+                  onPointerCancel: (_) => setState(() {
+                    _isUserInteracting = false;
+                    _isRotatingModel = false;
+                    _dragStartPos = null;
+                    _currentDragPos = null;
+                    _lastSphereVector = null;
+                    _pinnedPivotPoint = null;
+                    _pinnedScreenAnchor = null;
+                  }),
                   onPointerSignal: (event) {
                     if (event is PointerScrollEvent) {
                       _zoomCamera(event.scrollDelta.dy < 0 ? 1.15 : 0.85);
@@ -1454,19 +1743,26 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     if (isMiddle || (isSecondary && isCtrlPressed) || (isPrimary && (_isPanToolActive || isShiftPressed))) {
                       // Panning (Middle Drag / Ctrl+Right Drag / Shift+Left / Pan Tool)
                       _panCamera(event.delta, size);
+                      _lastSphereVector = _projectToSphere(event.localPosition, size);
                     } else if (isSecondary || isPrimary) {
                       if (widget.viewModel.is3dRotateLocked) {
                         return; // 3D Rotate is locked!
                       }
-                      if (isAltPressed) {
-                        // Alt + Right: Constrained turntable or pitch
-                        if (event.delta.dx.abs() > event.delta.dy.abs()) {
-                          _orbitCamera(event.delta.dx * 0.5, 0.0);
+                      _currentDragPos = event.localPosition;
+                      if (_isTurntableOrbit) {
+                        // Turntable constrained orbit
+                        if (isAltPressed) {
+                          if (event.delta.dx.abs() > event.delta.dy.abs()) {
+                            _orbitCamera(-event.delta.dx * 0.5, 0.0);
+                          } else {
+                            _orbitCamera(0.0, -event.delta.dy * 0.5);
+                          }
                         } else {
-                          _orbitCamera(0.0, -event.delta.dy * 0.5);
+                          _orbitCamera(-event.delta.dx * 0.5, -event.delta.dy * 0.5);
                         }
                       } else {
-                        _orbitCamera(event.delta.dx * 0.5, -event.delta.dy * 0.5);
+                        // 360° Virtual Globe Arcball rotation
+                        _rotateModelTrackball(event.localPosition, size, isAltPressed: isAltPressed, delta: event.delta);
                       }
                     }
                   },
@@ -1498,6 +1794,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                                 hoveredFaceId: widget.viewModel.hoveredFaceId,
                                 activePorts: widget.viewModel.activeCmsPorts,
                                 focusedPortId: widget.viewModel.cmsGuidedController.state.focus.activePortId,
+                                modelTransform: _modelTransform,
                               ),
                             ),
                           ),
@@ -1523,6 +1820,25 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                   child: CustomPaint(
                     size: size,
                     painter: _Cad3dDimensionsPainter(mesh: mesh, viewModel: widget.viewModel, project: (p) => projectPointToScreen(p, size)),
+                  ),
+                ),
+              ),
+
+            // =================================================================
+            // 2b. 360° VIRTUAL GLOBE DRAG OVERLAY
+            // =================================================================
+            if (_isRotatingModel && _dragStartPos != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    size: size,
+                    painter: _VirtualGlobeOverlayPainter(
+                      center: Offset(size.width / 2.0 + _paintPan.dx, size.height / 2.0 + _paintPan.dy),
+                      radius: math.min(size.width, size.height) * 0.45,
+                      startPoint: _dragStartPos,
+                      currentPoint: _currentDragPos,
+                      pinnedAnchor: _pinnedScreenAnchor,
+                    ),
                   ),
                 ),
               ),
@@ -1743,6 +2059,10 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                 onToggleOrbitMode: () {
                   setState(() => _isTurntableOrbit = !_isTurntableOrbit);
                 },
+                isPinnedPivot: _isPinnedPivotMode,
+                onTogglePinnedPivot: () {
+                  setState(() => _isPinnedPivotMode = !_isPinnedPivotMode);
+                },
                 isPanToolActive: _isPanToolActive,
                 onTogglePanTool: () {
                   setState(() => _isPanToolActive = !_isPanToolActive);
@@ -1938,8 +2258,8 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                         widget.viewModel.isGraphicsPreferencesOpen = true;
                       });
                     },
-                    onRollCw: () => _orbitCamera(15.0, 0.0),
-                    onRollCcw: () => _orbitCamera(-15.0, 0.0),
+                    onRollCw: () => _rollCamera(15.0),
+                    onRollCcw: () => _rollCamera(-15.0),
                     onResetView: () {
                       _setCameraFromAngles(45.0, 35.264);
                       _zoomToFit();
@@ -2172,4 +2492,154 @@ class _Cad3dDimensionsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _Cad3dDimensionsPainter oldDelegate) => true;
+}
+
+/// Sleek 360° Virtual Globe overlay displayed during interactive model rotation
+class _VirtualGlobeOverlayPainter extends CustomPainter {
+  final Offset center;
+  final double radius;
+  final Offset? startPoint;
+  final Offset? currentPoint;
+  final Offset? pinnedAnchor;
+
+  _VirtualGlobeOverlayPainter({
+    required this.center,
+    required this.radius,
+    this.startPoint,
+    this.currentPoint,
+    this.pinnedAnchor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (radius <= 0) return;
+
+    // 1. Globe Equator / Silhouette Circle
+    final rimPaint = Paint()
+      ..color = const Color(0xFF00E5FF).withValues(alpha: 0.22)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    canvas.drawCircle(center, radius, rimPaint);
+
+    // Subtle outer halo glow
+    final glowPaint = Paint()
+      ..color = const Color(0xFF00E5FF).withValues(alpha: 0.06)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6.0;
+    canvas.drawCircle(center, radius, glowPaint);
+
+    // 2. Subtle internal curved meridian & parallel arcs
+    final arcPaint = Paint()
+      ..color = const Color(0xFF00E5FF).withValues(alpha: 0.10)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    // Horizontal equator arc (slight perspective curve)
+    final equatorRect = Rect.fromCenter(center: center, width: radius * 2.0, height: radius * 0.4);
+    canvas.drawOval(equatorRect, arcPaint);
+
+    // Vertical meridian arc
+    final meridianRect = Rect.fromCenter(center: center, width: radius * 0.4, height: radius * 2.0);
+    canvas.drawOval(meridianRect, arcPaint);
+
+    // 3. Pointer Drag Track
+    if (startPoint != null && currentPoint != null) {
+      final trackPaint = Paint()
+        ..color = const Color(0xFF00E5FF).withValues(alpha: 0.75)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawLine(startPoint!, currentPoint!, trackPaint);
+
+      // Start anchor dot
+      final startPaint = Paint()
+        ..color = const Color(0xFF00E5FF)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(startPoint!, 4.5, startPaint);
+
+      final startRing = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+      canvas.drawCircle(startPoint!, 4.5, startRing);
+
+      // Current position pointer ring
+      final currRing = Paint()
+        ..color = const Color(0xFF00E5FF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+      canvas.drawCircle(currentPoint!, 6.0, currRing);
+    }
+
+    // 4. Pinned Pivot Reticle Indicator (opposite side pinned in place)
+    if (pinnedAnchor != null) {
+      final pinP = pinnedAnchor!;
+
+      // Outer glowing target ring
+      final anchorGlow = Paint()
+        ..color = const Color(0xFFFFB300).withValues(alpha: 0.28)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6.0;
+      canvas.drawCircle(pinP, 13.0, anchorGlow);
+
+      final anchorRing = Paint()
+        ..color = const Color(0xFFFFB300)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+      canvas.drawCircle(pinP, 11.0, anchorRing);
+
+      // Center solid anchor dot
+      final dotPaint = Paint()
+        ..color = const Color(0xFFFFB300)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(pinP, 3.5, dotPaint);
+
+      // Target reticle crosshairs
+      final crossPaint = Paint()
+        ..color = const Color(0xFFFFB300)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+      canvas.drawLine(Offset(pinP.dx - 18, pinP.dy), Offset(pinP.dx - 13, pinP.dy), crossPaint);
+      canvas.drawLine(Offset(pinP.dx + 13, pinP.dy), Offset(pinP.dx + 18, pinP.dy), crossPaint);
+      canvas.drawLine(Offset(pinP.dx, pinP.dy - 18), Offset(pinP.dx, pinP.dy - 13), crossPaint);
+      canvas.drawLine(Offset(pinP.dx, pinP.dy + 13), Offset(pinP.dx, pinP.dy + 18), crossPaint);
+
+      // Radial lever arm line to drag start
+      if (startPoint != null) {
+        final leverPaint = Paint()
+          ..color = const Color(0xFFFFB300).withValues(alpha: 0.35)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2;
+        canvas.drawLine(pinP, startPoint!, leverPaint);
+      }
+
+      // High-contrast CAD pill badge: "📌 PINNED PIVOT"
+      final textSpan = TextSpan(
+        text: '📌 PINNED PIVOT',
+        style: const TextStyle(
+          color: Color(0xFFFFB300),
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
+        ),
+      );
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final badgeOffset = Offset(pinP.dx - textPainter.width / 2.0, pinP.dy + 16.0);
+      textPainter.paint(canvas, badgeOffset);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _VirtualGlobeOverlayPainter oldDelegate) {
+    return oldDelegate.center != center ||
+        oldDelegate.radius != radius ||
+        oldDelegate.startPoint != startPoint ||
+        oldDelegate.currentPoint != currentPoint ||
+        oldDelegate.pinnedAnchor != pinnedAnchor;
+  }
 }

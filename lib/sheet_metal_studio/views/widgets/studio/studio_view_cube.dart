@@ -223,7 +223,7 @@ class _StudioViewCubeState extends State<StudioViewCube> {
                 behavior: HitTestBehavior.opaque,
                 onPanStart: (_) => setState(() => _isDragging = true),
                 onPanUpdate: (details) {
-                  widget.onOrbit?.call(details.delta.dx * 0.75, -details.delta.dy * 0.75);
+                  widget.onOrbit?.call(-details.delta.dx * 0.75, details.delta.dy * 0.75);
                 },
                 onPanEnd: (_) => setState(() => _isDragging = false),
                 onTap: () {
@@ -262,7 +262,13 @@ class _StudioViewCubeState extends State<StudioViewCube> {
       tooltip: 'Camera & Display Preferences',
       offset: const Offset(-180, 24),
       padding: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      color: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(6),
+        side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
+      ),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
         decoration: BoxDecoration(
@@ -336,7 +342,8 @@ class _StudioViewCubeState extends State<StudioViewCube> {
         text,
         style: TextStyle(
           fontSize: 12,
-          color: isEnabled ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
+          color: isEnabled ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+          fontWeight: isEnabled ? FontWeight.w500 : FontWeight.normal,
         ),
       ),
     );
@@ -348,7 +355,7 @@ class _StudioViewCubeState extends State<StudioViewCube> {
       height: 30,
       child: Row(
         children: [
-          Icon(icon, size: 14, color: const Color(0xFF475569)),
+          Icon(icon, size: 14, color: const Color(0xFF0F172A)),
           const SizedBox(width: 8),
           Text(
             text,
@@ -371,8 +378,8 @@ class _StudioViewCubeState extends State<StudioViewCube> {
             text,
             style: TextStyle(
               fontSize: 12,
-              fontWeight: isChecked ? FontWeight.w600 : FontWeight.normal,
-              color: isChecked ? const Color(0xFF0F172A) : const Color(0xFF334155),
+              fontWeight: isChecked ? FontWeight.w600 : FontWeight.w500,
+              color: isChecked ? const Color(0xFF0284C7) : const Color(0xFF0F172A),
             ),
           ),
         ],

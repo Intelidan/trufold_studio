@@ -15,6 +15,7 @@ import 'package:trufold_studio/sheet_metal_studio/engine/ladder/ladder_assembly_
 import 'package:trufold_studio/sheet_metal_studio/models/ladder/ladder_assembly_parameters.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/sheet_metal_material.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/canvas_2d/controllers/vector_cad_controller.dart';
+import 'package:trufold_studio/sheet_metal_studio/views/widgets/studio/studio_view_cube.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -708,6 +709,95 @@ void main() {
       final prefs = doc.material.paintCoat.toCadMaterialSettings();
       expect(prefs.baseColor, equals(RalColor.ral7035.color));
       expect(prefs.isPlastic, isTrue);
+    });
+
+    testWidgets('360 Virtual Globe Arcball rotates model directly following pointer movement', (tester) async {
+      final doc = DsfDocument.sampleCableTray(width: 100, height: 50, length: 200, thickness: 2.0);
+      final vm = SheetMetalStudioViewModel();
+      vm.loadDocument(doc);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 800,
+              height: 600,
+              child: FlutterSceneViewportWidget(viewModel: vm),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final initialAzimuth = vm.camera3dState!.azimuthDeg;
+      final initialElevation = vm.camera3dState!.elevationDeg;
+
+      // Drag right with mouse: rotates model horizontally following pointer
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse, buttons: kPrimaryMouseButton);
+      await gesture.addPointer(location: const Offset(400, 300));
+      await gesture.down(const Offset(400, 300));
+
+      await gesture.moveTo(const Offset(500, 300));
+      await tester.pump();
+
+      expect(vm.camera3dState!.azimuthDeg, isNot(equals(initialAzimuth)),
+          reason: 'Horizontal drag rotates model azimuth in the direction of dragging pointer');
+
+      // Drag vertically: rotates model vertically following pointer
+      await gesture.moveTo(const Offset(500, 200));
+      await tester.pump();
+
+      expect(vm.camera3dState!.elevationDeg, isNot(equals(initialElevation)),
+          reason: 'Vertical drag rotates model elevation in the direction of dragging pointer');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Pinned Pivot rotation mode and ViewCube drag gestures behave correctly', (tester) async {
+      final doc = DsfDocument.sampleCableTray(width: 100, height: 50, length: 200, thickness: 2.0);
+      final vm = SheetMetalStudioViewModel();
+      vm.loadDocument(doc);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 800,
+              height: 600,
+              child: FlutterSceneViewportWidget(viewModel: vm),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find ViewCube widget
+      final viewCubeFinder = find.byType(StudioViewCube);
+      expect(viewCubeFinder, findsOneWidget);
+
+      final initialAz = vm.camera3dState!.azimuthDeg;
+      final initialEl = vm.camera3dState!.elevationDeg;
+
+      // Drag on ViewCube: dragging right decreases azimuth (rotates cube to right)
+      await tester.drag(viewCubeFinder, const Offset(30, 20));
+      await tester.pumpAndSettle();
+
+      expect(vm.camera3dState!.azimuthDeg, isNot(equals(initialAz)));
+      expect(vm.camera3dState!.elevationDeg, isNot(equals(initialEl)));
+
+      // Pinned Pivot button is present in the navigation bar
+      expect(find.byIcon(Icons.push_pin), findsOneWidget);
+
+      // Tapping Pinned Pivot button toggles to unpinned (Icons.push_pin_outlined)
+      await tester.tap(find.byIcon(Icons.push_pin));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.push_pin_outlined), findsOneWidget);
+
+      // Tapping again re-enables Pinned Pivot
+      await tester.tap(find.byIcon(Icons.push_pin_outlined));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.push_pin), findsOneWidget);
     });
   });
 }

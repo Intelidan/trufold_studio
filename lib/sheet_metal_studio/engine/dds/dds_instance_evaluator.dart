@@ -167,23 +167,45 @@ class DdsInstanceEvaluator {
           alignment: alignment,
           params: ladderParams,
         );
-      } else if (tId.contains('tee') || pName.contains('tee')) {
-        final mainW = (instance.instanceParameters['width'] ?? instance.instanceParameters['W'] ?? 600.0).toDouble();
-        final branchW = (instance.instanceParameters['port3_width'] ?? instance.instanceParameters['branch_width'] ?? mainW).toDouble();
+      } else if (tId == 'ladder_unequal_tee' || (tId.contains('tee') && (tId.contains('unequal') || pName.contains('unequal')))) {
+        final branchW = (instance.instanceParameters['port1_width'] ?? instance.instanceParameters['branch_width'] ?? instance.instanceParameters['width3'] ?? instance.instanceParameters['W3'] ?? 300.0).toDouble();
+        final mainOutW = (instance.instanceParameters['port2_width'] ?? instance.instanceParameters['main_out_width'] ?? instance.instanceParameters['run_width'] ?? instance.instanceParameters['width2'] ?? instance.instanceParameters['W2'] ?? 450.0).toDouble();
+        final mainInW = (instance.instanceParameters['port3_width'] ?? instance.instanceParameters['main_in_width'] ?? instance.instanceParameters['width1'] ?? instance.instanceParameters['width'] ?? instance.instanceParameters['W'] ?? 600.0).toDouble();
         final radius = (instance.instanceParameters['radius'] ?? 300.0).toDouble();
-        ladderAssembly = LadderAssemblyGenerator.generateTee(
-          mainWidth: mainW,
+        ladderAssembly = LadderAssemblyGenerator.generateUnequalTee(
+          mainInWidth: mainInW,
+          mainOutWidth: mainOutW,
           branchWidth: branchW,
           radiusMm: radius,
           params: ladderParams,
         );
-      } else if (tId.contains('cross') || pName.contains('cross')) {
-        final mainW = (instance.instanceParameters['width'] ?? instance.instanceParameters['W'] ?? 600.0).toDouble();
-        final branchW = (instance.instanceParameters['port4_width'] ?? instance.instanceParameters['branch_width'] ?? mainW).toDouble();
+      } else if (tId.contains('tee') || pName.contains('tee')) {
+        final w = (instance.instanceParameters['width'] ?? instance.instanceParameters['W'] ?? 600.0).toDouble();
         final radius = (instance.instanceParameters['radius'] ?? 300.0).toDouble();
-        ladderAssembly = LadderAssemblyGenerator.generateCross(
-          mainWidth: mainW,
-          branchWidth: branchW,
+        ladderAssembly = LadderAssemblyGenerator.generateEqualTee(
+          width: w,
+          radiusMm: radius,
+          params: ladderParams,
+        );
+      } else if (tId == 'ladder_unequal_cross' || (tId.contains('cross') && (tId.contains('unequal') || pName.contains('unequal')))) {
+        final westW = (instance.instanceParameters['port1_width'] ?? instance.instanceParameters['west_width'] ?? instance.instanceParameters['width1'] ?? instance.instanceParameters['width'] ?? instance.instanceParameters['W'] ?? 600.0).toDouble();
+        final northW = (instance.instanceParameters['port2_width'] ?? instance.instanceParameters['north_width'] ?? instance.instanceParameters['branch_width'] ?? instance.instanceParameters['width3'] ?? instance.instanceParameters['W3'] ?? 450.0).toDouble();
+        final eastW = (instance.instanceParameters['port3_width'] ?? instance.instanceParameters['east_width'] ?? instance.instanceParameters['width2'] ?? instance.instanceParameters['W2'] ?? 300.0).toDouble();
+        final southW = (instance.instanceParameters['port4_width'] ?? instance.instanceParameters['south_width'] ?? instance.instanceParameters['width4'] ?? instance.instanceParameters['W4'] ?? 200.0).toDouble();
+        final radius = (instance.instanceParameters['radius'] ?? 300.0).toDouble();
+        ladderAssembly = LadderAssemblyGenerator.generateUnequalCross(
+          westWidth: westW,
+          eastWidth: eastW,
+          northWidth: northW,
+          southWidth: southW,
+          radiusMm: radius,
+          params: ladderParams,
+        );
+      } else if (tId.contains('cross') || pName.contains('cross')) {
+        final w = (instance.instanceParameters['width'] ?? instance.instanceParameters['W'] ?? 600.0).toDouble();
+        final radius = (instance.instanceParameters['radius'] ?? 300.0).toDouble();
+        ladderAssembly = LadderAssemblyGenerator.generateEqualCross(
+          width: w,
           radiusMm: radius,
           params: ladderParams,
         );

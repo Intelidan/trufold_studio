@@ -76,6 +76,18 @@ class DdsTemplateResolver {
     'trunking_outside_riser_90': 'Cable Trunking 90° Outside Riser',
     'trunking_inside_riser_45': 'Cable Trunking 45° Inside Riser',
     'trunking_outside_riser_45': 'Cable Trunking 45° Outside Riser',
+
+    // Cable Ladder Accessories
+    'ladder_straight': 'Cable Ladder Straight',
+    'ladder_bend_90': 'Cable Ladder 90° Flat Bend',
+    'ladder_bend_45': 'Cable Ladder 45° Flat Bend',
+    'ladder_inside_riser_90': 'Cable Ladder 90° Inside Riser',
+    'ladder_outside_riser_90': 'Cable Ladder 90° Outside Riser',
+    'ladder_reducer': 'Cable Ladder Reducer',
+    'ladder_equal_tee': 'Cable Ladder Equal Tee',
+    'ladder_unequal_tee': 'Cable Ladder Unequal Tee',
+    'ladder_equal_cross': 'Cable Ladder Equal Cross',
+    'ladder_unequal_cross': 'Cable Ladder Unequal Cross',
   };
 
   /// Resolves a template synchronously from disk (used by desktop / test runner).
@@ -206,9 +218,11 @@ class DdsTemplateResolver {
         return createReference('ladder_reducer');
       }
       if (lower.contains('cross') || lower.contains('4-way')) {
+        if (lower.contains('unequal')) return createReference('ladder_unequal_cross');
         return createReference('ladder_equal_cross');
       }
       if (lower.contains('tee') || lower.contains('t-piece')) {
+        if (lower.contains('unequal')) return createReference('ladder_unequal_tee');
         return createReference('ladder_equal_tee');
       }
       return createReference('ladder_straight');

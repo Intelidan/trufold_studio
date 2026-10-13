@@ -335,6 +335,10 @@ class OnshapeGraphicsPreferences {
   final bool hasSecondaryLight; // toggle secondary fill light, default true
   final bool hasBackLight; // toggle rim/back light, default false
 
+  // Welding Display Settings (SS1 / SS2)
+  final bool showWeldOverlay; // default true (translucent overlaid color on welds)
+  final Color weldOverlayColor; // default 0xD9F59E0B (amber gold)
+
   // PBR / Shader Material Settings (Hot-Dip Galvanized, Pre-Galvanized, Plastic, Chrome, etc.)
   final CadMaterialSettings materialSettings;
 
@@ -360,6 +364,8 @@ class OnshapeGraphicsPreferences {
     this.keyLightIntensity = 1.45,
     this.hasSecondaryLight = true,
     this.hasBackLight = false,
+    this.showWeldOverlay = true,
+    this.weldOverlayColor = const Color(0xD9F59E0B),
     this.materialSettings = const CadMaterialSettings(),
   });
 
@@ -385,6 +391,8 @@ class OnshapeGraphicsPreferences {
     double? keyLightIntensity,
     bool? hasSecondaryLight,
     bool? hasBackLight,
+    bool? showWeldOverlay,
+    Color? weldOverlayColor,
     CadMaterialSettings? materialSettings,
   }) {
     return OnshapeGraphicsPreferences(
@@ -409,6 +417,8 @@ class OnshapeGraphicsPreferences {
       keyLightIntensity: keyLightIntensity ?? this.keyLightIntensity,
       hasSecondaryLight: hasSecondaryLight ?? this.hasSecondaryLight,
       hasBackLight: hasBackLight ?? this.hasBackLight,
+      showWeldOverlay: showWeldOverlay ?? this.showWeldOverlay,
+      weldOverlayColor: weldOverlayColor ?? this.weldOverlayColor,
       materialSettings: materialSettings ?? this.materialSettings,
     );
   }

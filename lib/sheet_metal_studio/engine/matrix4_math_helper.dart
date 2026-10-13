@@ -15,6 +15,12 @@ class TransformMatrix4 {
 
   const TransformMatrix4._(this.m);
 
+  /// Creates a matrix from a 16-element list
+  factory TransformMatrix4.fromList(List<double> list) {
+    assert(list.length == 16, 'TransformMatrix4 requires exactly 16 entries');
+    return TransformMatrix4._(List<double>.from(list));
+  }
+
   /// Identity matrix
   factory TransformMatrix4.identity() {
     return TransformMatrix4._([

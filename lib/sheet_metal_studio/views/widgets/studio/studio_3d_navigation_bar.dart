@@ -20,6 +20,8 @@ class Studio3dNavigationBar extends StatelessWidget {
   final void Function(double azimuth, double elevation) onSelectView;
   final bool isTurntable;
   final VoidCallback onToggleOrbitMode;
+  final bool isPinnedPivot;
+  final VoidCallback? onTogglePinnedPivot;
   final bool isPanToolActive;
   final VoidCallback onTogglePanTool;
   final bool isOrtho;
@@ -40,6 +42,8 @@ class Studio3dNavigationBar extends StatelessWidget {
     required this.onSelectView,
     required this.isTurntable,
     required this.onToggleOrbitMode,
+    this.isPinnedPivot = false,
+    this.onTogglePinnedPivot,
     required this.isPanToolActive,
     required this.onTogglePanTool,
     required this.isOrtho,
@@ -95,6 +99,17 @@ class Studio3dNavigationBar extends StatelessWidget {
                 : 'Free Trackball Orbit Active\nClick for Turntable Orbit',
             onPressed: onToggleOrbitMode,
           ),
+
+          // 3b. Pinned Pivot Mode
+          if (onTogglePinnedPivot != null)
+            _NavIconButton(
+              icon: isPinnedPivot ? Icons.push_pin : Icons.push_pin_outlined,
+              isActive: isPinnedPivot,
+              tooltip: isPinnedPivot
+                  ? 'Pinned Pivot Active (P)\n(Opposite side remains anchored while rotating)\nClick for Center Orbit'
+                  : 'Pinned Pivot Orbit (P)\n(Pins opposite side of model when rotating part)',
+              onPressed: onTogglePinnedPivot!,
+            ),
 
           // 4. Pan Tool Toggle
           _NavIconButton(
