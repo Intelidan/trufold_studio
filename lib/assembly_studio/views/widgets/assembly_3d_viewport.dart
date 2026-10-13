@@ -72,6 +72,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   AssemblyPart? _draggingPart;
   final List<AssemblyPart> _draggedParts = [];
   final Map<String, CadPoint3D> _draggedPartsStartPos = {};
+  final Map<String, CadPoint3D> _draggedWeldsStartPos = {};
+  final Map<String, CadPoint3D?> _draggedWeldsStartSecPos = {};
+  final Map<String, List<CadPoint3D>?> _draggedWeldsStartPathPoints = {};
   Offset? _partDragStartScreen;
   bool _hasMovedPart = false;
   bool _isMovingEntity = false;
@@ -124,8 +127,11 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   Offset? _weldDraftStartScreen;
   final List<Offset> _weldDraftPath = [];
   final List<CadPoint3D> _weld3DPoints = [];
+  final Set<String> _weldHitPartIds = {};
   final List<_WeldSparkParticle> _weldSparks = [];
   bool _isDrawingWeld = false;
+  double _weldFlickerPhase = 0.0;
+  int _lastSparkSpawnMs = 0;
 
   // Draggable Standard Views Toolbar State
   Offset _viewsToolbarOffset = const Offset(60, 54);
@@ -856,11 +862,16 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                         _weldDraftPath.clear();
                         _weldDraftPath.add(event.localPosition);
                         _weld3DPoints.clear();
+                        _weldHitPartIds.clear();
+                        _weldSparks.clear();
+                        _weldFlickerPhase = 0.0;
                         _isDrawingWeld = true;
                         final (rayOrigin, rayDir) = _getRayFromScreen(event.localPosition, size, mesh);
                         final hit = AssemblyRaycaster.raycast(rayOrigin: rayOrigin, rayDirection: rayDir, mesh: mesh);
                         if (hit != null) {
                           _weld3DPoints.add(hit.hitPoint);
+                          final p = vm.findPartForFaceId(hit.polygon.faceId);
+                          if (p != null) _weldHitPartIds.add(p.id);
                         }
                         _spawnWeldSparks(event.localPosition);
                         setState(() {});
@@ -1044,6 +1055,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                               for (final p in _draggedParts) {
                                 _draggedPartsStartPos[p.id] = p.position;
                               }
+                              _snapshotDraggedWelds(vm);
 
                               final nearestSnap = _findNearestSnapPointOnSelectedPart(event.localPosition, size, mesh);
                               _moveBaseWorldPoint = nearestSnap?.worldPosition ?? hitPart.position;
@@ -1083,6 +1095,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                               for (final p in _draggedParts) {
                                 _draggedPartsStartPos[p.id] = p.position;
                               }
+                              _snapshotDraggedWelds(vm);
 
                               final nearestSnap = _findNearestSnapPointOnSelectedPart(event.localPosition, size, mesh);
                               _moveBaseWorldPoint = nearestSnap?.worldPosition ?? partToMove.position;
@@ -1165,14 +1178,26 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                       }
 
                       if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld && isPrimary) {
-                        _weldDraftPath.add(event.localPosition);
+                        if (_weldDraftPath.isEmpty) {
+                          _weldDraftPath.add(event.localPosition);
+                        } else {
+                          final lastPt = _weldDraftPath.last;
+                          final dist = (event.localPosition - lastPt).distance;
+                          if (dist >= 3.0) {
+                            final smoothedPt = Offset.lerp(lastPt, event.localPosition, 0.65)!;
+                            _weldDraftPath.add(smoothedPt);
+                          }
+                        }
                         final (rayOrigin, rayDir) = _getRayFromScreen(event.localPosition, size, mesh);
                         final hit = AssemblyRaycaster.raycast(rayOrigin: rayOrigin, rayDirection: rayDir, mesh: mesh);
                         if (hit != null) {
                           if (_weld3DPoints.isEmpty || _weld3DPoints.last.distanceTo(hit.hitPoint) > 2.0) {
                             _weld3DPoints.add(hit.hitPoint);
                           }
+                          final p = vm.findPartForFaceId(hit.polygon.faceId);
+                          if (p != null) _weldHitPartIds.add(p.id);
                         }
+                        _weldFlickerPhase += 0.08;
                         _spawnWeldSparks(event.localPosition);
                         _updateWeldSparks(0.016);
                         setState(() {});
@@ -1260,6 +1285,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                         _processWeldDraft(event.localPosition, size, mesh, vm);
                         _weldDraftPath.clear();
                         _weldDraftStartScreen = null;
+                        _weld3DPoints.clear();
+                        _weldHitPartIds.clear();
+                        _weldSparks.clear();
                         setState(() {});
                         return;
                       }
@@ -1312,6 +1340,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                       _draggingFeature = null;
                       _featureDragStartScreen = null;
                       _featureDragStartPos = null;
+                      _isDrawingWeld = false;
+                      _weldDraftPath.clear();
+                      _weldDraftStartScreen = null;
+                      _weld3DPoints.clear();
+                      _weldHitPartIds.clear();
+                      _weldSparks.clear();
                     },
                     onPointerSignal: (pointerSignal) {
                       if (pointerSignal is PointerScrollEvent) {
@@ -1571,16 +1605,56 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                   ),
 
                 // =================================================================
-                // 2c. INTERACTIVE REAL-WORLD WELDING TORCH BRUSH, BEADS & SPARKS
+                // 2c. INTERACTIVE REAL-WORLD WELDING TORCH BRUSH, ARC LAMP & SPARKS
                 // =================================================================
-                if (vm.activeToolMode == SketchUpToolMode.weld && _weldDraftPath.isNotEmpty)
+                if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld && _weldDraftPath.isNotEmpty)
                   Positioned.fill(
                     child: IgnorePointer(
                       child: CustomPaint(
                         size: Size.infinite,
-                        painter: _WeldBeadsBrushPainter(path: _weldDraftPath),
+                        painter: AssemblyWeldLampPainter(
+                          torchPosition: _weldDraftPath.last,
+                          isWelding: _isDrawingWeld,
+                          flickerPhase: _weldFlickerPhase,
+                        ),
                       ),
                     ),
+                  ),
+
+                if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld && _weldDraftPath.isNotEmpty)
+                  Builder(
+                    builder: (context) {
+                      double dynamicBeadRadius = 11.5;
+                      double dynamicSpacing = 9.0;
+                      if (_weld3DPoints.isNotEmpty || mesh.allPolygons.isNotEmpty) {
+                        final refPt = _weld3DPoints.isNotEmpty ? _weld3DPoints.last : mesh.center;
+                        final p0 = _projectPoint(refPt, size, mesh);
+                        final p1 = _projectPoint(CadPoint3D(refPt.x + 10.0, refPt.y, refPt.z), size, mesh);
+                        final p2 = _projectPoint(CadPoint3D(refPt.x, refPt.y + 10.0, refPt.z), size, mesh);
+                        final p3 = _projectPoint(CadPoint3D(refPt.x, refPt.y, refPt.z + 10.0), size, mesh);
+                        final d1 = (p1 - p0).distance / 10.0;
+                        final d2 = (p2 - p0).distance / 10.0;
+                        final d3 = (p3 - p0).distance / 10.0;
+                        final pxPerMm = math.max(d1, math.max(d2, d3));
+                        if (pxPerMm > 0.02) {
+                          dynamicBeadRadius = (pxPerMm * 4.5).clamp(2.5, 45.0);
+                          dynamicSpacing = (dynamicBeadRadius * 0.72).clamp(1.8, 32.0);
+                        }
+                      }
+                      return Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            size: Size.infinite,
+                            painter: _WeldBeadsBrushPainter(
+                              path: AssemblyWeldSmoothingHelper.smooth2DPath(_weldDraftPath),
+                              isFinished: false,
+                              beadRadius: dynamicBeadRadius,
+                              scallopSpacing: dynamicSpacing,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
 
                 if (vm.activeToolMode == SketchUpToolMode.weld && _weldSparks.isNotEmpty)
@@ -2731,6 +2805,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _draggedParts.clear();
     _draggedPartsStartRot.clear();
     _draggedPartsStartPos.clear();
+    _clearDraggedWelds();
     _rotatingPart = null;
     _hasClonedForRotate = false;
     setState(() {});
@@ -2743,6 +2818,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       if (startRot != null) part.rotationDeg = startRot;
       if (startPos != null) part.position = startPos;
     }
+    _restoreDraggedWelds(vm);
     _rotatePhase = RotateToolPhase.awaitingCenter;
     _rotateCenterPoint = null;
     _rotateBaselinePoint = null;
@@ -2775,6 +2851,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _hasMovedPart = false;
     _draggedParts.clear();
     _draggedPartsStartPos.clear();
+    _clearDraggedWelds();
     vm.invalidateMeshCache();
     _rebuildGpuCadModel(force: true);
     vm.notifyDocChanged();
@@ -2789,6 +2866,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         part.position = startPos;
       }
     }
+    _restoreDraggedWelds(vm);
     _isMovingEntity = false;
     _moveBaseWorldPoint = null;
     _moveBaseStartWorldPoint = null;
@@ -2804,6 +2882,87 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     vm.notifyDocChanged();
     vm.setVcbState(label: 'Move', value: 'Cancelled', hint: 'Click entity point or surface to move');
     setState(() {});
+  }
+
+  // Synchronized 3D Weld Movement & Rotation (Requirement SS4)
+  void _snapshotDraggedWelds(AssemblyStudioViewModel vm) {
+    _draggedWeldsStartPos.clear();
+    _draggedWeldsStartSecPos.clear();
+    _draggedWeldsStartPathPoints.clear();
+    final draggedPartIds = _draggedParts.map((p) => p.id).toSet();
+    for (final w in vm.doc.welds) {
+      if (draggedPartIds.contains(w.partAId) || draggedPartIds.contains(w.partBId)) {
+        _draggedWeldsStartPos[w.id] = w.weldPoint;
+        _draggedWeldsStartSecPos[w.id] = w.secondWeldPoint;
+        _draggedWeldsStartPathPoints[w.id] = w.pathPoints != null ? List<CadPoint3D>.from(w.pathPoints!) : null;
+      }
+    }
+  }
+
+  void _applyTranslationToDraggedWelds(CadPoint3D worldDelta, AssemblyStudioViewModel vm) {
+    if (_draggedWeldsStartPos.isEmpty) return;
+    for (int i = 0; i < vm.doc.welds.length; i++) {
+      final w = vm.doc.welds[i];
+      final startPos = _draggedWeldsStartPos[w.id];
+      if (startPos != null) {
+        final startSec = _draggedWeldsStartSecPos[w.id];
+        final startPaths = _draggedWeldsStartPathPoints[w.id];
+        vm.doc.welds[i] = w.copyWith(
+          weldPoint: CadPoint3D(startPos.x + worldDelta.x, startPos.y + worldDelta.y, startPos.z + worldDelta.z),
+          secondWeldPoint: startSec != null ? CadPoint3D(startSec.x + worldDelta.x, startSec.y + worldDelta.y, startSec.z + worldDelta.z) : null,
+          pathPoints: startPaths?.map((pt) => CadPoint3D(pt.x + worldDelta.x, pt.y + worldDelta.y, pt.z + worldDelta.z)).toList(),
+        );
+      }
+    }
+  }
+
+  void _applyRotationToDraggedWelds({
+    required CadPoint3D centerPoint,
+    required GizmoAxis axis,
+    required double angleDeg,
+    required AssemblyStudioViewModel vm,
+  }) {
+    if (_draggedWeldsStartPos.isEmpty) return;
+    for (int i = 0; i < vm.doc.welds.length; i++) {
+      final w = vm.doc.welds[i];
+      final startPos = _draggedWeldsStartPos[w.id];
+      if (startPos != null) {
+        final startSec = _draggedWeldsStartSecPos[w.id];
+        final startPaths = _draggedWeldsStartPathPoints[w.id];
+        final newPos = AssemblyRotateMathHelper.rotatePoint(point: startPos, centerPoint: centerPoint, axis: axis, angleDeg: angleDeg);
+        final newSec = startSec != null ? AssemblyRotateMathHelper.rotatePoint(point: startSec, centerPoint: centerPoint, axis: axis, angleDeg: angleDeg) : null;
+        final newPaths = startPaths?.map((pt) => AssemblyRotateMathHelper.rotatePoint(point: pt, centerPoint: centerPoint, axis: axis, angleDeg: angleDeg)).toList();
+        vm.doc.welds[i] = w.copyWith(
+          weldPoint: newPos,
+          secondWeldPoint: newSec,
+          pathPoints: newPaths,
+        );
+      }
+    }
+  }
+
+  void _restoreDraggedWelds(AssemblyStudioViewModel vm) {
+    if (_draggedWeldsStartPos.isEmpty) return;
+    for (int i = 0; i < vm.doc.welds.length; i++) {
+      final w = vm.doc.welds[i];
+      final startPos = _draggedWeldsStartPos[w.id];
+      if (startPos != null) {
+        final startSec = _draggedWeldsStartSecPos[w.id];
+        final startPaths = _draggedWeldsStartPathPoints[w.id];
+        vm.doc.welds[i] = w.copyWith(
+          weldPoint: startPos,
+          secondWeldPoint: startSec,
+          pathPoints: startPaths,
+        );
+      }
+    }
+    _clearDraggedWelds();
+  }
+
+  void _clearDraggedWelds() {
+    _draggedWeldsStartPos.clear();
+    _draggedWeldsStartSecPos.clear();
+    _draggedWeldsStartPathPoints.clear();
   }
 
   void _applyVcbTextToMovingEntity(String rawText, AssemblyStudioViewModel vm) {
@@ -2827,6 +2986,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
           part.position = startPos;
         }
       }
+      _restoreDraggedWelds(vm);
       _moveBaseWorldPoint = _moveBaseStartWorldPoint;
       vm.invalidateMeshCache();
       _rebuildGpuCadModel(force: true);
@@ -2863,6 +3023,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       final startPos = _draggedPartsStartPos[part.id] ?? part.position;
       part.position = CadPoint3D(startPos.x + worldDelta.x, startPos.y + worldDelta.y, startPos.z + worldDelta.z);
     }
+    _applyTranslationToDraggedWelds(worldDelta, vm);
     _moveBaseWorldPoint = CadPoint3D(baseAnchor.x + worldDelta.x, baseAnchor.y + worldDelta.y, baseAnchor.z + worldDelta.z);
 
     _hasMovedPart = true;
@@ -2880,6 +3041,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
           _draggedPartsStartRot[p.id] = p.rotationDeg;
           _draggedPartsStartPos[p.id] = p.position;
         }
+        _snapshotDraggedWelds(vm);
       }
     }
     if (_draggedParts.isEmpty) return;
@@ -2895,6 +3057,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         if (startRot != null) part.rotationDeg = startRot;
         if (startPos != null) part.position = startPos;
       }
+      _restoreDraggedWelds(vm);
       _rotateCurrentAngleDeg = 0.0;
       vm.invalidateMeshCache();
       _rebuildGpuCadModel(force: true);
@@ -2913,6 +3076,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       part.position = newPos;
       part.rotationDeg = newRot;
     }
+    _applyRotationToDraggedWelds(centerPoint: center, axis: activeAxis, angleDeg: targetAngle, vm: vm);
 
     _hasRotatedPart = true;
     vm.invalidateMeshCache();
@@ -2921,29 +3085,34 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   }
 
   void _spawnWeldSparks(Offset origin) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastSparkSpawnMs < 45) return;
+    _lastSparkSpawnMs = now;
+
     final rng = math.Random();
-    final count = 7 + rng.nextInt(7);
+    final count = 2 + rng.nextInt(3); // Moderated realistic spark count (Req 5)
     for (int i = 0; i < count; i++) {
       final angle = rng.nextDouble() * 2 * math.pi;
-      final speed = 40.0 + rng.nextDouble() * 150.0;
+      final speed = 35.0 + rng.nextDouble() * 110.0;
       final vx = math.cos(angle) * speed;
-      final vy = math.sin(angle) * speed - 35.0; // slight upward eruption
-      final life = 0.25 + rng.nextDouble() * 0.45;
+      final vy = math.sin(angle) * speed - 28.0; // slight upward eruption
+      final life = 0.18 + rng.nextDouble() * 0.35;
+      // Strictly authentic fiery red and orange hues (Req 5)
       final colors = [
-        const Color(0xFFFFFFFF),
-        const Color(0xFFFEF08A),
-        const Color(0xFFFBBF24),
-        const Color(0xFFF97316),
-        const Color(0xFF38BDF8),
-        const Color(0xFF00E5FF),
+        const Color(0xFFEF4444), // Crimson Red
+        const Color(0xFFDC2626), // Torch Red
+        const Color(0xFFEA580C), // Fiery Red-Orange
+        const Color(0xFFF97316), // Molten Orange
+        const Color(0xFFFB923C), // Amber Orange
+        const Color(0xFFFBBF24), // Golden Orange
       ];
       _weldSparks.add(
         _WeldSparkParticle(
-          position: origin + Offset((rng.nextDouble() - 0.5) * 6, (rng.nextDouble() - 0.5) * 6),
+          position: origin + Offset((rng.nextDouble() - 0.5) * 4, (rng.nextDouble() - 0.5) * 4),
           velocity: Offset(vx, vy),
           life: life,
           maxLife: life,
-          size: 1.5 + rng.nextDouble() * 2.5,
+          size: 1.5 + rng.nextDouble() * 2.0,
           color: colors[rng.nextInt(colors.length)],
         ),
       );
@@ -3099,6 +3268,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       final startPos = _draggedPartsStartPos[part.id] ?? part.position;
       part.position = CadPoint3D(startPos.x + worldDelta.x, startPos.y + worldDelta.y, startPos.z + worldDelta.z);
     }
+    _applyTranslationToDraggedWelds(worldDelta, vm);
 
     // Keep base anchor point moving synchronously
     _moveBaseWorldPoint = CadPoint3D(baseAnchor.x + worldDelta.x, baseAnchor.y + worldDelta.y, baseAnchor.z + worldDelta.z);
@@ -3237,6 +3407,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
           part.rotationDeg = newRot;
         }
       }
+      _applyRotationToDraggedWelds(
+        centerPoint: _rotateCenterPoint!,
+        axis: activeAxis,
+        angleDeg: snappedAngle,
+        vm: vm,
+      );
       vm.setVcbState(
         label: 'Angle',
         value: '${snappedAngle.toStringAsFixed(1)}°',
@@ -3382,6 +3558,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         _draggedPartsStartRot[p.id] = p.rotationDeg;
         _draggedPartsStartPos[p.id] = p.position;
       }
+      _snapshotDraggedWelds(vm);
       if (_draggedParts.isNotEmpty) {
         _rotatingPart = _draggedParts.first;
       }
@@ -3423,132 +3600,66 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     final startScreen = _weldDraftStartScreen ?? _weldDraftPath.first;
     final screenDist = (endScreen - startScreen).distance;
     if (screenDist < 4.0 && _weld3DPoints.length < 2) {
-      vm.setVcbState(label: 'Weld Tool', value: 'Drag across seam', hint: 'Click and drag torch across seam of entities to paint beads');
+      vm.setVcbState(label: 'Weld Tool', value: 'Drag across seam', hint: 'Click and drag torch across seam of 2 entities to paint beads');
       return;
     }
 
-    final (rayStartOrigin, rayStartDir) = _getRayFromScreen(startScreen, size, mesh);
-    final (rayEndOrigin, rayEndDir) = _getRayFromScreen(endScreen, size, mesh);
-
-    final hitStart = AssemblyRaycaster.raycast(rayOrigin: rayStartOrigin, rayDirection: rayStartDir, mesh: mesh);
-    final hitEnd = AssemblyRaycaster.raycast(rayOrigin: rayEndOrigin, rayDirection: rayEndDir, mesh: mesh);
-
-    AssemblyPart? partA = hitStart != null ? vm.findPartForFaceId(hitStart.polygon.faceId) : null;
-    AssemblyPart? partB = hitEnd != null ? vm.findPartForFaceId(hitEnd.polygon.faceId) : null;
-
-    if (partA == null || partB == null || partA.id == partB.id) {
-      for (double t = 0.2; t <= 0.8; t += 0.2) {
-        final sampleScreen = Offset.lerp(startScreen, endScreen, t)!;
-        final (sampleRayOrigin, sampleRayDir) = _getRayFromScreen(sampleScreen, size, mesh);
-        final sampleHit = AssemblyRaycaster.raycast(rayOrigin: sampleRayOrigin, rayDirection: sampleRayDir, mesh: mesh);
-        if (sampleHit != null) {
-          final p = vm.findPartForFaceId(sampleHit.polygon.faceId);
-          if (p != null) {
-            if (partA == null) {
-              partA = p;
-            } else if (partB == null && p.id != partA.id) {
-              partB = p;
-            }
-          }
-        }
-      }
-    }
-
-    // Inspect entities along 3D sampled surface points
-    if (partA == null || partB == null || partA.id == partB.id) {
-      for (final pt in _weld3DPoints) {
-        for (final p in vm.doc.parts) {
-          if (!p.isVisible) continue;
-          final dist = (p.position.x - pt.x).abs() + (p.position.y - pt.y).abs() + (p.position.z - pt.z).abs();
-          if (dist < 400.0) {
-            if (partA == null) {
-              partA = p;
-            } else if (partB == null && p.id != partA.id) {
-              partB = p;
-            }
-          }
-        }
-      }
-    }
-
-    if (partA != null && (partB == null || partB.id == partA.id)) {
-      partB = vm.doc.parts.where((p) => p.isVisible && p.id != partA!.id).fold<AssemblyPart?>(null, (closest, p) {
-        final dist = (p.position.x - partA!.position.x).abs() + (p.position.y - partA.position.y).abs() + (p.position.z - partA.position.z).abs();
-        if (dist < 500.0) return p;
-        return closest;
-      });
-    }
-
-    if (partA == null || partB == null || partA.id == partB.id) {
-      ScaffoldMessenger.maybeOf(
-        context,
-      )?.showSnackBar(const SnackBar(content: Text('Could not detect 2 entities along weld stroke. Drag torch across seam.'), duration: Duration(seconds: 2)));
-      return;
-    }
-
-    CadPoint3D weldPt;
-    CadPoint3D axisVector;
-    CadPoint3D? leg1 = hitStart?.polygon.normal;
-    CadPoint3D? leg2 = hitEnd?.polygon.normal;
-    double seamLength;
-
-    if (_weld3DPoints.length >= 2) {
-      final pFirst = _weld3DPoints.first;
-      final pLast = _weld3DPoints.last;
-      weldPt = CadPoint3D((pFirst.x + pLast.x) / 2.0, (pFirst.y + pLast.y) / 2.0, (pFirst.z + pLast.z) / 2.0);
-      axisVector = CadPoint3D(pLast.x - pFirst.x, pLast.y - pFirst.y, pLast.z - pFirst.z);
-      double totalDist = 0.0;
-      for (int i = 1; i < _weld3DPoints.length; i++) {
-        totalDist += _weld3DPoints[i].distanceTo(_weld3DPoints[i - 1]);
-      }
-      seamLength = totalDist > 5.0 ? totalDist : axisVector.length;
-    } else if (hitStart != null && hitEnd != null) {
-      weldPt = CadPoint3D(
-        (hitStart.hitPoint.x + hitEnd.hitPoint.x) / 2.0,
-        (hitStart.hitPoint.y + hitEnd.hitPoint.y) / 2.0,
-        (hitStart.hitPoint.z + hitEnd.hitPoint.z) / 2.0,
-      );
-      axisVector = CadPoint3D(hitEnd.hitPoint.x - hitStart.hitPoint.x, hitEnd.hitPoint.y - hitStart.hitPoint.y, hitEnd.hitPoint.z - hitStart.hitPoint.z);
-      seamLength = axisVector.length;
-    } else {
-      weldPt = CadPoint3D(
-        (partA.position.x + partB.position.x) / 2.0,
-        (partA.position.y + partB.position.y) / 2.0,
-        (partA.position.z + partB.position.z) / 2.0,
-      );
-      axisVector = const CadPoint3D(1.0, 0.0, 0.0);
-      seamLength = 60.0;
-    }
-
-    if (axisVector.length < 1e-4) {
-      axisVector = const CadPoint3D(1.0, 0.0, 0.0);
-    }
-    seamLength = seamLength.clamp(15.0, 600.0);
-
-    // Pass the sampled 3D points directly to ensure the bead follows the dragged surface path
-    final pathPts = _weld3DPoints.length >= 2 ? List<CadPoint3D>.from(_weld3DPoints) : null;
-
-    vm.weldParts(
-      partA.id,
-      partB.id,
-      weldPoint: weldPt,
-      weldAxis: axisVector,
-      legDir1: leg1,
-      legDir2: leg2,
-      weldLengthMm: seamLength,
-      bothSides: false,
-      pathPoints: pathPts,
+    final vicinity = AssemblyWeldSmoothingHelper.resolveTwoEntityWeldVicinity(
+      raw3DPoints: _weld3DPoints,
+      startScreen: startScreen,
+      endScreen: endScreen,
+      viewportSize: size,
+      mesh: mesh,
+      allParts: vm.doc.parts,
+      findPartForFaceId: vm.findPartForFaceId,
+      getRayFromScreen: (pt) => _getRayFromScreen(pt, size, mesh),
+      hitPartIds: _weldHitPartIds,
+      maxVicinityDistanceMm: 25.0,
     );
 
-    if (vm.doc.welds.isNotEmpty) {
-      vm.selectWeld(vm.doc.welds.last.id);
+    if (vicinity == null) {
+      // Clear draft stroke so wrong weld stroke does not persist on screen (SS5)
+      _weldDraftPath.clear();
+      _weldDraftStartScreen = null;
+      _weld3DPoints.clear();
+      _weldHitPartIds.clear();
+      _weldSparks.clear();
+      setState(() {});
+
+      // Restriction: Single-surface welding is strictly restricted (Req 3, SS2 & SS3)
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Welding restricted: 2 entities must be present in direct contact seam (<= 25mm) to create a weld joint.'),
+          duration: Duration(seconds: 3),
+          backgroundColor: Color(0xFFDC2626),
+        ),
+      );
+      return;
     }
 
+    // Proportionately thick weld bead (12mm) glued between both entities (Req 2 & 3)
+    vm.weldParts(
+      vicinity.partA.id,
+      vicinity.partB.id,
+      weldPoint: vicinity.weldPoint,
+      weldAxis: vicinity.weldAxis,
+      legDir1: vicinity.legDir1,
+      legDir2: vicinity.legDir2,
+      weldLengthMm: vicinity.seamLengthMm,
+      bothSides: false,
+      pathPoints: vicinity.smoothedPathPoints,
+      weldSizeMm: 12.0,
+    );
+
+    // Guarantee immediate 3D CAD mesh & GPU node invalidation and update (Req 1)
+    vm.invalidateMeshCache();
+    vm.notifyDocChanged();
     _rebuildGpuCadModel(force: true);
+    setState(() {});
 
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
-        content: Text('Fillet Weld Bead created between ${partA.name} and ${partB.name} (${seamLength.toInt()}mm)'),
+        content: Text('Fillet Weld Bead created between ${vicinity.partA.name} and ${vicinity.partB.name} (${vicinity.seamLengthMm.toInt()}mm)'),
         duration: const Duration(seconds: 3),
         backgroundColor: const Color(0xFF0F766E),
       ),

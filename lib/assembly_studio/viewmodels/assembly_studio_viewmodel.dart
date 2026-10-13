@@ -2132,14 +2132,11 @@ class AssemblyStudioViewModel extends ChangeNotifier {
       weldPoint: CadPoint3D(posX, partA.position.y, posZ + 10.0),
       weldAxis: const CadPoint3D(1.0, 0.0, 0.0),
       weldLengthMm: 40.0,
-      weldSizeMm: 5.0,
+      weldSizeMm: 10.0,
       legDir1: const CadPoint3D(0.0, 0.0, 1.0),
       legDir2: CadPoint3D(0.0, inwardDirA, 0.0),
-      bothSides: true,
-      secondWeldPoint: CadPoint3D(posX, partA.position.y, posZ - 10.0),
-      secondLegDir1: const CadPoint3D(0.0, 0.0, -1.0),
-      secondLegDir2: CadPoint3D(0.0, inwardDirA, 0.0),
-      jointDescription: 'Bridge Stile-to-Rung Both-Sides Fillet Weld (5mm)',
+      bothSides: false,
+      jointDescription: 'Bridge Stile-to-Rung Fillet Weld (10mm)',
       jointType: AssemblyJointType.welded,
     );
 
@@ -2151,14 +2148,11 @@ class AssemblyStudioViewModel extends ChangeNotifier {
       weldPoint: CadPoint3D(posX, partB.position.y, posZ + 10.0),
       weldAxis: const CadPoint3D(1.0, 0.0, 0.0),
       weldLengthMm: 40.0,
-      weldSizeMm: 5.0,
+      weldSizeMm: 10.0,
       legDir1: const CadPoint3D(0.0, 0.0, 1.0),
       legDir2: CadPoint3D(0.0, inwardDirB, 0.0),
-      bothSides: true,
-      secondWeldPoint: CadPoint3D(posX, partB.position.y, posZ - 10.0),
-      secondLegDir1: const CadPoint3D(0.0, 0.0, -1.0),
-      secondLegDir2: CadPoint3D(0.0, inwardDirB, 0.0),
-      jointDescription: 'Bridge Stile-to-Rung Both-Sides Fillet Weld (5mm)',
+      bothSides: false,
+      jointDescription: 'Bridge Stile-to-Rung Fillet Weld (10mm)',
       jointType: AssemblyJointType.welded,
     );
 
@@ -2223,6 +2217,7 @@ class AssemblyStudioViewModel extends ChangeNotifier {
         _propagateTranslationToAssemblySet(p.id, delta, excludePartIds: movedPartIds);
       }
     }
+    _translateWeldsForParts(movedPartIds, delta);
     notifyListeners();
   }
 
@@ -2273,6 +2268,7 @@ class AssemblyStudioViewModel extends ChangeNotifier {
     }
 
     _propagateTranslationToAssemblySet(id, delta, excludePartIds: movedPartIds);
+    _translateWeldsForParts(movedPartIds, delta);
     notifyListeners();
   }
 
@@ -2283,6 +2279,26 @@ class AssemblyStudioViewModel extends ChangeNotifier {
         child.position = CadPoint3D(child.position.x + delta.x, child.position.y + delta.y, child.position.z + delta.z);
         excludePartIds?.add(child.id);
         _propagateTranslationToAssemblySet(child.id, delta, excludePartIds: excludePartIds);
+      }
+    }
+  }
+
+  /// Translates all attached weld geometry when welded parts move (keeps welds sticking/glued to parts, SS4).
+  void _translateWeldsForParts(Set<String> movedPartIds, CadPoint3D delta) {
+    if (movedPartIds.isEmpty || (delta.x == 0.0 && delta.y == 0.0 && delta.z == 0.0)) return;
+    for (int i = 0; i < doc.welds.length; i++) {
+      final w = doc.welds[i];
+      if (movedPartIds.contains(w.partAId) || movedPartIds.contains(w.partBId)) {
+        final newPt = CadPoint3D(w.weldPoint.x + delta.x, w.weldPoint.y + delta.y, w.weldPoint.z + delta.z);
+        final newSec = w.secondWeldPoint != null
+            ? CadPoint3D(w.secondWeldPoint!.x + delta.x, w.secondWeldPoint!.y + delta.y, w.secondWeldPoint!.z + delta.z)
+            : null;
+        final newPaths = w.pathPoints?.map((p) => CadPoint3D(p.x + delta.x, p.y + delta.y, p.z + delta.z)).toList();
+        doc.welds[i] = w.copyWith(
+          weldPoint: newPt,
+          secondWeldPoint: newSec,
+          pathPoints: newPaths,
+        );
       }
     }
   }
@@ -2444,7 +2460,12 @@ class AssemblyStudioViewModel extends ChangeNotifier {
 
     if (weldPoint != null) {
       pt = weldPoint;
-      if ((isRailRung || isRungRail) && pathPoints == null && bothSides) {
+      if (pathPoints != null) {
+        both = false;
+        sPt = null;
+        sL1 = null;
+        sL2 = null;
+      } else if ((isRailRung || isRungRail) && bothSides) {
         final rail = isRailRung ? pA : pB;
         final rung = isRailRung ? pB : pA;
         final double inwardY = (rail.position.y <= rung.position.y) ? 1.0 : -1.0;

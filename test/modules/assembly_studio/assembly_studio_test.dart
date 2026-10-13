@@ -1767,14 +1767,14 @@ void main() {
         expect(poly.normal, isNotNull);
       }
 
-      // Check authentic weld bead color with translucent overlay by default
-      expect(weldPolys.first.color, equals(const Color(0xD9F59E0B)));
+      // Check authentic metallic weld bead color (dark gunmetal finish, zero blue tint, no yellow boxes, SS5)
+      expect(weldPolys.first.color, equals(const Color(0xFF3F3F46)));
 
-      // When translucent overlay is toggled off, reverts to solid metallic steel
+      // When translucent overlay is toggled off, reverts to solid dark tempered steel
       vm.toggleWeldOverlay();
       final solidMesh = vm.assemblyMesh;
       final solidWeldPolys = solidMesh.polygons.where((p) => p.faceId == 'weld_${firstWeld.id}').toList();
-      expect(solidWeldPolys.first.color, equals(const Color(0xFF78909C)));
+      expect(solidWeldPolys.first.color, equals(const Color(0xFF27272A)));
       vm.toggleWeldOverlay(); // Re-enable overlay
 
       // Select the weld bead directly -> changes to glowing electric cyan

@@ -171,4 +171,33 @@ class AssemblyRotateMathHelper {
 
     return (newPos, newRot);
   }
+
+  /// Rotates an individual 3D point around a center point and primary axis.
+  static CadPoint3D rotatePoint({
+    required CadPoint3D point,
+    required CadPoint3D centerPoint,
+    required GizmoAxis axis,
+    required double angleDeg,
+  }) {
+    final rad = angleDeg * math.pi / 180.0;
+    if (axis == GizmoAxis.x) {
+      final dy = point.y - centerPoint.y;
+      final dz = point.z - centerPoint.z;
+      final ry = centerPoint.y + (dy * math.cos(rad) - dz * math.sin(rad));
+      final rz = centerPoint.z + (dy * math.sin(rad) + dz * math.cos(rad));
+      return CadPoint3D(point.x, ry, rz);
+    } else if (axis == GizmoAxis.y) {
+      final dz = point.z - centerPoint.z;
+      final dx = point.x - centerPoint.x;
+      final rz = centerPoint.z + (dz * math.cos(rad) - dx * math.sin(rad));
+      final rx = centerPoint.x + (dz * math.sin(rad) + dx * math.cos(rad));
+      return CadPoint3D(rx, point.y, rz);
+    } else {
+      final dx = point.x - centerPoint.x;
+      final dy = point.y - centerPoint.y;
+      final rx = centerPoint.x + (dx * math.cos(rad) - dy * math.sin(rad));
+      final ry = centerPoint.y + (dx * math.sin(rad) + dy * math.cos(rad));
+      return CadPoint3D(rx, ry, point.z);
+    }
+  }
 }

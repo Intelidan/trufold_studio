@@ -707,8 +707,9 @@ class FlutterPaint3dPainter extends CustomPainter {
 
       if (!item.fillPath.getBounds().isEmpty && item.color.a > 0.0) {
         Color drawColor = item.color;
-        if (isGlassMode) {
-          // Plate faces: render as translucent steel
+        final isWeld = item.faceId.startsWith('weld_');
+        if (isGlassMode && !isWeld) {
+          // Plate faces: render as translucent steel (welds remain solid opaque metal)
           drawColor = Color.from(alpha: 0.35, red: item.color.r, green: item.color.g, blue: item.color.b);
         }
         facePaint.color = drawColor;
