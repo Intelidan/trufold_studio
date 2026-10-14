@@ -66,12 +66,14 @@ class AssemblyWeldSparksPainter extends CustomPainter {
 class AssemblyWeldBeadsBrushPainter extends CustomPainter {
   final List<Offset> path;
   final bool isFinished;
+  final bool isSelected;
   final double beadRadius;
   final double scallopSpacing;
 
   AssemblyWeldBeadsBrushPainter({
     required this.path,
     this.isFinished = false,
+    this.isSelected = false,
     this.beadRadius = 11.5,
     this.scallopSpacing = 9.0,
   });
@@ -93,6 +95,9 @@ class AssemblyWeldBeadsBrushPainter extends CustomPainter {
         canvas.drawCircle(pt, r * 1.1, glowPaint);
         canvas.drawCircle(pt, r * 0.65, Paint()..color = const Color(0xFFFBBF24));
         canvas.drawCircle(pt, r * 0.32, Paint()..color = const Color(0xFFFFFFFF));
+      } else if (isSelected) {
+        canvas.drawCircle(pt, r * 0.9, Paint()..color = const Color(0xFF00E5FF));
+        canvas.drawCircle(pt, r * 0.65, Paint()..color = const Color(0xFF67E8F9));
       } else {
         // Cooled solid bead point (clean dark steel, no concentric silver balls, SS5)
         canvas.drawCircle(pt, r * 0.8, Paint()..color = const Color(0xFF18181B));
@@ -101,11 +106,13 @@ class AssemblyWeldBeadsBrushPainter extends CustomPainter {
       return;
     }
 
-    // 1. Heat Affected Zone (HAZ) outer soft warm glow (no blue tint, SS5)
+    // 1. Heat Affected Zone (HAZ) outer soft warm glow / selection glow
     final hazGlow = Paint()
-      ..color = isFinished
-          ? const Color(0xFF27272A).withValues(alpha: 0.20)
-          : const Color(0xFF78350F).withValues(alpha: 0.25)
+      ..color = isSelected
+          ? const Color(0xFF00E5FF).withValues(alpha: 0.50)
+          : (isFinished
+              ? const Color(0xFF27272A).withValues(alpha: 0.20)
+              : const Color(0xFF78350F).withValues(alpha: 0.25))
       ..strokeWidth = r * 3.2
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -118,9 +125,9 @@ class AssemblyWeldBeadsBrushPainter extends CustomPainter {
     }
     canvas.drawPath(hazPath, hazGlow);
 
-    // 2. Base molten bead root trail (dark gunmetal slag boundary, no blue tint)
+    // 2. Base molten bead root trail (dark gunmetal slag boundary or cyan)
     final rootPaint = Paint()
-      ..color = const Color(0xFF18181B) // deep charcoal slag boundary
+      ..color = isSelected ? const Color(0xFF0E7490) : const Color(0xFF18181B)
       ..strokeWidth = r * 2.1
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -128,7 +135,7 @@ class AssemblyWeldBeadsBrushPainter extends CustomPainter {
     canvas.drawPath(hazPath, rootPaint);
 
     final midBeadPaint = Paint()
-      ..color = const Color(0xFF27272A) // solid dark steel core
+      ..color = isSelected ? const Color(0xFF00E5FF) : const Color(0xFF27272A)
       ..strokeWidth = r * 1.6
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -138,17 +145,19 @@ class AssemblyWeldBeadsBrushPainter extends CustomPainter {
     // 3. Overlapping scalloped fish-scale ripples (spaced wider so no excessive wrinkles, SS5)
     double accumulatedDist = 0.0;
     final scallopRimPaint = Paint()
-      ..color = const Color(0xFF71717A) // neutral graphite / gunmetal highlight rim (NO blue)
+      ..color = isSelected ? const Color(0xFFCFFAFE) : const Color(0xFF71717A)
       ..style = PaintingStyle.stroke
       ..strokeWidth = math.max(1.0, r * 0.16)
       ..strokeCap = StrokeCap.round;
 
     final scallopFill = Paint()
-      ..color = const Color(0xFF3F3F46) // dark gray steel body
+      ..color = isSelected ? const Color(0xFF00E5FF) : const Color(0xFF3F3F46)
       ..style = PaintingStyle.fill;
 
     final goldTemperPaint = Paint()
-      ..color = const Color(0xFF78350F).withValues(alpha: 0.60) // subtle bronze heat discoloration
+      ..color = isSelected
+          ? const Color(0xFF67E8F9).withValues(alpha: 0.8)
+          : const Color(0xFF78350F).withValues(alpha: 0.60)
       ..style = PaintingStyle.stroke
       ..strokeWidth = math.max(0.8, r * 0.12)
       ..strokeCap = StrokeCap.round;
@@ -362,3 +371,61 @@ class AssemblyWeldingTorchCursorPainter extends CustomPainter {
   bool shouldRepaint(covariant AssemblyWeldingTorchCursorPainter old) =>
       old.cursorScreenPos != cursorScreenPos || old.isWelding != isWelding;
 }
+
+/// Renders an unmistakable bright cyan bounding halo, centerline, and end handles over the selected weld
+class AssemblySelectedWeldHighlightPainter extends CustomPainter {
+  final Offset screenStart;
+  final Offset screenEnd;
+
+  AssemblySelectedWeldHighlightPainter({
+    required this.screenStart,
+    required this.screenEnd,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final diff = screenEnd - screenStart;
+    final len = diff.distance;
+    if (len < 1.0) return;
+
+    // 1. Soft glowing outer selection aura
+    final glowPaint = Paint()
+      ..color = const Color(0xFF00E5FF).withValues(alpha: 0.45)
+      ..strokeWidth = 14.0
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0);
+    canvas.drawLine(screenStart, screenEnd, glowPaint);
+
+    // 2. High-contrast crisp cyan selection stroke
+    final seamPaint = Paint()
+      ..color = const Color(0xFF00E5FF)
+      ..strokeWidth = 4.0
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(screenStart, screenEnd, seamPaint);
+
+    // 3. Bright white core line
+    final corePaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(screenStart, screenEnd, corePaint);
+
+    // 4. Distinct circular selection handles at start, midpoint, and end
+    final handleFill = Paint()..color = const Color(0xFF00E5FF);
+    final handleBorder = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    final mid = Offset((screenStart.dx + screenEnd.dx) / 2.0, (screenStart.dy + screenEnd.dy) / 2.0);
+
+    for (final pt in [screenStart, mid, screenEnd]) {
+      canvas.drawCircle(pt, 5.0, handleFill);
+      canvas.drawCircle(pt, 5.0, handleBorder);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant AssemblySelectedWeldHighlightPainter old) =>
+      old.screenStart != screenStart || old.screenEnd != screenEnd;
+}
+

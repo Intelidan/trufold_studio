@@ -42,7 +42,8 @@ class FlutterSceneCadMeshBuilder {
     final List<double> edgePositions = [];
 
     final bool shouldDrawWireframe = showWireframe &&
-        renderMode != OnshapeRenderMode.shadedWithoutEdges;
+        renderMode != OnshapeRenderMode.shadedWithoutEdges &&
+        preferences.lineWidth > 0.05;
 
     // Collect tangent seam edges (fillet transitions)
     final List<double> tangentPositions = [];
@@ -327,7 +328,7 @@ class FlutterSceneCadMeshBuilder {
       final lineData = LineSegmentData(
         positions: Float32List.fromList(edgePositions),
       );
-      final computedLineWidth = (preferences.lineWidth * 2.0).clamp(1.0, 3.5);
+      final computedLineWidth = (preferences.lineWidth * 2.0).clamp(0.5, 4.0);
       final lineGeometry = LineSegmentsGeometry(lineData, width: computedLineWidth, normalOffset: 0.05);
       final boundaryColor = preferences.highlightBoundaryEdges
           ? preferences.boundaryEdgeColor

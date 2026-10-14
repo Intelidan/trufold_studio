@@ -8,6 +8,9 @@ class AssemblySketchupViewsToolbar extends StatelessWidget {
   final VoidCallback? onResetView;
   final VoidCallback? onCenterAxes;
   final Function(DragUpdateDetails)? onDragUpdate;
+  final VoidCallback? onToggleMinimize;
+  final VoidCallback? onClose;
+  final bool? isMinimized;
 
   const AssemblySketchupViewsToolbar({
     super.key,
@@ -15,6 +18,9 @@ class AssemblySketchupViewsToolbar extends StatelessWidget {
     this.onResetView,
     this.onCenterAxes,
     this.onDragUpdate,
+    this.onToggleMinimize,
+    this.onClose,
+    this.isMinimized,
   });
 
   void _selectView(SketchUpStandardView view) {
@@ -28,9 +34,72 @@ class AssemblySketchupViewsToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (viewModel.isCleanCanvasMode || !viewModel.showViewsToolbar) {
+      return const SizedBox.shrink();
+    }
+
     final isLight = viewModel.isLightBackground;
     final currentAzimuth = (viewModel.azimuthDeg % 360.0 + 360.0) % 360.0;
     final currentElevation = viewModel.elevationDeg;
+    final minimized = isMinimized ?? viewModel.isViewsToolbarMinimized;
+
+    if (minimized) {
+      return Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: isLight ? Colors.white.withValues(alpha: 0.96) : const Color(0xFF1E1E26).withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+            width: 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isLight ? 0.08 : 0.35),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildDragGrip(isLight),
+            const SizedBox(width: 4),
+            Icon(Icons.view_in_ar, size: 16, color: isLight ? const Color(0xFF334155) : const Color(0xFF38BDF8)),
+            const SizedBox(width: 4),
+            Text(
+              'Views',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: isLight ? const Color(0xFF1E293B) : Colors.white,
+              ),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: onToggleMinimize ?? viewModel.toggleViewsToolbarMinimized,
+              borderRadius: BorderRadius.circular(3),
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(Icons.chevron_right, size: 14, color: isLight ? Colors.black54 : Colors.white70),
+              ),
+            ),
+            const SizedBox(width: 2),
+            InkWell(
+              onTap: onClose ?? viewModel.toggleViewsToolbar,
+              borderRadius: BorderRadius.circular(3),
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(Icons.close, size: 12, color: isLight ? Colors.black38 : Colors.white38),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Container(
       height: 38,
@@ -119,6 +188,29 @@ class AssemblySketchupViewsToolbar extends StatelessWidget {
             painter: _BottomHousePainter(isLight: isLight),
             onTap: () => _selectView(SketchUpStandardView.bottom),
             isLight: isLight,
+          ),
+          const SizedBox(width: 2),
+          Container(
+            width: 1,
+            height: 18,
+            color: isLight ? const Color(0xFFCBD5E1) : Colors.white12,
+          ),
+          const SizedBox(width: 2),
+          InkWell(
+            onTap: onToggleMinimize ?? viewModel.toggleViewsToolbarMinimized,
+            borderRadius: BorderRadius.circular(3),
+            child: Padding(
+              padding: const EdgeInsets.all(2),
+              child: Icon(Icons.chevron_left, size: 14, color: isLight ? Colors.black54 : Colors.white70),
+            ),
+          ),
+          InkWell(
+            onTap: onClose ?? viewModel.toggleViewsToolbar,
+            borderRadius: BorderRadius.circular(3),
+            child: Padding(
+              padding: const EdgeInsets.all(2),
+              child: Icon(Icons.close, size: 12, color: isLight ? Colors.black38 : Colors.white38),
+            ),
           ),
         ],
       ),

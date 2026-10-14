@@ -130,9 +130,14 @@ class AssemblyRaycaster {
     if (hits.isEmpty) return null;
 
     // Sort by ray distance (closest to eye first)
-    // If distances are almost identical (e.g. within 0.25mm), prefer front-facing surface
+    // If one hit is a weld bead and distance difference is within 2.0mm, prefer the weld bead attached on top
     hits.sort((a, b) {
+      final aIsWeld = a.polygon.faceId.startsWith('weld_');
+      final bIsWeld = b.polygon.faceId.startsWith('weld_');
       final dDiff = a.distance - b.distance;
+      if (aIsWeld != bIsWeld && dDiff.abs() <= 2.0) {
+        return aIsWeld ? -1 : 1;
+      }
       if (dDiff.abs() > 0.25) {
         return dDiff.compareTo(0.0);
       }

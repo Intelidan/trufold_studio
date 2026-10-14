@@ -6,6 +6,7 @@
 // Shaded Bodies, Shininess, Specular Highlights, Line Width, Phantom Edges).
 // =============================================================================
 
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../models/cad_primitives.dart';
 import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
@@ -16,6 +17,8 @@ class StudioGraphicsPreferencesPanel extends StatefulWidget {
   final VoidCallback onClose;
   final VoidCallback onResetToDefault;
   final SheetMetalStudioViewModel? viewModel;
+  final double? snapDistancePx;
+  final ValueChanged<double>? onSnapDistanceChanged;
 
   const StudioGraphicsPreferencesPanel({
     super.key,
@@ -24,6 +27,8 @@ class StudioGraphicsPreferencesPanel extends StatefulWidget {
     required this.onClose,
     required this.onResetToDefault,
     this.viewModel,
+    this.snapDistancePx,
+    this.onSnapDistanceChanged,
   });
 
   @override
@@ -43,9 +48,11 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
   @override
   Widget build(BuildContext context) {
     final prefs = widget.preferences;
+    final screenH = MediaQuery.sizeOf(context).height;
 
     return Container(
       width: 320,
+      constraints: BoxConstraints(maxHeight: math.max(300.0, screenH - 76.0)),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(6),
@@ -126,6 +133,16 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                       )).toList(),
                       onSelected: (val) => widget.onChanged(prefs.copyWith(antiAliasingQuality: val)),
                     ),
+                    if (widget.onSnapDistanceChanged != null || widget.snapDistancePx != null)
+                      _buildSliderRow(
+                        label: 'Magnetic snap distance',
+                        valueStr: '${(widget.snapDistancePx ?? 10.0).round()} px',
+                        tooltip: 'Defines the magnetic attraction distance and strength for snapping to vertices, edges, and centroids.',
+                        value: (widget.snapDistancePx ?? 10.0).clamp(4.0, 30.0),
+                        min: 4,
+                        max: 30,
+                        onChanged: (val) => widget.onSnapDistanceChanged?.call(val),
+                      ),
                   ],
 
                   const SizedBox(height: 6),

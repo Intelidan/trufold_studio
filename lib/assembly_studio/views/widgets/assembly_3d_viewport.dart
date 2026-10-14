@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_scene/scene.dart';
+import 'package:flutter_scene/scene.dart' hide Material;
 import 'package:vector_math/vector_math.dart' as vm_math;
 
 import '../../../sheet_metal_studio/models/cad_primitives.dart';
@@ -26,6 +26,7 @@ import 'assembly_sketchup_views_toolbar.dart';
 import 'viewport/handlers/handlers.dart';
 import 'viewport/overlays/overlays.dart';
 import 'viewport/painters/painters.dart';
+import '../../engine/sketch/assembly_surface_sketch_engine.dart' hide WeldJointStyle;
 
 /// Primary 3D interactive viewport for the Assembly Studio.
 /// Powered by the real flutter_scene Impeller GPU engine (PBR shaders, lighting, depth buffer)
@@ -81,6 +82,10 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   CadPoint3D? _moveBaseWorldPoint;
   CadPoint3D? _moveBaseStartWorldPoint;
 
+  // 3D Parametric Surface Sketching Local State
+  Offset? _sketchLineStartLocal;
+  final List<Offset> _sketchPolylinePoints = [];
+
   // Subtle in-viewport warning banner (Item 5.1 / SS5)
   String? _subtleWarningText;
   String? _subtleWarningActionLabel;
@@ -119,22 +124,36 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   int _lastMeshPolyCount = -1;
   int _lastDocVersion = -1;
   String? _lastSelectedFaceId;
+  String? _lastSelectedWeldId;
   OnshapeRenderMode? _lastRenderMode;
   CadMaterialPresetType? _lastPreset;
   bool _lastShowWireframe = true;
+  OnshapeGraphicsPreferences? _lastGraphicsPreferences;
 
   // Interactive Draft-Line Welding Tool State
   Offset? _weldDraftStartScreen;
   final List<Offset> _weldDraftPath = [];
   final List<CadPoint3D> _weld3DPoints = [];
+  final List<double> _weldTimestamps = [];
+  final Stopwatch _weldStopwatch = Stopwatch();
   final Set<String> _weldHitPartIds = {};
   final List<_WeldSparkParticle> _weldSparks = [];
   bool _isDrawingWeld = false;
   double _weldFlickerPhase = 0.0;
   int _lastSparkSpawnMs = 0;
+  Timer? _cameraAnimationTimer;
+  Timer? _weldPhysicsTimer;
 
-  // Draggable Standard Views Toolbar State
+  // Draggable Standard Views Toolbar & Joint Toolbar State
   Offset _viewsToolbarOffset = const Offset(60, 54);
+  Offset _jointToolbarOffset = const Offset(60, 98);
+
+  void _resetToolbarPositions() {
+    setState(() {
+      _viewsToolbarOffset = const Offset(60, 54);
+      _jointToolbarOffset = const Offset(60, 98);
+    });
+  }
 
   // Magnetic Tool State
   CadPoint3D? _magneticHoverPoint;
@@ -164,6 +183,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   // VCB Measurements HUD Controller
   final TextEditingController _vcbController = TextEditingController();
   final FocusNode _vcbFocusNode = FocusNode();
+  bool _isVcbUserTyping = false;
   bool _isOrbitingWithMouse = false;
   bool _isPanningWithMouse = false;
 
@@ -175,6 +195,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _elevationDeg = widget.viewModel.elevationDeg;
     _zoom = widget.viewModel.zoom;
     _pan = widget.viewModel.pan;
+    _vcbFocusNode.addListener(() {
+      if (_vcbFocusNode.hasFocus) {
+        _isVcbUserTyping = true;
+        _vcbController.selection = TextSelection(baseOffset: 0, extentOffset: _vcbController.text.length);
+      }
+    });
     widget.viewModel.addListener(_onViewModelChanged);
     _setupSceneGraph();
   }
@@ -182,6 +208,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   @override
   void dispose() {
     _subtleWarningTimer?.cancel();
+    _cameraAnimationTimer?.cancel();
+    _weldPhysicsTimer?.cancel();
+    _weldStopwatch.stop();
     _snapAnimator.dispose();
     _cursorScreenPosNotifier.dispose();
     widget.viewModel.removeListener(_onViewModelChanged);
@@ -257,23 +286,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
           } catch (_) {}
         }
 
-        // High-Performance CAD graphics profile (60-120fps buttery-smooth navigation, zero jank)
-        _scene!.environmentSettings = EnvironmentSettings(
-          toneMapping: ToneMappingMode.aces,
-          exposure: 1.10,
-          bloomEnabled: false,
-          ambientOcclusionEnabled: true,
-          ambientOcclusionMethod: AmbientOcclusionMethod.groundTruth,
-          ambientOcclusionBentNormals: false,
-          ambientOcclusionSpecularMode: SpecularAmbientOcclusionMode.none,
-          ambientOcclusionIntensity: 0.65,
-          ambientOcclusionHalfResolution: true,
-          screenSpaceReflectionsEnabled: false,
-          colorGradingEnabled: false,
-          vignetteEnabled: false,
-        );
-
-        _scene!.directionalLight = DirectionalLight(direction: vm_math.Vector3(-0.45, -0.85, -0.35).normalized(), intensity: 3.2, castsShadow: false);
+        // High-Performance CAD graphics profile and lighting (Item 6, SS3)
+        _applyEnvironmentSettings();
 
         _isSceneReady = true;
         _rebuildGpuCadModel(force: true);
@@ -288,6 +302,47 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     }
   }
 
+  void _applyEnvironmentSettings() {
+    if (_scene == null || !_isGpuAvailable) return;
+    final prefs = widget.viewModel.graphicsPreferences;
+    final aoRatio = (prefs.ambientOcclusion / 100.0).clamp(0.0, 1.0);
+
+    _scene!.environmentSettings = EnvironmentSettings(
+      toneMapping: ToneMappingMode.aces,
+      exposure: 1.10,
+      bloomEnabled: false,
+      ambientOcclusionEnabled: aoRatio > 0.05,
+      ambientOcclusionMethod: AmbientOcclusionMethod.groundTruth,
+      ambientOcclusionBentNormals: false,
+      ambientOcclusionSpecularMode: SpecularAmbientOcclusionMode.none,
+      ambientOcclusionIntensity: aoRatio,
+      ambientOcclusionHalfResolution: true,
+      screenSpaceReflectionsEnabled: false,
+      colorGradingEnabled: false,
+      vignetteEnabled: false,
+    );
+
+    final azRad = prefs.lightAzimuthDeg * vm_math.degrees2Radians;
+    final elRad = prefs.lightElevationDeg * vm_math.degrees2Radians;
+    final lx = -math.cos(elRad) * math.sin(azRad);
+    final ly = -math.cos(elRad) * math.cos(azRad);
+    final lz = -math.sin(elRad);
+
+    _scene!.directionalLight = DirectionalLight(
+      direction: vm_math.Vector3(lx, ly, lz).normalized(),
+      intensity: (prefs.keyLightIntensity).clamp(0.5, 4.0),
+      castsShadow: false,
+    );
+
+    if (!widget.viewModel.isOrthoProjection) {
+      _cameraComponent.projection = PerspectiveProjection(
+        fovRadiansY: (prefs.fieldOfView * vm_math.degrees2Radians).clamp(15.0 * vm_math.degrees2Radians, 90.0 * vm_math.degrees2Radians),
+        near: 0.5,
+        far: 50000.0,
+      );
+    }
+  }
+
   void _rebuildGpuCadModel({bool force = false}) {
     if (_scene == null || !_isGpuAvailable || !_isSceneReady) return;
     final mesh = widget.viewModel.assemblyMesh;
@@ -295,9 +350,11 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
 
     final selectedPartId = widget.viewModel.selectedPart?.id;
     final targetSelectedFaceId = widget.viewModel.doc.selectedFaceId ?? selectedPartId;
+    final targetSelectedWeldId = widget.viewModel.selectedWeldId;
     final targetRenderMode = widget.viewModel.onshapeRenderMode;
     final targetPreset = widget.viewModel.graphicsPreferences.materialSettings.preset;
     final targetWireframe = widget.viewModel.showWireframe;
+    final currentPrefs = widget.viewModel.graphicsPreferences;
 
     final docVersion = widget.viewModel.documentVersion;
 
@@ -306,18 +363,22 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         docVersion == _lastDocVersion &&
         mesh.polygons.length == _lastMeshPolyCount &&
         targetSelectedFaceId == _lastSelectedFaceId &&
+        targetSelectedWeldId == _lastSelectedWeldId &&
         targetRenderMode == _lastRenderMode &&
         targetPreset == _lastPreset &&
-        targetWireframe == _lastShowWireframe) {
+        targetWireframe == _lastShowWireframe &&
+        currentPrefs == _lastGraphicsPreferences) {
       return;
     }
 
     _lastDocVersion = docVersion;
     _lastMeshPolyCount = mesh.polygons.length;
     _lastSelectedFaceId = targetSelectedFaceId;
+    _lastSelectedWeldId = targetSelectedWeldId;
     _lastRenderMode = targetRenderMode;
     _lastPreset = targetPreset;
     _lastShowWireframe = targetWireframe;
+    _lastGraphicsPreferences = currentPrefs;
 
     if (_cadModelNode != null) {
       _scene!.remove(_cadModelNode!);
@@ -373,7 +434,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     final isOrtho = widget.viewModel.isOrthoProjection;
     // In orthographic projection, keep camera eye safely outside model bounds
     // so near clipping plane (0.5) never slices through 3D parts when rotating / zooming (Item 4 / SS3/SS4)
-    final orbitDist = isOrtho ? math.max(fitDim * 12.0, 15000.0) : math.max((fitDim * 2.5) / _zoom, 25.0);
+    final orbitDist = isOrtho ? math.max(fitDim * 12.0, 15000.0) : math.max((fitDim * 2.5) / _zoom, 2.0);
 
     final m = _computeRotationMatrix(_azimuthDeg, _elevationDeg);
     final d = vm_math.Vector3(-m[8], m[10], m[9]);
@@ -429,7 +490,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       _zoom = widget.viewModel.zoom;
       _pan = widget.viewModel.pan;
     });
-    if (!_vcbFocusNode.hasFocus && widget.viewModel.vcbValue.isNotEmpty && _vcbController.text != widget.viewModel.vcbValue) {
+    if (!_isVcbUserTyping && !_vcbFocusNode.hasFocus && widget.viewModel.vcbValue.isNotEmpty && _vcbController.text != widget.viewModel.vcbValue) {
       _vcbController.text = widget.viewModel.vcbValue;
     }
     _rebuildGpuCadModel();
@@ -462,7 +523,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
 
   void _zoomCamera(double factor) {
     setState(() {
-      _zoom = (_zoom * factor).clamp(0.15, 10.0);
+      _zoom = (_zoom * factor).clamp(0.02, 120.0);
       widget.viewModel.zoom = _zoom;
     });
     _updateGpuCamera();
@@ -497,30 +558,98 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _updateGpuCamera();
   }
 
-  AssemblySnapPoint? _findNearestSnapPointOnSelectedPart(Offset cursorScreen, Size size, FoldedMeshResult mesh) {
-    final part = widget.viewModel.selectedPart;
-    if (part == null || !part.isVisible) return null;
+  void _smoothAnimateCameraTo(CadPoint3D targetPos, {double targetZoom = 4.5}) {
+    _cameraAnimationTimer?.cancel();
+
+    final mesh = widget.viewModel.assemblyMesh;
+    _initCameraTargetIfNeeded(mesh);
+    final pivot = _cameraPivot;
+    final fitDim = _cameraFitDim > 0 ? _cameraFitDim : 200.0;
+    final size = MediaQuery.sizeOf(context);
+    final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
+    final startPan = _pan;
+    final startZoom = _zoom;
+    final startAz = _azimuthDeg;
+    final startEl = _elevationDeg;
+
+    final rx = targetPos.x - pivot.x;
+    final ry = targetPos.y - pivot.y;
+    final rz = targetPos.z - pivot.z;
+
+    const endAz = 45.0;
+    const endEl = 30.0;
+    final m = _computeRotationMatrix(endAz, endEl);
+    final x2 = rx * m[0] + ry * m[1] + rz * m[2];
+    final y2 = rx * m[4] + ry * m[5] + rz * m[6];
+    final z2 = rx * m[8] + ry * m[9] + rz * m[10];
+
+    final cameraDist = math.max(fitDim * 2.5, 1000.0);
+    final isOrtho = widget.viewModel.isOrthoProjection;
+    final persp = isOrtho ? 1.0 : (cameraDist / math.max(cameraDist - z2, cameraDist * 0.15));
+
+    final endScale = baseScale * targetZoom;
+    final endPan = Offset(-(x2 * persp) * endScale, (y2 * persp) * endScale);
+    final endZoom = targetZoom.clamp(0.02, 120.0);
+
+    int tick = 0;
+    const totalTicks = 35;
+    _cameraAnimationTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+      tick++;
+      final t = (tick / totalTicks).clamp(0.0, 1.0);
+      final factor = 1.0 - math.pow(1.0 - t, 3.0).toDouble();
+
+      if (mounted) {
+        setState(() {
+          _pan = Offset.lerp(startPan, endPan, factor) ?? endPan;
+          _zoom = startZoom + (endZoom - startZoom) * factor;
+          _azimuthDeg = startAz + (endAz - startAz) * factor;
+          _elevationDeg = startEl + (endEl - startEl) * factor;
+
+          widget.viewModel.pan = _pan;
+          widget.viewModel.zoom = _zoom;
+          widget.viewModel.azimuthDeg = _azimuthDeg;
+          widget.viewModel.elevationDeg = _elevationDeg;
+        });
+        _updateGpuCamera();
+      }
+
+      if (tick >= totalTicks) {
+        timer.cancel();
+        _cameraAnimationTimer = null;
+      }
+    });
+  }
+
+  void _resetCamera() {
+    _cameraAnimationTimer?.cancel();
+    _zoomToFit();
+    widget.viewModel.clearWeldEvaluation();
+  }
+
+  AssemblySnapPoint? _findNearestSnapPointForPart(AssemblyPart part, Offset cursorScreen, Size size, FoldedMeshResult mesh) {
+    if (!part.isVisible) return null;
     final allSnapPts = AssemblyDockingEngine.getAllSnapPointsForPart(part, cachedMesh: mesh);
     return AssemblyDockingEngine.findNearestSnapPoint(
       screenCursor: cursorScreen,
       candidates: allSnapPts,
       projectPoint: (pt) => _projectPoint(pt, size, mesh),
-      maxPixelDistance: 12.0,
+      maxPixelDistance: widget.viewModel.magneticSnapDistancePx,
     );
   }
 
   MouseCursor _getCursorForToolMode(AssemblyStudioViewModel vm) {
     if (_isOrbitingWithMouse || vm.activeToolMode == SketchUpToolMode.orbit) return SystemMouseCursors.none;
     if (_isPanningWithMouse || vm.activeToolMode == SketchUpToolMode.pan || _isPanToolActive) return SystemMouseCursors.none;
+    if (vm.activeToolMode == SketchUpToolMode.select) return SystemMouseCursors.none;
     if (vm.activeToolMode == SketchUpToolMode.move) return SystemMouseCursors.none;
     if (vm.activeToolMode == SketchUpToolMode.rotate) return SystemMouseCursors.none;
     if (_snapDragSourceSnap != null) return SystemMouseCursors.grabbing;
-    if (_hoveredSnapPoint != null) return SystemMouseCursors.grab;
+    if (_hoveredSnapPoint != null) return SystemMouseCursors.none;
     if (vm.pendingPlacement != null) return SystemMouseCursors.precise;
     if (_draggingPart != null) return SystemMouseCursors.none;
     if (vm.activeToolMode == SketchUpToolMode.weld) return SystemMouseCursors.none;
     if (vm.activeToolMode == SketchUpToolMode.magnetic) return SystemMouseCursors.precise;
-    return SystemMouseCursors.basic;
+    return SystemMouseCursors.none;
   }
 
   @override
@@ -584,11 +713,17 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                 vm.setToolMode(SketchUpToolMode.pan);
                 return KeyEventResult.handled;
               } else if (event.logicalKey == LogicalKeyboardKey.keyS && !isCtrl) {
-                // Focus part, lock 3D movement, activate real-time direct sketch
+                // Focus plane/surface, normal view alignment, activate real-time direct sketch
                 if (!vm.isSketchMode) {
-                  vm.focusPartAndEnterSketch(vm.selectedPart?.id);
-                  return KeyEventResult.handled;
+                  if (vm.doc.selectedFaceId != null) {
+                    vm.focusPartAndEnterSketch(vm.selectedPart?.id, faceId: vm.doc.selectedFaceId);
+                  } else {
+                    vm.focusPartAndEnterSketch(vm.selectedPart?.id);
+                  }
+                } else {
+                  vm.alignCameraToActivePlaneNormal();
                 }
+                return KeyEventResult.handled;
               } else if (event.logicalKey == LogicalKeyboardKey.keyM) {
                 // SketchUp Move Tool
                 vm.setToolMode(SketchUpToolMode.move);
@@ -736,6 +871,21 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
               } else if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
                 if (_vcbController.text.isNotEmpty || vm.vcbValue.isNotEmpty) {
                   final input = _vcbController.text.isNotEmpty ? _vcbController.text : vm.vcbValue;
+                  _isVcbUserTyping = false;
+                  if (_isMovingEntity) {
+                    _applyVcbTextToMovingEntity(input, vm);
+                    _commitEntityMove(vm);
+                    _vcbController.clear();
+                    _viewportFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  if (vm.activeToolMode == SketchUpToolMode.rotate && (_rotatePhase == RotateToolPhase.rotatingAngle || _draggedParts.isNotEmpty)) {
+                    _applyVcbTextToRotatingEntity(input, vm);
+                    _commitRotation(vm);
+                    _vcbController.clear();
+                    _viewportFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
                   vm.submitVcbInput(input);
                   _vcbController.clear();
                   _viewportFocusNode.requestFocus();
@@ -746,7 +896,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                   return KeyEventResult.handled;
                 }
               } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+                _isVcbUserTyping = false;
                 bool cancelledActiveAction = false;
+                if (vm.latestWeldEvaluation != null) {
+                  vm.clearWeldEvaluation();
+                  cancelledActiveAction = true;
+                }
                 if (vm.activeToolMode == SketchUpToolMode.rotate && (_rotatePhase != RotateToolPhase.awaitingCenter || _draggedParts.isNotEmpty)) {
                   _cancelRotation(vm);
                   cancelledActiveAction = true;
@@ -817,7 +972,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
               if (!isCtrl && event.character != null && event.character!.isNotEmpty && !_vcbFocusNode.hasFocus) {
                 final char = event.character!;
                 if (RegExp(r'^[0-9\.\,\*\x\X\/\-\+]$').hasMatch(char)) {
-                  _vcbController.text += char;
+                  if (!_isVcbUserTyping) {
+                    _isVcbUserTyping = true;
+                    _vcbController.text = char;
+                  } else {
+                    _vcbController.text += char;
+                  }
                   vm.setVcbState(label: vm.vcbLabel, value: _vcbController.text);
                   return KeyEventResult.handled;
                 }
@@ -842,6 +1002,21 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                     onPointerHover: (event) {
                       _lastHoverScreenPos = event.localPosition;
                       _cursorScreenPosNotifier.value = event.localPosition;
+
+                      // Snap point hover & magnetic attraction for selection/move/rotate tools (Requirement 4)
+                      final isSnapTool = !vm.isSketchMode && (
+                        vm.activeToolMode == SketchUpToolMode.select ||
+                        vm.activeToolMode == SketchUpToolMode.move ||
+                        vm.activeToolMode == SketchUpToolMode.rotate
+                      );
+                      if (isSnapTool && !_isOrbitingWithMouse && !_isPanningWithMouse && !_isMovingEntity) {
+                        _handleMagneticSnapHover(event.localPosition, size, mesh, vm);
+                      }
+
+                      if (vm.isSketchMode && vm.activeSketchPlane != null && !_isOrbitingWithMouse && !_isPanningWithMouse) {
+                        _updateSketchHover(event.localPosition, size, mesh, vm);
+                      }
+
                       if (vm.activeToolMode == SketchUpToolMode.rotate) {
                         _handleRotatePointerHover(event.localPosition, size, mesh, vm);
                       } else if (vm.activeToolMode == SketchUpToolMode.magnetic) {
@@ -856,16 +1031,37 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                       _viewportFocusNode.requestFocus();
                       final selectedPart = vm.selectedPart;
 
+                      // 1a. Immediate Middle Mouse Button Pan / Orbit Activation (Requirement 1 & 2)
+                      final isMiddle = (event.buttons & kTertiaryButton) != 0 || (event.buttons & kMiddleMouseButton) != 0;
+                      if (isMiddle) {
+                        bool isShift = false;
+                        try {
+                          isShift = HardwareKeyboard.instance.isShiftPressed;
+                        } catch (_) {}
+                        if (isShift) {
+                          _isOrbitingWithMouse = true;
+                        } else {
+                          _isPanningWithMouse = true;
+                        }
+                        setState(() {});
+                        return;
+                      }
+
                       // 1b. Draft-Line Welding Tool Start
                       if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.weld && (event.buttons & kPrimaryMouseButton) != 0) {
                         _weldDraftStartScreen = event.localPosition;
                         _weldDraftPath.clear();
                         _weldDraftPath.add(event.localPosition);
                         _weld3DPoints.clear();
+                        _weldTimestamps.clear();
+                        _weldStopwatch.reset();
+                        _weldStopwatch.start();
+                        _weldTimestamps.add(0.0);
                         _weldHitPartIds.clear();
                         _weldSparks.clear();
                         _weldFlickerPhase = 0.0;
                         _isDrawingWeld = true;
+                        _startWeldPhysicsLoop();
                         final (rayOrigin, rayDir) = _getRayFromScreen(event.localPosition, size, mesh);
                         final hit = AssemblyRaycaster.raycast(rayOrigin: rayOrigin, rayDirection: rayDir, mesh: mesh);
                         if (hit != null) {
@@ -878,8 +1074,121 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                         return;
                       }
 
-                      // 1c. Direct Sketch Entity Interaction
+                      // 1c. Direct Sketch Entity Interaction & Parametric Drawing
                       if (vm.isSketchMode && (event.buttons & kPrimaryMouseButton) != 0) {
+                        final plane = vm.activeSketchPlane;
+                        if (plane != null) {
+                          final localPoint = _unprojectScreenToPlane(event.localPosition, plane, size, mesh);
+                          if (localPoint != null) {
+                            final snapped = vm.activePlaneHoverLocal ?? localPoint;
+                            final tool = vm.activeSketchTool;
+
+                            if (tool == 'rectangle' || tool == 'rect') {
+                              final newRect = CADRectangleEntity(
+                                id: 'rect_${DateTime.now().millisecondsSinceEpoch}',
+                                startPoint: Offset(snapped.dx - 15.0, snapped.dy - 10.0),
+                                width: 30.0,
+                                height: 20.0,
+                                isPassThrough: true,
+                                depthMm: 5.0,
+                              );
+                              vm.addPrimitiveEntityToActivePlane(newRect);
+                              vm.activeSketchTool = 'select_entity';
+                              setState(() {});
+                              _rebuildGpuCadModel();
+                              return;
+                            } else if (tool == 'circle' || tool == 'hole') {
+                              final newCircle = CADCircleEntity(
+                                id: 'circle_${DateTime.now().millisecondsSinceEpoch}',
+                                center: snapped,
+                                radius: 12.0,
+                                isPassThrough: true,
+                                depthMm: 5.0,
+                              );
+                              vm.addPrimitiveEntityToActivePlane(newCircle);
+                              vm.activeSketchTool = 'select_entity';
+                              setState(() {});
+                              _rebuildGpuCadModel();
+                              return;
+                            } else if (tool == 'line') {
+                              if (_sketchLineStartLocal == null) {
+                                _sketchLineStartLocal = snapped;
+                                setState(() {});
+                                return;
+                              } else {
+                                final newLine = CADLineEntity(
+                                  id: 'line_${DateTime.now().millisecondsSinceEpoch}',
+                                  start: _sketchLineStartLocal!,
+                                  end: snapped,
+                                );
+                                vm.addPrimitiveEntityToActivePlane(newLine);
+                                _sketchLineStartLocal = null;
+                                vm.activeSketchTool = 'select_entity';
+                                setState(() {});
+                                _rebuildGpuCadModel();
+                                return;
+                              }
+                            } else if (tool == 'polyline') {
+                              if (_sketchPolylinePoints.isNotEmpty && (snapped - _sketchPolylinePoints.first).distance < 6.0 && _sketchPolylinePoints.length >= 2) {
+                                _sketchPolylinePoints.add(_sketchPolylinePoints.first);
+                                final newPoly = CADPolylineEntity(
+                                  id: 'polyline_${DateTime.now().millisecondsSinceEpoch}',
+                                  points: List.from(_sketchPolylinePoints),
+                                  isClosed: true,
+                                );
+                                vm.addPrimitiveEntityToActivePlane(newPoly);
+                                _sketchPolylinePoints.clear();
+                                vm.activeSketchTool = 'select_entity';
+                                setState(() {});
+                                _rebuildGpuCadModel();
+                                return;
+                              } else {
+                                _sketchPolylinePoints.add(snapped);
+                                setState(() {});
+                                return;
+                              }
+                            } else {
+                              // Selection mode: hit test primitive entities on active plane
+                              CADPrimitiveEntity? hitPrimitive;
+                              for (final p in plane.primitives.reversed) {
+                                if (p is CADRectangleEntity) {
+                                  final r = Rect.fromLTWH(p.startPoint.dx, p.startPoint.dy, p.width, p.height);
+                                  if (r.inflate(5.0).contains(localPoint)) {
+                                    hitPrimitive = p;
+                                    break;
+                                  }
+                                } else if (p is CADCircleEntity) {
+                                  if ((localPoint - p.center).distance <= p.radius + 5.0) {
+                                    hitPrimitive = p;
+                                    break;
+                                  }
+                                } else if (p is CADLineEntity) {
+                                  if (_distanceToSegment(localPoint, p.start, p.end) <= 5.0) {
+                                    hitPrimitive = p;
+                                    break;
+                                  }
+                                } else if (p is CADPolylineEntity) {
+                                  for (int i = 0; i < p.points.length - 1; i++) {
+                                    if (_distanceToSegment(localPoint, p.points[i], p.points[i + 1]) <= 5.0) {
+                                      hitPrimitive = p;
+                                      break;
+                                    }
+                                  }
+                                  if (hitPrimitive != null) break;
+                                }
+                              }
+
+                              if (hitPrimitive != null) {
+                                vm.selectSketchPrimitive(hitPrimitive);
+                                setState(() {});
+                                return;
+                              } else {
+                                vm.selectSketchPrimitive(null);
+                              }
+                            }
+                          }
+                        }
+
                         final targetPart = vm.doc.parts.where((p) => p.id == vm.sketchPartId).firstOrNull ?? vm.selectedPart;
                         if (targetPart != null) {
                           final hitFeature = _hitTestSketchFeature(event.localPosition, size, mesh, targetPart);
@@ -960,17 +1269,37 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
 
                       // 3. Direct Whole-Part Group Selection, Weld Picking, Move, and In-Place Rotate
                       if (!vm.isSketchMode && (event.buttons & kPrimaryMouseButton) != 0 && vm.pendingPlacement == null) {
+                        // Proximity picking for weld beads (Item 5)
+                        final clickedWeld = _findNearestWeldUnderScreenCursor(event.localPosition, size, mesh, vm, maxScreenDist: 14.0);
+                        if (clickedWeld != null) {
+                          vm.selectWeld(clickedWeld.id);
+                          _rebuildGpuCadModel(force: true);
+                          setState(() {});
+                          return;
+                        }
+
                         final hitPoly = _findFrontmostPolygonUnderCursor(event.localPosition, size, mesh);
                         if (hitPoly != null) {
                           // Check if hit a weld bead directly
                           if (hitPoly.faceId.startsWith('weld_')) {
                             final weldId = hitPoly.faceId.substring('weld_'.length);
                             vm.selectWeld(weldId);
+                            _rebuildGpuCadModel(force: true);
+                            setState(() {});
                             return;
                           }
 
                           final hitPart = vm.findPartForFaceId(hitPoly.faceId);
                           if (hitPart != null) {
+                            vm.doc.selectedFaceId = hitPoly.faceId;
+
+                            // Direct 3D Face Sketch Mode Activation (Key: S or Sketch tool)
+                            if (vm.activeToolMode == SketchUpToolMode.sketch) {
+                              vm.activateSketchOnFacePolygon(hitPoly, partId: hitPart.id);
+                              setState(() {});
+                              return;
+                            }
+
                             bool isShift = false;
                             bool isCtrl = false;
                             try {
@@ -1001,7 +1330,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                               _lastClickTime = now;
 
                               if (_clickCount == 2) {
-                                vm.focusPartAndEnterSketch(hitPart.id);
+                                vm.focusPartAndEnterSketch(hitPart.id, faceId: hitPoly.faceId);
                                 return;
                               }
 
@@ -1047,6 +1376,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                               _partDragStartScreen = event.localPosition;
                               _hasMovedPart = false;
                               _isMovingEntity = true;
+                              _isVcbUserTyping = false;
 
                               final groupParts = hitPart.groupId != null ? vm.doc.parts.where((p) => p.groupId == hitPart.groupId).toList() : <AssemblyPart>[];
                               _draggedParts.clear();
@@ -1057,8 +1387,10 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                               }
                               _snapshotDraggedWelds(vm);
 
-                              final nearestSnap = _findNearestSnapPointOnSelectedPart(event.localPosition, size, mesh);
-                              _moveBaseWorldPoint = nearestSnap?.worldPosition ?? hitPart.position;
+                              // Pickup from clicked snap point OR clicked surface point (never defaulting to bottom snap point, SS2)
+                              final nearestSnap = _findNearestSnapPointForPart(hitPart, event.localPosition, size, mesh);
+                              final surfaceHit = _findFrontmostRaycastHit(event.localPosition, size, mesh);
+                              _moveBaseWorldPoint = nearestSnap?.worldPosition ?? surfaceHit?.hitPoint ?? hitPart.position;
                               _moveBaseStartWorldPoint = _moveBaseWorldPoint;
 
                               vm.setVcbState(
@@ -1085,6 +1417,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                               _partDragStartScreen = event.localPosition;
                               _hasMovedPart = false;
                               _isMovingEntity = true;
+                              _isVcbUserTyping = false;
 
                               final groupParts = partToMove.groupId != null
                                   ? vm.doc.parts.where((p) => p.groupId == partToMove.groupId).toList()
@@ -1097,8 +1430,10 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                               }
                               _snapshotDraggedWelds(vm);
 
-                              final nearestSnap = _findNearestSnapPointOnSelectedPart(event.localPosition, size, mesh);
-                              _moveBaseWorldPoint = nearestSnap?.worldPosition ?? partToMove.position;
+                              // Pickup from clicked snap point OR clicked surface point (never defaulting to bottom snap point, SS2)
+                              final nearestSnap = _findNearestSnapPointForPart(partToMove, event.localPosition, size, mesh);
+                              final surfaceHit = _findFrontmostRaycastHit(event.localPosition, size, mesh);
+                              _moveBaseWorldPoint = nearestSnap?.worldPosition ?? surfaceHit?.hitPoint ?? partToMove.position;
                               _moveBaseStartWorldPoint = _moveBaseWorldPoint;
 
                               vm.setVcbState(label: 'Distance', value: vm.formatLength(0.0), hint: 'Move mouse or type distance in VCB (e.g. 150)');
@@ -1150,11 +1485,14 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                       } catch (_) {}
 
                       final isPan =
-                          (isMiddle && isShiftPressed) ||
+                          (isMiddle && !isShiftPressed) ||
                           (isSecondary && (isShiftPressed || isCtrlPressed)) ||
                           (isPrimary && _isPanToolActive) ||
                           (isPrimary && isShiftPressed && _isPanToolActive);
-                      final isOrbit = (isMiddle && !isShiftPressed) || (isSecondary && !isShiftPressed && !isCtrlPressed);
+                      final isOrbit =
+                          (isMiddle && isShiftPressed) ||
+                          (isSecondary && !isShiftPressed && !isCtrlPressed) ||
+                          (isPrimary && vm.activeToolMode == SketchUpToolMode.orbit);
 
                       if (isPan) {
                         _isPanningWithMouse = true;
@@ -1193,6 +1531,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                         if (hit != null) {
                           if (_weld3DPoints.isEmpty || _weld3DPoints.last.distanceTo(hit.hitPoint) > 2.0) {
                             _weld3DPoints.add(hit.hitPoint);
+                            _weldTimestamps.add(_weldStopwatch.elapsedMilliseconds / 1000.0);
                           }
                           final p = vm.findPartForFaceId(hit.polygon.faceId);
                           if (p != null) _weldHitPartIds.add(p.id);
@@ -1318,6 +1657,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                         }
                         _secondaryDownPos = null;
                       }
+                      setState(() {});
                     },
                     onPointerCancel: (_) {
                       _isOrbitingWithMouse = false;
@@ -1346,10 +1686,11 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                       _weld3DPoints.clear();
                       _weldHitPartIds.clear();
                       _weldSparks.clear();
+                      setState(() {});
                     },
                     onPointerSignal: (pointerSignal) {
                       if (pointerSignal is PointerScrollEvent) {
-                        final factor = pointerSignal.scrollDelta.dy < 0 ? 1.15 : 0.85;
+                        final factor = pointerSignal.scrollDelta.dy < 0 ? 1.20 : 0.82;
                         _zoomCamera(factor);
                       }
                     },
@@ -1457,7 +1798,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                 // =================================================================
                 // 1b. SKETCHUP TRANSLUCENT BOUNDING BOX OVERLAY (Requirement 7 / SS3)
                 // =================================================================
-                if (!vm.isSketchMode && (vm.selectedPart != null || vm.selectedPartIds.isNotEmpty))
+                if (!vm.isSketchMode && (vm.selectedPart != null || vm.selectedPartIds.isNotEmpty || _hoveredSnapPointModel != null))
                   Positioned.fill(
                     child: IgnorePointer(
                       child: CustomPaint(
@@ -1584,6 +1925,42 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                     ),
                   ),
 
+                if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.select && !_isOrbitingWithMouse && !_isPanningWithMouse)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: ValueListenableBuilder<Offset?>(
+                        valueListenable: _cursorScreenPosNotifier,
+                        builder: (context, cursorPos, _) {
+                          final pos = cursorPos ?? _lastHoverScreenPos;
+                          if (pos == null) return const SizedBox.shrink();
+                          return CustomPaint(
+                            size: Size.infinite,
+                            painter: _CadSelectionPointerOverlayPainter(
+                              cursorScreenPos: pos,
+                              isSnapped: _hoveredSnapPointModel != null,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+
+                // =================================================================
+                // 2a-2. 3D PARAMETRIC SURFACE SKETCH OVERLAY (GRIDS, INFERENCES, PRIMITIVES)
+                // =================================================================
+                if (vm.isSketchMode && vm.activeSketchPlane != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: Assembly3DSurfaceSketchPainter(
+                          viewModel: vm,
+                          projectPoint: (pt) => _projectPoint(pt, size, mesh),
+                        ),
+                      ),
+                    ),
+                  ),
+
                 // =================================================================
                 // 2b. 3D INTERACTIVE SKETCH ENTITY OVERLAY (HIGHLIGHTS, BENDS, LABELS)
                 // =================================================================
@@ -1605,6 +1982,76 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                   ),
 
                 // =================================================================
+                // 2b-0. SELECTED WELD HIGHLIGHT OVERLAY (Item 2)
+                // =================================================================
+                if (vm.selectedWeldId != null)
+                  Builder(
+                    builder: (context) {
+                      final selWeld = vm.doc.welds.where((w) => w.id == vm.selectedWeldId).firstOrNull;
+                      if (selWeld == null) return const SizedBox.shrink();
+                      CadPoint3D u = selWeld.weldAxis;
+                      final uLen = math.sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+                      if (uLen > 1e-4) {
+                        u = CadPoint3D(u.x / uLen, u.y / uLen, u.z / uLen);
+                      } else {
+                        u = const CadPoint3D(1.0, 0.0, 0.0);
+                      }
+                      final halfLen = selWeld.weldLengthMm / 2.0;
+                      final p0 = CadPoint3D(selWeld.weldPoint.x - u.x * halfLen, selWeld.weldPoint.y - u.y * halfLen, selWeld.weldPoint.z - u.z * halfLen);
+                      final p1 = CadPoint3D(selWeld.weldPoint.x + u.x * halfLen, selWeld.weldPoint.y + u.y * halfLen, selWeld.weldPoint.z + u.z * halfLen);
+                      final scr0 = _projectPoint(p0, size, mesh);
+                      final scr1 = _projectPoint(p1, size, mesh);
+                      return Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: AssemblySelectedWeldHighlightPainter(
+                              screenStart: scr0,
+                              screenEnd: scr1,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
+                // =================================================================
+                // 2b. WELD JOINT STYLE SELECTION TOOLBAR (welding_simulation_docs.md)
+                // =================================================================
+                if (vm.activeToolMode == SketchUpToolMode.weld || vm.selectedWeldId != null)
+                  AssemblyWeldJointStyleToolbar(
+                    viewModel: vm,
+                    position: _jointToolbarOffset,
+                    onDragUpdate: (details) {
+                      setState(() {
+                        _jointToolbarOffset += details.delta;
+                      });
+                    },
+                    onToggleMinimize: () => setState(() => vm.toggleJointToolbarMinimized()),
+                    onClose: () => setState(() => vm.toggleJointStyleToolbar()),
+                  ),
+
+                // =================================================================
+                // 2b-2. WELD QUALITY EVALUATION CARD & DEFECT SIDEBAR (welding_simulation_docs.md)
+                // =================================================================
+                if (vm.latestWeldEvaluation != null)
+                  AssemblyWeldQualityHUD(
+                    viewModel: vm,
+                    onAnomalyTap: (pos) => _smoothAnimateCameraTo(pos, targetZoom: 5.5),
+                    onInspectSeam: () {
+                      final selectedWeld = vm.selectedWeld;
+                      if (selectedWeld != null) {
+                        _smoothAnimateCameraTo(selectedWeld.weldPoint, targetZoom: 5.0);
+                      } else if (vm.doc.welds.isNotEmpty) {
+                        _smoothAnimateCameraTo(vm.doc.welds.last.weldPoint, targetZoom: 5.0);
+                      }
+                    },
+                    onResetCam: _resetCamera,
+                    onDismiss: () => vm.clearWeldEvaluation(),
+                    onToggleCardMinimize: () => setState(() => vm.toggleQualityCardMinimized()),
+                    onToggleSidebarMinimize: () => setState(() => vm.toggleAnomalySidebarMinimized()),
+                  ),
+
+                // =================================================================
                 // 2c. INTERACTIVE REAL-WORLD WELDING TORCH BRUSH, ARC LAMP & SPARKS
                 // =================================================================
                 if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld && _weldDraftPath.isNotEmpty)
@@ -1612,11 +2059,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                     child: IgnorePointer(
                       child: CustomPaint(
                         size: Size.infinite,
-                        painter: AssemblyWeldLampPainter(
-                          torchPosition: _weldDraftPath.last,
-                          isWelding: _isDrawingWeld,
-                          flickerPhase: _weldFlickerPhase,
-                        ),
+                        painter: AssemblyWeldLampPainter(torchPosition: _weldDraftPath.last, isWelding: _isDrawingWeld, flickerPhase: _weldFlickerPhase),
                       ),
                     ),
                   ),
@@ -1701,41 +2144,51 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                 ),
 
                 // Contextual Banner for Auto-Span Bridging Tool (Key: B)
+                // Contextual Banner for Auto-Span Bridging Tool (Key: B)
                 if (vm.activeToolMode == SketchUpToolMode.bridge)
                   Positioned(
-                    top: 14,
-                    left: 0,
-                    right: 0,
+                    top: 62,
+                    left: 70,
+                    right: 120,
                     child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A).withValues(alpha: 0.94),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF38BDF8), width: 1.2),
-                          boxShadow: [BoxShadow(color: const Color(0xFF38BDF8).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.horizontal_distribute_rounded, color: Color(0xFF38BDF8), size: 16),
-                            const SizedBox(width: 8),
-                            Text(
-                              vm.bridgeSourcePartId == null
-                                  ? 'Auto-Span Bridge: Click first stile / part'
-                                  : 'Bridging: Click destination stile to bridge with auto rungs & welds',
-                              style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFF38BDF8), width: 1.2),
+                            boxShadow: [BoxShadow(color: const Color(0xFF38BDF8).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.horizontal_distribute_rounded, color: Color(0xFF38BDF8), size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  vm.bridgeSourcePartId == null
+                                      ? 'Auto-Span Bridge: Click first stile / part'
+                                      : 'Bridging: Click destination stile to bridge with auto rungs & welds',
+                                  style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(width: 10),
+                                InkWell(
+                                  onTap: () {
+                                    vm.cancelBridge();
+                                    vm.setToolMode(SketchUpToolMode.select);
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
+                                    child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 10),
-                            InkWell(
-                              onTap: vm.cancelBridge,
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -1744,37 +2197,43 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                 // Contextual Banner for Interactive Weld Tool (Key: W)
                 if (vm.activeToolMode == SketchUpToolMode.weld)
                   Positioned(
-                    top: 14,
-                    left: 0,
-                    right: 0,
+                    top: 62,
+                    left: 70,
+                    right: 120,
                     child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A).withValues(alpha: 0.94),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFFF59E0B), width: 1.2),
-                          boxShadow: [BoxShadow(color: const Color(0xFFF59E0B).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.blur_linear_rounded, color: Color(0xFFF59E0B), size: 16),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Weld Tool: Click and drag draft line across entity seam to weld',
-                              style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFFF59E0B), width: 1.2),
+                            boxShadow: [BoxShadow(color: const Color(0xFFF59E0B).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.blur_linear_rounded, color: Color(0xFFF59E0B), size: 16),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Weld Tool: Click and drag draft line across entity seam to weld',
+                                  style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(width: 10),
+                                InkWell(
+                                  onTap: () => vm.setToolMode(SketchUpToolMode.select),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
+                                    child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 10),
-                            InkWell(
-                              onTap: () => vm.setToolMode(SketchUpToolMode.select),
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -1783,49 +2242,55 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                 // Contextual Banner for Magnetic Tool (Key: J)
                 if (vm.activeToolMode == SketchUpToolMode.magnetic)
                   Positioned(
-                    top: 14,
-                    left: 0,
-                    right: 0,
+                    top: 62,
+                    left: 70,
+                    right: 120,
                     child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A).withValues(alpha: 0.94),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF818CF8), width: 1.2),
-                          boxShadow: [BoxShadow(color: const Color(0xFF818CF8).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.hub_rounded, color: Color(0xFF818CF8), size: 16),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Magnetic Tool: Click surface to place spot',
-                              style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(width: 10),
-                            InkWell(
-                              onTap: () => _showMagneticCouplingDialog(context, vm),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(color: const Color(0xFF6366F1), borderRadius: BorderRadius.circular(12)),
-                                child: const Text(
-                                  'Link Spots Dialog',
-                                  style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFF818CF8), width: 1.2),
+                            boxShadow: [BoxShadow(color: const Color(0xFF818CF8).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.hub_rounded, color: Color(0xFF818CF8), size: 16),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Magnetic Tool: Click surface to place spot',
+                                  style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
                                 ),
-                              ),
+                                const SizedBox(width: 10),
+                                InkWell(
+                                  onTap: () => _showMagneticCouplingDialog(context, vm),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(color: const Color(0xFF6366F1), borderRadius: BorderRadius.circular(12)),
+                                    child: const Text(
+                                      'Link Spots Dialog',
+                                      style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: () => vm.setToolMode(SketchUpToolMode.select),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
+                                    child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            InkWell(
-                              onTap: () => vm.setToolMode(SketchUpToolMode.select),
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -1834,59 +2299,62 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                 // Contextual In-Viewport Warning Banner (Item 5.1 / SS5)
                 if (_subtleWarningText != null)
                   Positioned(
-                    top: 60,
-                    left: 0,
-                    right: 0,
+                    top: 104,
+                    left: 70,
+                    right: 120,
                     child: Center(
-                      child: Container(
-                        constraints: BoxConstraints(maxWidth: math.max(200.0, size.width - 60.0)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A).withValues(alpha: 0.94),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFFEF4444), width: 1.2),
-                          boxShadow: [BoxShadow(color: const Color(0xFFEF4444).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 16),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                _subtleWarningText!,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          constraints: BoxConstraints(maxWidth: math.max(200.0, size.width - 60.0)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFFEF4444), width: 1.2),
+                            boxShadow: [BoxShadow(color: const Color(0xFFEF4444).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 16),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  _subtleWarningText!,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
                               ),
-                            ),
-                            if (_subtleWarningActionLabel != null && _subtleWarningAction != null) ...[
-                              const SizedBox(width: 10),
-                              InkWell(
-                                onTap: () {
-                                  final action = _subtleWarningAction;
-                                  _dismissSubtleWarning();
-                                  action?.call();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(color: const Color(0xFFEF4444), borderRadius: BorderRadius.circular(12)),
-                                  child: Text(
-                                    _subtleWarningActionLabel!,
-                                    style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                              if (_subtleWarningActionLabel != null && _subtleWarningAction != null) ...[
+                                const SizedBox(width: 10),
+                                InkWell(
+                                  onTap: () {
+                                    final action = _subtleWarningAction;
+                                    _dismissSubtleWarning();
+                                    action?.call();
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(color: const Color(0xFFEF4444), borderRadius: BorderRadius.circular(12)),
+                                    child: Text(
+                                      _subtleWarningActionLabel!,
+                                      style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                    ),
                                   ),
+                                ),
+                              ],
+                              const SizedBox(width: 8),
+                              InkWell(
+                                onTap: _dismissSubtleWarning,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
+                                  child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
                                 ),
                               ),
                             ],
-                            const SizedBox(width: 8),
-                            InkWell(
-                              onTap: _dismissSubtleWarning,
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -1904,7 +2372,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                 // =================================================================
                 // 3b. FLOATING INDUSTRIAL CAD 3D NAVIGATION BAR
                 // =================================================================
-                if (!vm.isSketchMode)
+                if (!vm.isSketchMode && !vm.isCleanCanvasMode && vm.show3dNavigationBar)
                   Positioned(
                     top: 14,
                     left: 60,
@@ -1951,7 +2419,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                 // =================================================================
                 // 3c. SKETCHUP-STYLE STANDARD VIEWS TOOLBAR (SS3)
                 // =================================================================
-                if (!vm.isSketchMode && vm.showViewsToolbar)
+                if (!vm.isSketchMode && vm.showViewsToolbar && !vm.isCleanCanvasMode)
                   Positioned(
                     top: _viewsToolbarOffset.dy,
                     left: _viewsToolbarOffset.dx,
@@ -1962,6 +2430,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                           _viewsToolbarOffset += details.delta;
                         });
                       },
+                      onToggleMinimize: () => setState(() => vm.toggleViewsToolbarMinimized()),
+                      onClose: () => setState(() => vm.toggleViewsToolbar()),
                       onCenterAxes: () {
                         setState(() {
                           _pan = Offset.zero;
@@ -2048,12 +2518,19 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                 if (vm.isGraphicsPreferencesOpen)
                   Positioned(
                     top: 56,
+                    bottom: 20,
                     right: 140,
                     child: StudioGraphicsPreferencesPanel(
                       preferences: vm.graphicsPreferences,
+                      snapDistancePx: vm.magneticSnapDistancePx,
+                      onSnapDistanceChanged: (val) {
+                        vm.setMagneticSnapDistance(val);
+                        setState(() {});
+                      },
                       onChanged: (prefs) {
                         vm.graphicsPreferences = prefs;
-                        _rebuildGpuCadModel();
+                        _applyEnvironmentSettings();
+                        _rebuildGpuCadModel(force: true);
                         setState(() {});
                       },
                       onClose: () {
@@ -2063,7 +2540,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                       },
                       onResetToDefault: () {
                         vm.graphicsPreferences = const OnshapeGraphicsPreferences();
-                        _rebuildGpuCadModel();
+                        _applyEnvironmentSettings();
+                        _rebuildGpuCadModel(force: true);
                         setState(() {});
                       },
                     ),
@@ -2082,7 +2560,23 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                 // =================================================================
                 // 6. ONSHAPE-STYLE DIRECT 3D FACE SKETCH HUD (WHEN SKETCHING)
                 // =================================================================
-                if (vm.isSketchMode && vm.sketchPartId != null) Positioned(top: 14, left: 14, right: 14, child: _buildOnshapeSketchHUD(vm)),
+                if (vm.isSketchMode) Positioned(top: 14, left: 14, right: 14, child: _buildOnshapeSketchHUD(vm)),
+
+                // =================================================================
+                // 6b. ONSHAPE / FUSION 360 PARAMETRIC DIMENSION & FEATURE MODIFIER PANEL
+                // =================================================================
+                if (vm.isSketchMode && vm.selectedSketchEntity != null)
+                  Positioned(
+                    top: 65,
+                    right: 16,
+                    child: AssemblySketchParameterPanel(
+                      viewModel: vm,
+                      onRebuildModel: () {
+                        setState(() {});
+                        _rebuildGpuCadModel();
+                      },
+                    ),
+                  ),
 
                 // =================================================================
                 // 7. SELECTED PART / WELD STATUS PILL (BOTTOM CENTER)
@@ -2108,6 +2602,11 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                 // 9. SKETCHUP MEASUREMENTS VCB HUD (BOTTOM RIGHT)
                 // =================================================================
                 Positioned(bottom: 16, right: 16, child: _buildMeasurementsVcbHud(vm)),
+
+                // =================================================================
+                // 10. CANVAS CONTROLS & TOOLBAR VISIBILITY MANAGER (BOTTOM LEFT)
+                // =================================================================
+                if (!vm.isSketchMode) AssemblyCanvasControlsHUD(viewModel: vm, onResetPositions: _resetToolbarPositions),
               ],
             ),
           ),
@@ -2497,13 +2996,17 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     }
   }
 
+  AssemblyRayHit? _findFrontmostRaycastHit(Offset cursorLocalPos, Size size, FoldedMeshResult mesh) {
+    if (mesh.allPolygons.isEmpty || size.width <= 0 || size.height <= 0) return null;
+    final (rayOrigin, rayDir) = _getRayFromScreen(cursorLocalPos, size, mesh);
+    return AssemblyRaycaster.raycast(rayOrigin: rayOrigin, rayDirection: rayDir, mesh: mesh);
+  }
+
   CadFoldedPolygon3D? _findFrontmostPolygonUnderCursor(Offset cursorLocalPos, Size size, FoldedMeshResult mesh) {
     if (mesh.allPolygons.isEmpty || size.width <= 0 || size.height <= 0) return null;
 
-    final (rayOrigin, rayDir) = _getRayFromScreen(cursorLocalPos, size, mesh);
-
     // 1. Direct 3D Raycast against all model polygons (true frontmost surface)
-    final hit = AssemblyRaycaster.raycast(rayOrigin: rayOrigin, rayDirection: rayDir, mesh: mesh);
+    final hit = _findFrontmostRaycastHit(cursorLocalPos, size, mesh);
     if (hit != null) {
       return hit.polygon;
     }
@@ -2516,6 +3019,84 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       projectPoint: (pt) => _projectPoint(pt, size, mesh),
       maxScreenDistance: 8.0,
     );
+  }
+
+  Offset? _unprojectScreenToPlane(Offset screenPos, CADSketchPlane plane, Size size, FoldedMeshResult mesh) {
+    final (rayOrigin, rayDir) = _getRayFromScreen(screenPos, size, mesh);
+    final planeNormal = plane.zAxis;
+    final denom = rayDir.dot(planeNormal);
+    if (denom.abs() < 1e-6) return null;
+    final diff = plane.origin - rayOrigin;
+    final t = diff.dot(planeNormal) / denom;
+    final hitWorld = rayOrigin + (rayDir * t);
+    return plane.toLocal(hitWorld);
+  }
+
+  void _updateSketchHover(Offset screenPos, Size size, FoldedMeshResult mesh, AssemblyStudioViewModel vm) {
+    final plane = vm.activeSketchPlane;
+    if (plane == null) return;
+    final localPos = _unprojectScreenToPlane(screenPos, plane, size, mesh);
+    if (localPos == null) return;
+    vm.updateSketchPlaneHover(localPos);
+  }
+
+  double _distanceToSegment(Offset p, Offset a, Offset b) {
+    final ab = b - a;
+    final ap = p - a;
+    final lenSq = ab.dx * ab.dx + ab.dy * ab.dy;
+    if (lenSq < 1e-6) return (p - a).distance;
+    final t = ((ap.dx * ab.dx + ap.dy * ab.dy) / lenSq).clamp(0.0, 1.0);
+    final proj = a + ab * t;
+    return (p - proj).distance;
+  }
+
+  AssemblyWeldJoint? _findNearestWeldUnderScreenCursor(
+    Offset cursorScreen,
+    Size size,
+    FoldedMeshResult mesh,
+    AssemblyStudioViewModel vm, {
+    double maxScreenDist = 14.0,
+  }) {
+    if (vm.doc.welds.isEmpty || size.width <= 0 || size.height <= 0) return null;
+
+    double closestDist = maxScreenDist;
+    AssemblyWeldJoint? bestWeld;
+
+    for (final weld in vm.doc.welds) {
+      final samplePts = <CadPoint3D>[];
+      if (weld.pathPoints != null && weld.pathPoints!.length >= 2) {
+        samplePts.addAll(weld.pathPoints!);
+      } else {
+        CadPoint3D u = weld.weldAxis;
+        final uLen = math.sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+        if (uLen > 1e-4) {
+          u = CadPoint3D(u.x / uLen, u.y / uLen, u.z / uLen);
+        } else {
+          u = const CadPoint3D(1.0, 0.0, 0.0);
+        }
+        final halfL = math.max(12.0, weld.weldLengthMm) / 2.0;
+        final start = CadPoint3D(weld.weldPoint.x - u.x * halfL, weld.weldPoint.y - u.y * halfL, weld.weldPoint.z - u.z * halfL);
+        final end = CadPoint3D(weld.weldPoint.x + u.x * halfL, weld.weldPoint.y + u.y * halfL, weld.weldPoint.z + u.z * halfL);
+        samplePts.add(start);
+        samplePts.add(weld.weldPoint);
+        samplePts.add(end);
+      }
+
+      // Check distance from cursorScreen to each segment between sample points in screen space
+      for (int i = 0; i < samplePts.length - 1; i++) {
+        final p1 = _projectPoint(samplePts[i], size, mesh);
+        final p2 = _projectPoint(samplePts[i + 1], size, mesh);
+        if (p1 == Offset.zero && p2 == Offset.zero) continue;
+
+        final dist = _distToSegment(cursorScreen, p1, p2);
+        if (dist < closestDist) {
+          closestDist = dist;
+          bestWeld = weld;
+        }
+      }
+    }
+
+    return bestWeld;
   }
 
   Future<void> _promptGroupNameAndGroup(AssemblyStudioViewModel vm) async {
@@ -2663,6 +3244,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       controller: _vcbController,
       focusNode: _vcbFocusNode,
       onClear: () {
+        _isVcbUserTyping = false;
         if (_isMovingEntity) {
           _cancelEntityMove(vm);
         }
@@ -2671,6 +3253,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         vm.notifyDocChanged();
       },
       onChanged: (val) {
+        _isVcbUserTyping = true;
         if (_isMovingEntity) {
           _applyVcbTextToMovingEntity(val, vm);
         } else if (vm.activeToolMode == SketchUpToolMode.rotate && (_rotatePhase == RotateToolPhase.rotatingAngle || _draggedParts.isNotEmpty)) {
@@ -2678,6 +3261,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         }
       },
       onSubmitted: (val) {
+        _isVcbUserTyping = false;
         if (_isMovingEntity) {
           final clean = val.replaceAll('mm', '').replaceAll('cm', '').replaceAll('m', '').replaceAll('in', '').replaceAll('ft', '').trim();
           final parsed = double.tryParse(clean);
@@ -2687,6 +3271,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
             _viewportFocusNode.requestFocus();
             return;
           }
+          _applyVcbTextToMovingEntity(clean, vm);
           _commitEntityMove(vm);
           _vcbController.clear();
           _viewportFocusNode.requestFocus();
@@ -2916,12 +3501,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     }
   }
 
-  void _applyRotationToDraggedWelds({
-    required CadPoint3D centerPoint,
-    required GizmoAxis axis,
-    required double angleDeg,
-    required AssemblyStudioViewModel vm,
-  }) {
+  void _applyRotationToDraggedWelds({required CadPoint3D centerPoint, required GizmoAxis axis, required double angleDeg, required AssemblyStudioViewModel vm}) {
     if (_draggedWeldsStartPos.isEmpty) return;
     for (int i = 0; i < vm.doc.welds.length; i++) {
       final w = vm.doc.welds[i];
@@ -2930,13 +3510,13 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         final startSec = _draggedWeldsStartSecPos[w.id];
         final startPaths = _draggedWeldsStartPathPoints[w.id];
         final newPos = AssemblyRotateMathHelper.rotatePoint(point: startPos, centerPoint: centerPoint, axis: axis, angleDeg: angleDeg);
-        final newSec = startSec != null ? AssemblyRotateMathHelper.rotatePoint(point: startSec, centerPoint: centerPoint, axis: axis, angleDeg: angleDeg) : null;
-        final newPaths = startPaths?.map((pt) => AssemblyRotateMathHelper.rotatePoint(point: pt, centerPoint: centerPoint, axis: axis, angleDeg: angleDeg)).toList();
-        vm.doc.welds[i] = w.copyWith(
-          weldPoint: newPos,
-          secondWeldPoint: newSec,
-          pathPoints: newPaths,
-        );
+        final newSec = startSec != null
+            ? AssemblyRotateMathHelper.rotatePoint(point: startSec, centerPoint: centerPoint, axis: axis, angleDeg: angleDeg)
+            : null;
+        final newPaths = startPaths
+            ?.map((pt) => AssemblyRotateMathHelper.rotatePoint(point: pt, centerPoint: centerPoint, axis: axis, angleDeg: angleDeg))
+            .toList();
+        vm.doc.welds[i] = w.copyWith(weldPoint: newPos, secondWeldPoint: newSec, pathPoints: newPaths);
       }
     }
   }
@@ -2949,11 +3529,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       if (startPos != null) {
         final startSec = _draggedWeldsStartSecPos[w.id];
         final startPaths = _draggedWeldsStartPathPoints[w.id];
-        vm.doc.welds[i] = w.copyWith(
-          weldPoint: startPos,
-          secondWeldPoint: startSec,
-          pathPoints: startPaths,
-        );
+        vm.doc.welds[i] = w.copyWith(weldPoint: startPos, secondWeldPoint: startSec, pathPoints: startPaths);
       }
     }
     _clearDraggedWelds();
@@ -3119,6 +3695,25 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     }
   }
 
+  void _startWeldPhysicsLoop() {
+    _weldPhysicsTimer?.cancel();
+    _weldPhysicsTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_weldSparks.isEmpty && !_isDrawingWeld) {
+        timer.cancel();
+        _weldPhysicsTimer = null;
+        return;
+      }
+      _updateWeldSparks(0.016);
+      setState(() {
+        _weldFlickerPhase = (_weldFlickerPhase + 0.25) % (math.pi * 2);
+      });
+    });
+  }
+
   void _updateWeldSparks(double dt) {
     if (_weldSparks.isEmpty) return;
     for (int i = _weldSparks.length - 1; i >= 0; i--) {
@@ -3127,8 +3722,11 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       if (s.life <= 0) {
         _weldSparks.removeAt(i);
       } else {
-        s.position += s.velocity * dt;
-        s.velocity += const Offset(0, 180.0) * dt; // gravity
+        // Kinematic equation pos = pos + v*dt + 0.5*g*dt^2 per welding_simulation_docs.md
+        const gravity = Offset(0, 320.0);
+        s.position += s.velocity * dt + gravity * (0.5 * dt * dt);
+        s.velocity += gravity * dt;
+        s.size = math.max(0.6, s.size * (s.life / s.maxLife));
       }
     }
   }
@@ -3407,12 +4005,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
           part.rotationDeg = newRot;
         }
       }
-      _applyRotationToDraggedWelds(
-        centerPoint: _rotateCenterPoint!,
-        axis: activeAxis,
-        angleDeg: snappedAngle,
-        vm: vm,
-      );
+      _applyRotationToDraggedWelds(centerPoint: _rotateCenterPoint!, axis: activeAxis, angleDeg: snappedAngle, vm: vm);
       vm.setVcbState(
         label: 'Angle',
         value: '${snappedAngle.toStringAsFixed(1)}°',
@@ -3637,7 +4230,10 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       return;
     }
 
-    // Proportionately thick weld bead (12mm) glued between both entities (Req 2 & 3)
+    _weldStopwatch.stop();
+    vm.evaluateWeldQuality(pathPoints: vicinity.smoothedPathPoints, timestamps: _weldTimestamps);
+
+    // Solid 3D fillet weld bead matching auto demo weld geometry and fullness (SS1 Req 1)
     vm.weldParts(
       vicinity.partA.id,
       vicinity.partB.id,
@@ -3647,8 +4243,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       legDir2: vicinity.legDir2,
       weldLengthMm: vicinity.seamLengthMm,
       bothSides: false,
-      pathPoints: vicinity.smoothedPathPoints,
-      weldSizeMm: 12.0,
+      pathPoints: null,
+      weldSizeMm: 6.0,
     );
 
     // Guarantee immediate 3D CAD mesh & GPU node invalidation and update (Req 1)
@@ -3664,6 +4260,48 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         backgroundColor: const Color(0xFF0F766E),
       ),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // MAGNETIC SNAP POINT HOVER & ATTRACTION LOGIC (Requirement 4)
+  // ---------------------------------------------------------------------------
+  void _handleMagneticSnapHover(Offset localPos, Size size, FoldedMeshResult mesh, AssemblyStudioViewModel vm) {
+    final candidateSnapPoints = <AssemblySnapPoint>[];
+    for (final part in vm.doc.parts) {
+      if (!part.isVisible) continue;
+      candidateSnapPoints.addAll(AssemblyDockingEngine.getAllSnapPointsForPart(part, cachedMesh: mesh));
+    }
+    // Weld string snap points: start edge, center, end edge (Item 2)
+    for (final weld in vm.doc.welds) {
+      candidateSnapPoints.addAll(AssemblyDockingEngine.getAllSnapPointsForWeld(weld));
+    }
+
+    final targetSnap = AssemblyDockingEngine.findNearestSnapPoint(
+      screenCursor: localPos,
+      candidates: candidateSnapPoints,
+      projectPoint: (pt) => _projectPoint(pt, size, mesh),
+      maxPixelDistance: vm.magneticSnapDistancePx,
+    );
+
+    final prevSnap = _hoveredSnapPointModel;
+    if (targetSnap != null) {
+      _hoveredSnapPointModel = targetSnap;
+      _hoveredSnapPoint = targetSnap.worldPosition;
+      final scr = _projectPoint(targetSnap.worldPosition, size, mesh);
+      if (scr != Offset.zero) {
+        _cursorScreenPosNotifier.value = scr;
+      }
+      if (prevSnap?.id != targetSnap.id) {
+        setState(() {});
+      }
+    } else {
+      if (_hoveredSnapPointModel != null) {
+        _hoveredSnapPointModel = null;
+        _hoveredSnapPoint = null;
+        setState(() {});
+      }
+      _cursorScreenPosNotifier.value = localPos;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -3730,6 +4368,7 @@ typedef _SelectedPartBoundingBoxPainter = AssemblySelectedPartBoundingBoxPainter
 typedef _SketchUpMoveBadgeOverlayPainter = AssemblyMoveBadgeOverlayPainter;
 typedef _SketchUpOrbitCursorPainter = AssemblyOrbitCursorPainter;
 typedef _SketchUpPanCursorPainter = AssemblyPanCursorPainter;
+typedef _CadSelectionPointerOverlayPainter = AssemblyCadSelectionCursorPainter;
 typedef _WeldSparkParticle = AssemblyWeldSparkParticle;
 typedef _WeldSparksPainter = AssemblyWeldSparksPainter;
 typedef _WeldBeadsBrushPainter = AssemblyWeldBeadsBrushPainter;

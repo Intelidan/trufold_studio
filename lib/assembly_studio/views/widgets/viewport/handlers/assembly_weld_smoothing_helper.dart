@@ -229,8 +229,20 @@ class AssemblyWeldSmoothingHelper {
       return null;
     }
 
-    // 5. Smooth the 3D path points
-    final smoothedPts = smooth3DPoints(strokePoints, iterations: 2);
+    // 5. Project stroke points onto mutual physical contact seam between Part A and Part B (SS1)
+    // Snaps any accidental mouse movements floating in air back to touch both surfaces
+    final seamProjectedPts = projectStrokeToMutualContactSeam(
+      strokePoints: strokePoints,
+      partA: partA,
+      partB: partB,
+      mesh: mesh,
+      contactToleranceMm: contactToleranceMm,
+    );
+
+    final smoothedPts = smooth3DPoints(
+      seamProjectedPts.isNotEmpty ? seamProjectedPts : strokePoints,
+      iterations: 2,
+    );
 
     // 6. Calculate Seam Axis and Root Point
     CadPoint3D weldPt;
@@ -265,6 +277,18 @@ class AssemblyWeldSmoothingHelper {
     // 7. Calculate gluing leg directions between Entity A and Entity B
     CadPoint3D leg1 = normalA ?? const CadPoint3D(0.0, 0.0, 1.0);
     CadPoint3D leg2 = normalB ?? const CadPoint3D(0.0, 1.0, 0.0);
+
+    // If normalB was not set by raycast or is nearly collinear with leg1, compute transverse outward direction
+    final dotLegs = leg1.x * leg2.x + leg1.y * leg2.y + leg1.z * leg2.z;
+    if (dotLegs.abs() > 0.85) {
+      final dy = partB.position.y - partA.position.y;
+      final dx = partB.position.x - partA.position.x;
+      if (leg1.z.abs() > 0.7) {
+        leg2 = dy.abs() >= dx.abs() ? CadPoint3D(0.0, dy >= 0 ? 1.0 : -1.0, 0.0) : CadPoint3D(dx >= 0 ? 1.0 : -1.0, 0.0, 0.0);
+      } else {
+        leg2 = const CadPoint3D(0.0, 0.0, 1.0);
+      }
+    }
 
     // Guarantee normals strictly point outward away from solid faces (never inverted underneath)
     if (leg1.z < -0.01 && (partA.position.z >= partB.position.z)) {
@@ -370,5 +394,137 @@ class AssemblyWeldSmoothingHelper {
 
     final q = CadPoint3D(a.x + abX * t, a.y + abY * t, a.z + abZ * t);
     return p.distanceTo(q);
+  }
+
+  /// Projects stroke points onto the mutual physical contact seam between Part A and Part B.
+  ///
+  /// Prevents weld beads from floating in mid-air when the user's mouse stroke accidentally
+  /// drifts away from the contact joint (SS1). Clamps endpoints to the boundary of the seam
+  /// so that the weld beads firmly touch both surfaces in the vicinity.
+  static List<CadPoint3D> projectStrokeToMutualContactSeam({
+    required List<CadPoint3D> strokePoints,
+    required AssemblyPart partA,
+    required AssemblyPart partB,
+    FoldedMeshResult? mesh,
+    double contactToleranceMm = 25.0,
+  }) {
+    if (strokePoints.isEmpty) return [];
+
+    final contactSegments = <(CadPoint3D, CadPoint3D)>[];
+
+    // 1. Gather all polygons belonging to Part A and Part B
+    final polysA = <CadFoldedPolygon3D>[];
+    final polysB = <CadFoldedPolygon3D>[];
+
+    if (mesh != null) {
+      for (final poly in mesh.allPolygons) {
+        if (poly.faceId.startsWith(partA.id)) {
+          polysA.add(poly);
+        } else if (poly.faceId.startsWith(partB.id)) {
+          polysB.add(poly);
+        }
+      }
+    }
+
+    if (polysA.isEmpty) polysA.addAll(partA.build3DMesh().allPolygons);
+    if (polysB.isEmpty) polysB.addAll(partB.build3DMesh().allPolygons);
+
+    // 2. Check edges of Part A touching Part B surfaces
+    for (final poly in polysA) {
+      final verts = poly.vertices;
+      for (int i = 0; i < verts.length; i++) {
+        final v1 = verts[i];
+        final v2 = verts[(i + 1) % verts.length];
+        if (v1.distanceTo(v2) < 2.0) continue;
+        final mid = CadPoint3D((v1.x + v2.x) / 2.0, (v1.y + v2.y) / 2.0, (v1.z + v2.z) / 2.0);
+        final d1 = _pointToPartDistance(v1, partB, mesh);
+        final d2 = _pointToPartDistance(v2, partB, mesh);
+        final dm = _pointToPartDistance(mid, partB, mesh);
+        if (d1 <= contactToleranceMm && d2 <= contactToleranceMm && dm <= contactToleranceMm) {
+          contactSegments.add((v1, v2));
+        }
+      }
+    }
+
+    // 3. Check edges of Part B touching Part A surfaces
+    for (final poly in polysB) {
+      final verts = poly.vertices;
+      for (int i = 0; i < verts.length; i++) {
+        final v1 = verts[i];
+        final v2 = verts[(i + 1) % verts.length];
+        if (v1.distanceTo(v2) < 2.0) continue;
+        final mid = CadPoint3D((v1.x + v2.x) / 2.0, (v1.y + v2.y) / 2.0, (v1.z + v2.z) / 2.0);
+        final d1 = _pointToPartDistance(v1, partA, mesh);
+        final d2 = _pointToPartDistance(v2, partA, mesh);
+        final dm = _pointToPartDistance(mid, partA, mesh);
+        if (d1 <= contactToleranceMm && d2 <= contactToleranceMm && dm <= contactToleranceMm) {
+          contactSegments.add((v1, v2));
+        }
+      }
+    }
+
+    // 4. Fallback: check oriented bounding box edges if polygon check had no hits
+    if (contactSegments.isEmpty) {
+      final bA = partA.getOrientedBoundingBoxCorners();
+      if (bA.length >= 8) {
+        final edgesA = [
+          (bA[0], bA[1]), (bA[1], bA[2]), (bA[2], bA[3]), (bA[3], bA[0]),
+          (bA[4], bA[5]), (bA[5], bA[6]), (bA[6], bA[7]), (bA[7], bA[4]),
+          (bA[0], bA[4]), (bA[1], bA[5]), (bA[2], bA[6]), (bA[3], bA[7]),
+        ];
+        for (final edge in edgesA) {
+          final v1 = edge.$1;
+          final v2 = edge.$2;
+          final d1 = _pointToPartDistance(v1, partB, mesh);
+          final d2 = _pointToPartDistance(v2, partB, mesh);
+          if (d1 <= contactToleranceMm * 1.5 && d2 <= contactToleranceMm * 1.5) {
+            contactSegments.add(edge);
+          }
+        }
+      }
+    }
+
+    if (contactSegments.isEmpty) {
+      return List<CadPoint3D>.from(strokePoints);
+    }
+
+    // 5. Project each stroke point to the nearest physical contact segment
+    final projected = <CadPoint3D>[];
+    for (final pt in strokePoints) {
+      CadPoint3D closestPt = pt;
+      double minD = double.infinity;
+
+      for (final seg in contactSegments) {
+        final a = seg.$1;
+        final b = seg.$2;
+        final abX = b.x - a.x;
+        final abY = b.y - a.y;
+        final abZ = b.z - a.z;
+        final lenSq = abX * abX + abY * abY + abZ * abZ;
+        if (lenSq < 1e-4) continue;
+
+        final apX = pt.x - a.x;
+        final apY = pt.y - a.y;
+        final apZ = pt.z - a.z;
+        final t = ((apX * abX + apY * abY + apZ * abZ) / lenSq).clamp(0.0, 1.0);
+        final q = CadPoint3D(a.x + abX * t, a.y + abY * t, a.z + abZ * t);
+        final d = pt.distanceTo(q);
+        if (d < minD) {
+          minD = d;
+          closestPt = q;
+        }
+      }
+
+      // Snap directly to the mutual contact seam (clamps air strokes to the joint)
+      if (projected.isEmpty || projected.last.distanceTo(closestPt) >= 1.5) {
+        projected.add(closestPt);
+      }
+    }
+
+    if (projected.isEmpty) {
+      return List<CadPoint3D>.from(strokePoints);
+    }
+
+    return projected;
   }
 }

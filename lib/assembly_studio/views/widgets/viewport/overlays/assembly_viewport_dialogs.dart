@@ -2,6 +2,7 @@
 // Modularized for TruFold MVVM Architecture
 
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -37,11 +38,7 @@ class AssemblyViewportDialogs {
                       // Header
                       Row(
                         children: [
-                          Icon(
-                            report.isCompliant ? Icons.verified_user_rounded : Icons.shield_rounded,
-                            color: report.badgeColor,
-                            size: 26,
-                          ),
+                          Icon(report.isCompliant ? Icons.verified_user_rounded : Icons.shield_rounded, color: report.badgeColor, size: 26),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -105,10 +102,7 @@ class AssemblyViewportDialogs {
                                       ),
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: item.statusColor.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
+                                        decoration: BoxDecoration(color: item.statusColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
                                         child: Text(
                                           item.statusLabel,
                                           style: TextStyle(color: item.statusColor, fontWeight: FontWeight.bold, fontSize: 9.5),
@@ -449,11 +443,7 @@ class AssemblyViewportDialogs {
   // ---------------------------------------------------------------------------
   // MAGNETIC COUPLING DIALOG
   // ---------------------------------------------------------------------------
-  static void showMagneticCouplingDialog(
-    BuildContext context,
-    AssemblyStudioViewModel vm, {
-    VoidCallback? onRebuildGpu,
-  }) {
+  static void showMagneticCouplingDialog(BuildContext context, AssemblyStudioViewModel vm, {VoidCallback? onRebuildGpu}) {
     final spotsList = <(AssemblyPart, AssemblyMagneticSpot)>[];
     for (final part in vm.doc.parts) {
       if (!part.isVisible) continue;
@@ -463,12 +453,9 @@ class AssemblyViewportDialogs {
     }
 
     if (spotsList.length < 2) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('At least 2 magnetic spots must be placed on different entities first.'),
-          duration: Duration(seconds: 3),
-        ),
-      );
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(const SnackBar(content: Text('At least 2 magnetic spots must be placed on different entities first.'), duration: Duration(seconds: 3)));
       return;
     }
 
@@ -476,10 +463,7 @@ class AssemblyViewportDialogs {
     var validSpotsFor2 = spotsList.where((item) => item.$1.id != selectedItem1.$1.id).toList();
     if (validSpotsFor2.isEmpty) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('Both spots currently belong to the same entity. Place a spot on a second entity first.'),
-          duration: Duration(seconds: 3),
-        ),
+        const SnackBar(content: Text('Both spots currently belong to the same entity. Place a spot on a second entity first.'), duration: Duration(seconds: 3)),
       );
       return;
     }
@@ -513,10 +497,7 @@ class AssemblyViewportDialogs {
                         children: [
                           Container(
                             padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
+                            decoration: BoxDecoration(color: const Color(0xFF6366F1).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
                             child: const Icon(Icons.hub_rounded, color: Color(0xFF818CF8), size: 22),
                           ),
                           const SizedBox(width: 12),
@@ -528,10 +509,7 @@ class AssemblyViewportDialogs {
                                   'Magnetic Snap & Coupling',
                                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
                                 ),
-                                Text(
-                                  'Attract & link entities via magnetic snap points',
-                                  style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                                ),
+                                Text('Attract & link entities via magnetic snap points', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
                               ],
                             ),
                           ),
@@ -914,32 +892,33 @@ class AssemblyViewportDialogs {
             Positioned(
               left: menuX,
               top: menuY,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E24),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFF383844), width: 1),
-                  boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 10, offset: Offset(0, 4))],
-                ),
-                child: DefaultTextStyle(
-                  style: const TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
-                  child: IntrinsicWidth(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final item in items)
-                          if (item is PopupMenuItem<String>)
-                            InkWell(
-                              onTap: () => Navigator.of(dialogContext).pop(item.value),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                child: item.child,
-                              ),
-                            )
-                          else if (item is PopupMenuDivider)
-                            const Divider(height: 1, color: Color(0xFF383844)),
-                      ],
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1E24),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFF383844), width: 1),
+                    boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 10, offset: Offset(0, 4))],
+                  ),
+                  child: DefaultTextStyle(
+                    style: const TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
+                    child: IntrinsicWidth(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final item in items)
+                            if (item is PopupMenuItem<String>)
+                              InkWell(
+                                borderRadius: BorderRadius.circular(4),
+                                onTap: () => Navigator.of(dialogContext).pop(item.value),
+                                child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8), child: item.child),
+                              )
+                            else if (item is PopupMenuDivider)
+                              const Divider(height: 1, color: Color(0xFF383844)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -957,11 +936,7 @@ class AssemblyViewportDialogs {
       vm.ungroupSelectedParts();
     } else if (choice == 'weld') {
       vm.setToolMode(SketchUpToolMode.weld);
-      vm.setVcbState(
-        label: 'Weld Tool',
-        value: 'Ready',
-        hint: 'Click and drag torch to paint weld beads along entity seam',
-      );
+      vm.setVcbState(label: 'Weld Tool', value: 'Ready', hint: 'Click and drag torch to paint weld beads along entity seam');
     } else if (choice == 'duplicate') {
       vm.duplicateSelectedPart();
     } else if (choice == 'delete') {

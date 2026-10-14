@@ -80,17 +80,62 @@ class AssemblySketchHud extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            _buildSketchToolChip(vm, 'select_entity', 'Select / Move (V)', Icons.near_me_rounded),
+            _buildSketchToolChip(vm, 'select_entity', 'Select (V)', Icons.near_me_rounded),
+            const SizedBox(width: 6),
+            _buildSketchToolChip(vm, 'rectangle', 'Rectangle', Icons.crop_square_rounded),
+            const SizedBox(width: 6),
+            _buildSketchToolChip(vm, 'circle', 'Circle', Icons.circle_outlined),
+            const SizedBox(width: 6),
+            _buildSketchToolChip(vm, 'line', 'Line', Icons.show_chart_rounded),
+            const SizedBox(width: 6),
+            _buildSketchToolChip(vm, 'polyline', 'Polyline', Icons.polyline_rounded),
             const SizedBox(width: 6),
             _buildSketchToolChip(vm, 'bend_line', 'Bend Line', Icons.linear_scale_rounded),
             const SizedBox(width: 6),
-            _buildSketchToolChip(vm, 'rung_slot', 'Punch Slot (Entity)', Icons.crop_portrait_rounded),
+            _buildSketchToolChip(vm, 'rung_slot', 'Punch Slot', Icons.crop_portrait_rounded),
+            const SizedBox(width: 8),
+            // Normal View Snap Button (Key: S)
+            Tooltip(
+              message: 'Focus Normal View (Shortcut: S)',
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0284C7),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                icon: const Icon(Icons.center_focus_strong_rounded, size: 14),
+                label: const Text('Normal View (S)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                onPressed: () => vm.alignCameraToActivePlaneNormal(),
+              ),
+            ),
             const SizedBox(width: 6),
-            _buildSketchToolChip(vm, 'circle_hole', 'Circle Hole', Icons.circle_outlined),
-            const SizedBox(width: 6),
-            _buildSketchToolChip(vm, 'obround_slot', 'Slot (Obround)', Icons.stadium_rounded),
-            const SizedBox(width: 6),
-            _buildSketchToolChip(vm, 'rect_cut', 'Cutout', Icons.crop_square_rounded),
+            // Export STL Button
+            Tooltip(
+              message: 'Export 3D Model to ASCII STL for 3D Printing',
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0F172A),
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                icon: const Icon(Icons.print_rounded, size: 14),
+                label: const Text('Export STL', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                onPressed: () async {
+                  final stl = await vm.generateIndustrialSTLFilePayload();
+                  if (stl != null && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: const Color(0xFF10B981),
+                        content: Text('STL Compiled Successfully! (${(stl.length / 1024).toStringAsFixed(1)} KB)'),
+                      ),
+                    );
+                  }
+                },
+              ),
+            ),
             if (vm.selectedSketchFeatureId != null && part != null) ...[
               Builder(
                 builder: (context) {

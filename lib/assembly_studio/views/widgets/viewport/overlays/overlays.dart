@@ -9,3 +9,7 @@ export 'assembly_sketch_hud.dart';
 export 'assembly_vcb_hud.dart';
 export 'assembly_viewport_dialogs.dart';
 export 'assembly_viewport_status_pill.dart';
+export 'assembly_weld_joint_style_toolbar.dart';
+export 'assembly_weld_quality_hud.dart';
+export 'assembly_canvas_controls_hud.dart';
+export 'assembly_sketch_parameter_panel.dart';

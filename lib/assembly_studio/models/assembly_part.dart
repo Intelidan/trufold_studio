@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../sheet_metal_studio/models/cad_primitives.dart';
 import '../../sheet_metal_studio/engine/kinematic_fold_engine.dart';
+import 'weld_quality_model.dart';
 
 /// Type of modular component used in the assembly studio.
 enum AssemblyPartType {
@@ -27,6 +28,14 @@ enum AssemblyPartType {
   baseFootPlate,
   splicePlate,
   swingGate,
+}
+
+/// Joint style configuration for welding simulation per welding_simulation_docs.md
+enum WeldJointStyle {
+  buttJoint, // Flat plate to flat plate connection
+  lapJoint, // Overlapping stepped plates
+  tJoint, // 90-degree perpendicular standing wall plate
+  cornerJoint, // Corner/edge joint
 }
 
 /// Type of 3D joint / mate between parts in an assembly set.
@@ -74,6 +83,11 @@ class AssemblySketchFeature {
   bool isUpsideDown; // When true, mated rung is rotated upside down (180°)
   double distanceAlongRailMm; // Linear distance along the rail web from origin
   String targetFace; // 'web', 'flange_top', 'flange_bottom', or specific faceId
+  bool isPassThrough; // When true, passes completely through part thickness
+  bool isSurfaceImpress; // When true, embosses/impresses on surface without void punching
+  double cutDepthMm; // Depth for blind cut
+  List<Offset>? customPolygonPoints; // Vertex offsets relative to localCenter for arbitrary loops
+  String? planeId; // Bound sketch plane ID
 
   AssemblySketchFeature({
     required this.id,
@@ -88,6 +102,11 @@ class AssemblySketchFeature {
     this.isUpsideDown = false,
     this.distanceAlongRailMm = 0.0,
     this.targetFace = 'web',
+    this.isPassThrough = true,
+    this.isSurfaceImpress = false,
+    this.cutDepthMm = 5.0,
+    this.customPolygonPoints,
+    this.planeId,
   });
 
   AssemblySketchFeature copyWith({
@@ -103,6 +122,11 @@ class AssemblySketchFeature {
     bool? isUpsideDown,
     double? distanceAlongRailMm,
     String? targetFace,
+    bool? isPassThrough,
+    bool? isSurfaceImpress,
+    double? cutDepthMm,
+    List<Offset>? customPolygonPoints,
+    String? planeId,
   }) {
     return AssemblySketchFeature(
       id: id ?? this.id,
@@ -117,6 +141,11 @@ class AssemblySketchFeature {
       isUpsideDown: isUpsideDown ?? this.isUpsideDown,
       distanceAlongRailMm: distanceAlongRailMm ?? this.distanceAlongRailMm,
       targetFace: targetFace ?? this.targetFace,
+      isPassThrough: isPassThrough ?? this.isPassThrough,
+      isSurfaceImpress: isSurfaceImpress ?? this.isSurfaceImpress,
+      cutDepthMm: cutDepthMm ?? this.cutDepthMm,
+      customPolygonPoints: customPolygonPoints ?? (this.customPolygonPoints != null ? List.from(this.customPolygonPoints!) : null),
+      planeId: planeId ?? this.planeId,
     );
   }
 
@@ -134,6 +163,12 @@ class AssemblySketchFeature {
     'isUpsideDown': isUpsideDown,
     'distanceAlongRailMm': distanceAlongRailMm,
     'targetFace': targetFace,
+    'isPassThrough': isPassThrough,
+    'isSurfaceImpress': isSurfaceImpress,
+    'cutDepthMm': cutDepthMm,
+    if (customPolygonPoints != null)
+      'customPolygonPoints': customPolygonPoints!.map((p) => [p.dx, p.dy]).toList(),
+    if (planeId != null) 'planeId': planeId,
   };
 
   factory AssemblySketchFeature.fromJson(Map<String, dynamic> json) => AssemblySketchFeature(
@@ -149,6 +184,13 @@ class AssemblySketchFeature {
     isUpsideDown: json['isUpsideDown'] as bool? ?? false,
     distanceAlongRailMm: (json['distanceAlongRailMm'] as num?)?.toDouble() ?? 0.0,
     targetFace: json['targetFace'] as String? ?? 'web',
+    isPassThrough: json['isPassThrough'] as bool? ?? true,
+    isSurfaceImpress: json['isSurfaceImpress'] as bool? ?? false,
+    cutDepthMm: (json['cutDepthMm'] as num?)?.toDouble() ?? 5.0,
+    customPolygonPoints: (json['customPolygonPoints'] as List<dynamic>?)
+        ?.map((p) => Offset((p[0] as num).toDouble(), (p[1] as num).toDouble()))
+        .toList(),
+    planeId: json['planeId'] as String?,
   );
 }
 
@@ -256,6 +298,8 @@ class AssemblyWeldJoint {
   final CadPoint3D? secondLegDir2;
   final List<CadPoint3D>? pathPoints;
   final String standard;
+  final WeldJointStyle jointStyle;
+  final WeldScoreResult? scoreResult;
 
   AssemblyWeldJoint({
     required this.id,
@@ -277,6 +321,8 @@ class AssemblyWeldJoint {
     this.secondLegDir2,
     this.pathPoints,
     this.standard = 'AWS D1.1 / ISO 2553',
+    this.jointStyle = WeldJointStyle.tJoint,
+    this.scoreResult,
   });
 
   /// Engineering weld callout symbol per AWS / ISO standard (SS4)
@@ -305,6 +351,8 @@ class AssemblyWeldJoint {
     CadPoint3D? secondLegDir2,
     List<CadPoint3D>? pathPoints,
     String? standard,
+    WeldJointStyle? jointStyle,
+    WeldScoreResult? scoreResult,
   }) {
     return AssemblyWeldJoint(
       id: id ?? this.id,
@@ -326,6 +374,8 @@ class AssemblyWeldJoint {
       secondLegDir2: secondLegDir2 ?? this.secondLegDir2,
       pathPoints: pathPoints ?? this.pathPoints,
       standard: standard ?? this.standard,
+      jointStyle: jointStyle ?? this.jointStyle,
+      scoreResult: scoreResult ?? this.scoreResult,
     );
   }
 
@@ -349,6 +399,8 @@ class AssemblyWeldJoint {
     if (secondLegDir2 != null) 'secondLegDir2': {'x': secondLegDir2!.x, 'y': secondLegDir2!.y, 'z': secondLegDir2!.z},
     if (pathPoints != null) 'pathPoints': pathPoints!.map((p) => {'x': p.x, 'y': p.y, 'z': p.z}).toList(),
     'standard': standard,
+    'jointStyle': jointStyle.name,
+    if (scoreResult != null) 'scoreResult': scoreResult!.toJson(),
   };
 
   factory AssemblyWeldJoint.fromJson(Map<String, dynamic> json) {
@@ -387,6 +439,8 @@ class AssemblyWeldJoint {
       secondLegDir2: sLd2 != null ? CadPoint3D((sLd2['x'] as num).toDouble(), (sLd2['y'] as num).toDouble(), (sLd2['z'] as num).toDouble()) : null,
       pathPoints: pPts,
       standard: json['standard'] as String? ?? 'AWS D1.1 / ISO 2553',
+      jointStyle: json['jointStyle'] != null ? WeldJointStyle.values.byName(json['jointStyle'] as String) : WeldJointStyle.tJoint,
+      scoreResult: json['scoreResult'] != null ? WeldScoreResult.fromJson(json['scoreResult'] as Map<String, dynamic>) : null,
     );
   }
 }
@@ -1934,8 +1988,14 @@ class AssemblyPart {
   List<List<CadPoint3D>> _buildWebHoles() {
     final webHoles = <List<CadPoint3D>>[];
     for (final sk in sketches) {
+      if (sk.isSurfaceImpress) continue; // Surface impress draws on surface without cutting
       if (sk.targetFace == 'web' || sk.targetFace.endsWith('_web') || sk.targetFace.isEmpty) {
-        if (sk.featureType == 'circle_hole') {
+        if (sk.customPolygonPoints != null && sk.customPolygonPoints!.length >= 3) {
+          final pts = sk.customPolygonPoints!
+              .map((p) => CadPoint3D(sk.localCenter.x + p.dx, 0.0, sk.localCenter.y + p.dy))
+              .toList();
+          webHoles.add(pts);
+        } else if (sk.featureType == 'circle_hole' || sk.featureType == 'circle') {
           webHoles.add(
             _makeOctagonHole(
               CadPoint3D(sk.localCenter.x, 0.0, sk.localCenter.y),
@@ -1946,7 +2006,7 @@ class AssemblyPart {
           );
         } else if (sk.featureType == 'obround_slot') {
           webHoles.add(_makeObroundSlotXZ(sk.localCenter.x, 0.0, sk.localCenter.y, sk.widthMm, sk.heightMm));
-        } else if (sk.featureType == 'rung_slot' || sk.isRungSlotEntity || sk.featureType == 'rect_cut' || sk.featureType == 'rect_slot') {
+        } else if (sk.featureType == 'rung_slot' || sk.isRungSlotEntity || sk.featureType == 'rect_cut' || sk.featureType == 'rect_slot' || sk.featureType == 'rectangle' || sk.featureType == 'square') {
           webHoles.add(_makeRectSlot(sk.localCenter.x, 0.0, sk.localCenter.y, sk.widthMm, sk.heightMm));
         }
       }
@@ -1957,15 +2017,21 @@ class AssemblyPart {
   List<List<CadPoint3D>> _buildFlangeHoles(String faceKey, double zCoord, double fDir) {
     final flgHoles = <List<CadPoint3D>>[];
     for (final sk in sketches) {
+      if (sk.isSurfaceImpress) continue;
       if (sk.targetFace == faceKey || sk.targetFace.endsWith(faceKey)) {
         final cy = sk.localCenter.y * fDir;
-        if (sk.featureType == 'circle_hole') {
+        if (sk.customPolygonPoints != null && sk.customPolygonPoints!.length >= 3) {
+          final pts = sk.customPolygonPoints!
+              .map((p) => CadPoint3D(sk.localCenter.x + p.dx, (cy + p.dy) * fDir, zCoord))
+              .toList();
+          flgHoles.add(pts);
+        } else if (sk.featureType == 'circle_hole' || sk.featureType == 'circle') {
           flgHoles.add(
             _makeOctagonHole(CadPoint3D(sk.localCenter.x, cy, zCoord), sk.widthMm / 2.0, const CadPoint3D(1.0, 0.0, 0.0), const CadPoint3D(0.0, 1.0, 0.0)),
           );
         } else if (sk.featureType == 'obround_slot') {
           flgHoles.add(_makeObroundSlot(sk.localCenter.x, cy, zCoord, sk.widthMm, sk.heightMm));
-        } else if (sk.featureType == 'rect_cut' || sk.featureType == 'rect_slot') {
+        } else if (sk.featureType == 'rect_cut' || sk.featureType == 'rect_slot' || sk.featureType == 'rectangle' || sk.featureType == 'square') {
           flgHoles.add(_makeRectSlotXY(sk.localCenter.x, cy, zCoord, sk.widthMm, sk.heightMm));
         }
       }

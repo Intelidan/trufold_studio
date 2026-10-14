@@ -237,7 +237,7 @@ class AssemblySketchupToolbar extends StatelessWidget {
 
           // 13. Orbit Camera Tool (O) (SS1)
           _buildToolButton(
-            tooltip: 'Orbit Camera (O) • Middle Mouse Drag',
+            tooltip: 'Orbit Camera (O) • Shift + Middle Drag / Right Drag',
             isActive: !isSketch && activeTool == SketchUpToolMode.orbit,
             iconPainter: const OrbitIconPainter(),
             onTap: () {
@@ -248,7 +248,7 @@ class AssemblySketchupToolbar extends StatelessWidget {
 
           // 14. Pan Camera Tool (H) (SS1)
           _buildToolButton(
-            tooltip: 'Pan Camera (H) • Shift + Middle Mouse Drag',
+            tooltip: 'Pan Camera (H) • Middle Mouse Drag',
             isActive: !isSketch && activeTool == SketchUpToolMode.pan,
             iconPainter: const PanIconPainter(),
             onTap: () {

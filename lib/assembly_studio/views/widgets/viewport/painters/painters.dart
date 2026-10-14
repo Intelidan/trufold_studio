@@ -9,3 +9,4 @@ export 'assembly_selection_box_painter.dart';
 export 'assembly_sketch_overlay_painter.dart';
 export 'assembly_weld_painters.dart';
 export 'assembly_weld_lamp_painter.dart';
+export 'assembly_3d_surface_sketch_painter.dart';

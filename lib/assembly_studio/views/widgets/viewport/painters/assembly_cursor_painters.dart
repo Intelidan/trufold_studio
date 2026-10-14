@@ -257,3 +257,95 @@ class AssemblyPanCursorPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant AssemblyPanCursorPainter old) => old.cursorScreenPos != cursorScreenPos;
 }
+
+/// Custom CAD Selection Pointer Vector Cursor Overlay
+///
+/// Provides a sleek, precision CAD selection arrow with a distinct CAD pickbox,
+/// high-contrast outline, and magnetic attraction snapping feedback.
+class AssemblyCadSelectionCursorPainter extends CustomPainter {
+  final Offset? cursorScreenPos;
+  final bool isSnapped;
+
+  AssemblyCadSelectionCursorPainter({
+    required this.cursorScreenPos,
+    this.isSnapped = false,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (cursorScreenPos == null) return;
+    final pos = cursorScreenPos!;
+
+    // 1. Sleek CAD Precision Pointer Arrow Path
+    final arrowPath = Path()
+      ..moveTo(pos.dx, pos.dy)
+      ..lineTo(pos.dx, pos.dy + 15.0)
+      ..lineTo(pos.dx + 4.2, pos.dy + 11.2)
+      ..lineTo(pos.dx + 8.2, pos.dy + 19.5)
+      ..lineTo(pos.dx + 11.5, pos.dy + 18.0)
+      ..lineTo(pos.dx + 7.5, pos.dy + 9.8)
+      ..lineTo(pos.dx + 12.5, pos.dy + 9.8)
+      ..close();
+
+    // 2. High-contrast white silhouette background for visibility over dark/light parts
+    final bgBorder = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 3.6
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(arrowPath, bgBorder);
+
+    // 3. Crisp white pointer fill
+    final arrowFill = Paint()
+      ..color = isSnapped ? const Color(0xFFF0FDF4) : Colors.white
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(arrowPath, arrowFill);
+
+    // 4. Sharp dark charcoal CAD edge border
+    final arrowBorder = Paint()
+      ..color = const Color(0xFF0F172A)
+      ..strokeWidth = 1.3
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(arrowPath, arrowBorder);
+
+    // 5. Subtle CAD Pickbox / Precision Crosshair at Apex
+    if (isSnapped) {
+      // Magnetic Snapping Halo & Reticle
+      final snapHalo = Paint()
+        ..color = const Color(0xFF10B981).withValues(alpha: 0.25)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(pos, 7.0, snapHalo);
+
+      final snapRing = Paint()
+        ..color = const Color(0xFF10B981)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2;
+      canvas.drawCircle(pos, 4.5, snapRing);
+
+      final snapReticle = Paint()
+        ..color = const Color(0xFF047857)
+        ..strokeWidth = 1.0;
+      canvas.drawLine(pos - const Offset(6, 0), pos + const Offset(6, 0), snapReticle);
+      canvas.drawLine(pos - const Offset(0, 6), pos + const Offset(0, 6), snapReticle);
+    } else {
+      // Precision 4x4 CAD Pickbox Square at cursor apex
+      final pickboxRect = Rect.fromCenter(center: pos, width: 4.5, height: 4.5);
+      final pickboxBg = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill;
+      canvas.drawRect(pickboxRect, pickboxBg);
+
+      final pickboxBorder = Paint()
+        ..color = const Color(0xFF0284C7) // Signature CAD cyan-blue accent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+      canvas.drawRect(pickboxRect, pickboxBorder);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant AssemblyCadSelectionCursorPainter old) {
+    return old.cursorScreenPos != cursorScreenPos || old.isSnapped != isSnapped;
+  }
+}

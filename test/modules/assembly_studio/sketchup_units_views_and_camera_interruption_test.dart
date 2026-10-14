@@ -138,17 +138,22 @@ void main() {
       // Verify toolbar exists
       expect(find.byType(AssemblySketchupViewsToolbar), findsOneWidget);
 
-      // Tap Top view button (second button)
-      final buttons = find.byType(InkWell);
-      expect(buttons, findsNWidgets(7));
+      // Verify 7 standard view house buttons exist
+      expect(find.byTooltip('Iso (Isometric View)'), findsOneWidget);
+      expect(find.byTooltip('Top View (Roof)'), findsOneWidget);
+      expect(find.byTooltip('Front View'), findsOneWidget);
+      expect(find.byTooltip('Right View'), findsOneWidget);
+      expect(find.byTooltip('Back View'), findsOneWidget);
+      expect(find.byTooltip('Left View'), findsOneWidget);
+      expect(find.byTooltip('Bottom View'), findsOneWidget);
 
-      // Tap Top (index 1)
-      await tester.tap(buttons.at(1));
+      // Tap Top (Roof)
+      await tester.tap(find.byTooltip('Top View (Roof)'));
       await tester.pumpAndSettle();
       expect(viewModel.elevationDeg, closeTo(89.9, 0.1));
 
-      // Tap Front (index 2)
-      await tester.tap(buttons.at(2));
+      // Tap Front
+      await tester.tap(find.byTooltip('Front View'));
       await tester.pumpAndSettle();
       expect(viewModel.elevationDeg, closeTo(0.0, 0.1));
       expect(viewModel.azimuthDeg, closeTo(0.0, 0.1));
@@ -289,7 +294,7 @@ void main() {
       expect(viewModel.doc.parts.length, equals(3));
     });
 
-    testWidgets('Middle mouse rotation and Shift + Middle mouse panning in Assembly3DViewport', (tester) async {
+    testWidgets('Middle mouse panning and Shift + Middle mouse rotation in Assembly3DViewport', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -307,26 +312,26 @@ void main() {
       final initAz = viewModel.azimuthDeg;
       expect(viewModel.pan, equals(Offset.zero));
 
-      // a. Middle mouse button drag -> Rotation (Orbit)
-      final orbitGesture = await tester.startGesture(center, kind: PointerDeviceKind.mouse, buttons: kMiddleMouseButton);
-      await orbitGesture.moveBy(const Offset(50, -30));
-      await tester.pump();
-      await orbitGesture.up();
-      await tester.pumpAndSettle();
-
-      expect(viewModel.azimuthDeg, isNot(equals(initAz)));
-
-      // b. Shift + Middle mouse button drag -> Panning
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      // a. Middle mouse button drag alone -> Panning (Requirement 2)
       final panGesture = await tester.startGesture(center, kind: PointerDeviceKind.mouse, buttons: kMiddleMouseButton);
       await panGesture.moveBy(const Offset(40, 20));
       await tester.pump();
       await panGesture.up();
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await tester.pumpAndSettle();
 
       expect(viewModel.pan.dx, equals(40.0));
       expect(viewModel.pan.dy, equals(20.0));
+
+      // b. Shift + Middle mouse button drag -> Rotation (Orbit)
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      final orbitGesture = await tester.startGesture(center, kind: PointerDeviceKind.mouse, buttons: kMiddleMouseButton);
+      await orbitGesture.moveBy(const Offset(50, -30));
+      await tester.pump();
+      await orbitGesture.up();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+
+      expect(viewModel.azimuthDeg, isNot(equals(initAz)));
     });
 
     testWidgets('Orbit & Pan camera tools exist in AssemblySketchupToolbar matching SS1', (tester) async {
@@ -343,8 +348,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tooltips for Orbit and Pan tools
-      final orbitBtn = find.byTooltip('Orbit Camera (O) • Middle Mouse Drag');
-      final panBtn = find.byTooltip('Pan Camera (H) • Shift + Middle Mouse Drag');
+      final orbitBtn = find.byTooltip('Orbit Camera (O) • Shift + Middle Drag / Right Drag');
+      final panBtn = find.byTooltip('Pan Camera (H) • Middle Mouse Drag');
 
       expect(orbitBtn, findsOneWidget);
       expect(panBtn, findsOneWidget);

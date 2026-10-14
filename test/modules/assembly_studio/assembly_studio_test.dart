@@ -2223,26 +2223,24 @@ void main() {
       final initAz = vm.azimuthDeg;
       final center = tester.getCenter(find.byType(Assembly3DViewport));
 
-      // 1. Middle mouse button drag alone: Rotates camera (Orbit)
-      final orbitGesture = await tester.startGesture(center, kind: PointerDeviceKind.mouse, buttons: kMiddleMouseButton);
-      await orbitGesture.moveBy(const Offset(60, 40));
-      await tester.pump();
-      await orbitGesture.up();
-      await tester.pumpAndSettle();
-      expect(vm.azimuthDeg, isNot(equals(initAz)));
-
-      // 2. Shift + Middle mouse drag: Pans camera
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      // 1. Middle mouse button drag alone: Pans camera (direct middle mouse pan without Shift)
       final panGesture = await tester.startGesture(center, kind: PointerDeviceKind.mouse, buttons: kMiddleMouseButton);
       await panGesture.moveBy(const Offset(60, 40));
       await tester.pump();
       await panGesture.up();
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await tester.pumpAndSettle();
-
-      // Pan should increase positively in the exact direction of the mouse drag
       expect(vm.pan.dx, equals(60.0));
       expect(vm.pan.dy, equals(40.0));
+
+      // 2. Shift + Middle mouse drag: Rotates camera (Orbit)
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      final orbitGesture = await tester.startGesture(center, kind: PointerDeviceKind.mouse, buttons: kMiddleMouseButton);
+      await orbitGesture.moveBy(const Offset(60, 40));
+      await tester.pump();
+      await orbitGesture.up();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+      expect(vm.azimuthDeg, isNot(equals(initAz)));
     });
 
     test('Bounding Box 12 Edge Centers, Snapping & Hole Outline Boundaries', () {

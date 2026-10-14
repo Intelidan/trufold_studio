@@ -343,4 +343,66 @@ class AssemblyDockingEngine {
     }
     return null;
   }
+
+  /// Extracts the standard snap points for a single continuous weld string (Item 2).
+  /// A weld string is treated as a single length object and has ONLY edge (start & finish) and center snapping points.
+  static List<AssemblySnapPoint> getAllSnapPointsForWeld(AssemblyWeldJoint weld) {
+    final points = <AssemblySnapPoint>[];
+    CadPoint3D startPt;
+    CadPoint3D endPt;
+
+    if (weld.pathPoints != null && weld.pathPoints!.length >= 2) {
+      startPt = weld.pathPoints!.first;
+      endPt = weld.pathPoints!.last;
+    } else {
+      CadPoint3D u = weld.weldAxis;
+      final uLen = math.sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+      if (uLen > 1e-4) {
+        u = CadPoint3D(u.x / uLen, u.y / uLen, u.z / uLen);
+      } else {
+        u = const CadPoint3D(1.0, 0.0, 0.0);
+      }
+      final len = math.max(12.0, weld.weldLengthMm);
+      startPt = CadPoint3D(weld.weldPoint.x - u.x * (len / 2.0), weld.weldPoint.y - u.y * (len / 2.0), weld.weldPoint.z - u.z * (len / 2.0));
+      endPt = CadPoint3D(weld.weldPoint.x + u.x * (len / 2.0), weld.weldPoint.y + u.y * (len / 2.0), weld.weldPoint.z + u.z * (len / 2.0));
+    }
+
+    final midPt = CadPoint3D(
+      (startPt.x + endPt.x) / 2.0,
+      (startPt.y + endPt.y) / 2.0,
+      (startPt.z + endPt.z) / 2.0,
+    );
+
+    // 1. Start edge snapping point
+    points.add(AssemblySnapPoint(
+      id: '${weld.id}_weld_start',
+      partId: weld.partAId,
+      worldPosition: startPt,
+      localPosition: startPt,
+      type: AssemblySnapPointType.boundingBoxCorner,
+      label: '● Weld Start (${weld.jointDescription})',
+    ));
+
+    // 2. Center snapping point
+    points.add(AssemblySnapPoint(
+      id: '${weld.id}_weld_center',
+      partId: weld.partAId,
+      worldPosition: midPt,
+      localPosition: midPt,
+      type: AssemblySnapPointType.boundingBoxEdgeCenter,
+      label: '✦ Weld Center (${weld.jointDescription})',
+    ));
+
+    // 3. End edge snapping point
+    points.add(AssemblySnapPoint(
+      id: '${weld.id}_weld_end',
+      partId: weld.partAId,
+      worldPosition: endPt,
+      localPosition: endPt,
+      type: AssemblySnapPointType.boundingBoxCorner,
+      label: '● Weld End (${weld.jointDescription})',
+    ));
+
+    return points;
+  }
 }
