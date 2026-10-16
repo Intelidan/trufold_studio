@@ -83,6 +83,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   bool _isMovingEntity = false;
   CadPoint3D? _moveBaseWorldPoint;
   CadPoint3D? _moveBaseStartWorldPoint;
+  CadPoint3D _moveInitialRayOffset = const CadPoint3D(0.0, 0.0, 0.0);
+  double _moveInitialAxisScalar = 0.0;
   final List<AssemblySnapPoint> _cachedMoveOtherSnapPoints = [];
 
   // Subtle in-viewport warning banner (Item 5.1 / SS5)
@@ -307,28 +309,24 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     final prefs = widget.viewModel.graphicsPreferences;
     final aoRatio = (prefs.ambientOcclusion / 100.0).clamp(0.0, 1.0);
 
-    // Authentic Onshape CAD look: ACES tone mapping, high contrast, clean saturation, ground-truth AO
+    // Balanced Onshape Studio exposure (0.98 instead of 1.15) so steel-blue never bleaches to white!
     _scene!.environmentSettings = EnvironmentSettings(
       toneMapping: ToneMappingMode.aces,
-      exposure: 1.15,
-      bloomEnabled: true,
-      bloomThreshold: 1.15,
-      bloomIntensity: 0.12,
-      bloomScatter: 0.6,
-      ambientOcclusionEnabled: true,
+      exposure: 0.98,
+      bloomEnabled: false, // Disable bloom so white background never bleeds over part silhouette edges!
+      ambientOcclusionEnabled: aoRatio > 0.02,
       ambientOcclusionMethod: AmbientOcclusionMethod.groundTruth,
       ambientOcclusionBentNormals: true,
       ambientOcclusionSpecularMode: SpecularAmbientOcclusionMode.bentCone,
-      ambientOcclusionIntensity: aoRatio > 0.05 ? aoRatio : 0.85,
-      ambientOcclusionHalfResolution: true,
+      ambientOcclusionIntensity: (aoRatio * 1.25).clamp(0.0, 1.0),
+      ambientOcclusionHalfResolution: false, // Full-res AO for crisp crevice shadows!
       screenSpaceReflectionsEnabled: true,
-      screenSpaceReflectionsIntensity: 0.7,
+      screenSpaceReflectionsIntensity: (prefs.shininess / 100.0) * 0.55,
       colorGradingEnabled: true,
-      contrast: 1.10,
-      saturation: 1.16,
-      brightness: 1.02,
-      vignetteEnabled: true,
-      vignetteIntensity: 0.12,
+      contrast: 1.14,
+      saturation: 1.18,
+      brightness: 0.98,
+      vignetteEnabled: false,
     );
 
     final azRad = prefs.lightAzimuthDeg * vm_math.degrees2Radians;
@@ -339,7 +337,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
 
     _scene!.directionalLight = DirectionalLight(
       direction: vm_math.Vector3(lx, ly, lz).normalized(),
-      intensity: (prefs.keyLightIntensity).clamp(0.5, 4.0),
+      intensity: (prefs.keyLightIntensity * 0.92).clamp(0.3, 2.2),
       castsShadow: false,
     );
 
@@ -471,8 +469,18 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
 
     // Camera-relative CAD 3-light key direction from top-left: creates natural contrast across top, flange, and end faces
     if (_scene != null) {
-      final lightDir = (right * (-0.55) + up * 0.65 + d * 0.45).normalized();
-      _scene!.directionalLight = DirectionalLight(direction: lightDir, intensity: 3.2, castsShadow: false);
+      final prefs = widget.viewModel.graphicsPreferences;
+      final azOff = (prefs.lightAzimuthDeg - 45.0) * vm_math.degrees2Radians;
+      final elOff = (prefs.lightElevationDeg - 55.0) * vm_math.degrees2Radians;
+      final lightDir = (right * (-0.52 + math.sin(azOff) * 0.35) +
+              up * (0.68 + math.sin(elOff) * 0.25) +
+              d * 0.52)
+          .normalized();
+      _scene!.directionalLight = DirectionalLight(
+        direction: lightDir,
+        intensity: (prefs.keyLightIntensity * 0.92).clamp(0.3, 2.2),
+        castsShadow: false,
+      );
     }
   }
 
@@ -1768,14 +1776,54 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   setState(() {});
                                 }
                                 return;
-                              } else if (tool == 'split') {
-                                if (OnshapeSketchModifyEngine.splitAtPoint(plane, localPoint)) {
-                                  vm.activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(plane);
-                                  vm.notifyDocChanged();
-                                  setState(() {});
-                                }
-                                return;
-                              } else {
+                                } else if (tool == 'split') {
+                                  if (OnshapeSketchModifyEngine.splitAtPoint(plane, localPoint)) {
+                                    vm.activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(plane);
+                                    vm.notifyDocChanged();
+                                    setState(() {});
+                                  }
+                                  return;
+                                } else if (tool == 'dimension') {
+                                  CADPrimitiveEntity? hitPrim;
+                                  for (final p in plane.primitives.reversed) {
+                                    if (p is CADCircleEntity && (localPoint - p.center).distance <= p.radius + 6.0) {
+                                      hitPrim = p;
+                                      break;
+                                    } else if (p is CADLineEntity && _distanceToSegment(localPoint, p.start, p.end) <= 6.0) {
+                                      hitPrim = p;
+                                      break;
+                                    } else {
+                                      for (final seg in p.toLineSegments()) {
+                                        if (_distanceToSegment(localPoint, seg.start, seg.end) <= 6.0) {
+                                          hitPrim = p;
+                                          break;
+                                        }
+                                      }
+                                      if (hitPrim != null) break;
+                                    }
+                                  }
+                                  if (hitPrim != null) {
+                                    vm.selectSketchPrimitive(hitPrim);
+                                    final double currentVal = hitPrim is CADCircleEntity
+                                        ? hitPrim.radius * 2.0
+                                        : hitPrim is CADLineEntity
+                                            ? (hitPrim.end - hitPrim.start).distance
+                                            : hitPrim is CADRectangleEntity
+                                                ? hitPrim.width
+                                                : 20.0;
+                                    vm.applyDrivingSketchDimension(
+                                      entityId: hitPrim.id,
+                                      valueMmOrDeg: currentVal,
+                                    );
+                                    vm.setVcbState(
+                                      label: '📏 Driving Dimension',
+                                      value: '${currentVal.toStringAsFixed(1)} mm',
+                                      hint: 'Type new dimension in mm + Enter',
+                                    );
+                                    setState(() {});
+                                  }
+                                  return;
+                                } else {
                                 // Selection mode: hit test primitive entities on active plane
                                 CADPrimitiveEntity? hitPrimitive;
                                 for (final p in plane.primitives.reversed) {
@@ -2405,7 +2453,25 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                       final bool useGpu = (vm.renderEngine == Cad3dEngineMode.flutterGpu) &&
                                           _isGpuAvailable && _scene != null && _isSceneReady;
                                       return useGpu
-                                          ? RepaintBoundary(child: SceneView(_scene!))
+                                          ? RepaintBoundary(
+                                              child: Stack(
+                                                fit: StackFit.expand,
+                                                children: [
+                                                  SceneView(_scene!),
+                                                  if (vm.graphicsPreferences.screenSpaceEdgeAntiAliasing &&
+                                                      vm.onshapeRenderMode != OnshapeRenderMode.shadedWithoutEdges)
+                                                    CustomPaint(
+                                                      size: Size.infinite,
+                                                      painter: AssemblyGpuEdgeAntiAliasPainter(
+                                                        mesh: mesh,
+                                                        projectPoint: (pt) => _projectPoint(pt, size, mesh),
+                                                        lineWidth: vm.graphicsPreferences.lineWidth,
+                                                        silhouetteBoost: vm.graphicsPreferences.silhouetteEdgeBoost,
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            )
                                           : RepaintBoundary(
                                               child: CustomPaint(
                                                 size: Size.infinite,
@@ -3413,7 +3479,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     }
 
     final screenDelta = currentPos - _gizmoDragStartScreen!;
-    final center3d = part.position;
+    final center3d = _gizmoDragStartPartPos ?? part.position;
     final centerScreen = _projectPoint(center3d, size, mesh);
     const double axisLen = 65.0;
 
@@ -4728,6 +4794,16 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _moveBaseWorldPoint = baseAnchor;
     _moveBaseStartWorldPoint = _moveBaseWorldPoint;
 
+    final curMesh = mesh ?? vm.assemblyMesh;
+    final curSize = _lastViewportSize ?? const Size(1280, 800);
+    final initPlaneHit = _intersectCameraViewPlane(screenPos, curSize, curMesh, baseAnchor);
+    _moveInitialRayOffset = CadPoint3D(
+      initPlaneHit.x - baseAnchor.x,
+      initPlaneHit.y - baseAnchor.y,
+      initPlaneHit.z - baseAnchor.z,
+    );
+    _moveInitialAxisScalar = _computeAxisRayParameter(screenPos, curSize, curMesh, baseAnchor, vm.lockedAxis);
+
     // Pre-cache other visible parts snap points for zero-overhead 120 FPS movement
     _cachedMoveOtherSnapPoints.clear();
     for (final p in vm.doc.parts) {
@@ -4744,6 +4820,51 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       hint: 'Move mouse freely to translate • Click to place anywhere • Esc to cancel',
     );
     setState(() {});
+  }
+
+  double _computeAxisRayParameter(Offset screenPos, Size size, FoldedMeshResult mesh, CadPoint3D baseAnchor, GizmoAxis axis) {
+    if (axis == GizmoAxis.none) return 0.0;
+    final CadPoint3D axisWorldDir;
+    switch (axis) {
+      case GizmoAxis.x:
+        axisWorldDir = const CadPoint3D(1.0, 0.0, 0.0);
+        break;
+      case GizmoAxis.y:
+        axisWorldDir = const CadPoint3D(0.0, 1.0, 0.0);
+        break;
+      case GizmoAxis.z:
+        axisWorldDir = const CadPoint3D(0.0, 0.0, 1.0);
+        break;
+      case GizmoAxis.none:
+        return 0.0;
+    }
+    final (vm_math.Vector3 rayOrigin, vm_math.Vector3 rayDir) = _getRayFromScreen(screenPos, size, mesh);
+    final rLen = math.sqrt(rayDir.x * rayDir.x + rayDir.y * rayDir.y + rayDir.z * rayDir.z);
+    final CadPoint3D v = rLen > 1e-6 ? CadPoint3D(rayDir.x / rLen, rayDir.y / rLen, rayDir.z / rLen) : CadPoint3D(rayDir.x, rayDir.y, rayDir.z);
+
+    final w0 = CadPoint3D(baseAnchor.x - rayOrigin.x, baseAnchor.y - rayOrigin.y, baseAnchor.z - rayOrigin.z);
+    final b = axisWorldDir.x * v.x + axisWorldDir.y * v.y + axisWorldDir.z * v.z;
+    final d = axisWorldDir.x * w0.x + axisWorldDir.y * w0.y + axisWorldDir.z * w0.z;
+    final e = v.x * w0.x + v.y * w0.y + v.z * w0.z;
+    final denom = 1.0 - b * b;
+
+    if (denom > 1e-4) {
+      return (b * e - d) / denom;
+    } else {
+      final axisScr = _projectPoint(
+        CadPoint3D(baseAnchor.x + axisWorldDir.x * 100, baseAnchor.y + axisWorldDir.y * 100, baseAnchor.z + axisWorldDir.z * 100),
+        size,
+        mesh,
+      );
+      final centerScr = _projectPoint(baseAnchor, size, mesh);
+      final scrVec = axisScr - centerScr;
+      final scrLen = scrVec.distance;
+      final scrDelta = _partDragStartScreen != null ? (screenPos - _partDragStartScreen!) : Offset.zero;
+      if (scrLen > 1.0) {
+        return ((scrDelta.dx * scrVec.dx + scrDelta.dy * scrVec.dy) / scrLen) * (100.0 / scrLen);
+      }
+    }
+    return 0.0;
   }
 
   void _handleMovePreGrabHover(Offset localPos, Size size, FoldedMeshResult mesh, AssemblyStudioViewModel vm) {
@@ -4850,34 +4971,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         );
         s = diff.x * axisWorldDir.x + diff.y * axisWorldDir.y + diff.z * axisWorldDir.z;
       } else {
-        // 3D Ray-to-Line closest point calculation
-        final (vm_math.Vector3 rayOrigin, vm_math.Vector3 rayDir) = _getRayFromScreen(localPos, size, mesh);
-        final rLen = math.sqrt(rayDir.x * rayDir.x + rayDir.y * rayDir.y + rayDir.z * rayDir.z);
-        final CadPoint3D v = rLen > 1e-6 ? CadPoint3D(rayDir.x / rLen, rayDir.y / rLen, rayDir.z / rLen) : CadPoint3D(rayDir.x, rayDir.y, rayDir.z);
-
-        final w0 = CadPoint3D(baseAnchor.x - rayOrigin.x, baseAnchor.y - rayOrigin.y, baseAnchor.z - rayOrigin.z);
-        final b = axisWorldDir.x * v.x + axisWorldDir.y * v.y + axisWorldDir.z * v.z;
-        final d = axisWorldDir.x * w0.x + axisWorldDir.y * w0.y + axisWorldDir.z * w0.z;
-        final e = v.x * w0.x + v.y * w0.y + v.z * w0.z;
-        final denom = 1.0 - b * b;
-
-        if (denom > 1e-4) {
-          s = (b * e - d) / denom;
-        } else {
-          // Ray nearly parallel to axis line: fallback to screen displacement projected onto axis screen vector
-          final axisScr = _projectPoint(
-            CadPoint3D(baseAnchor.x + axisWorldDir.x * 100, baseAnchor.y + axisWorldDir.y * 100, baseAnchor.z + axisWorldDir.z * 100),
-            size,
-            mesh,
-          );
-          final centerScr = _projectPoint(baseAnchor, size, mesh);
-          final scrVec = axisScr - centerScr;
-          final scrLen = scrVec.distance;
-          final scrDelta = _partDragStartScreen != null ? (localPos - _partDragStartScreen!) : Offset.zero;
-          if (scrLen > 1.0) {
-            s = ((scrDelta.dx * scrVec.dx + scrDelta.dy * scrVec.dy) / scrLen) * (100.0 / scrLen);
-          }
-        }
+        s = _computeAxisRayParameter(localPos, size, mesh, baseAnchor, vm.lockedAxis) - _moveInitialAxisScalar;
       }
 
       // Silky-smooth, continuous 120 FPS movement along locked axis (no stepped jumping)
@@ -4892,9 +4986,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         );
       } else {
         final hitPlanePos = _intersectCameraViewPlane(localPos, size, mesh, baseAnchor);
-        final dx = hitPlanePos.x - baseAnchor.x;
-        final dy = hitPlanePos.y - baseAnchor.y;
-        final dz = hitPlanePos.z - baseAnchor.z;
+        final dx = (hitPlanePos.x - baseAnchor.x) - _moveInitialRayOffset.x;
+        final dy = (hitPlanePos.y - baseAnchor.y) - _moveInitialRayOffset.y;
+        final dz = (hitPlanePos.z - baseAnchor.z) - _moveInitialRayOffset.z;
 
         // Silky-smooth, continuous 120 FPS free camera-plane movement (no stepped jumping)
         worldDelta = CadPoint3D(dx, dy, dz);
@@ -4913,8 +5007,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     // Keep base anchor point moving synchronously
     _moveBaseWorldPoint = CadPoint3D(baseAnchor.x + worldDelta.x, baseAnchor.y + worldDelta.y, baseAnchor.z + worldDelta.z);
 
-    // Synchronous lightweight repaint without blocking GPU reallocation
+    // Synchronous lightweight repaint with live GPU model rebuild
     vm.invalidateMeshCache();
+    if (_isGpuAvailable) {
+      _rebuildGpuCadModel(force: true);
+      _cameraRepaintNotifier.value++;
+    }
     setState(() {});
 
     final dist = math.sqrt(worldDelta.x * worldDelta.x + worldDelta.y * worldDelta.y + worldDelta.z * worldDelta.z);
@@ -5020,7 +5118,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
               screenRadius: screenRadius,
               snapToGrid: true,
             )
-          : (rawAngle * 10.0).round() / 10.0;
+          : rawAngle;
       _rotateCurrentAngleDeg = snappedAngle;
 
       if (_isRotateCopyMode && !_hasClonedForRotate && _draggedParts.isNotEmpty) {
@@ -5146,14 +5244,17 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         pixelTolerance: 20.0,
       );
 
-      if (hitPart != null) {
-        // Direct click on entity body: pivot at entity position for in-place rotation
-        centerPt = hitPart.position;
-      } else if (snappedPt != null) {
-        // User clicked a corner/snap point: pivot exactly around that point!
+      final surfaceHit = _findFrontmostRaycastHit(localPos, size, mesh);
+      if (snappedPt != null) {
+        // 1. User clicked a corner, midpoint, or hole center snap point: pivot exactly there!
         centerPt = snappedPt;
+      } else if (surfaceHit != null) {
+        // 2. User clicked directly on a 3D face: pivot at the exact clicked 3D surface point!
+        centerPt = surfaceHit.hitPoint;
+      } else if (hitPart != null) {
+        centerPt = hitPart.position;
       } else {
-        // 2. Work Plane Intersection in Empty Area
+        // 3. Work Plane Intersection in Empty Area
         centerPt = _rotateHoverWorldPos ?? _intersectPlane(localPos, size, mesh, activeAxis, targetPart?.position ?? const CadPoint3D(0, 0, 0));
       }
 

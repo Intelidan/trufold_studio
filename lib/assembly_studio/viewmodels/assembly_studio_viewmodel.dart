@@ -4475,7 +4475,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       flangeWidth: flangeW,
       isFlangeOutward: false,
       position: const CadPoint3D(0.0, 0.0, 0.0),
-      color: const Color(0xFF94B5CB),
+      color: const Color(0xFF6C9DC6), // Onshape Cerulean Steel-Blue
     );
 
     // Right Rail (Flange facing inward toward left rail)
@@ -4488,7 +4488,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       flangeWidth: flangeW,
       isFlangeOutward: true,
       position: CadPoint3D(0.0, ladderWidth, 0.0),
-      color: const Color(0xFF94B5CB),
+      color: const Color(0xFF6C9DC6), // Onshape Cerulean Steel-Blue
     );
 
     doc.parts.addAll([leftRail, rightRail]);
@@ -4518,7 +4518,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         mateStyle: 'passThrough',
         position: CadPoint3D(rx, -10.0, (railHeight / 2.0) - 10.0), // Pass through protrudes -10mm
         rotationDeg: const CadPoint3D(0.0, 0.0, 90.0), // Transverse along Y
-        color: const Color(0xFF82A4BA),
+        color: const Color(0xFF5B8DB8), // Onshape Medium Cerulean
         jointType: AssemblyJointType.slotMate,
       );
       slotEntityLeft.matedRungPartId = rungId;

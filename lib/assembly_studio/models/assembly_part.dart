@@ -489,7 +489,7 @@ class AssemblyPart {
     this.flangeWidth = 20.0, // User requested 20mm editable flange
     this.thickness = 2.0,
     this.isFlangeOutward = false,
-    this.color = const Color(0xFF94B5CB),
+    this.color = const Color(0xFF6C9DC6), // Onshape Cerulean Steel-Blue
     this.isVisible = true,
     List<RailSegmentDefinition>? segments,
     List<AssemblySketchFeature>? sketches,
@@ -1216,6 +1216,8 @@ class AssemblyPart {
 
     // Web face at Y = 0: from X = 0 to L, Z = 0 to H
     final webHoles = <List<CadPoint3D>>[];
+    final webDepths = <double>[];
+    final webBlind = <bool>[];
 
     // Splice holes on web at both ends (2x2 grid, Ø10mm)
     if (L >= 100.0) {
@@ -1224,14 +1226,16 @@ class AssemblyPart {
       for (final x in [35.0, 75.0, L - 75.0, L - 35.0]) {
         for (final z in [z1, z2]) {
           webHoles.add(_makeOctagonHole(CadPoint3D(x, 0.0, z), 5.0, const CadPoint3D(1.0, 0.0, 0.0), const CadPoint3D(0.0, 0.0, 1.0)));
+          webDepths.add(T);
+          webBlind.add(false);
         }
       }
     }
 
     // Sketches & holes on web
-    webHoles.addAll(_buildWebHoles());
+    webHoles.addAll(_buildWebHoles(depthsOut: webDepths, isBlindOut: webBlind));
     _addBendLinePolygons(polys, H);
-    _addHoleBoreWalls(thickPolys, webHoles, const CadPoint3D(0.0, -1.0, 0.0), T);
+    _addHoleBoreWalls(thickPolys, webHoles, const CadPoint3D(0.0, -1.0, 0.0), T, holeDepths: webDepths, isBlindList: webBlind);
 
     polys.add(
       CadFoldedPolygon3D(
@@ -1244,8 +1248,10 @@ class AssemblyPart {
     );
 
     // Top flange: Z = H, Y extends by F * fDir
-    final topHoles = _buildFlangeHoles('flange_top', H, fDir);
-    _addHoleBoreWalls(thickPolys, topHoles, const CadPoint3D(0.0, 0.0, 1.0), T);
+    final topDepths = <double>[];
+    final topBlind = <bool>[];
+    final topHoles = _buildFlangeHoles('flange_top', H, fDir, depthsOut: topDepths, isBlindOut: topBlind);
+    _addHoleBoreWalls(thickPolys, topHoles, const CadPoint3D(0.0, 0.0, 1.0), T, holeDepths: topDepths, isBlindList: topBlind);
     polys.add(
       CadFoldedPolygon3D(
         faceId: '${id}_flange_top',
@@ -1281,8 +1287,10 @@ class AssemblyPart {
     );
 
     // Bottom flange: Z = 0, Y extends by F * fDir
-    final bottomHoles = _buildFlangeHoles('flange_bottom', 0.0, fDir);
-    _addHoleBoreWalls(thickPolys, bottomHoles, const CadPoint3D(0.0, 0.0, -1.0), T);
+    final bottomDepths = <double>[];
+    final bottomBlind = <bool>[];
+    final bottomHoles = _buildFlangeHoles('flange_bottom', 0.0, fDir, depthsOut: bottomDepths, isBlindOut: bottomBlind);
+    _addHoleBoreWalls(thickPolys, bottomHoles, const CadPoint3D(0.0, 0.0, -1.0), T, holeDepths: bottomDepths, isBlindList: bottomBlind);
     polys.add(
       CadFoldedPolygon3D(
         faceId: '${id}_flange_bottom',
@@ -2277,7 +2285,7 @@ class AssemblyPart {
     );
   }
 
-  List<List<CadPoint3D>> _buildWebHoles({bool throughOnly = false}) {
+  List<List<CadPoint3D>> _buildWebHoles({bool throughOnly = false, List<double>? depthsOut, List<bool>? isBlindOut}) {
     final webHoles = <List<CadPoint3D>>[];
     for (final sk in sketches) {
       if (sk.isSurfaceImpress) continue; // Surface impress draws on surface without cutting
@@ -2289,11 +2297,16 @@ class AssemblyPart {
           sk.targetFace.endsWith('_bar_top') ||
           sk.targetFace.isEmpty;
       if (isWebLike) {
+        final boreDepth = sk.isPassThrough ? thickness : math.min(sk.cutDepthMm, thickness);
+        final isBlind = !sk.isPassThrough && sk.cutDepthMm < thickness;
+
         if (sk.customPolygonPoints != null && sk.customPolygonPoints!.length >= 3) {
           final pts = sk.customPolygonPoints!
               .map((p) => CadPoint3D(sk.localCenter.x + p.dx, 0.0, sk.localCenter.y + p.dy))
               .toList();
           webHoles.add(pts);
+          depthsOut?.add(boreDepth);
+          isBlindOut?.add(isBlind);
         } else if (sk.featureType == 'circle_hole' || sk.featureType == 'circle') {
           webHoles.add(
             _makeOctagonHole(
@@ -2303,50 +2316,77 @@ class AssemblyPart {
               const CadPoint3D(0.0, 0.0, 1.0),
             ),
           );
+          depthsOut?.add(boreDepth);
+          isBlindOut?.add(isBlind);
         } else if (sk.featureType == 'obround_slot') {
           webHoles.add(_makeObroundSlotXZ(sk.localCenter.x, 0.0, sk.localCenter.y, sk.widthMm, sk.heightMm));
+          depthsOut?.add(boreDepth);
+          isBlindOut?.add(isBlind);
         } else if (sk.featureType == 'rung_slot' || sk.isRungSlotEntity || sk.featureType == 'rect_cut' || sk.featureType == 'rect_slot' || sk.featureType == 'rectangle' || sk.featureType == 'square') {
           webHoles.add(_makeRectSlot(sk.localCenter.x, 0.0, sk.localCenter.y, sk.widthMm, sk.heightMm));
+          depthsOut?.add(boreDepth);
+          isBlindOut?.add(isBlind);
         }
       }
     }
     return webHoles;
   }
 
-  List<List<CadPoint3D>> _buildFlangeHoles(String faceKey, double zCoord, double fDir, {bool throughOnly = false}) {
+  List<List<CadPoint3D>> _buildFlangeHoles(String faceKey, double zCoord, double fDir, {bool throughOnly = false, List<double>? depthsOut, List<bool>? isBlindOut}) {
     final flgHoles = <List<CadPoint3D>>[];
     for (final sk in sketches) {
       if (sk.isSurfaceImpress) continue;
       if (throughOnly && !sk.isPassThrough && sk.cutDepthMm < thickness) continue;
       if (sk.targetFace == faceKey || sk.targetFace.endsWith(faceKey)) {
         final cy = sk.localCenter.y * fDir;
+        final boreDepth = sk.isPassThrough ? thickness : math.min(sk.cutDepthMm, thickness);
+        final isBlind = !sk.isPassThrough && sk.cutDepthMm < thickness;
+
         if (sk.customPolygonPoints != null && sk.customPolygonPoints!.length >= 3) {
           final pts = sk.customPolygonPoints!
               .map((p) => CadPoint3D(sk.localCenter.x + p.dx, (cy + p.dy) * fDir, zCoord))
               .toList();
           flgHoles.add(pts);
+          depthsOut?.add(boreDepth);
+          isBlindOut?.add(isBlind);
         } else if (sk.featureType == 'circle_hole' || sk.featureType == 'circle') {
           flgHoles.add(
             _makeOctagonHole(CadPoint3D(sk.localCenter.x, cy, zCoord), sk.widthMm / 2.0, const CadPoint3D(1.0, 0.0, 0.0), const CadPoint3D(0.0, 1.0, 0.0)),
           );
+          depthsOut?.add(boreDepth);
+          isBlindOut?.add(isBlind);
         } else if (sk.featureType == 'obround_slot') {
           flgHoles.add(_makeObroundSlot(sk.localCenter.x, cy, zCoord, sk.widthMm, sk.heightMm));
+          depthsOut?.add(boreDepth);
+          isBlindOut?.add(isBlind);
         } else if (sk.featureType == 'rect_cut' || sk.featureType == 'rect_slot' || sk.featureType == 'rectangle' || sk.featureType == 'square') {
           flgHoles.add(_makeRectSlotXY(sk.localCenter.x, cy, zCoord, sk.widthMm, sk.heightMm));
+          depthsOut?.add(boreDepth);
+          isBlindOut?.add(isBlind);
         }
       }
     }
     return flgHoles;
   }
 
-  void _addHoleBoreWalls(List<CadFoldedPolygon3D> thickPolys, List<List<CadPoint3D>> holes, CadPoint3D faceNormal, double t) {
+  void _addHoleBoreWalls(
+    List<CadFoldedPolygon3D> thickPolys,
+    List<List<CadPoint3D>> holes,
+    CadPoint3D faceNormal,
+    double t, {
+    List<double>? holeDepths,
+    List<bool>? isBlindList,
+  }) {
     for (int h = 0; h < holes.length; h++) {
       final loop = holes[h];
+      final boreDepth = (holeDepths != null && h < holeDepths.length) ? holeDepths[h] : t;
+      final isBlind = (isBlindList != null && h < isBlindList.length) ? isBlindList[h] : false;
+
       for (int i = 0; i < loop.length; i++) {
         final v0 = loop[i];
         final v1 = loop[(i + 1) % loop.length];
-        final v1In = CadPoint3D(v1.x - faceNormal.x * t, v1.y - faceNormal.y * t, v1.z - faceNormal.z * t);
-        final v0In = CadPoint3D(v0.x - faceNormal.x * t, v0.y - faceNormal.y * t, v0.z - faceNormal.z * t);
+        final v1In = CadPoint3D(v1.x - faceNormal.x * boreDepth, v1.y - faceNormal.y * boreDepth, v1.z - faceNormal.z * boreDepth);
+        final v0In = CadPoint3D(v0.x - faceNormal.x * boreDepth, v0.y - faceNormal.y * boreDepth, v0.z - faceNormal.z * boreDepth);
 
         // Accurate split normal: perpendicular to rim segment and plate normal pointing inward
         final dx = v1.x - v0.x;
@@ -2366,6 +2406,23 @@ class AssemblyPart {
             vertices: [v0, v1, v1In, v0In],
             normal: wallNorm,
             color: const Color(0xFF475569),
+          ),
+        );
+      }
+
+      // If blind cut, add pocket floor cap polygon
+      if (isBlind && loop.length >= 3) {
+        final floorVerts = loop
+            .map((pt) => CadPoint3D(pt.x - faceNormal.x * boreDepth, pt.y - faceNormal.y * boreDepth, pt.z - faceNormal.z * boreDepth))
+            .toList()
+            .reversed
+            .toList();
+        thickPolys.add(
+          CadFoldedPolygon3D(
+            faceId: '${id}_pocket_floor_$h',
+            vertices: floorVerts,
+            normal: faceNormal,
+            color: color,
           ),
         );
       }

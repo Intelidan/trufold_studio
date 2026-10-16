@@ -16,11 +16,34 @@ class CadPolygonTriangulator {
     required CadPoint3D normal,
     required CadPoint3D pivot,
     required GeometryBuilder builder,
+    vm.Vector4? baseLinearColor,
+    double creviceAoStrength = 0.65,
+    bool isInnerOrWebFace = false,
   }) {
     if (outerVertices.length < 3) return;
 
-    // Fast-path: simple convex or planar polygon with NO holes and <= 4 vertices
-    if (holes.isEmpty && outerVertices.length <= 4) {
+    // Helper that applies subtle vertex-level crevice darkening at 90° bend roots & hole rims
+    void emitVertexColor(CadPoint3D pt, {required bool isHoleRim, required bool isCreaseCorner}) {
+      if (baseLinearColor == null) return;
+      double vAo = 1.0;
+      if (isHoleRim) {
+        // Subtle rim shadow around punched holes and slots (like Onshape SS3)
+        vAo = 1.0 - (0.16 * creviceAoStrength);
+      } else if (isInnerOrWebFace && isCreaseCorner) {
+        // Soft crevice shadow along the 90° bend line where web and flange meet!
+        vAo = 1.0 - (0.20 * creviceAoStrength);
+      }
+      builder.color(vm.Vector4(
+        baseLinearColor.x * vAo,
+        baseLinearColor.y * vAo,
+        baseLinearColor.z * vAo,
+        baseLinearColor.w,
+      ));
+    }
+
+    // Fast-path: Quad polygon with NO holes -> Subdivide into 4 triangles around center
+    // for smooth radial highlight in the center and soft crevice shading at edges
+    if (holes.isEmpty && outerVertices.length == 4) {
       var nz = normal;
       final lenN = math.sqrt(nz.x * nz.x + nz.y * nz.y + nz.z * nz.z);
       if (lenN > 1e-6) {
@@ -29,7 +52,6 @@ class CadPolygonTriangulator {
         nz = _computeNewellNormal(outerVertices);
       }
 
-      // Check triangle orientation against face normal nz
       final v0 = outerVertices[0];
       final v1 = outerVertices[1];
       final v2 = outerVertices[2];
@@ -41,34 +63,102 @@ class CadPolygonTriangulator {
       final dot = crossX * nz.x + crossY * nz.y + crossZ * nz.z;
       final bool isFlipped = dot < 0;
 
-      builder.texCoord(_computeUv(outerVertices[0], nz));
-      final p0 = vm.Vector3(
-        outerVertices[0].x - pivot.x,
-        outerVertices[0].y - pivot.y,
-        outerVertices[0].z - pivot.z,
-      );
-      final idx0 = builder.addVertex(p0);
+      // When crevice AO is active on inner/web faces, subdivide quad into 4 triangles around center
+      if (creviceAoStrength > 0.05 && isInnerOrWebFace) {
+        final pCenter = CadPoint3D(
+          (outerVertices[0].x + outerVertices[1].x + outerVertices[2].x + outerVertices[3].x) * 0.25,
+          (outerVertices[0].y + outerVertices[1].y + outerVertices[2].y + outerVertices[3].y) * 0.25,
+          (outerVertices[0].z + outerVertices[1].z + outerVertices[2].z + outerVertices[3].z) * 0.25,
+        );
 
-      for (int i = 1; i < outerVertices.length - 1; i++) {
+        emitVertexColor(pCenter, isHoleRim: false, isCreaseCorner: false);
+        builder.texCoord(_computeUv(pCenter, nz));
+        final idxCenter = builder.addVertex(vm.Vector3(
+          pCenter.x - pivot.x,
+          pCenter.y - pivot.y,
+          pCenter.z - pivot.z,
+        ));
+
+        final cornerIndices = <int>[];
+        for (int i = 0; i < 4; i++) {
+          final pt = outerVertices[i];
+          emitVertexColor(pt, isHoleRim: false, isCreaseCorner: i == 0 || i == 1);
+          builder.texCoord(_computeUv(pt, nz));
+          cornerIndices.add(builder.addVertex(vm.Vector3(
+            pt.x - pivot.x,
+            pt.y - pivot.y,
+            pt.z - pivot.z,
+          )));
+        }
+
+        for (int i = 0; i < 4; i++) {
+          final next = (i + 1) % 4;
+          if (!isFlipped) {
+            builder.addTriangle(idxCenter, cornerIndices[i], cornerIndices[next]);
+          } else {
+            builder.addTriangle(idxCenter, cornerIndices[next], cornerIndices[i]);
+          }
+        }
+        return;
+      }
+
+      // Standard 2-triangle quad
+      final indices = <int>[];
+      for (int i = 0; i < 4; i++) {
+        emitVertexColor(outerVertices[i], isHoleRim: false, isCreaseCorner: i == 0 || i == 1);
         builder.texCoord(_computeUv(outerVertices[i], nz));
-        final p1 = vm.Vector3(
+        indices.add(builder.addVertex(vm.Vector3(
           outerVertices[i].x - pivot.x,
           outerVertices[i].y - pivot.y,
           outerVertices[i].z - pivot.z,
-        );
-        builder.texCoord(_computeUv(outerVertices[i + 1], nz));
-        final p2 = vm.Vector3(
-          outerVertices[i + 1].x - pivot.x,
-          outerVertices[i + 1].y - pivot.y,
-          outerVertices[i + 1].z - pivot.z,
-        );
-        final idx1 = builder.addVertex(p1);
-        final idx2 = builder.addVertex(p2);
-        if (!isFlipped) {
-          builder.addTriangle(idx0, idx1, idx2);
-        } else {
-          builder.addTriangle(idx0, idx2, idx1);
-        }
+        )));
+      }
+
+      if (!isFlipped) {
+        builder.addTriangle(indices[0], indices[1], indices[2]);
+        builder.addTriangle(indices[0], indices[2], indices[3]);
+      } else {
+        builder.addTriangle(indices[0], indices[2], indices[1]);
+        builder.addTriangle(indices[0], indices[3], indices[2]);
+      }
+      return;
+    }
+
+    // Fast-path: Single triangle with NO holes
+    if (holes.isEmpty && outerVertices.length == 3) {
+      var nz = normal;
+      final lenN = math.sqrt(nz.x * nz.x + nz.y * nz.y + nz.z * nz.z);
+      if (lenN > 1e-6) {
+        nz = CadPoint3D(nz.x / lenN, nz.y / lenN, nz.z / lenN);
+      } else {
+        nz = _computeNewellNormal(outerVertices);
+      }
+
+      final v0 = outerVertices[0];
+      final v1 = outerVertices[1];
+      final v2 = outerVertices[2];
+      final e1 = CadPoint3D(v1.x - v0.x, v1.y - v0.y, v1.z - v0.z);
+      final e2 = CadPoint3D(v2.x - v0.x, v2.y - v0.y, v2.z - v0.z);
+      final crossX = e1.y * e2.z - e1.z * e2.y;
+      final crossY = e1.z * e2.x - e1.x * e2.z;
+      final crossZ = e1.x * e2.y - e1.y * e2.x;
+      final dot = crossX * nz.x + crossY * nz.y + crossZ * nz.z;
+      final bool isFlipped = dot < 0;
+
+      final indices = <int>[];
+      for (int i = 0; i < 3; i++) {
+        emitVertexColor(outerVertices[i], isHoleRim: false, isCreaseCorner: i == 0 || i == 1);
+        builder.texCoord(_computeUv(outerVertices[i], nz));
+        indices.add(builder.addVertex(vm.Vector3(
+          outerVertices[i].x - pivot.x,
+          outerVertices[i].y - pivot.y,
+          outerVertices[i].z - pivot.z,
+        )));
+      }
+      if (!isFlipped) {
+        builder.addTriangle(indices[0], indices[1], indices[2]);
+      } else {
+        builder.addTriangle(indices[0], indices[2], indices[1]);
       }
       return;
     }
@@ -131,6 +221,10 @@ class CadPolygonTriangulator {
     final builderIndices = <int>[];
     for (int i = 0; i < allPts3D.length; i++) {
       final pt = allPts3D[i];
+      final bool isHole = (i >= outerVertices.length);
+      final bool isCrease = (!isHole && (i == 0 || i == 1));
+      emitVertexColor(pt, isHoleRim: isHole, isCreaseCorner: isCrease);
+
       final uCoord = (i * 2 < coords.length) ? coords[i * 2] * 0.01 : pt.x * 0.01;
       final vCoord = (i * 2 + 1 < coords.length) ? coords[i * 2 + 1] * 0.01 : pt.y * 0.01;
       builder.texCoord(vm.Vector2(uCoord, vCoord));

@@ -634,7 +634,7 @@ class FlutterPaint3dPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true
-      ..color = const Color(0xFF000000); // Pure solid pitch black
+      ..color = const Color(0xFF1B242D); // Onshape dark charcoal-slate
 
     final highlightEdgePaint = Paint()
       ..style = PaintingStyle.stroke
@@ -644,7 +644,7 @@ class FlutterPaint3dPainter extends CustomPainter {
       ..color = const Color(0xFF0284C7);
 
     final holeRimPaint = Paint()
-      ..color = const Color(0xFF000000) // Pure solid pitch black
+      ..color = const Color(0xFF1B242D) // Onshape dark charcoal-slate
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -657,9 +657,10 @@ class FlutterPaint3dPainter extends CustomPainter {
       ..strokeWidth = 2.0;
 
     final cutLinePaint = Paint()
-      ..color = const Color(0xFF000000)
+      ..color = const Color(0xFF1B242D) // Onshape dark charcoal-slate
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6
+      ..isAntiAlias = true
       ..strokeCap = StrokeCap.round;
 
     // PASS 1: Render All Faces & Outlines Solid & Crisp

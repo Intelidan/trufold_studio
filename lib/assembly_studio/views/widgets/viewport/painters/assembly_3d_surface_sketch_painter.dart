@@ -85,35 +85,48 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       }
     }
 
-    // 2. Interior Shaded Tessellated Profile (if loop is valid and enabled)
+    // 2. Interior Shaded Tessellated Profiles (shade ALL valid closed loops on the plane!)
     final validation = viewModel.activeSketchValidation;
-    if (viewModel.showSketchProfileShading && validation != null && validation.isValidClosedLoop && validation.orderedPathVertices.length >= 3) {
-      final fillPath = Path();
-      bool first = true;
-      for (final pt in validation.orderedPathVertices) {
-        final scr = toScreen(pt);
-        if (scr == Offset.zero) continue;
-        if (first) {
-          fillPath.moveTo(scr.dx, scr.dy);
-          first = false;
-        } else {
-          fillPath.lineTo(scr.dx, scr.dy);
-        }
-      }
-      fillPath.close();
-
+    if (viewModel.showSketchProfileShading && validation != null && validation.isValidClosedLoop) {
+      final loopsToFill = validation.allClosedLoops.isNotEmpty
+          ? validation.allClosedLoops
+          : (validation.orderedPathVertices.length >= 3 ? [validation.orderedPathVertices] : <List<Offset>>[]);
       final fillPaint = Paint()
         ..color = const Color(0x380284C7)
         ..style = PaintingStyle.fill;
-      canvas.drawPath(fillPath, fillPaint);
+
+      for (final loop in loopsToFill) {
+        if (loop.length < 3) continue;
+        final fillPath = Path();
+        bool first = true;
+        for (final pt in loop) {
+          final scr = toScreen(pt);
+          if (scr == Offset.zero) continue;
+          if (first) {
+            fillPath.moveTo(scr.dx, scr.dy);
+            first = false;
+          } else {
+            fillPath.lineTo(scr.dx, scr.dy);
+          }
+        }
+        if (!first) {
+          fillPath.close();
+          canvas.drawPath(fillPath, fillPaint);
+        }
+      }
     }
 
     // 3. Render Primitive Entities & Segments
     for (final prim in plane.primitives) {
       final isSel = (prim.id == viewModel.selectedSketchEntity?.id);
       final isConstrained = prim.isFullyConstrained;
+      final isOverConstrained = viewModel.lastConstraintSolverResult?.conflictingConstraints
+              .any((c) => c.entityIds.contains(prim.id)) ??
+          false;
       final strokePaint = Paint()
-        ..color = isSel
+        ..color = isOverConstrained
+            ? const Color(0xFFEF4444) // Onshape Red for over-constrained / conflicting geometry!
+            : isSel
             ? const Color(0xFFF59E0B) // Amber for selected
             : prim.isProjected
             ? const Color(0xFFC084FC) // Purple/Magenta for projected geometry

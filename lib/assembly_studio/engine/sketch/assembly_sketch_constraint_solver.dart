@@ -48,14 +48,28 @@ class AssemblySketchConstraintSolver {
       return 0;
     } else if (prim is CADLineEntity) {
       return 4; // Start X, Start Y, End X, End Y
-    } else if (prim is CADCircleEntity) {
+    } else if (prim is CADCircleEntity || prim is CADThreePointCircleEntity) {
       return 3; // Center X, Center Y, Radius
-    } else if (prim is CADArcEntity) {
-      return 5; // Center X, Center Y, Radius, Start Angle, Sweep
+    } else if (prim is CADEllipseEntity) {
+      return 5; // Center X, Center Y, RadiusX, RadiusY, Rotation
+    } else if (prim is CADArcEntity || prim is CADCenterPointArcEntity) {
+      return 5; // Center X, Center Y, Radius, Angles
+    } else if (prim is CADRegularPolygonEntity) {
+      return 4; // Center X, Center Y, Radius, Angle
+    } else if (prim is CADSlotEntity) {
+      return 5; // StartCenter X, Y, EndCenter X, Y, Diameter
+    } else if (prim is CADAlignedRectangleEntity) {
+      return 5; // Corner1 X, Y, Corner2 X, Y, Offset
+    } else if (prim is CADConicEntity) {
+      return 6; // Start X, Y, End X, Y, Apex X, Y
+    } else if (prim is CADSplineEntity) {
+      return prim.controlPoints.length * 2;
     } else if (prim is CADRectangleEntity || prim is CADCenterRectangleEntity) {
       return 4; // Center/Corner X, Y, Width, Height
     } else if (prim is CADPolylineEntity) {
       return prim.points.length * 2;
+    } else if (prim is CADTextEntity) {
+      return 3;
     } else {
       return 2;
     }
@@ -97,11 +111,40 @@ class AssemblySketchConstraintSolver {
       satisfied.add(c);
     }
 
+    // Pre-check for inherently conflicting constraints
+    final conflictingSet = <CadConstraint>{};
+    for (int i = 0; i < constraints.length; i++) {
+      final c1 = constraints[i];
+      for (int j = i + 1; j < constraints.length; j++) {
+        final c2 = constraints[j];
+        final commonEntities = c1.entityIds.toSet().intersection(c2.entityIds.toSet());
+        if (commonEntities.isNotEmpty) {
+          if ((c1.type == CadConstraintType.horizontal && c2.type == CadConstraintType.vertical) ||
+              (c1.type == CadConstraintType.vertical && c2.type == CadConstraintType.horizontal)) {
+            conflictingSet.add(c1);
+            conflictingSet.add(c2);
+          }
+          final isDim1 = c1.type == CadConstraintType.distance || c1.type == CadConstraintType.radius || c1.type == CadConstraintType.diameter;
+          final isDim2 = c2.type == CadConstraintType.distance || c2.type == CadConstraintType.radius || c2.type == CadConstraintType.diameter;
+          if (isDim1 && isDim2 && c1.type == c2.type && c1.parameterValue != null && c2.parameterValue != null) {
+            if ((c1.parameterValue! - c2.parameterValue!).abs() > 1e-3) {
+              conflictingSet.add(c1);
+              conflictingSet.add(c2);
+            }
+          }
+        }
+      }
+    }
+
     // 4. Process geometric & dimensional constraints iteratively (relaxation)
     final geometricConstraints = constraints.where((c) => c.type != CadConstraintType.fixed).toList();
     const int maxIterations = 5;
     for (int iter = 0; iter < maxIterations; iter++) {
       for (final c in geometricConstraints) {
+        if (conflictingSet.contains(c)) {
+          if (iter == 0) conflicting.add(c);
+          continue;
+        }
         final success = _applySingleConstraint(c, entityMap);
         if (iter == 0) {
           if (success) {
@@ -493,6 +536,9 @@ class AssemblySketchConstraintSolver {
         break;
       case CadConstraintType.concentric:
       case CadConstraintType.coincident:
+      case CadConstraintType.symmetric:
+      case CadConstraintType.midpoint:
+      case CadConstraintType.pierce:
         for (final id in c.entityIds) {
           if (dofMap.containsKey(id)) {
             dofMap[id] = math.max(0, dofMap[id]! - 2);
@@ -504,10 +550,7 @@ class AssemblySketchConstraintSolver {
           dofMap[id] = 0;
         }
         break;
-      case CadConstraintType.symmetric:
-      case CadConstraintType.midpoint:
       case CadConstraintType.normal:
-      case CadConstraintType.pierce:
       case CadConstraintType.curvature:
         for (final id in c.entityIds) {
           if (dofMap.containsKey(id)) {
@@ -525,6 +568,23 @@ class AssemblySketchConstraintSolver {
       return Offset((e.start.dx + e.end.dx) / 2.0, (e.start.dy + e.end.dy) / 2.0);
     } else if (e is CADCircleEntity) {
       return e.center;
+    } else if (e is CADEllipseEntity) {
+      return e.center;
+    } else if (e is CADCenterPointArcEntity) {
+      return e.center;
+    } else if (e is CADRegularPolygonEntity) {
+      return e.center;
+    } else if (e is CADSlotEntity) {
+      return (e.startCenter + e.endCenter) * 0.5;
+    } else if (e is CADAlignedRectangleEntity) {
+      final c = e.corners;
+      return (c[0] + c[2]) * 0.5;
+    } else if (e is CADConicEntity) {
+      return e.apexControlPoint;
+    } else if (e is CADSplineEntity) {
+      return e.controlPoints.isNotEmpty ? e.controlPoints.first : Offset.zero;
+    } else if (e is CADTextEntity) {
+      return e.origin;
     } else if (e is CADRectangleEntity) {
       return Offset(e.startPoint.dx + e.width / 2.0, e.startPoint.dy + e.height / 2.0);
     } else if (e is CADCenterRectangleEntity) {
@@ -543,8 +603,35 @@ class AssemblySketchConstraintSolver {
     if (e is CADLineEntity) {
       e.start = e.start + delta;
       e.end = e.end + delta;
+    } else if (e is CADThreePointCircleEntity) {
+      e.p1 = e.p1 + delta;
+      e.p2 = e.p2 + delta;
+      e.p3 = e.p3 + delta;
+      e.recomputeFromThreePoints();
     } else if (e is CADCircleEntity) {
       e.center = newAnchor;
+    } else if (e is CADEllipseEntity) {
+      e.center = newAnchor;
+    } else if (e is CADCenterPointArcEntity) {
+      e.center = newAnchor;
+    } else if (e is CADRegularPolygonEntity) {
+      e.center = newAnchor;
+    } else if (e is CADSlotEntity) {
+      e.startCenter = e.startCenter + delta;
+      e.endCenter = e.endCenter + delta;
+    } else if (e is CADAlignedRectangleEntity) {
+      e.corner1 = e.corner1 + delta;
+      e.corner2 = e.corner2 + delta;
+    } else if (e is CADConicEntity) {
+      e.startPoint = e.startPoint + delta;
+      e.endPoint = e.endPoint + delta;
+      e.apexControlPoint = e.apexControlPoint + delta;
+    } else if (e is CADSplineEntity) {
+      for (int i = 0; i < e.controlPoints.length; i++) {
+        e.controlPoints[i] = e.controlPoints[i] + delta;
+      }
+    } else if (e is CADTextEntity) {
+      e.origin = newAnchor;
     } else if (e is CADRectangleEntity) {
       e.startPoint = e.startPoint + delta;
     } else if (e is CADCenterRectangleEntity) {
@@ -650,6 +737,23 @@ class AssemblySketchConstraintSolver {
   /// Solves Onshape Curvature Continuity Constraint (Shift+U):
   /// Aligns endpoints and matches tangent/curvature vectors at the junction.
   static bool _solveCurvature(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
-    return _solveCoincident(c, entityMap);
+    if (c.entityIds.length < 2) return false;
+    final e1 = entityMap[c.entityIds[0]];
+    final e2 = entityMap[c.entityIds[1]];
+    if (e1 == null || e2 == null) return false;
+
+    if (e1 is CADSplineEntity && e2 is CADSplineEntity && e1.controlPoints.length >= 2 && e2.controlPoints.length >= 2) {
+      // Snap start of e2 to end of e1 and align C1/G2 tangent control vector
+      final junction = e1.controlPoints.last;
+      final tangentVec = e1.controlPoints.last - e1.controlPoints[e1.controlPoints.length - 2];
+      e2.controlPoints[0] = junction;
+      e2.controlPoints[1] = junction + tangentVec;
+      return true;
+    }
+    if (_solveCoincident(c, entityMap)) return true;
+    // Fallback for arcs/conics: align anchors
+    final p1 = _getEntityCenterOrAnchor(e1);
+    _shiftEntityTo(e2, p1);
+    return true;
   }
 }

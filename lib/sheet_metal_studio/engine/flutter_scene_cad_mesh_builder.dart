@@ -14,6 +14,85 @@ import 'kinematic_fold_engine.dart';
 /// with true hole punch-through via [CadPolygonTriangulator], and crisp silhouette borders
 /// via [LineSegmentsGeometry].
 class FlutterSceneCadMeshBuilder {
+  /// Converts an sRGB channel [0..1] to Linear RGB for physically based rendering.
+  static double _srgbToLinear(double s) {
+    final c = s.clamp(0.0, 1.0);
+    return c <= 0.04045 ? c / 12.92 : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
+  }
+
+  /// Computes Onshape Studio 3-Light + Hemisphere + Crevice AO Linear RGB color for a face.
+  /// Works for BOTH default Onshape CAD colors AND custom per-part colors (`partColorOverrides`)!
+  static vm.Vector4 computeOnshapeStudioFaceColor({
+    required CadFoldedPolygon3D poly,
+    required Color baseSrgbColor,
+    required OnshapeGraphicsPreferences preferences,
+    required bool isHovered,
+  }) {
+    if (isHovered) {
+      return vm.Vector4(_srgbToLinear(0.73), _srgbToLinear(0.90), _srgbToLinear(0.99), 1.0);
+    }
+
+    // 1. Normalize face normal
+    final n = poly.normal;
+    final lenN = math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+    final nx = lenN > 1e-6 ? n.x / lenN : 0.0;
+    final ny = lenN > 1e-6 ? n.y / lenN : 0.0;
+    final nz = lenN > 1e-6 ? n.z / lenN : 1.0;
+
+    // 2. Studio 3-Light Rig + Cool Sky / Warm Ground Hemisphere
+    const lKeyX = -0.42, lKeyY = -0.58, lKeyZ = 0.70;
+    const lFillX = 0.60, lFillY = 0.45, lFillZ = -0.66;
+    const lRimX = 0.25, lRimY = 0.78, lRimZ = 0.57;
+
+    final dotKey = (nx * lKeyX + ny * lKeyY + nz * lKeyZ).clamp(0.0, 1.0);
+    final wrapKey = ((nx * lKeyX + ny * lKeyY + nz * lKeyZ + 0.35) / 1.35).clamp(0.0, 1.0);
+    final dotFill = (nx * lFillX + ny * lFillY + nz * lFillZ).clamp(0.0, 1.0);
+    final dotRim = (nx * lRimX + ny * lRimY + nz * lRimZ).clamp(0.0, 1.0);
+
+    // Sky-to-ground hemisphere gradient along Z-up
+    final hemi = (nz * 0.5 + 0.5); // 1.0 facing sky, 0.0 facing ground
+    final hemiTone = 0.52 + 0.22 * hemi;
+
+    // Directional studio contrast factor
+    double directionalTone = hemiTone +
+        wrapKey * 0.34 +
+        dotKey * 0.14 +
+        dotFill * (preferences.hasSecondaryLight ? 0.14 : 0.04) +
+        dotRim * (preferences.hasBackLight ? 0.10 : 0.03);
+
+    // 3. Topological Crevice & Feature Ambient Occlusion Multiplier
+    final aoStrength = (preferences.ambientOcclusion / 100.0).clamp(0.0, 1.0);
+    final fid = poly.faceId;
+    double featureAo = 1.0;
+
+    if (fid.startsWith('BORE_') || fid.contains('_bore_')) {
+      featureAo = 1.0 - (0.38 * aoStrength);
+    } else if (fid.contains('_inner_web')) {
+      featureAo = 1.0 - (0.28 * aoStrength);
+    } else if (fid.contains('_inner_flange')) {
+      featureAo = 1.0 - (0.22 * aoStrength);
+    } else if (fid.startsWith('RIM_') || fid.contains('_rim_') || fid.contains('_end_cap_')) {
+      featureAo = 1.0 - (0.18 * aoStrength);
+    } else if (fid.endsWith('_BOT') || fid.contains('flange_bottom')) {
+      featureAo = 1.0 - (0.15 * aoStrength);
+    }
+
+    final finalSrgbScale = (directionalTone * featureAo).clamp(0.28, 1.08);
+
+    // Subtle cool sky tint on upward faces, warm slate on downward crevices
+    final rSrgb = (baseSrgbColor.r * finalSrgbScale * (0.98 + 0.02 * (1.0 - hemi))).clamp(0.0, 1.0);
+    final gSrgb = (baseSrgbColor.g * finalSrgbScale).clamp(0.0, 1.0);
+    final bSrgb = (baseSrgbColor.b * finalSrgbScale * (0.97 + 0.05 * hemi)).clamp(0.0, 1.0);
+
+    // Convert sRGB -> Linear RGB so ACES tone mapping doesn't wash out colors to white!
+    return vm.Vector4(
+      _srgbToLinear(rSrgb),
+      _srgbToLinear(gSrgb),
+      _srgbToLinear(bSrgb),
+      1.0,
+    );
+  }
+
   /// Builds a complete 3D CAD scene node from a folded sheet metal mesh.
   static Node buildCadModel(
     FoldedMeshResult meshResult, {
@@ -34,8 +113,8 @@ class FlutterSceneCadMeshBuilder {
     final rootNode = Node(name: 'CadModelRoot');
     final pivot = pivotOverride ?? meshResult.center;
 
-    final opaqueBuilder = GeometryBuilder(deduplicate: true);
-    final translucentBuilder = GeometryBuilder(deduplicate: true);
+    final opaqueBuilder = GeometryBuilder(deduplicate: false);
+    final translucentBuilder = GeometryBuilder(deduplicate: false);
 
     // Collect outer boundary lines for wireframe (single border line per segment)
     final List<(CadPoint3D, CadPoint3D)> rawBoundarySegs = [];
@@ -94,49 +173,31 @@ class FlutterSceneCadMeshBuilder {
 
       final isHovered = (poly.faceId == hoveredFaceId);
 
-      // Resolve color for this face
+      // Resolve color for this face, then apply Onshape Studio 3-Light + Crevice AO
       vm.Vector4 faceColor;
       if (isWeld) {
         // Fillet weld bead: preserve poly.color (selection cyan / translucent amber gold / solid steel)
         faceColor = vm.Vector4(
-          poly.color.r,
-          poly.color.g,
-          poly.color.b,
+          _srgbToLinear(poly.color.r),
+          _srgbToLinear(poly.color.g),
+          _srgbToLinear(poly.color.b),
           poly.color.a,
         );
-      } else if (isHovered) {
-        faceColor = vm.Vector4(0.73, 0.90, 0.99, 1.0); // Cyan hover #BAE6FD
-      } else if (baseColorOverride != null) {
-        faceColor = vm.Vector4(
-          baseColorOverride.r,
-          baseColorOverride.g,
-          baseColorOverride.b,
-          1.0,
-        );
-      } else if (partColorOverrides.containsKey(partId)) {
-        final pc = partColorOverrides[partId]!;
-        faceColor = vm.Vector4(pc.r, pc.g, pc.b, 1.0);
-      } else if (!preferences.useOnshapeCadColor) {
-        final mc = preferences.materialSettings.baseColor;
-        if (poly.faceId.startsWith('BORE_') || poly.faceId.contains('_bore_') || poly.faceId.startsWith('RIM_')) {
-          faceColor = vm.Vector4(mc.r * 0.75, mc.g * 0.75, mc.b * 0.75, 1.0);
-        } else if (poly.faceId.endsWith('_BOT')) {
-          faceColor = vm.Vector4(mc.r * 0.88, mc.g * 0.88, mc.b * 0.88, 1.0);
-        } else {
-          faceColor = vm.Vector4(mc.r, mc.g, mc.b, 1.0);
-        }
-      } else if (poly.faceId.startsWith('BORE_') || poly.faceId.contains('_bore_') || poly.faceId.startsWith('RIM_') || poly.faceId.contains('_rim')) {
-        // Deep bore wall / sheet thickness rim steel: darker tone
-        faceColor = vm.Vector4(0.38, 0.50, 0.60, 1.0);
-      } else if (poly.faceId.endsWith('_BOT') || poly.faceId.contains('_bot')) {
-        // Underside / bottom surface
-        faceColor = vm.Vector4(0.44, 0.56, 0.66, 1.0);
-      } else if (poly.faceId.contains('flange') || poly.faceId.contains('leg_v') || poly.faceId.contains('side')) {
-        // Side / vertical flange surfaces
-        faceColor = vm.Vector4(0.50, 0.62, 0.72, 1.0);
       } else {
-        // Authentic Onshape Radiant Steel-Blue top surfaces
-        faceColor = vm.Vector4(0.56, 0.68, 0.78, 1.0);
+        Color baseSrgb = const Color(0xFF6C9DC6); // Authentic Onshape SS3 Cerulean Steel-Blue
+        if (baseColorOverride != null) {
+          baseSrgb = baseColorOverride;
+        } else if (partColorOverrides.containsKey(partId)) {
+          baseSrgb = partColorOverrides[partId]!;
+        } else if (!preferences.useOnshapeCadColor) {
+          baseSrgb = preferences.materialSettings.baseColor;
+        }
+        faceColor = computeOnshapeStudioFaceColor(
+          poly: poly,
+          baseSrgbColor: baseSrgb,
+          preferences: preferences,
+          isHovered: isHovered,
+        );
       }
 
       currentBuilder.color(faceColor);
@@ -149,13 +210,16 @@ class FlutterSceneCadMeshBuilder {
           : vm.Vector3(0, 0, 1);
       currentBuilder.normal(normVec);
 
-      // Triangulate planar polygon with inner cutout holes (round holes, obround slots, coupler slots)
+      // Triangulate planar polygon with inner cutout holes and bake crevice AO
       CadPolygonTriangulator.triangulateToBuilder(
         outerVertices: poly.vertices,
         holes: poly.holes,
         normal: poly.normal,
         pivot: pivot,
         builder: currentBuilder,
+        baseLinearColor: faceColor,
+        creviceAoStrength: (preferences.ambientOcclusion / 100.0).clamp(0.0, 1.0),
+        isInnerOrWebFace: poly.faceId.contains('_inner') || poly.faceId.contains('_web') || poly.faceId.contains('flange'),
       );
 
       // Filter only strictly internal tessellation/bore/inner faces; external end caps, rims, and slots emit boundary edges
@@ -277,13 +341,16 @@ class FlutterSceneCadMeshBuilder {
       } else if (customMaterial != null) {
         material = customMaterial..doubleSided = true;
       } else {
-        // Shaded mode: Onshape CAD satin steel sheen (Walkthrough Solution C)
+        // Shaded mode: Wire Graphics Preferences 'Shininess' (0..100%) to GGX Roughness!
         final matSettings = preferences.materialSettings;
+        final shininessRatio = (preferences.shininess / 100.0).clamp(0.0, 1.0);
+        // 68% shininess -> roughness 0.22 (Onshape SS3 satin-plastic/anodized sheen)
+        final roughness = (0.68 - shininessRatio * 0.52).clamp(0.12, 0.75);
         material = PhysicallyBasedMaterial()
           ..doubleSided = true
           ..depthLayer = 0
-          ..metallicFactor = matSettings.isPlastic ? 0.0 : 0.04
-          ..roughnessFactor = 0.22
+          ..metallicFactor = matSettings.isPlastic ? 0.02 : 0.08
+          ..roughnessFactor = roughness
           ..baseColorFactor = vm.Vector4(1.0, 1.0, 1.0, 1.0);
       }
 
@@ -308,23 +375,32 @@ class FlutterSceneCadMeshBuilder {
       rootNode.add(transNode);
     }
 
-    // 3. Add crisp silhouette wireframe if boundary lines exist (with Highlight Boundary Edges support)
+    // 3. Add crisp silhouette wireframe scaled to the model's millimeter dimensions!
     if (shouldDrawWireframe && edgePositions.length >= 6) {
       final lineData = LineSegmentData(
         positions: Float32List.fromList(edgePositions),
       );
-      final computedLineWidth = (preferences.lineWidth * 0.025).clamp(0.015, 0.045);
-      final lineGeometry = LineSegmentsGeometry(lineData, width: computedLineWidth, normalOffset: 0.0);
+      final maxModelDim = math.max(
+        meshResult.boundWidth,
+        math.max(meshResult.boundLength, meshResult.boundHeight),
+      ).clamp(100.0, 5000.0);
+      // Scale world-space ribbon width proportionally to model size so 1.3px..4.0px is crisp!
+      final computedLineWidth = (preferences.lineWidth * maxModelDim * 0.00048).clamp(0.25, 4.5);
+      final lineGeometry = LineSegmentsGeometry(
+        lineData,
+        width: computedLineWidth,
+        normalOffset: maxModelDim * 0.00025,
+      );
       final boundaryColor = preferences.highlightBoundaryEdges
           ? preferences.boundaryEdgeColor
-          : const Color(0xFF000000); // Pure solid pitch black
+          : const Color(0xFF1B242D); // Onshape dark charcoal-slate (not harsh #000000)
       final lineMat = UnlitMaterial()
         ..doubleSided = true
-        ..depthLayer = 2 // Hardware-ordered depth layer: draws over coplanar faces at any distance!
+        ..depthLayer = 2 // Hardware-ordered depth layer
         ..baseColorFactor = vm.Vector4(
-          boundaryColor.r,
-          boundaryColor.g,
-          boundaryColor.b,
+          _srgbToLinear(boundaryColor.r),
+          _srgbToLinear(boundaryColor.g),
+          _srgbToLinear(boundaryColor.b),
           1.0,
         );
       final lineMesh = Mesh(lineGeometry, lineMat);
@@ -337,16 +413,24 @@ class FlutterSceneCadMeshBuilder {
       final tangentLineData = LineSegmentData(
         positions: Float32List.fromList(tangentPositions),
       );
-      final computedPhantomWidth = (preferences.phantomTangentEdgeWidth * 0.02).clamp(0.01, 0.035);
-      final tangentGeometry = LineSegmentsGeometry(tangentLineData, width: computedPhantomWidth, normalOffset: 0.0);
+      final maxModelDim = math.max(
+        meshResult.boundWidth,
+        math.max(meshResult.boundLength, meshResult.boundHeight),
+      ).clamp(100.0, 5000.0);
+      final computedPhantomWidth = (preferences.phantomTangentEdgeWidth * maxModelDim * 0.00025).clamp(0.15, 2.5);
+      final tangentGeometry = LineSegmentsGeometry(
+        tangentLineData,
+        width: computedPhantomWidth,
+        normalOffset: maxModelDim * 0.00015,
+      );
       final tColor = preferences.phantomTangentEdgeColor;
       final tangentMat = UnlitMaterial()
         ..doubleSided = true
         ..depthLayer = 2
         ..baseColorFactor = vm.Vector4(
-          tColor.r,
-          tColor.g,
-          tColor.b,
+          _srgbToLinear(tColor.r),
+          _srgbToLinear(tColor.g),
+          _srgbToLinear(tColor.b),
           tColor.a,
         );
       final tangentMesh = Mesh(tangentGeometry, tangentMat);

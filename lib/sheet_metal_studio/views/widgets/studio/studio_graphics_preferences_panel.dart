@@ -90,6 +90,8 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                   ),
                   if (_uiDensityExpanded) ...[
                     _buildUiDensitySection(),
+                    const SizedBox(height: 6),
+                    _buildVisualPresetsSection(prefs),
                   ],
 
                   const SizedBox(height: 6),
@@ -143,6 +145,18 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                         max: 30,
                         onChanged: (val) => widget.onSnapDistanceChanged?.call(val),
                       ),
+                    _buildToggleRow(
+                      label: 'Vector edge anti-aliasing',
+                      value: prefs.screenSpaceEdgeAntiAliasing,
+                      tooltip: 'Projects crisp vector-smoothed edge outlines on top of the 3D scene, eliminating pixel stair-stepping.',
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(screenSpaceEdgeAntiAliasing: val)),
+                    ),
+                    _buildToggleRow(
+                      label: 'Ground contact shadow',
+                      value: prefs.showGroundShadow,
+                      tooltip: 'Renders a soft ambient floor shadow on the Z=0 plane to ground the assembly.',
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(showGroundShadow: val)),
+                    ),
                   ],
 
                   const SizedBox(height: 6),
@@ -207,6 +221,21 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                       min: 0.05,
                       max: 0.95,
                       onChanged: (val) => widget.onChanged(prefs.copyWith(transparencyLevel: val)),
+                    ),
+                    _buildSliderRow(
+                      label: 'Crevice & cavity shading',
+                      valueStr: '${prefs.cavityStrength.round()}%',
+                      tooltip: 'Darkens concave 90° bend roots, punched hole bores, and inner channels for rich depth perception.',
+                      value: prefs.cavityStrength,
+                      min: 0,
+                      max: 100,
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(cavityStrength: val)),
+                    ),
+                    _buildToggleRow(
+                      label: 'Silhouette edge boost',
+                      value: prefs.silhouetteEdgeBoost,
+                      tooltip: 'Draws outer contour edges 1.35x thicker than internal crease lines for Onshape CAD distinction.',
+                      onChanged: (val) => widget.onChanged(prefs.copyWith(silhouetteEdgeBoost: val)),
                     ),
                   ],
 
@@ -1225,4 +1254,112 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
       ),
     );
   }
+
+  Widget _buildVisualPresetsSection(OnshapeGraphicsPreferences prefs) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('1-Click Visual Preset', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 2.0),
+                  child: InkWell(
+                    onTap: () {
+                      widget.onChanged(prefs.copyWith(
+                        useOnshapeCadColor: true,
+                        ambientOcclusion: 70.0,
+                        cavityStrength: 70.0,
+                        lineWidth: 1.35,
+                        shininess: 68.0,
+                        screenSpaceEdgeAntiAliasing: true,
+                        lightingPreset: CadLightingPreset.onshapeStudio,
+                      ));
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+                      decoration: BoxDecoration(
+                        color: prefs.lightingPreset == CadLightingPreset.onshapeStudio ? const Color(0xFFE0F2FE) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: prefs.lightingPreset == CadLightingPreset.onshapeStudio ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text('Onshape SS3', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                  child: InkWell(
+                    onTap: () {
+                      widget.onChanged(prefs.copyWith(
+                        lineWidth: 1.8,
+                        silhouetteEdgeBoost: true,
+                        ambientOcclusion: 85.0,
+                        shininess: 20.0,
+                        screenSpaceEdgeAntiAliasing: true,
+                        lightingPreset: CadLightingPreset.engineeringCrisp,
+                      ));
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+                      decoration: BoxDecoration(
+                        color: prefs.lightingPreset == CadLightingPreset.engineeringCrisp ? const Color(0xFFE0F2FE) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: prefs.lightingPreset == CadLightingPreset.engineeringCrisp ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text('Blueprint', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 2.0),
+                  child: InkWell(
+                    onTap: () {
+                      widget.onChanged(prefs.copyWith(
+                        lightingPreset: CadLightingPreset.clayPresentation,
+                        cavityStrength: 90.0,
+                        ambientOcclusion: 85.0,
+                        shininess: 15.0,
+                        screenSpaceEdgeAntiAliasing: true,
+                      ));
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+                      decoration: BoxDecoration(
+                        color: prefs.lightingPreset == CadLightingPreset.clayPresentation ? const Color(0xFFE0F2FE) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: prefs.lightingPreset == CadLightingPreset.clayPresentation ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text('Soft Clay', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
+

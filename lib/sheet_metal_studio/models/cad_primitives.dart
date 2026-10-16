@@ -301,17 +301,27 @@ class Cad3dCameraState {
   }
 }
 
+enum CadLightingPreset {
+  onshapeStudio('Onshape Studio (Cool/Warm)'),
+  engineeringCrisp('Engineering High-Contrast'),
+  clayPresentation('Soft Clay / Cavity Mode'),
+  metallicShowroom('Anodized Showroom');
+
+  final String label;
+  const CadLightingPreset(this.label);
+}
+
 /// Onshape-compatible 3D Graphics Preferences.
 /// Configures viewport lighting/FOV, shaded body surface properties, and phantom edge lines.
 class OnshapeGraphicsPreferences {
   // Viewport Settings
-  final double ambientOcclusion; // 0% to 100%, default 40%
+  final double ambientOcclusion; // 0% to 100%, default 65%
   final double fieldOfView; // 15 deg to 90 deg, default 46 deg
   final AntiAliasingQuality antiAliasingQuality; // Viewport anti-aliasing & SSAA level
 
   // Shaded Bodies Settings
-  final double lineWidth; // 0.5 px to 5.0 px, default 1.3 px
-  final double shininess; // 0% to 100%, default 25% (as seen in Onshape SS2)
+  final double lineWidth; // 0.5 px to 5.0 px, default 1.35 px
+  final double shininess; // 0% to 100%, default 68% (as seen in Onshape SS3)
   final Color specularColor; // default 0xFFFFFFFF (crisp white specular glare)
   final Color sectionInterferenceColor; // default 0xFF4CAF50
 
@@ -321,7 +331,7 @@ class OnshapeGraphicsPreferences {
   final OnshapeTangentEdgeMode tangentEdgeMode; // default: phantom
 
   // Part Appearance
-  final bool useOnshapeCadColor; // default true (Onshape slate steel-blue 0x70A5C2)
+  final bool useOnshapeCadColor; // default true (Onshape slate steel-blue 0x70A5C2 / 0xFF6C9DC6)
   final bool hiddenEdgesVisible; // default false
   final bool highlightBoundaryEdges; // default false (highlights open/laminar sheet edges in red)
   final Color boundaryEdgeColor; // default 0xFFEF4444 (red)
@@ -342,12 +352,19 @@ class OnshapeGraphicsPreferences {
   // PBR / Shader Material Settings (Hot-Dip Galvanized, Pre-Galvanized, Plastic, Chrome, etc.)
   final CadMaterialSettings materialSettings;
 
+  // New Pro CAD Visual Polish Settings (Part C)
+  final CadLightingPreset lightingPreset; // default: CadLightingPreset.onshapeStudio
+  final double cavityStrength;            // 0% to 100%, default 65% (darkens inner folds, brightens convex edges)
+  final bool silhouetteEdgeBoost;         // default true (renders outer contour edges 1.35x thicker than inner creases)
+  final bool showGroundShadow;            // default true (renders soft contact shadow plane on Z = 0 floor)
+  final bool screenSpaceEdgeAntiAliasing; // default true (hardware MSAA vector edge smoothing pass)
+
   const OnshapeGraphicsPreferences({
-    this.ambientOcclusion = 40.0,
+    this.ambientOcclusion = 65.0,
     this.fieldOfView = 46.0,
-    this.antiAliasingQuality = AntiAliasingQuality.extreme,
-    this.lineWidth = 0.65,
-    this.shininess = 25.0,
+    this.antiAliasingQuality = AntiAliasingQuality.high,
+    this.lineWidth = 1.35,
+    this.shininess = 68.0,
     this.specularColor = const Color(0xFFFFFFFF),
     this.sectionInterferenceColor = const Color(0xFF4CAF50),
     this.phantomTangentEdgeWidth = 0.8,
@@ -367,6 +384,11 @@ class OnshapeGraphicsPreferences {
     this.showWeldOverlay = true,
     this.weldOverlayColor = const Color(0xD9F59E0B),
     this.materialSettings = const CadMaterialSettings(),
+    this.lightingPreset = CadLightingPreset.onshapeStudio,
+    this.cavityStrength = 65.0,
+    this.silhouetteEdgeBoost = true,
+    this.showGroundShadow = true,
+    this.screenSpaceEdgeAntiAliasing = true,
   });
 
   OnshapeGraphicsPreferences copyWith({
@@ -394,6 +416,11 @@ class OnshapeGraphicsPreferences {
     bool? showWeldOverlay,
     Color? weldOverlayColor,
     CadMaterialSettings? materialSettings,
+    CadLightingPreset? lightingPreset,
+    double? cavityStrength,
+    bool? silhouetteEdgeBoost,
+    bool? showGroundShadow,
+    bool? screenSpaceEdgeAntiAliasing,
   }) {
     return OnshapeGraphicsPreferences(
       ambientOcclusion: ambientOcclusion ?? this.ambientOcclusion,
@@ -420,6 +447,11 @@ class OnshapeGraphicsPreferences {
       showWeldOverlay: showWeldOverlay ?? this.showWeldOverlay,
       weldOverlayColor: weldOverlayColor ?? this.weldOverlayColor,
       materialSettings: materialSettings ?? this.materialSettings,
+      lightingPreset: lightingPreset ?? this.lightingPreset,
+      cavityStrength: cavityStrength ?? this.cavityStrength,
+      silhouetteEdgeBoost: silhouetteEdgeBoost ?? this.silhouetteEdgeBoost,
+      showGroundShadow: showGroundShadow ?? this.showGroundShadow,
+      screenSpaceEdgeAntiAliasing: screenSpaceEdgeAntiAliasing ?? this.screenSpaceEdgeAntiAliasing,
     );
   }
 
@@ -448,7 +480,12 @@ class OnshapeGraphicsPreferences {
         other.keyLightIntensity == keyLightIntensity &&
         other.hasSecondaryLight == hasSecondaryLight &&
         other.hasBackLight == hasBackLight &&
-        other.materialSettings == materialSettings;
+        other.materialSettings == materialSettings &&
+        other.lightingPreset == lightingPreset &&
+        other.cavityStrength == cavityStrength &&
+        other.silhouetteEdgeBoost == silhouetteEdgeBoost &&
+        other.showGroundShadow == showGroundShadow &&
+        other.screenSpaceEdgeAntiAliasing == screenSpaceEdgeAntiAliasing;
   }
 
   @override
@@ -475,6 +512,11 @@ class OnshapeGraphicsPreferences {
         hasSecondaryLight,
         hasBackLight,
         materialSettings,
+        lightingPreset,
+        cavityStrength,
+        silhouetteEdgeBoost,
+        showGroundShadow,
+        screenSpaceEdgeAntiAliasing,
       ]);
 }
 

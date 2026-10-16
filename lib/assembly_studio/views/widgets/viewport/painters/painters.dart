@@ -12,3 +12,4 @@ export 'assembly_weld_lamp_painter.dart';
 export 'assembly_3d_surface_sketch_painter.dart';
 export 'assembly_3d_plane_painter.dart';
 export 'assembly_3d_extrude_painter.dart';
+export 'assembly_gpu_edge_antialias_painter.dart';
