@@ -3,7 +3,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmodel.dart';
-import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 
 class AssemblyViewportStatusPill extends StatelessWidget {
   final AssemblyStudioViewModel viewModel;
@@ -20,142 +19,46 @@ class AssemblyViewportStatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final report = viewModel.evaluateLadderCompliance();
-    final isGpu = viewModel.renderEngine == Cad3dEngineMode.flutterGpu;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Active 3D Render Engine Selector Pill (GPU vs 2D Canvas)
-        Theme(
-          data: Theme.of(context).copyWith(
-            hoverColor: const Color(0xFFF1F5F9),
-          ),
-          child: PopupMenuButton<Cad3dEngineMode>(
-            tooltip: '3D Render Engine: ${viewModel.renderEngine.label}\nClick to switch between GPU and 2D Canvas',
-            initialValue: viewModel.renderEngine,
-            onSelected: (mode) => viewModel.setRenderEngine(mode),
-            color: Colors.white,
-            elevation: 6,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(color: Color(0xFFCBD5E1)),
+        // Active 3D Render Engine Status Pill (Impeller GPU 120 FPS)
+        Tooltip(
+          message: '3D Render Engine: Flutter GPU (Impeller)\nHardware-accelerated 120 FPS PBR rendering active.',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: const Color(0xFF10B981),
+                width: 1.2,
+              ),
+              boxShadow: const [
+                BoxShadow(color: Color(0x15000000), blurRadius: 8, offset: Offset(0, 2)),
+              ],
             ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isGpu ? const Color(0xFF10B981) : const Color(0xFF0284C7),
-                  width: 1.2,
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.speed_rounded,
+                  color: Color(0xFF059669),
+                  size: 14,
                 ),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x15000000), blurRadius: 8, offset: Offset(0, 2)),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isGpu ? Icons.speed_rounded : Icons.brush_rounded,
-                    color: isGpu ? const Color(0xFF059669) : const Color(0xFF0284C7),
-                    size: 14,
+                SizedBox(width: 5),
+                Text(
+                  '⚡ GPU (Impeller 120 FPS)',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF047857),
+                    letterSpacing: 0.2,
                   ),
-                  const SizedBox(width: 5),
-                  Text(
-                    isGpu ? '⚡ GPU (flutter_scene)' : '🎨 2D Canvas (Paint)',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.bold,
-                      color: isGpu ? const Color(0xFF047857) : const Color(0xFF0369A1),
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                  const SizedBox(width: 3),
-                  Icon(
-                    Icons.arrow_drop_down_rounded,
-                    size: 16,
-                    color: isGpu ? const Color(0xFF047857) : const Color(0xFF0369A1),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            itemBuilder: (ctx) => [
-              PopupMenuItem<Cad3dEngineMode>(
-                value: Cad3dEngineMode.flutterGpu,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.speed_rounded,
-                      size: 18,
-                      color: isGpu ? const Color(0xFF059669) : const Color(0xFF64748B),
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            const Text('Flutter GPU (flutter_scene)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                            if (isGpu) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFDCFCE7),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text('ACTIVE', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        const Text('Hardware-accelerated 120 FPS PBR renderer', style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem<Cad3dEngineMode>(
-                value: Cad3dEngineMode.flutterPaint,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.brush_rounded,
-                      size: 18,
-                      color: !isGpu ? const Color(0xFF0284C7) : const Color(0xFF64748B),
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            const Text('2D Canvas (FlutterPaint)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                            if (!isGpu) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE0F2FE),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text('ACTIVE', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Color(0xFF0369A1))),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        const Text('Pure software CustomPainter Canvas fallback', style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
         ),
         const SizedBox(width: 8),

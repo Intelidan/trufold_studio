@@ -103,44 +103,50 @@ class TruFold3dEnginePreloader {
     }
 
     // Step 1: Initialize FlutterScene Impeller GPU static resources & shader bundle
-    report('Initializing truFold 3D Engine (Impeller GPU)...', 0.20);
+    report('Verifying Impeller GPU backend...', 0.20);
     try {
       await Scene.initializeStaticResources();
+      // Instantiate a test scene to ensure the Impeller GPU backend is active
+      final testScene = Scene();
+      final warmupMesh = Mesh(CuboidGeometry(vm.Vector3(5, 5, 5)), PhysicallyBasedMaterial());
+      final warmupNode = Node(name: 'EngineWarmupNode', mesh: warmupMesh);
+      testScene.add(warmupNode);
+      _isGpuAvailable = true;
     } catch (e) {
-      debugPrint('TruFold3dEnginePreloader: Static resources notice: $e');
+      debugPrint('TruFold3dEnginePreloader: Impeller verification failed: $e');
       _isGpuAvailable = false;
+      _lastError = e;
+      report('Impeller GPU backend not detected.', 0.20);
+      return;
     }
 
     // Step 2: Load and pre-compile master PBR shader material
     report('Compiling Master PBR Shaders & Materials...', 0.50);
-    if (_isGpuAvailable) {
-      try {
-        _cachedMasterMaterial = await loadFmatMaterial('assets/materials/master_materials.fmat');
-        _cachedMasterMaterial?.doubleSided = true;
-      } catch (e) {
-        debugPrint('TruFold3dEnginePreloader: master_materials.fmat notice: $e');
-      }
+    try {
+      _cachedMasterMaterial = await loadFmatMaterial('assets/materials/master_materials.fmat');
+      _cachedMasterMaterial?.doubleSided = true;
+    } catch (e) {
+      debugPrint('TruFold3dEnginePreloader: master_materials.fmat notice: $e');
     }
 
-    // Step 3: Warm up Scene Graph and Impeller Pipeline with a lightweight test node
-    report('Pre-warming 3D Geometric Tessellator...', 0.75);
-    if (_isGpuAvailable) {
-      try {
-        final warmupScene = Scene();
-        final warmupMesh = Mesh(CuboidGeometry(vm.Vector3(5, 5, 5)), PhysicallyBasedMaterial());
-        final warmupNode = Node(name: 'EngineWarmupNode', mesh: warmupMesh);
-        warmupScene.add(warmupNode);
-      } catch (e) {
-        debugPrint('TruFold3dEnginePreloader: Warmup scene notice: $e');
-      }
-    }
-
-    // Step 4: Final handshake and solver calibration
-    report('Calibrating 3D Kinematics & Solvers...', 0.92);
-    // Allow microtask drain so frame dispatcher receives warm pipeline state
+    // Step 3: Calibrating 3D Kinematics & Solvers
+    report('Calibrating 3D Kinematics & Solvers...', 0.90);
     await Future<void>.delayed(const Duration(milliseconds: 40));
 
     report('truFold 3D Engine Ready.', 1.0);
+  }
+
+  /// Attempts to re-verify and re-initialize the Impeller GPU engine.
+  Future<void> retryPreload({EnginePreloadProgressCallback? onProgress}) {
+    _isReady = false;
+    _isInitializing = false;
+    _isGpuAvailable = true;
+    _progress = 0.0;
+    _currentStatus = 'Retrying Impeller initialization...';
+    _lastError = null;
+    _cachedMasterMaterial = null;
+    _preloadFuture = null;
+    return preload(onProgress: onProgress);
   }
 
   /// Resets the preloader state (primarily used in automated unit tests).

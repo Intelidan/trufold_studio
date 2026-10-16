@@ -11,7 +11,6 @@ import '../../../sheet_metal_studio/models/cad_primitives.dart';
 import '../../../sheet_metal_studio/engine/kinematic_fold_engine.dart';
 import '../../../sheet_metal_studio/engine/flutter_scene_cad_mesh_builder.dart';
 import '../../../sheet_metal_studio/engine/trufold_3d_engine_preloader.dart';
-import '../../../sheet_metal_studio/views/widgets/viewport_3d/painters/flutter_paint_3d_engine.dart';
 import '../../../sheet_metal_studio/views/widgets/studio/studio_3d_navigation_bar.dart';
 import '../../../sheet_metal_studio/views/widgets/studio/studio_view_cube.dart';
 import '../../../sheet_metal_studio/views/widgets/studio/studio_graphics_preferences_panel.dart';
@@ -30,8 +29,7 @@ import '../../engine/sketch/assembly_surface_sketch_engine.dart' hide WeldJointS
 import '../../engine/sketch/onshape_sketch_modify_engine.dart';
 
 /// Primary 3D interactive viewport for the Assembly Studio.
-/// Powered by the real flutter_scene Impeller GPU engine (PBR shaders, lighting, depth buffer)
-/// with graceful fallback to FlutterPaint3dPainter on headless/non-GPU environments.
+/// Powered by the real flutter_scene Impeller GPU engine (PBR shaders, lighting, depth buffer).
 /// Features exact CAD Studio 3D navigation (Orbit, Pan, Zoom, Alt-constrained orbit, Double-tap fit),
 /// integrated Studio3dNavigationBar & StudioViewCube, SketchUp-style primary movement toolbar,
 /// direct 3D model face sketching with 'S' hotkey, and 60FPS fluid transformations.
@@ -2450,8 +2448,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   child: ListenableBuilder(
                                     listenable: _cameraRepaintNotifier,
                                     builder: (context, _) {
-                                      final bool useGpu = (vm.renderEngine == Cad3dEngineMode.flutterGpu) &&
-                                          _isGpuAvailable && _scene != null && _isSceneReady;
+                                      final bool useGpu = _isGpuAvailable && _scene != null && _isSceneReady;
                                       return useGpu
                                           ? RepaintBoundary(
                                               child: Stack(
@@ -2472,23 +2469,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                                 ],
                                               ),
                                             )
-                                          : RepaintBoundary(
-                                              child: CustomPaint(
-                                                size: Size.infinite,
-                                                painter: FlutterPaint3dPainter(
-                                                  mesh: mesh,
-                                                  azimuthDeg: _azimuthDeg,
-                                                  elevationDeg: _elevationDeg,
-                                                  zoom: _zoom,
-                                                  pan: _pan,
-                                                  showWireframe: vm.onshapeRenderMode != OnshapeRenderMode.shadedWithoutEdges,
-                                                  isGlassMode: vm.onshapeRenderMode == OnshapeRenderMode.translucent,
-                                                  isOrthoProjection: vm.isOrthoProjection,
-                                                  selectedFaceId: vm.doc.selectedPartId ?? vm.doc.selectedFaceId,
-                                                  pivotOverride: _cameraPivot,
-                                                ),
-                                              ),
-                                            );
+                                          : const RepaintBoundary(child: SizedBox.shrink());
                                     },
                                   ),
                                 ),

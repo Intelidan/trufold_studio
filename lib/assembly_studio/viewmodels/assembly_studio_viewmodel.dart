@@ -171,22 +171,16 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   bool showWeldOverlay = true;
   int documentVersion = 0;
 
-  // Active 3D Render Engine (Flutter GPU vs 2D Canvas Fallback)
-  Cad3dEngineMode _renderEngine = Cad3dEngineMode.flutterGpu;
+  // Active 3D Render Engine (Impeller Hardware-Accelerated Flutter GPU)
+  final Cad3dEngineMode _renderEngine = Cad3dEngineMode.flutterGpu;
   Cad3dEngineMode get renderEngine => _renderEngine;
 
   void setRenderEngine(Cad3dEngineMode mode) {
-    if (_renderEngine == mode) return;
-    _renderEngine = mode;
-    notifyListeners();
+    // Exclusively Impeller GPU
   }
 
   void toggleRenderEngine() {
-    if (_renderEngine == Cad3dEngineMode.flutterGpu) {
-      setRenderEngine(Cad3dEngineMode.flutterPaint);
-    } else {
-      setRenderEngine(Cad3dEngineMode.flutterGpu);
-    }
+    // Exclusively Impeller GPU
   }
 
   // ===========================================================================

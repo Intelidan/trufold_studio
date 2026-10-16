@@ -5,7 +5,6 @@
 import 'package:flutter/material.dart';
 import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmodel.dart';
 import 'package:trufold_studio/assembly_studio/views/widgets/viewport/overlays/assembly_viewport_dialogs.dart';
-import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 
 class AssemblyDesktopMenuBar extends StatelessWidget {
   final AssemblyStudioViewModel viewModel;
@@ -175,13 +174,8 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
         const PopupMenuDivider(),
         _buildCheckboxItem(
           value: 'engine_gpu',
-          label: '3D Engine: Flutter GPU (120 FPS)',
-          isChecked: vm.renderEngine == Cad3dEngineMode.flutterGpu,
-        ),
-        _buildCheckboxItem(
-          value: 'engine_paint',
-          label: '3D Engine: 2D Canvas (Paint Fallback)',
-          isChecked: vm.renderEngine == Cad3dEngineMode.flutterPaint,
+          label: '3D Engine: Flutter GPU (Impeller 120 FPS)',
+          isChecked: true,
         ),
       ],
       onSelected: (val) {
@@ -224,10 +218,6 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
             vm.toggleCleanCanvasMode();
             break;
           case 'engine_gpu':
-            vm.setRenderEngine(Cad3dEngineMode.flutterGpu);
-            break;
-          case 'engine_paint':
-            vm.setRenderEngine(Cad3dEngineMode.flutterPaint);
             break;
         }
       },

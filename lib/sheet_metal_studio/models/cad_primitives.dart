@@ -234,10 +234,6 @@ enum Cad3dEngineMode {
   flutterGpu(
     'Flutter GPU (Scene)',
     'Hardware-accelerated 120 FPS PBR renderer powered by flutter_scene and Impeller.',
-  ),
-  flutterPaint(
-    'Flutter Paint (2.5D Canvas)',
-    '1st-generation pure software Canvas CustomPainter fallback with zero GPU dependencies.',
   );
 
   final String label;

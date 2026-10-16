@@ -33,9 +33,8 @@ import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../studio/studio_3d_navigation_bar.dart';
 import '../studio/studio_graphics_preferences_panel.dart';
 import '../studio/studio_view_cube.dart';
-import 'painters/flutter_paint_3d_engine.dart';
 
-/// Next-Generation 3D CAD Viewport with Dual-Engine (Flutter GPU / Flutter Paint) switching.
+/// Next-Generation 3D CAD Viewport powered by Flutter GPU (flutter_scene Impeller).
 class FlutterSceneViewportWidget extends StatefulWidget {
   final SheetMetalStudioViewModel viewModel;
   final bool isInteractionLocked;
@@ -66,7 +65,6 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
   bool _isCameraReady = false;
   bool _isEngineReady = false;
   bool _isGpuAvailable = true;
-  Cad3dEngineMode _engineMode = Cad3dEngineMode.flutterGpu;
   bool _showWireframe = true;
   bool _showDimensions = true;
   bool _isFirstLoad = true;
@@ -75,7 +73,6 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
   // --- Mouse & Navigation States ---
   bool _isTurntableOrbit = false; // Default: 360° Free Virtual Globe Trackball
   bool _isPanToolActive = false;
-  bool _isUserInteracting = false;
   late final ValueNotifier<(double, double)> _viewCubeNotifier;
 
   // --- 360° Virtual Globe / Arcball & Model Transform State ---
@@ -102,10 +99,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
   @override
   void initState() {
     super.initState();
-    _cameraAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 380),
-    )..addListener(_onCameraAnimationTick);
+    _cameraAnimationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 380))..addListener(_onCameraAnimationTick);
 
     final savedState = widget.viewModel.camera3dState;
     final initialAzDeg = (savedState != null && savedState.isInitialized) ? savedState.azimuthDeg : 45.0;
@@ -277,7 +271,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
 
   void _onViewModelChanged() {
     if (!mounted) return;
-    if (_isEngineReady && _engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+    if (_isEngineReady && _isGpuAvailable) {
       _rebuildCadMesh(preserveCamera: true);
     } else {
       setState(() {});
@@ -287,10 +281,9 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
   void _setupSceneGraph() {
     try {
       _scene = Scene();
+      _isGpuAvailable = true;
     } catch (_) {
-      // Graceful fallback to pure software Flutter Paint engine on headless tests or non-Impeller hosts
       _isGpuAvailable = false;
-      _engineMode = Cad3dEngineMode.flutterPaint;
       setState(() => _isEngineReady = true);
       return;
     }
@@ -406,7 +399,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
       widget.viewModel.addListener(_onViewModelChanged);
 
       // Rebuild 3D mesh for the new tab's drawing while holding current camera view
-      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+      if (_isGpuAvailable) {
         _rebuildCadMesh(preserveCamera: true);
       } else {
         setState(() {});
@@ -415,7 +408,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
       // Smoothly glide camera from outgoing tab position to restored destination position
       _restoreCameraStateFromViewModel(widget.viewModel, animate: true);
     } else if (widget.viewModel.currentMesh != oldWidget.viewModel.currentMesh) {
-      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+      if (_isGpuAvailable) {
         _rebuildCadMesh(preserveCamera: true);
       }
     }
@@ -425,7 +418,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
   void reassemble() {
     super.reassemble();
     widget.viewModel.recomputeMesh();
-    if (_isEngineReady && _engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+    if (_isEngineReady && _isGpuAvailable) {
       _rebuildCadMesh(preserveCamera: true);
     }
   }
@@ -454,10 +447,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     // Use procedural Voronoi shader specifically for HDG spangles, while using
     // double-sided PhysicallyBasedMaterial with vertex color sheet thickness for all other materials (Paint, GI, SS, etc.)
     if (matSettings.useSpangles && _masterShaderMaterial != null) {
-      _masterShaderMaterial!.parameters.setVec4(
-        'baseColorFactor',
-        matSettings.toLinearRgbVector4(),
-      );
+      _masterShaderMaterial!.parameters.setVec4('baseColorFactor', matSettings.toLinearRgbVector4());
       _masterShaderMaterial!.parameters.setFloat('roughnessFactor', matSettings.roughness);
       _masterShaderMaterial!.parameters.setFloat('isPlastic', matSettings.isPlastic ? 1.0 : 0.0);
       _masterShaderMaterial!.parameters.setFloat('materialMode', 1.0);
@@ -513,11 +503,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     final up = vm.Vector3(-m[4], m[6], m[5]);
 
     final pivot = widget.viewModel.currentMesh.center;
-    final target = vm.Vector3(
-      _orbitTarget.x - pivot.x,
-      _orbitTarget.y - pivot.y,
-      _orbitTarget.z - pivot.z,
-    );
+    final target = vm.Vector3(_orbitTarget.x - pivot.x, _orbitTarget.y - pivot.y, _orbitTarget.z - pivot.z);
     final eye = target + d * _orbitDistance;
 
     _cameraNode.lookAtFrom(eye, target, up: up);
@@ -532,10 +518,22 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     final sinEl = math.sin(elRad);
 
     return TransformMatrix4.fromList([
-      cosAz, sinAz, 0.0, 0.0,
-      -sinEl * sinAz, sinEl * cosAz, cosEl, 0.0,
-      cosEl * sinAz, -cosEl * cosAz, sinEl, 0.0,
-      0.0, 0.0, 0.0, 1.0,
+      cosAz,
+      sinAz,
+      0.0,
+      0.0,
+      -sinEl * sinAz,
+      sinEl * cosAz,
+      cosEl,
+      0.0,
+      cosEl * sinAz,
+      -cosEl * cosAz,
+      sinEl,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
     ]);
   }
 
@@ -556,18 +554,9 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     var r1 = CadPoint3D(m[4], m[5], m[6]);
     final dot01 = r1.x * r0.x + r1.y * r0.y + r1.z * r0.z;
     r1 = CadPoint3D(r1.x - dot01 * r0.x, r1.y - dot01 * r0.y, r1.z - dot01 * r0.z).normalized();
-    final r2 = CadPoint3D(
-      r0.y * r1.z - r0.z * r1.y,
-      r0.z * r1.x - r0.x * r1.z,
-      r0.x * r1.y - r0.y * r1.x,
-    ).normalized();
+    final r2 = CadPoint3D(r0.y * r1.z - r0.z * r1.y, r0.z * r1.x - r0.x * r1.z, r0.x * r1.y - r0.y * r1.x).normalized();
 
-    _modelTransform = TransformMatrix4.fromList([
-      r0.x, r0.y, r0.z, 0.0,
-      r1.x, r1.y, r1.z, 0.0,
-      r2.x, r2.y, r2.z, 0.0,
-      0.0,  0.0,  0.0,  1.0,
-    ]);
+    _modelTransform = TransformMatrix4.fromList([r0.x, r0.y, r0.z, 0.0, r1.x, r1.y, r1.z, 0.0, r2.x, r2.y, r2.z, 0.0, 0.0, 0.0, 0.0, 1.0]);
   }
 
   Offset _projectOffsetFromCenter(CadPoint3D p, Size size) {
@@ -657,10 +646,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
   void _maintainPinnedAnchor(Size size) {
     if (_pinnedPivotPoint != null && _pinnedScreenAnchor != null && size.width > 0 && size.height > 0) {
       final u = _projectOffsetFromCenter(_pinnedPivotPoint!, size);
-      _paintPan = Offset(
-        _pinnedScreenAnchor!.dx - size.width / 2.0 - u.dx,
-        _pinnedScreenAnchor!.dy - size.height / 2.0 - u.dy,
-      );
+      _paintPan = Offset(_pinnedScreenAnchor!.dx - size.width / 2.0 - u.dx, _pinnedScreenAnchor!.dy - size.height / 2.0 - u.dy);
     }
   }
 
@@ -734,7 +720,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     _syncCameraAnglesFromTransform();
     _maintainPinnedAnchor(size);
 
-    if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable && _isCameraReady && _scene != null) {
+    if (_isGpuAvailable && _isCameraReady && _scene != null) {
       _updateGpuCamera();
     }
     _saveCameraStateToViewModel(widget.viewModel);
@@ -750,7 +736,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     _orthonormalizeModelTransform();
     _syncCameraAnglesFromTransform();
     if (_lastKnownViewportSize != null) _maintainPinnedAnchor(_lastKnownViewportSize!);
-    if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable && _isCameraReady && _scene != null) {
+    if (_isGpuAvailable && _isCameraReady && _scene != null) {
       _updateGpuCamera();
     }
     _saveCameraStateToViewModel(widget.viewModel);
@@ -785,7 +771,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     _viewCubeNotifier.value = (_paintAzimuthDeg, _paintElevationDeg);
     if (_lastKnownViewportSize != null) _maintainPinnedAnchor(_lastKnownViewportSize!);
 
-    if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable && _isCameraReady && _scene != null) {
+    if (_isGpuAvailable && _isCameraReady && _scene != null) {
       _updateGpuCamera();
     }
     _saveCameraStateToViewModel(widget.viewModel);
@@ -802,11 +788,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     final elRad = _paintElevationDeg * vm.degrees2Radians;
 
     final right = vm.Vector3(math.cos(azRad), 0.0, -math.sin(azRad));
-    final up = vm.Vector3(
-      math.sin(azRad) * math.sin(elRad),
-      math.cos(elRad),
-      math.cos(azRad) * math.sin(elRad),
-    );
+    final up = vm.Vector3(math.sin(azRad) * math.sin(elRad), math.cos(elRad), math.cos(azRad) * math.sin(elRad));
 
     final vpHeight = size.height > 0 ? size.height : 600.0;
     final k = (_orbitDistance * 0.85) / vpHeight;
@@ -815,13 +797,9 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     // Moving mouse down (dy > 0) moves model down, so camera target shifts up (+up)
     final shift = (right * (-delta.dx * k)) + (up * (delta.dy * k));
 
-    _orbitTarget = CadPoint3D(
-      _orbitTarget.x + shift.x,
-      _orbitTarget.y + shift.y,
-      _orbitTarget.z + shift.z,
-    );
+    _orbitTarget = CadPoint3D(_orbitTarget.x + shift.x, _orbitTarget.y + shift.y, _orbitTarget.z + shift.z);
 
-    if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable && _isCameraReady && _scene != null) {
+    if (_isGpuAvailable && _isCameraReady && _scene != null) {
       _updateGpuCamera();
     }
     _saveCameraStateToViewModel(widget.viewModel);
@@ -835,7 +813,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     _paintZoom = (_paintZoom * factor).clamp(0.1, 25.0);
     _orbitDistance = (_orbitDistance / factor).clamp(10.0, 5000.0);
 
-    if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable && _isCameraReady && _scene != null) {
+    if (_isGpuAvailable && _isCameraReady && _scene != null) {
       _updateGpuCamera();
     }
     _saveCameraStateToViewModel(widget.viewModel);
@@ -958,10 +936,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                               setDlgState(() {});
                             }
                           },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0284C7),
-                            foregroundColor: Colors.white,
-                          ),
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7), foregroundColor: Colors.white),
                           child: const Text('Save'),
                         ),
                       ],
@@ -999,12 +974,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Close'),
-                ),
-              ],
+              actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close'))],
             );
           },
         );
@@ -1064,11 +1034,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
       widget.viewModel.selectFace(poly.faceId);
     }
 
-    _showOnshapeContextMenu(
-      globalPosition: details.globalPosition,
-      polygon: poly,
-      size: size,
-    );
+    _showOnshapeContextMenu(globalPosition: details.globalPosition, polygon: poly, size: size);
   }
 
   void _handlePrimaryTapUp(TapUpDetails details, Size size, FoldedMeshResult mesh) {
@@ -1082,11 +1048,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     }
   }
 
-  Future<void> _showOnshapeContextMenu({
-    required Offset globalPosition,
-    required CadFoldedPolygon3D? polygon,
-    required Size size,
-  }) async {
+  Future<void> _showOnshapeContextMenu({required Offset globalPosition, required CadFoldedPolygon3D? polygon, required Size size}) async {
     final faceId = polygon?.faceId;
     final partId = faceId != null ? SheetMetalStudioViewModel.extractPartIdFromFaceId(faceId) : null;
     final isPartHidden = partId != null && widget.viewModel.isPartHidden(partId);
@@ -1098,10 +1060,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
 
     final result = await showMenu<String>(
       context: context,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
-        Offset.zero & overlay.size,
-      ),
+      position: RelativeRect.fromRect(Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0), Offset.zero & overlay.size),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
@@ -1115,33 +1074,19 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
           height: 32,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(4),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(4)),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  polygon != null ? Icons.layers_rounded : Icons.view_in_ar_rounded,
-                  size: 13,
-                  color: const Color(0xFF0284C7),
-                ),
+                Icon(polygon != null ? Icons.layers_rounded : Icons.view_in_ar_rounded, size: 13, color: const Color(0xFF0284C7)),
                 const SizedBox(width: 6),
                 Text(
                   polygon != null ? 'Face: $faceId' : '3D Viewport Controls',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
-                  ),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                 ),
                 if (partId != null && partId != faceId) ...[
                   const SizedBox(width: 4),
-                  Text(
-                    '($partId)',
-                    style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
-                  ),
+                  Text('($partId)', style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
                 ],
               ],
             ),
@@ -1186,32 +1131,18 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     _executeContextMenuAction(result, polygon, partId);
   }
 
-  PopupMenuItem<String> _buildContextItem(
-    String value,
-    String text,
-    IconData icon, {
-    bool enabled = true,
-    Color? iconColor,
-  }) {
+  PopupMenuItem<String> _buildContextItem(String value, String text, IconData icon, {bool enabled = true, Color? iconColor}) {
     return PopupMenuItem<String>(
       value: value,
       enabled: enabled,
       height: 32,
       child: Row(
         children: [
-          Icon(
-            icon,
-            size: 15,
-            color: enabled ? (iconColor ?? const Color(0xFF475569)) : const Color(0xFFCBD5E1),
-          ),
+          Icon(icon, size: 15, color: enabled ? (iconColor ?? const Color(0xFF475569)) : const Color(0xFFCBD5E1)),
           const SizedBox(width: 9),
           Text(
             text,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: enabled ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
-            ),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: enabled ? const Color(0xFF1E293B) : const Color(0xFF94A3B8)),
           ),
         ],
       ),
@@ -1316,8 +1247,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
   }
 
   void _showPartAppearanceDialog(String partId) {
-    final currentColor = widget.viewModel.partColorOverrides[partId] ??
-        widget.viewModel.graphicsPreferences.materialSettings.baseColor;
+    final currentColor = widget.viewModel.partColorOverrides[partId] ?? widget.viewModel.graphicsPreferences.materialSettings.baseColor;
 
     final colorPresets = <(String, Color)>[
       ('Galvanized Steel DX51D', const Color(0xFFA6AABC)),
@@ -1360,7 +1290,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     child: InkWell(
                       onTap: () {
                         widget.viewModel.setPartColor(partId, preset.$2);
-                        if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                        if (_isGpuAvailable) {
                           _rebuildCadMesh(preserveCamera: true);
                         }
                         Navigator.of(ctx).pop();
@@ -1372,13 +1302,8 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                         decoration: BoxDecoration(
                           color: preset.$2,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF94A3B8),
-                            width: isSelected ? 2.5 : 1.0,
-                          ),
-                          boxShadow: [
-                            BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2, offset: const Offset(0, 1)),
-                          ],
+                          border: Border.all(color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF94A3B8), width: isSelected ? 2.5 : 1.0),
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2, offset: const Offset(0, 1))],
                         ),
                         child: isSelected ? const Icon(Icons.check, size: 16, color: Color(0xFF0284C7)) : null,
                       ),
@@ -1393,17 +1318,14 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
           TextButton(
             onPressed: () {
               widget.viewModel.clearPartColor(partId);
-              if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+              if (_isGpuAvailable) {
                 _rebuildCadMesh(preserveCamera: true);
               }
               Navigator.of(ctx).pop();
             },
             child: const Text('Reset to Default', style: TextStyle(color: Color(0xFFEF4444))),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Done'),
-          ),
+          ElevatedButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Done')),
         ],
       ),
     );
@@ -1417,16 +1339,17 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
         color: Colors.white.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFCBD5E1), width: 1.0),
-        boxShadow: const [
-          BoxShadow(color: Color(0x1F000000), blurRadius: 10, offset: Offset(0, 3)),
-        ],
+        boxShadow: const [BoxShadow(color: Color(0x1F000000), blurRadius: 10, offset: Offset(0, 3))],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(Icons.cut_outlined, size: 16, color: Color(0xFF0284C7)),
           const SizedBox(width: 8),
-          const Text('Section:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+          const Text(
+            'Section:',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+          ),
           const SizedBox(width: 8),
           // Axis selector
           DropdownButton<SectionPlaneAxis>(
@@ -1434,14 +1357,23 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
             isDense: true,
             underline: const SizedBox(),
             items: const [
-              DropdownMenuItem(value: SectionPlaneAxis.yz, child: Text('YZ (Front)', style: TextStyle(fontSize: 12))),
-              DropdownMenuItem(value: SectionPlaneAxis.zx, child: Text('ZX (Top)', style: TextStyle(fontSize: 12))),
-              DropdownMenuItem(value: SectionPlaneAxis.xy, child: Text('XY (Right)', style: TextStyle(fontSize: 12))),
+              DropdownMenuItem(
+                value: SectionPlaneAxis.yz,
+                child: Text('YZ (Front)', style: TextStyle(fontSize: 12)),
+              ),
+              DropdownMenuItem(
+                value: SectionPlaneAxis.zx,
+                child: Text('ZX (Top)', style: TextStyle(fontSize: 12)),
+              ),
+              DropdownMenuItem(
+                value: SectionPlaneAxis.xy,
+                child: Text('XY (Right)', style: TextStyle(fontSize: 12)),
+              ),
             ],
             onChanged: (val) {
               if (val != null) {
                 widget.viewModel.setSectionViewAxis(val);
-                if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                if (_isGpuAvailable) {
                   _rebuildCadMesh(preserveCamera: true);
                 }
                 setState(() {});
@@ -1453,10 +1385,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
           SizedBox(
             width: 140,
             child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                trackHeight: 3,
-              ),
+              data: SliderTheme.of(context).copyWith(thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6), trackHeight: 3),
               child: Slider(
                 value: cfg.distanceOffsetMm.clamp(-250.0, 250.0),
                 min: -250.0,
@@ -1464,7 +1393,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                 activeColor: const Color(0xFF0284C7),
                 onChanged: (val) {
                   widget.viewModel.setSectionViewOffset(val);
-                  if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                  if (_isGpuAvailable) {
                     _rebuildCadMesh(preserveCamera: true);
                   }
                   setState(() {});
@@ -1480,7 +1409,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
             icon: Icon(Icons.swap_horiz, size: 16, color: cfg.flipNormal ? const Color(0xFF0284C7) : const Color(0xFF64748B)),
             onPressed: () {
               widget.viewModel.sectionViewConfig = cfg.copyWith(flipNormal: !cfg.flipNormal);
-              if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+              if (_isGpuAvailable) {
                 _rebuildCadMesh(preserveCamera: true);
               }
               setState(() {});
@@ -1492,7 +1421,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
             icon: const Icon(Icons.close, size: 16, color: Color(0xFFEF4444)),
             onPressed: () {
               widget.viewModel.toggleSectionView();
-              if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+              if (_isGpuAvailable) {
                 _rebuildCadMesh(preserveCamera: true);
               }
               setState(() {});
@@ -1566,7 +1495,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
 
   /// Projects a 3D CAD vertex into logical 2D viewport coordinates for dimensions, tags, & annotations.
   Offset projectPointToScreen(CadPoint3D p, Size size) {
-    if (_engineMode == Cad3dEngineMode.flutterPaint || !_isGpuAvailable || _scene == null) {
+    if (!_isGpuAvailable || _scene == null) {
       return projectPointToScreenPaint(p, size);
     }
     return projectPointToScreenGpu(p, size);
@@ -1591,7 +1520,6 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     }
 
     final mesh = widget.viewModel.currentMesh;
-    final isPaintMode = (_engineMode == Cad3dEngineMode.flutterPaint || !_isGpuAvailable || _scene == null);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1632,7 +1560,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                       } else {
                         widget.viewModel.hidePart(pId);
                       }
-                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                      if (_isGpuAvailable) {
                         _rebuildCadMesh(preserveCamera: true);
                       }
                       setState(() {});
@@ -1644,7 +1572,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     if (selFace != null) {
                       final pId = SheetMetalStudioViewModel.extractPartIdFromFaceId(selFace);
                       widget.viewModel.isolatePart(pId);
-                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                      if (_isGpuAvailable) {
                         _rebuildCadMesh(preserveCamera: true);
                       }
                       setState(() {});
@@ -1656,7 +1584,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     if (selFace != null) {
                       final pId = SheetMetalStudioViewModel.extractPartIdFromFaceId(selFace);
                       widget.viewModel.makePartTransparent(pId);
-                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                      if (_isGpuAvailable) {
                         _rebuildCadMesh(preserveCamera: true);
                       }
                       setState(() {});
@@ -1678,7 +1606,6 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     } catch (_) {}
 
                     setState(() {
-                      _isUserInteracting = true;
                       if (!isMiddle && (isPrimary || isSecondary) && !_isPanToolActive) {
                         _isRotatingModel = true;
                         _dragStartPos = event.localPosition;
@@ -1703,7 +1630,6 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     });
                   },
                   onPointerUp: (_) => setState(() {
-                    _isUserInteracting = false;
                     _isRotatingModel = false;
                     _dragStartPos = null;
                     _currentDragPos = null;
@@ -1712,7 +1638,6 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     _pinnedScreenAnchor = null;
                   }),
                   onPointerCancel: (_) => setState(() {
-                    _isUserInteracting = false;
                     _isRotatingModel = false;
                     _dragStartPos = null;
                     _currentDragPos = null;
@@ -1766,47 +1691,13 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                       }
                     }
                   },
-                  child: isPaintMode
-                      // --- 1st Generation: Pure Flutter Paint Canvas ---
-                      ? GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTapUp: widget.isInteractionLocked ? null : (details) => _handlePrimaryTapUp(details, size, mesh),
-                          onSecondaryTapUp: widget.isInteractionLocked ? null : (details) => _handleSecondaryTapUp(details, size, mesh),
-                          onDoubleTap: _zoomToFit,
-                          child: RepaintBoundary(
-                            child: CustomPaint(
-                              size: Size.infinite,
-                              painter: FlutterPaint3dPainter(
-                                mesh: mesh,
-                                azimuthDeg: _paintAzimuthDeg,
-                                elevationDeg: _paintElevationDeg,
-                                zoom: _paintZoom,
-                                pan: _paintPan,
-                                showWireframe: _showWireframe && widget.viewModel.showBorderLines,
-                                isGlassMode: widget.viewModel.isGlassMode,
-                                isOrthoProjection: widget.viewModel.isOrthoProjection,
-                                isInteracting: _isUserInteracting,
-                                selectedBendId: widget.viewModel.selectedBendId,
-                                selectedPunchId: widget.viewModel.selectedPunchId,
-                                selectedFaceId: widget.viewModel.selectedFaceId,
-                                hoveredPunchId: widget.viewModel.hoveredPunchId,
-                                hoveredBendId: widget.viewModel.hoveredBendId,
-                                hoveredFaceId: widget.viewModel.hoveredFaceId,
-                                activePorts: widget.viewModel.activeCmsPorts,
-                                focusedPortId: widget.viewModel.cmsGuidedController.state.focus.activePortId,
-                                modelTransform: _modelTransform,
-                              ),
-                            ),
-                          ),
-                        )
-                      // --- Next Generation: Flutter GPU SceneView ---
-                      : GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTapUp: widget.isInteractionLocked ? null : (details) => _handlePrimaryTapUp(details, size, mesh),
-                          onSecondaryTapUp: widget.isInteractionLocked ? null : (details) => _handleSecondaryTapUp(details, size, mesh),
-                          onDoubleTap: _zoomToFit,
-                          child: SceneView(_scene!),
-                        ),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: widget.isInteractionLocked ? null : (details) => _handlePrimaryTapUp(details, size, mesh),
+                    onSecondaryTapUp: widget.isInteractionLocked ? null : (details) => _handleSecondaryTapUp(details, size, mesh),
+                    onDoubleTap: _zoomToFit,
+                    child: _scene != null ? SceneView(_scene!) : const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),
@@ -1921,49 +1812,26 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                             Container(width: 1, height: 14, color: const Color(0xFFCBD5E1)),
                             const SizedBox(width: 8),
 
-                            // Engine Mode Switcher (Flutter GPU vs Flutter Paint)
+                            // Engine Mode Indicator (Flutter GPU Impeller 120 FPS)
                             Tooltip(
-                              message: 'Switch 3D Engine: Flutter GPU (120 FPS PBR) vs Flutter Paint (Canvas 2.5D Backup View)',
-                              child: InkWell(
-                                onTap: () {
-                                  setState(() {
-                                    if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
-                                      _engineMode = Cad3dEngineMode.flutterPaint;
-                                    } else if (_isGpuAvailable) {
-                                      _engineMode = Cad3dEngineMode.flutterGpu;
-                                      _rebuildCadMesh(preserveCamera: true);
-                                    }
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(4),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                                  decoration: BoxDecoration(
-                                    color: _engineMode == Cad3dEngineMode.flutterGpu
-                                        ? const Color(0xFF10B981).withValues(alpha: 0.12)
-                                        : const Color(0xFF0284C7).withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: _engineMode == Cad3dEngineMode.flutterGpu ? const Color(0xFF10B981) : const Color(0xFF0284C7)),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        _engineMode == Cad3dEngineMode.flutterGpu ? Icons.speed : Icons.brush,
-                                        size: 12,
-                                        color: _engineMode == Cad3dEngineMode.flutterGpu ? const Color(0xFF10B981) : const Color(0xFF0284C7),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        _engineMode == Cad3dEngineMode.flutterGpu ? 'Engine: GPU (120 FPS)' : 'Engine: Paint (2D Canvas)',
-                                        style: TextStyle(
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: _engineMode == Cad3dEngineMode.flutterGpu ? const Color(0xFF059669) : const Color(0xFF0284C7),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                              message: '3D CAD Engine: Flutter GPU (Impeller)\nHardware-accelerated 120 FPS PBR rendering active.',
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: const Color(0xFF10B981)),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.speed, size: 12, color: Color(0xFF10B981)),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Engine: GPU (120 FPS)',
+                                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -2074,7 +1942,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                   setState(() {
                     _showWireframe = !_showWireframe;
                     widget.viewModel.toggleBorderLines();
-                    if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                    if (_isGpuAvailable) {
                       _rebuildCadMesh(preserveCamera: true);
                     }
                   });
@@ -2082,7 +1950,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                 isObstructedXRay: widget.viewModel.isObstructedXRayMode,
                 onToggleObstructedXRay: () {
                   widget.viewModel.toggleObstructedXRayMode();
-                  if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                  if (_isGpuAvailable) {
                     _rebuildCadMesh(preserveCamera: true);
                   }
                   setState(() {});
@@ -2090,7 +1958,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                 currentShadingStyle: widget.viewModel.cadShadingStyle,
                 onShadingStyleChanged: (style) {
                   widget.viewModel.cadShadingStyle = style;
-                  if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                  if (_isGpuAvailable) {
                     _rebuildCadMesh(preserveCamera: true);
                   }
                   setState(() {});
@@ -2166,7 +2034,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                   onChanged: (prefs) {
                     widget.viewModel.graphicsPreferences = prefs;
                     _applyEnvironmentSettings();
-                    if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                    if (_isGpuAvailable) {
                       _rebuildCadMesh(preserveCamera: true);
                     }
                     setState(() {});
@@ -2179,7 +2047,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                   onResetToDefault: () {
                     widget.viewModel.graphicsPreferences = const OnshapeGraphicsPreferences();
                     _applyEnvironmentSettings();
-                    if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                    if (_isGpuAvailable) {
                       _rebuildCadMesh(preserveCamera: true);
                     }
                     setState(() {});
@@ -2207,7 +2075,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     renderMode: widget.viewModel.onshapeRenderMode,
                     onRenderModeChanged: (mode) {
                       widget.viewModel.onshapeRenderMode = mode;
-                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                      if (_isGpuAvailable) {
                         _rebuildCadMesh(preserveCamera: true);
                       }
                       setState(() {});
@@ -2215,7 +2083,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     hiddenEdgesVisible: widget.viewModel.showBorderLines,
                     onToggleHiddenEdges: (val) {
                       widget.viewModel.toggleBorderLines();
-                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                      if (_isGpuAvailable) {
                         _rebuildCadMesh(preserveCamera: true);
                       }
                       setState(() {});
@@ -2223,17 +2091,15 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     tangentEdgeMode: widget.viewModel.graphicsPreferences.tangentEdgeMode,
                     onTangentEdgeModeChanged: (mode) {
                       widget.viewModel.updateGraphicsPreferences((p) => p.copyWith(tangentEdgeMode: mode));
-                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                      if (_isGpuAvailable) {
                         _rebuildCadMesh(preserveCamera: true);
                       }
                       setState(() {});
                     },
                     highlightBoundaryEdges: widget.viewModel.graphicsPreferences.highlightBoundaryEdges,
                     onToggleHighlightBoundaryEdges: () {
-                      widget.viewModel.updateGraphicsPreferences((p) => p.copyWith(
-                        highlightBoundaryEdges: !p.highlightBoundaryEdges,
-                      ));
-                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                      widget.viewModel.updateGraphicsPreferences((p) => p.copyWith(highlightBoundaryEdges: !p.highlightBoundaryEdges));
+                      if (_isGpuAvailable) {
                         _rebuildCadMesh(preserveCamera: true);
                       }
                       setState(() {});
@@ -2241,7 +2107,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     isSectionViewActive: widget.viewModel.sectionViewConfig.isEnabled,
                     onToggleSectionView: () {
                       widget.viewModel.toggleSectionView();
-                      if (_engineMode == Cad3dEngineMode.flutterGpu && _isGpuAvailable) {
+                      if (_isGpuAvailable) {
                         _rebuildCadMesh(preserveCamera: true);
                       }
                       setState(() {});
@@ -2273,15 +2139,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
             ),
 
             // Floating Section View Control Bar (when active)
-            if (widget.viewModel.sectionViewConfig.isEnabled)
-              Positioned(
-                bottom: 48,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: _buildSectionViewControlBar(),
-                ),
-              ),
+            if (widget.viewModel.sectionViewConfig.isEnabled) Positioned(bottom: 48, left: 0, right: 0, child: Center(child: _buildSectionViewControlBar())),
 
             // =================================================================
             // 9. BOTTOM-RIGHT LIVE BOUNDING DIMENSIONS BADGE
@@ -2502,13 +2360,7 @@ class _VirtualGlobeOverlayPainter extends CustomPainter {
   final Offset? currentPoint;
   final Offset? pinnedAnchor;
 
-  _VirtualGlobeOverlayPainter({
-    required this.center,
-    required this.radius,
-    this.startPoint,
-    this.currentPoint,
-    this.pinnedAnchor,
-  });
+  _VirtualGlobeOverlayPainter({required this.center, required this.radius, this.startPoint, this.currentPoint, this.pinnedAnchor});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2618,17 +2470,9 @@ class _VirtualGlobeOverlayPainter extends CustomPainter {
       // High-contrast CAD pill badge: "📌 PINNED PIVOT"
       final textSpan = TextSpan(
         text: '📌 PINNED PIVOT',
-        style: const TextStyle(
-          color: Color(0xFFFFB300),
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
-        ),
+        style: const TextStyle(color: Color(0xFFFFB300), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
       );
-      final textPainter = TextPainter(
-        text: textSpan,
-        textDirection: TextDirection.ltr,
-      )..layout();
+      final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
       final badgeOffset = Offset(pinP.dx - textPainter.width / 2.0, pinP.dy + 16.0);
       textPainter.paint(canvas, badgeOffset);
     }
