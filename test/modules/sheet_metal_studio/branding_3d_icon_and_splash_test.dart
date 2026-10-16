@@ -6,6 +6,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/trufold_3d_engine_preloader.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/branding/trufold_3d_icon.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/branding/trufold_splash_screen.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/branding/trufold_app_icon_painter.dart';
@@ -118,6 +119,54 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(TruFoldAppIconTile), findsNWidgets(2));
+    });
+
+    testWidgets('6. TruFoldSplashScreen renders 3D launch cards and responds to studio selection', (tester) async {
+      TruFold3dEnginePreloader.instance.setGpuAvailableForTesting(true);
+      StudioLaunchTarget? selectedTarget;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TruFoldSplashScreen(
+            totalDuration: const Duration(milliseconds: 200),
+            onLaunchStudio: (target) {
+              selectedTarget = target;
+            },
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('CAD Studio'), findsOneWidget);
+      expect(find.text('Assembly Studio'), findsOneWidget);
+      expect(find.text('TDS Studio'), findsOneWidget);
+
+      await tester.tap(find.text('Assembly Studio'));
+      await tester.pump();
+
+      expect(selectedTarget, equals(StudioLaunchTarget.assembly));
+    });
+
+    testWidgets('7. TruFoldSplashScreen displays Impeller required diagnostics when GPU unavailable', (tester) async {
+      TruFold3dEnginePreloader.instance.setGpuAvailableForTesting(false);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TruFoldSplashScreen(
+            totalDuration: const Duration(milliseconds: 200),
+            onLaunchStudio: (_) {},
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Impeller GPU Backend Required'), findsOneWidget);
+      expect(find.text('flutter run -d windows --enable-impeller'), findsOneWidget);
+      expect(find.text('Retry Impeller Detection'), findsOneWidget);
     });
   });
 }

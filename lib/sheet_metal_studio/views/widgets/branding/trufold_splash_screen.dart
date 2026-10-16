@@ -8,7 +8,6 @@
 // =============================================================================
 
 import 'dart:io' show exit;
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -51,21 +50,19 @@ class TruFoldSplashScreen extends StatefulWidget {
 
 class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerProviderStateMixin {
   late AnimationController _mainController;
-  late AnimationController _launcherFadeController;
   late Animation<double> _laserTraceAnim;
   late Animation<double> _foldProgressAnim;
   late Animation<double> _textFadeAnim;
   late Animation<Offset> _textSlideAnim;
   late Animation<double> _statusFadeAnim;
-  late Animation<double> _launcherFadeAnim;
-  late Animation<Offset> _launcherSlideAnim;
+  late Animation<double> _cardsFadeAnim;
+  late Animation<Offset> _cardsSlideAnim;
 
-  String _activeStatusMessage = 'Verifying Impeller GPU Hardware Acceleration...';
-  double _engineProgress = 0.0;
-  bool _enginePreloadComplete = false;
-  bool _animationComplete = false;
+  String _activeStatusMessage = 'Verifying Impeller GPU backend...';
+  bool _isGpuChecking = true;
   bool _isGpuAvailable = true;
   bool _isRetryingGpu = false;
+  bool _hasTriggeredCompletion = false;
   Object? _gpuError;
 
   StudioLaunchTarget _focusedTarget = StudioLaunchTarget.cad;
@@ -75,52 +72,57 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
     super.initState();
 
     _mainController = AnimationController(vsync: this, duration: widget.totalDuration);
-    _launcherFadeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
 
-    // 1. Laser cut outline trace: 0% -> 30%
+    // 1. Laser cut outline trace: 0% -> 28%
     _laserTraceAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _mainController,
-        curve: const Interval(0.0, 0.32, curve: Curves.easeInOut),
+        curve: const Interval(0.0, 0.28, curve: Curves.easeInOut),
       ),
     );
 
-    // 2. 3D Folding of the 'F' flap (0° -> 75°): 28% -> 72%
+    // 2. 3D Folding of the 'F' flap (0° -> 75°): 18% -> 65%
     _foldProgressAnim = Tween<double>(begin: 0.0, end: 75.0).animate(
       CurvedAnimation(
         parent: _mainController,
-        curve: const Interval(0.28, 0.72, curve: Curves.easeOutBack),
+        curve: const Interval(0.18, 0.65, curve: Curves.easeOutBack),
       ),
     );
 
-    // 3. Logo Typography Fade & Slide: 45% -> 80%
+    // 3. Logo Typography Fade & Slide: 25% -> 65%
     _textFadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _mainController,
-        curve: const Interval(0.45, 0.78, curve: Curves.easeOut),
+        curve: const Interval(0.25, 0.65, curve: Curves.easeOut),
       ),
     );
     _textSlideAnim = Tween<Offset>(begin: const Offset(0.0, 0.15), end: Offset.zero).animate(
       CurvedAnimation(
         parent: _mainController,
-        curve: const Interval(0.45, 0.78, curve: Curves.easeOutCubic),
+        curve: const Interval(0.25, 0.65, curve: Curves.easeOutCubic),
       ),
     );
 
-    // 4. Status Bar & Loading: 35% -> 95%
+    // 4. Status Bar & Loading: 20% -> 50%
     _statusFadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _mainController,
-        curve: const Interval(0.35, 0.55, curve: Curves.easeIn),
+        curve: const Interval(0.20, 0.50, curve: Curves.easeIn),
       ),
     );
 
-    // 5. 3D Studio Cards Entrance: Fade and spring slide up
-    _launcherFadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _launcherFadeController, curve: Curves.easeOut),
+    // 5. 3D Studio Cards Entrance: Fade and spring slide up: 30% -> 75%
+    _cardsFadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.30, 0.75, curve: Curves.easeOut),
+      ),
     );
-    _launcherSlideAnim = Tween<Offset>(begin: const Offset(0.0, 0.12), end: Offset.zero).animate(
-      CurvedAnimation(parent: _launcherFadeController, curve: Curves.easeOutCubic),
+    _cardsSlideAnim = Tween<Offset>(begin: const Offset(0.0, 0.12), end: Offset.zero).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.30, 0.75, curve: Curves.easeOutCubic),
+      ),
     );
 
     _startEnginePreload();
@@ -128,52 +130,62 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
     _mainController.forward();
     _mainController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        _animationComplete = true;
-        _evaluateLaunchReadiness();
+        if (widget.onLaunchStudio == null) {
+          _completeInitialization();
+        }
       }
     });
   }
 
   void _startEnginePreload() {
     TruFold3dEnginePreloader.instance.preload(
-      onProgress: (status, progress) {
+      onProgress: (status, _) {
         if (!mounted) return;
         setState(() {
           _activeStatusMessage = status;
-          _engineProgress = progress;
         });
       },
     ).then((_) {
       if (!mounted) return;
       setState(() {
-        _enginePreloadComplete = true;
+        _isGpuChecking = false;
         _isGpuAvailable = TruFold3dEnginePreloader.instance.isGpuAvailable;
         _gpuError = TruFold3dEnginePreloader.instance.lastError;
       });
-      _evaluateLaunchReadiness();
+      if (_mainController.isCompleted && widget.onLaunchStudio == null) {
+        _completeInitialization();
+      }
+    }).catchError((err) {
+      if (!mounted) return;
+      setState(() {
+        _isGpuChecking = false;
+        _isGpuAvailable = false;
+        _gpuError = err;
+      });
+      if (_mainController.isCompleted && widget.onLaunchStudio == null) {
+        _completeInitialization();
+      }
     });
   }
 
-  void _evaluateLaunchReadiness() {
-    if (_animationComplete && _enginePreloadComplete) {
-      if (_isGpuAvailable) {
-        _launcherFadeController.forward();
-      }
-    }
+  void _completeInitialization() {
+    if (_hasTriggeredCompletion) return;
+    _hasTriggeredCompletion = true;
+    widget.onInitializationComplete?.call();
   }
 
   void _retryImpellerVerification() async {
     setState(() {
       _isRetryingGpu = true;
+      _isGpuChecking = true;
       _activeStatusMessage = 'Retrying Impeller GPU verification...';
     });
 
     await TruFold3dEnginePreloader.instance.retryPreload(
-      onProgress: (status, progress) {
+      onProgress: (status, _) {
         if (!mounted) return;
         setState(() {
           _activeStatusMessage = status;
-          _engineProgress = progress;
         });
       },
     );
@@ -181,34 +193,35 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
     if (!mounted) return;
     setState(() {
       _isRetryingGpu = false;
+      _isGpuChecking = false;
       _isGpuAvailable = TruFold3dEnginePreloader.instance.isGpuAvailable;
       _gpuError = TruFold3dEnginePreloader.instance.lastError;
     });
-
-    if (_isGpuAvailable) {
-      _launcherFadeController.forward();
-    }
   }
 
   void _launchStudio(StudioLaunchTarget target) {
-    if (!_isGpuAvailable) return;
+    if (!_isGpuChecking && !_isGpuAvailable) return;
     if (widget.onLaunchStudio != null) {
       widget.onLaunchStudio!(target);
     } else {
-      widget.onInitializationComplete?.call();
+      _completeInitialization();
     }
   }
 
-  void _skipIntro() {
-    if (widget.allowTapToSkip && !_launcherFadeController.isCompleted) {
-      _mainController.animateTo(1.0, duration: const Duration(milliseconds: 250));
+  void _skip() {
+    if (widget.allowTapToSkip) {
+      if (widget.onLaunchStudio == null) {
+        _mainController.stop();
+        _completeInitialization();
+      } else {
+        _mainController.animateTo(1.0, duration: const Duration(milliseconds: 150));
+      }
     }
   }
 
   @override
   void dispose() {
     _mainController.dispose();
-    _launcherFadeController.dispose();
     super.dispose();
   }
 
@@ -227,255 +240,265 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
-          backgroundColor: const Color(0xFF070B14), // Deep Obsidian CAD Canvas
-          body: Stack(
-            children: [
-              // 1. Animated Blueprint CAD Grid Background
-              Positioned.fill(child: CustomPaint(painter: _BlueprintGridBackgroundPainter())),
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _skip,
+          child: Scaffold(
+            backgroundColor: const Color(0xFF070B14), // Deep Obsidian CAD Canvas
+            body: Stack(
+              children: [
+                // 1. Animated Blueprint CAD Grid Background
+                Positioned.fill(child: CustomPaint(painter: _BlueprintGridBackgroundPainter())),
 
-              // 2. Ambient High-Tech Volumetric Backlight Glows
-              Positioned.fill(
-                child: Center(
-                  child: Container(
-                    width: 750,
-                    height: 600,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          const Color(0xFF0284C7).withValues(alpha: 0.14),
-                          const Color(0xFF0F172A).withValues(alpha: 0.04),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.0, 0.55, 1.0],
+                // 2. Ambient High-Tech Volumetric Backlight Glows
+                Positioned.fill(
+                  child: Center(
+                    child: Container(
+                      width: 750,
+                      height: 600,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            const Color(0xFF0284C7).withValues(alpha: 0.14),
+                            const Color(0xFF0F172A).withValues(alpha: 0.04),
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 0.55, 1.0],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-              // 3. Central Interactive Layout
-              SafeArea(
-                child: Center(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // --- Brand Header (Icon + Name) ---
-                        AnimatedBuilder(
-                          animation: _mainController,
-                          builder: (context, _) {
-                            final isLauncherActive = _launcherFadeAnim.value > 0.01;
-                            final iconSize = isLauncherActive ? 92.0 : 140.0;
+                // 3. Central Interactive Layout
+                SafeArea(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                      child: AnimatedBuilder(
+                        animation: _mainController,
+                        builder: (context, _) {
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // --- Brand Header (3D Icon + truFold by danish STUDIO) ---
+                              _buildBrandHeader(),
+                              const SizedBox(height: 24),
 
-                            return Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // 3D Folding Icon with Laser Perimeter Ring
-                                GestureDetector(
-                                  onTap: _skipIntro,
-                                  child: SizedBox(
-                                    width: iconSize + 16,
-                                    height: iconSize + 16,
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        if (_laserTraceAnim.value < 1.0)
-                                          CustomPaint(
-                                            size: Size(iconSize + 16, iconSize + 16),
-                                            painter: _LaserCutTracePainter(progress: _laserTraceAnim.value),
-                                          ),
-                                        TruFold3DIcon(
-                                          size: iconSize,
-                                          isAnimated: false,
-                                          fixedFoldAngleDeg: _foldProgressAnim.value,
-                                          showGrid: false,
-                                          showAnnotations: !isLauncherActive,
-                                          sheetThickness: 2.8,
-                                          tColor: const Color(0xFF38BDF8),
-                                          fColor: const Color(0xFF94A3B8),
-                                          accentColor: const Color(0xFFF97316),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-
-                                // Logo Typography
+                              // --- Content Area: Either Impeller Warning, Launcher Cards, or Loading Bar ---
+                              if (!_isGpuChecking && !_isGpuAvailable)
+                                _buildImpellerRequiredCard()
+                              else
                                 FadeTransition(
-                                  opacity: _textFadeAnim,
+                                  opacity: _cardsFadeAnim,
                                   child: SlideTransition(
-                                    position: _textSlideAnim,
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          crossAxisAlignment: CrossAxisAlignment.center,
-                                          children: [
-                                            const Text(
-                                              'truFold',
-                                              style: TextStyle(
-                                                color: Color(0xFFF8FAFC),
-                                                fontSize: 34,
-                                                fontWeight: FontWeight.w900,
-                                                letterSpacing: -1.0,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF0284C7).withValues(alpha: 0.22),
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(
-                                                  color: const Color(0xFF38BDF8).withValues(alpha: 0.6),
-                                                  width: 1.0,
-                                                ),
-                                              ),
-                                              child: const Text(
-                                                'STUDIO',
-                                                style: TextStyle(
-                                                  color: Color(0xFF38BDF8),
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w800,
-                                                  letterSpacing: 1.4,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'ENTERPRISE SHEET METAL CAD & ASSEMBLY SUITE',
-                                          style: TextStyle(
-                                            color: const Color(0xFF64748B),
-                                            fontSize: 9.5,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 1.8,
-                                            fontFamily: 'monospace',
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                    position: _cardsSlideAnim,
+                                    child: _buildStudioSelectionSuite(),
                                   ),
                                 ),
-                              ],
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 28),
-
-                        // --- Content Area: Either Impeller Warning, Launcher Cards, or Progress Bar ---
-                        if (!_isGpuAvailable)
-                          _buildImpellerRequiredCard()
-                        else if (_launcherFadeAnim.value > 0.001)
-                          FadeTransition(
-                            opacity: _launcherFadeAnim,
-                            child: SlideTransition(
-                              position: _launcherSlideAnim,
-                              child: _buildStudioSelectionSuite(),
-                            ),
-                          )
-                        else
-                          _buildInitialLoadingProgress(),
-                      ],
+                            ],
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
-              ),
 
-              // 4. Bottom System Status Bar
-              Positioned(
-                bottom: 12,
-                left: 20,
-                right: 20,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'truFold Studio v3.2.0 • Danish Innovations',
-                      style: TextStyle(
-                        color: const Color(0xFF475569),
-                        fontSize: 9.5,
-                        fontFamily: 'monospace',
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _isGpuAvailable ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _isGpuAvailable ? 'Impeller GPU Hardware Accelerated (120 FPS)' : 'Impeller Backend Required',
-                          style: TextStyle(
-                            color: _isGpuAvailable ? const Color(0xFF10B981) : const Color(0xFFF87171),
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                // 4. Bottom System Status Bar
+                _buildBottomStatusBar(),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// Initial loading progress bar while preloading shaders and verifying Impeller.
-  Widget _buildInitialLoadingProgress() {
-    return FadeTransition(
-      opacity: _statusFadeAnim,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+  /// Builds the 3D folding icon and truFold brand typography with "by danish" credit.
+  Widget _buildBrandHeader() {
+    const iconSize = 96.0;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 3D Folding Icon with Laser Perimeter Ring
+        SizedBox(
+          width: iconSize + 16,
+          height: iconSize + 16,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (_laserTraceAnim.value < 1.0)
+                CustomPaint(
+                  size: const Size(iconSize + 16, iconSize + 16),
+                  painter: _LaserCutTracePainter(progress: _laserTraceAnim.value),
+                ),
+              TruFold3DIcon(
+                size: iconSize,
+                isAnimated: false,
+                fixedFoldAngleDeg: _foldProgressAnim.value,
+                showGrid: false,
+                showAnnotations: false,
+                sheetThickness: 2.8,
+                tColor: const Color(0xFF38BDF8),
+                fColor: const Color(0xFF94A3B8),
+                accentColor: const Color(0xFFF97316),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Logo Typography
+        FadeTransition(
+          opacity: _textFadeAnim,
+          child: SlideTransition(
+            position: _textSlideAnim,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    const Text(
+                      'truFold',
+                      style: TextStyle(
+                        color: Color(0xFFF8FAFC),
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -1.0,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0284C7).withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: const Color(0xFF38BDF8).withValues(alpha: 0.6),
+                          width: 1.0,
+                        ),
+                      ),
+                      child: const Text(
+                        'STUDIO',
+                        style: TextStyle(
+                          color: Color(0xFF38BDF8),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'by danish',
+                      style: TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 2.0,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      width: 4,
+                      height: 4,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF475569),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const Text(
+                      'ENTERPRISE SHEET METAL CAD & ASSEMBLY SUITE',
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.6,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Responsive bottom system status bar with live Impeller GPU accelerator indicator.
+  Widget _buildBottomStatusBar() {
+    return Positioned(
+      bottom: 12,
+      left: 20,
+      right: 20,
+      child: FadeTransition(
+        opacity: _statusFadeAnim,
+        child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          SizedBox(
-            width: 260,
-            height: 3.0,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: LinearProgressIndicator(
-                value: math.max(_mainController.value, _engineProgress),
-                backgroundColor: const Color(0xFF1E293B),
-                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF38BDF8)),
+          Flexible(
+            child: Text(
+              'truFold Studio v3.2.0 • Danish Innovations',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF475569),
+                fontSize: 9.5,
+                fontFamily: 'monospace',
+                letterSpacing: 0.4,
               ),
             ),
           ),
-          const SizedBox(height: 14),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            child: Text(
-              _activeStatusMessage,
-              key: ValueKey<String>(_activeStatusMessage),
-              style: const TextStyle(
-                color: Color(0xFF94A3B8),
-                fontSize: 11.5,
-                fontFamily: 'monospace',
-                letterSpacing: 0.3,
+          const SizedBox(width: 12),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _isGpuChecking
+                      ? const Color(0xFF38BDF8)
+                      : (_isGpuAvailable ? const Color(0xFF10B981) : const Color(0xFFEF4444)),
+                ),
               ),
-            ),
+              const SizedBox(width: 6),
+              Text(
+                _isGpuChecking
+                    ? _activeStatusMessage
+                    : (_isGpuAvailable
+                        ? 'Impeller GPU Hardware Accelerated (120 FPS)'
+                        : 'Impeller Backend Required'),
+                style: TextStyle(
+                  color: _isGpuChecking
+                      ? const Color(0xFF38BDF8)
+                      : (_isGpuAvailable ? const Color(0xFF10B981) : const Color(0xFFF87171)),
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   /// High-Tech 3D Diagnostics Card displayed when Impeller is not enabled on startup.
   Widget _buildImpellerRequiredCard() {
@@ -580,8 +603,10 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
           const SizedBox(height: 20),
 
           // Action buttons: Retry and Exit
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            alignment: WrapAlignment.end,
             children: [
               OutlinedButton.icon(
                 onPressed: () => exit(0),
@@ -593,7 +618,6 @@ class _TruFoldSplashScreenState extends State<TruFoldSplashScreen> with TickerPr
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 ),
               ),
-              const SizedBox(width: 12),
               ElevatedButton.icon(
                 onPressed: _isRetryingGpu ? null : _retryImpellerVerification,
                 icon: _isRetryingGpu
