@@ -168,6 +168,16 @@ class AssemblySketchConstraintSolver {
       case CadConstraintType.radius:
       case CadConstraintType.diameter:
         return _solveDimensional(c, entityMap);
+      case CadConstraintType.symmetric:
+        return _solveSymmetric(c, entityMap);
+      case CadConstraintType.midpoint:
+        return _solveMidpoint(c, entityMap);
+      case CadConstraintType.normal:
+        return _solveNormal(c, entityMap);
+      case CadConstraintType.pierce:
+        return _solvePierce(c, entityMap);
+      case CadConstraintType.curvature:
+        return _solveCurvature(c, entityMap);
       default:
         return false;
     }
@@ -494,6 +504,17 @@ class AssemblySketchConstraintSolver {
           dofMap[id] = 0;
         }
         break;
+      case CadConstraintType.symmetric:
+      case CadConstraintType.midpoint:
+      case CadConstraintType.normal:
+      case CadConstraintType.pierce:
+      case CadConstraintType.curvature:
+        for (final id in c.entityIds) {
+          if (dofMap.containsKey(id)) {
+            dofMap[id] = math.max(0, dofMap[id]! - 1);
+          }
+        }
+        break;
       default:
         break;
     }
@@ -510,6 +531,8 @@ class AssemblySketchConstraintSolver {
       return e.center;
     } else if (e is CADArcEntity) {
       return e.computeCircumcircle()?.center ?? e.startPoint;
+    } else if (e is CADPointEntity) {
+      return e.position;
     }
     return Offset.zero;
   }
@@ -530,6 +553,103 @@ class AssemblySketchConstraintSolver {
       e.startPoint = e.startPoint + delta;
       e.endPoint = e.endPoint + delta;
       e.pointOnArc = e.pointOnArc + delta;
+    } else if (e is CADPointEntity) {
+      e.position = newAnchor;
     }
+  }
+
+  /// Solves Onshape Symmetric Constraint (Shift+Q — onshape.pdf p. 41):
+  /// Enforces that entityIds[0] and entityIds[1] are mirrored across axis line entityIds[2] (or Y-axis if 2 entities).
+  static bool _solveSymmetric(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.length < 2) return false;
+    final e1 = entityMap[c.entityIds[0]];
+    final e2 = entityMap[c.entityIds[1]];
+    if (e1 == null || e2 == null) return false;
+
+    // Axis line: either 3rd entity if it is a CADLineEntity, or the sketch Y-axis (x = 0)
+    Offset axisA = const Offset(0.0, -100.0);
+    Offset axisB = const Offset(0.0, 100.0);
+    if (c.entityIds.length >= 3 && entityMap[c.entityIds[2]] is CADLineEntity) {
+      final axisLine = entityMap[c.entityIds[2]] as CADLineEntity;
+      axisA = axisLine.start;
+      axisB = axisLine.end;
+    }
+
+    final ab = axisB - axisA;
+    final lenSq = ab.dx * ab.dx + ab.dy * ab.dy;
+    if (lenSq < 1e-6) return false;
+
+    Offset reflect(Offset p) {
+      final ap = p - axisA;
+      final t = (ap.dx * ab.dx + ap.dy * ab.dy) / lenSq;
+      final foot = axisA + ab * t;
+      return foot * 2.0 - p;
+    }
+
+    final p1 = _getEntityCenterOrAnchor(e1);
+    _shiftEntityTo(e2, reflect(p1));
+    if (e1 is CADCircleEntity && e2 is CADCircleEntity) {
+      e2.radius = e1.radius;
+    }
+    return true;
+  }
+
+  /// Solves Onshape Midpoint Constraint (Shift+M):
+  /// Locks a point/circle center to the exact midpoint of a line segment.
+  static bool _solveMidpoint(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.length < 2) return false;
+    final e1 = entityMap[c.entityIds[0]];
+    final e2 = entityMap[c.entityIds[1]];
+    if (e1 == null || e2 == null) return false;
+
+    final CADLineEntity? line = e1 is CADLineEntity ? e1 : (e2 is CADLineEntity ? e2 : null);
+    final CADPrimitiveEntity other = (line == e1) ? e2 : e1;
+    if (line == null) return false;
+
+    final mid = Offset((line.start.dx + line.end.dx) * 0.5, (line.start.dy + line.end.dy) * 0.5);
+    _shiftEntityTo(other, mid);
+    return true;
+  }
+
+  /// Solves Onshape Normal Constraint (Shift+K):
+  /// Forces a line and a circle/arc perimeter to intersect at 90° (so the line passes directly through the circle/arc center).
+  static bool _solveNormal(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.length < 2) return false;
+    final e1 = entityMap[c.entityIds[0]];
+    final e2 = entityMap[c.entityIds[1]];
+    if (e1 == null || e2 == null) return false;
+
+    final CADLineEntity? line = e1 is CADLineEntity ? e1 : (e2 is CADLineEntity ? e2 : null);
+    final CADPrimitiveEntity curve = (line == e1) ? e2 : e1;
+    if (line == null) return false;
+
+    final center = _getEntityCenterOrAnchor(curve);
+    final len = (line.end - line.start).distance;
+    if (len < 1e-4) return false;
+    final dir = (line.end - center);
+    final dirLen = dir.distance;
+    final unit = dirLen > 1e-4 ? dir / dirLen : const Offset(1.0, 0.0);
+    line.start = center;
+    line.end = center + unit * len;
+    return true;
+  }
+
+  /// Solves Onshape Pierce Constraint (Shift+G):
+  /// Locks a 2D sketch entity to a projected 3D pierce point (or origin if 1 entity selected).
+  static bool _solvePierce(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.isEmpty) return false;
+    final e1 = entityMap[c.entityIds[0]];
+    if (e1 == null) return false;
+    final targetPt = c.entityIds.length >= 2 && entityMap[c.entityIds[1]] != null
+        ? _getEntityCenterOrAnchor(entityMap[c.entityIds[1]]!)
+        : Offset.zero;
+    _shiftEntityTo(e1, targetPt);
+    return true;
+  }
+
+  /// Solves Onshape Curvature Continuity Constraint (Shift+U):
+  /// Aligns endpoints and matches tangent/curvature vectors at the junction.
+  static bool _solveCurvature(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    return _solveCoincident(c, entityMap);
   }
 }

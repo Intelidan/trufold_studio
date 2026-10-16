@@ -165,6 +165,10 @@ class ConstraintSolver {
           case CadConstraintType.angle:
           case CadConstraintType.radius:
           case CadConstraintType.diameter:
+          case CadConstraintType.midpoint:
+          case CadConstraintType.normal:
+          case CadConstraintType.pierce:
+          case CadConstraintType.curvature:
             // Handled or accepted in tolerance
             ok = true;
             break;

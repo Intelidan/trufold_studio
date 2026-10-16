@@ -15,6 +15,7 @@ import '../models/weld_quality_model.dart';
 import '../models/assembly_timeline_item.dart';
 import '../models/assembly_cad_settings.dart';
 import '../engine/sketch/assembly_surface_sketch_engine.dart' hide WeldJointStyle;
+import '../engine/sketch/onshape_sketch_modify_engine.dart';
 import '../../sketch_draft_files/widgets/weld_overlay_ui.dart';
 
 /// Active 3D manipulation mode for the selected part.
@@ -169,6 +170,24 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   bool showWelds = true;
   bool showWeldOverlay = true;
   int documentVersion = 0;
+
+  // Active 3D Render Engine (Flutter GPU vs 2D Canvas Fallback)
+  Cad3dEngineMode _renderEngine = Cad3dEngineMode.flutterGpu;
+  Cad3dEngineMode get renderEngine => _renderEngine;
+
+  void setRenderEngine(Cad3dEngineMode mode) {
+    if (_renderEngine == mode) return;
+    _renderEngine = mode;
+    notifyListeners();
+  }
+
+  void toggleRenderEngine() {
+    if (_renderEngine == Cad3dEngineMode.flutterGpu) {
+      setRenderEngine(Cad3dEngineMode.flutterPaint);
+    } else {
+      setRenderEngine(Cad3dEngineMode.flutterGpu);
+    }
+  }
 
   // ===========================================================================
   // WELDING SIMULATION: JOINT STYLES & QUALITY EVALUATION (welding_simulation_docs.md)
@@ -733,13 +752,21 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   void toggleSketchConstructionMode() {
-    if (selectedSketchEntity != null) {
+    if (activeSketchPlane != null && selectedSketchEntity != null) {
+      _recordUndo();
       selectedSketchEntity!.isConstruction = !selectedSketchEntity!.isConstruction;
       isSketchConstructionMode = selectedSketchEntity!.isConstruction;
-      notifyDocChanged();
-    } else {
-      isSketchConstructionMode = !isSketchConstructionMode;
+      for (final id in selectedSketchEntityIds) {
+        final ent = activeSketchPlane!.primitives.where((p) => p.id == id).firstOrNull;
+        if (ent != null && ent != selectedSketchEntity) {
+          ent.isConstruction = selectedSketchEntity!.isConstruction;
+        }
+      }
+      activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
+      notifyListeners();
+      return;
     }
+    isSketchConstructionMode = !isSketchConstructionMode;
     notifyListeners();
   }
 
@@ -3571,7 +3598,19 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     finishSketch();
   }
 
+  /// Converts a 2D point on [plane] into the host [part]'s local 2D face coordinates (0..length, 0..height).
+  CadPoint2D _plane2DToPartFaceLocal(CADSketchPlane plane, AssemblyPart part, Offset planePt) {
+    final worldVec = plane.toWorld(planePt);
+    final local3D = part.worldToLocal(CadPoint3D(worldVec.x, worldVec.y, worldVec.z));
+    final faceId = plane.targetFaceId ?? 'web';
+    if (faceId.contains('flange_top') || faceId.contains('flange_bot') || faceId.contains('bar_top')) {
+      return CadPoint2D(local3D.x, local3D.y.abs());
+    }
+    return CadPoint2D(local3D.x, local3D.z);
+  }
+
   /// Adds a 2D parametric primitive entity directly to the active sketch plane.
+  /// Pure Onshape behavior: drawing a 2D sketch curve NEVER mutates 3D part.sketches until Extrude/Cut is executed!
   void addPrimitiveEntityToActivePlane(CADPrimitiveEntity entity) {
     if (activeSketchPlane == null) return;
     _recordUndo();
@@ -3579,47 +3618,9 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     selectedSketchEntity = entity;
     selectedSketchFeatureId = entity.id;
 
-    // Compile segments and validate loop
     final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(activeSketchPlane!);
     activeSketchValidation = CADProfileValidator.validateProfile(segments);
 
-    // Sync to part as a sketch feature
-    final part = doc.parts.where((p) => p.id == (activeSketchPlane!.targetPartId ?? sketchPartId)).firstOrNull ?? selectedPart;
-    if (part != null) {
-      final feat = AssemblySketchFeature(
-        id: entity.id,
-        featureType: entity is CADRectangleEntity
-            ? 'rect_cut'
-            : entity is CADCircleEntity
-            ? 'circle_hole'
-            : 'custom_cut',
-        localCenter: entity is CADRectangleEntity
-            ? CadPoint2D(entity.startPoint.dx + entity.width / 2.0, entity.startPoint.dy + entity.height / 2.0)
-            : entity is CADCircleEntity
-            ? CadPoint2D(entity.center.dx, entity.center.dy)
-            : entity is CADLineEntity
-            ? CadPoint2D((entity.start.dx + entity.end.dx) / 2.0, (entity.start.dy + entity.end.dy) / 2.0)
-            : CadPoint2D(0.0, 0.0),
-        widthMm: entity is CADRectangleEntity
-            ? entity.width
-            : entity is CADCircleEntity
-            ? entity.radius * 2.0
-            : 10.0,
-        heightMm: entity is CADRectangleEntity
-            ? entity.height
-            : entity is CADCircleEntity
-            ? entity.radius * 2.0
-            : 10.0,
-        targetFace: activeSketchPlane!.targetFaceId ?? 'web',
-        isPassThrough: entity.isPassThrough,
-        isSurfaceImpress: entity.featureType == FeatureType.extrude && !entity.isPassThrough,
-        cutDepthMm: entity.depthMm,
-        planeId: activeSketchPlane!.id,
-      );
-      part.sketches.removeWhere((s) => s.id == entity.id);
-      part.sketches.add(feat);
-      syncComponentInstances(part.id);
-    }
     solveSketchConstraints();
     notifyListeners();
   }
@@ -3688,27 +3689,29 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(activeSketchPlane!);
     activeSketchValidation = CADProfileValidator.validateProfile(segments);
 
-    // Sync to part
+    // Sync to part if an extruded/committed feature already exists
     final part = doc.parts.where((p) => p.id == (activeSketchPlane!.targetPartId ?? sketchPartId)).firstOrNull ?? selectedPart;
     if (part != null) {
-      final feat = part.sketches.where((s) => s.id == entity.id).firstOrNull;
+      final feat = part.sketches.where((s) => s.id == entity.id || s.id == 'cut_${entity.id}').firstOrNull;
       if (feat != null) {
         if (entity is CADRectangleEntity) {
           feat.widthMm = entity.width;
           feat.heightMm = entity.height;
-          feat.localCenter = CadPoint2D(entity.startPoint.dx + entity.width / 2.0, entity.startPoint.dy + entity.height / 2.0);
+          final c = Offset(entity.startPoint.dx + entity.width / 2.0, entity.startPoint.dy + entity.height / 2.0);
+          feat.localCenter = _plane2DToPartFaceLocal(activeSketchPlane!, part, c);
         } else if (entity is CADCenterRectangleEntity) {
           feat.widthMm = entity.width;
           feat.heightMm = entity.height;
-          feat.localCenter = CadPoint2D(entity.center.dx, entity.center.dy);
+          feat.localCenter = _plane2DToPartFaceLocal(activeSketchPlane!, part, entity.center);
         } else if (entity is CADCircleEntity) {
           feat.widthMm = entity.radius * 2.0;
           feat.heightMm = entity.radius * 2.0;
-          feat.localCenter = CadPoint2D(entity.center.dx, entity.center.dy);
+          feat.localCenter = _plane2DToPartFaceLocal(activeSketchPlane!, part, entity.center);
         }
         feat.isPassThrough = entity.isPassThrough;
         feat.isSurfaceImpress = (entity.featureType == FeatureType.extrude && !entity.isPassThrough);
         feat.cutDepthMm = entity.depthMm;
+        part.invalidateMeshCache();
         syncComponentInstances(part.id);
       }
     }
@@ -3745,25 +3748,31 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       if (pt.dy > maxY) maxY = pt.dy;
     }
     final count = path.length;
-    final cx = sumX / count;
-    final cy = sumY / count;
+    final cxPlane = sumX / count;
+    final cyPlane = sumY / count;
     final w = maxX - minX;
     final h = maxY - minY;
 
+    // CRITICAL FIX: Convert from Sketch Plane (centroid origin) to Part Local (corner origin)!
+    final partLocalCenter = _plane2DToPartFaceLocal(activeSketchPlane!, part, Offset(cxPlane, cyPlane));
+    final featureId = selectedSketchEntity?.id != null ? 'cut_${selectedSketchEntity!.id}' : _generateId('feature_cut');
+
     final feat = AssemblySketchFeature(
-      id: _generateId('feature_cut'),
+      id: featureId,
       featureType: 'custom_cut',
-      localCenter: CadPoint2D(cx, cy),
+      localCenter: partLocalCenter,
       widthMm: w > 0 ? w : 10.0,
       heightMm: h > 0 ? h : 10.0,
       targetFace: activeSketchPlane!.targetFaceId ?? 'web',
       isPassThrough: isPassThrough,
       isSurfaceImpress: !isPassThrough && depthMm == 0.0,
       cutDepthMm: depthMm,
-      customPolygonPoints: path.map((p) => Offset(p.dx - cx, p.dy - cy)).toList(),
+      customPolygonPoints: path.map((p) => Offset(p.dx - cxPlane, p.dy - cyPlane)).toList(),
       planeId: activeSketchPlane!.id,
     );
 
+    // Replace existing cut from the same sketch entity so editing Pos X / Pos Y moves the hole instead of leaving a ghost hole!
+    part.sketches.removeWhere((s) => s.id == featureId);
     part.sketches.add(feat);
     sketchFeatureHistory.add(
       CADHistoryItem(
@@ -3775,7 +3784,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         modificationDepth: isPassThrough ? 1.0 : depthMm,
       ),
     );
-
+    part.invalidateMeshCache();
     syncComponentInstances(part.id);
     notifyListeners();
   }
@@ -3802,26 +3811,151 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
+  void _convertSelectedRectangleToSegmentsIfNeeded() {
+    if (activeSketchPlane == null) return;
+    final sel = selectedSketchEntity;
+    if (sel is CADRectangleEntity || sel is CADCenterRectangleEntity || sel is CADAlignedRectangleEntity) {
+      activeSketchPlane!.primitives.remove(sel);
+      final segs = sel!.toLineSegments().where((s) => !s.isConstruction).toList();
+      activeSketchPlane!.entities.addAll(segs);
+      selectedSketchEntity = null;
+    }
+  }
+
   /// Applies chamfer to corners of the active sketch using CADCornerModifier.
   void applyChamferToSelectedCorner(double offsetMm) {
     if (activeSketchPlane == null) return;
-    final segs = AssemblySurfaceSketchEngine.compilePlaneSegments(activeSketchPlane!);
-    if (segs.length < 2) return;
     _recordUndo();
+    _convertSelectedRectangleToSegmentsIfNeeded();
+    final segs = activeSketchPlane!.entities.where((s) => !s.isDeleted && !s.isConstruction).toList();
+    if (segs.length < 2) return;
     final newSegs = CADCornerModifier.applyChamfer(segA: segs[0], segB: segs[1], offsetMm: offsetMm);
     activeSketchPlane!.entities.addAll(newSegs);
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
     notifyListeners();
   }
 
   /// Applies fillet arc to corners of the active sketch using CADCornerModifier.
   void applyFilletToSelectedCorner(double radiusMm) {
     if (activeSketchPlane == null) return;
-    final segs = AssemblySurfaceSketchEngine.compilePlaneSegments(activeSketchPlane!);
-    if (segs.length < 2) return;
     _recordUndo();
+    _convertSelectedRectangleToSegmentsIfNeeded();
+    final segs = activeSketchPlane!.entities.where((s) => !s.isDeleted && !s.isConstruction).toList();
+    if (segs.length < 2) return;
     final newSegs = CADCornerModifier.applyFillet(segA: segs[0], segB: segs[1], radiusMm: radiusMm);
     activeSketchPlane!.entities.addAll(newSegs);
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
     notifyListeners();
+  }
+
+  /// Applies a driving dimension constraint ('D' tool) to the selected sketch entity or pair of entities
+  /// and immediately solves the sketch!
+  void applyDrivingSketchDimension({
+    required String entityId,
+    String? secondEntityId,
+    required double valueMmOrDeg,
+  }) {
+    if (activeSketchPlane == null) return;
+    final ent = activeSketchPlane!.primitives.where((p) => p.id == entityId).firstOrNull;
+    if (ent == null) return;
+
+    _recordUndo();
+    CadConstraintType dimType = CadConstraintType.distance;
+    if (ent is CADCircleEntity) {
+      dimType = CadConstraintType.diameter;
+    } else if (ent is CADArcEntity || ent is CADCenterPointArcEntity) {
+      dimType = CadConstraintType.radius;
+    }
+
+    // Update existing dimension constraint on this entity if one exists, otherwise add a new one
+    final existing = activeSketchPlane!.constraints
+        .where((c) => c.type == dimType && c.entityIds.contains(entityId))
+        .firstOrNull;
+    if (existing != null) {
+      final idx = activeSketchPlane!.constraints.indexOf(existing);
+      activeSketchPlane!.constraints[idx] = existing.copyWith(parameterValue: valueMmOrDeg);
+    } else {
+      activeSketchPlane!.constraints.add(CadConstraint(
+        id: 'dim_${DateTime.now().millisecondsSinceEpoch}',
+        type: dimType,
+        entityIds: [entityId, ?secondEntityId],
+        parameterValue: valueMmOrDeg,
+      ));
+    }
+
+    solveSketchConstraints();
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
+    notifyListeners();
+  }
+
+  void offsetSelectedSketchEntity(double offsetMm) {
+    if (activeSketchPlane == null || selectedSketchEntity == null) return;
+    _recordUndo();
+    final newEnt = OnshapeSketchModifyEngine.offsetEntity(activeSketchPlane!, selectedSketchEntity!, offsetMm);
+    if (newEnt != null) {
+      selectedSketchEntity = newEnt;
+      selectedSketchFeatureId = newEnt.id;
+      activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
+      notifyListeners();
+    }
+  }
+
+  void mirrorSelectedSketchEntities() {
+    if (activeSketchPlane == null) return;
+    final axisLine = activeSketchPlane!.primitives.whereType<CADLineEntity>().where((l) => l.isConstruction).firstOrNull;
+    if (axisLine == null) return;
+    _recordUndo();
+    final targets = selectedSketchEntity != null
+        ? [selectedSketchEntity!]
+        : activeSketchPlane!.primitives.where((p) => p.id != axisLine.id).toList();
+    OnshapeSketchModifyEngine.mirrorEntitiesAcrossLine(
+      plane: activeSketchPlane!,
+      mirrorAxisLine: axisLine,
+      entitiesToMirror: targets,
+    );
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
+    notifyListeners();
+  }
+
+  void patternSelectedSketchEntitiesLinear({int countX = 3, int countY = 1, double spacingXMm = 40.0, double spacingYMm = 0.0}) {
+    if (activeSketchPlane == null) return;
+    _recordUndo();
+    final targets = selectedSketchEntity != null ? [selectedSketchEntity!] : List<CADPrimitiveEntity>.from(activeSketchPlane!.primitives);
+    OnshapeSketchModifyEngine.createSketchLinearPattern(
+      plane: activeSketchPlane!,
+      sourceEntities: targets,
+      countX: countX,
+      countY: countY,
+      spacingXMm: spacingXMm,
+      spacingYMm: spacingYMm,
+    );
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
+    notifyListeners();
+  }
+
+  void patternSelectedSketchEntitiesCircular({int instanceCount = 4, double totalAngleDeg = 360.0}) {
+    if (activeSketchPlane == null) return;
+    _recordUndo();
+    final targets = selectedSketchEntity != null ? [selectedSketchEntity!] : List<CADPrimitiveEntity>.from(activeSketchPlane!.primitives);
+    OnshapeSketchModifyEngine.createSketchCircularPattern(
+      plane: activeSketchPlane!,
+      sourceEntities: targets,
+      center: Offset.zero,
+      instanceCount: instanceCount,
+      totalAngleDeg: totalAngleDeg,
+    );
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
+    notifyListeners();
+  }
+
+  void project3DIntersectionToActivePlane() {
+    if (hoveredProjectableEdge != null && hoveredProjectableEdge!.length >= 2) {
+      project3DEdgeToActivePlane(hoveredProjectableEdge![0], hoveredProjectableEdge![1]);
+    } else if (hoveredProjectablePoint != null) {
+      project3DVertexToActivePlane(hoveredProjectablePoint!);
+    } else {
+      enterProjectGeometryMode();
+    }
   }
 
   /// Updates hovered and snapped position on the active sketch plane, evaluating

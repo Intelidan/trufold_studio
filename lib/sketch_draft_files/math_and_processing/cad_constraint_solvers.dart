@@ -10,15 +10,15 @@ class CADConstraintSolver {
     final Offset target = modStart ? sourceSegment.start : sourceSegment.end;
     for (var s in pool) {
       if (s.id == sourceSegment.id || s.isDeleted) continue;
-      if ((s.start - target).distance < 0.005) s.start = target;
-      if ((s.end - target).distance < 0.005) s.end = target;
+      if ((s.start - target).distance < 0.25) s.start = target;
+      if ((s.end - target).distance < 0.25) s.end = target;
     }
   }
 }
 
 class CADDimensionScaler {
   static void applyLengthTransformation({required CADLineSegment segment, required double lengthMm}) {
-    double targetLen = lengthMm / 100.0;
+    final double targetLen = lengthMm;
     Offset delta = segment.end - segment.start;
     double currLen = delta.distance;
     if (currLen < 0.0001) return;

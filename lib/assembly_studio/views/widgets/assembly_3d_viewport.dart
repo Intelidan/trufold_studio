@@ -27,6 +27,7 @@ import 'viewport/handlers/handlers.dart';
 import 'viewport/overlays/overlays.dart';
 import 'viewport/painters/painters.dart';
 import '../../engine/sketch/assembly_surface_sketch_engine.dart' hide WeldJointStyle;
+import '../../engine/sketch/onshape_sketch_modify_engine.dart';
 
 /// Primary 3D interactive viewport for the Assembly Studio.
 /// Powered by the real flutter_scene Impeller GPU engine (PBR shaders, lighting, depth buffer)
@@ -306,19 +307,28 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     final prefs = widget.viewModel.graphicsPreferences;
     final aoRatio = (prefs.ambientOcclusion / 100.0).clamp(0.0, 1.0);
 
+    // Authentic Onshape CAD look: ACES tone mapping, high contrast, clean saturation, ground-truth AO
     _scene!.environmentSettings = EnvironmentSettings(
       toneMapping: ToneMappingMode.aces,
-      exposure: 1.10,
-      bloomEnabled: false,
-      ambientOcclusionEnabled: aoRatio > 0.05,
+      exposure: 1.15,
+      bloomEnabled: true,
+      bloomThreshold: 1.15,
+      bloomIntensity: 0.12,
+      bloomScatter: 0.6,
+      ambientOcclusionEnabled: true,
       ambientOcclusionMethod: AmbientOcclusionMethod.groundTruth,
-      ambientOcclusionBentNormals: false,
-      ambientOcclusionSpecularMode: SpecularAmbientOcclusionMode.none,
-      ambientOcclusionIntensity: aoRatio,
+      ambientOcclusionBentNormals: true,
+      ambientOcclusionSpecularMode: SpecularAmbientOcclusionMode.bentCone,
+      ambientOcclusionIntensity: aoRatio > 0.05 ? aoRatio : 0.85,
       ambientOcclusionHalfResolution: true,
-      screenSpaceReflectionsEnabled: false,
-      colorGradingEnabled: false,
-      vignetteEnabled: false,
+      screenSpaceReflectionsEnabled: true,
+      screenSpaceReflectionsIntensity: 0.7,
+      colorGradingEnabled: true,
+      contrast: 1.10,
+      saturation: 1.16,
+      brightness: 1.02,
+      vignetteEnabled: true,
+      vignetteIntensity: 0.12,
     );
 
     final azRad = prefs.lightAzimuthDeg * vm_math.degrees2Radians;
@@ -459,11 +469,10 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     final eye = target + d * orbitDist;
     _cameraNode.lookAtFrom(eye, target, up: up);
 
-    // Camera-locked CAD Headlight rig (Phase 1 / Solution C of Walkthrough):
-    // Locks directional key light (-0.25 right, 0.35 up, 0.90 forward) to camera view space
+    // Camera-relative CAD 3-light key direction from top-left: creates natural contrast across top, flange, and end faces
     if (_scene != null) {
-      final lightDir = (right * (-0.25) + up * 0.35 + d * 0.90).normalized();
-      _scene!.directionalLight = DirectionalLight(direction: lightDir, intensity: 2.5, castsShadow: false);
+      final lightDir = (right * (-0.55) + up * 0.65 + d * 0.45).normalized();
+      _scene!.directionalLight = DirectionalLight(direction: lightDir, intensity: 3.2, castsShadow: false);
     }
   }
 
@@ -1467,6 +1476,305 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   setState(() {});
                                   return;
                                 }
+                              }
+                              // --- MIDPOINT LINE (2 Clicks: Midpoint -> Endpoint) ---
+                              else if (tool == 'midpoint_line') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  vm.setVcbState(label: '📏 Midpoint Line', value: '0.0 mm', hint: 'Click endpoint (extends symmetrically from midpoint)');
+                                  setState(() {});
+                                  return;
+                                } else {
+                                  final midPt = vm.sketchInteractiveStartPoint!;
+                                  if ((snapped - midPt).distance > 0.1) {
+                                    final midLine = CADMidpointLineEntity(
+                                      id: 'midline_${DateTime.now().millisecondsSinceEpoch}',
+                                      midpoint: midPt,
+                                      endpoint: snapped,
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    );
+                                    vm.addPrimitiveEntityToActivePlane(midLine);
+                                    vm.clearSketchInteractiveState();
+                                    setState(() {});
+                                    _rebuildGpuCadModel();
+                                    return;
+                                  }
+                                }
+                              }
+                              // --- ALIGNED RECTANGLE (3 Clicks: Corner 1 -> Corner 2 -> Height) ---
+                              else if (tool == 'aligned_rect') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  vm.setVcbState(label: '📐 Aligned Rect', value: 'Step 1/3', hint: 'Click 2nd corner to set primary edge & angle');
+                                  setState(() {});
+                                  return;
+                                } else if (vm.sketchInteractiveMidPoint == null) {
+                                  if ((snapped - vm.sketchInteractiveStartPoint!).distance > 0.1) {
+                                    vm.setInteractiveSketchMid(snapped);
+                                    vm.setVcbState(label: '📐 Aligned Rect Height', value: 'Step 2/3', hint: 'Click 3rd point to set perpendicular height');
+                                    setState(() {});
+                                    return;
+                                  }
+                                } else {
+                                  final p1 = vm.sketchInteractiveStartPoint!;
+                                  final p2 = vm.sketchInteractiveMidPoint!;
+                                  final edge = p2 - p1;
+                                  final len = edge.distance;
+                                  final perp = len > 1e-4 ? Offset(-edge.dy / len, edge.dx / len) : const Offset(0, 1);
+                                  final hSigned = (snapped.dx - p1.dx) * perp.dx + (snapped.dy - p1.dy) * perp.dy;
+                                  if (hSigned.abs() > 0.1) {
+                                    vm.addPrimitiveEntityToActivePlane(CADAlignedRectangleEntity(
+                                      id: 'arect_${DateTime.now().millisecondsSinceEpoch}',
+                                      corner1: p1,
+                                      corner2: p2,
+                                      height: hSigned,
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    ));
+                                    vm.clearSketchInteractiveState();
+                                    vm.activeSketchTool = 'select_entity';
+                                    setState(() {});
+                                    _rebuildGpuCadModel();
+                                    return;
+                                  }
+                                }
+                              }
+                              // --- 3-POINT PERIMETER CIRCLE (3 Clicks on Perimeter) ---
+                              else if (tool == 'circle_3point') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  return;
+                                } else if (vm.sketchInteractiveMidPoint == null) {
+                                  vm.setInteractiveSketchMid(snapped);
+                                  return;
+                                } else {
+                                  vm.addPrimitiveEntityToActivePlane(CADThreePointCircleEntity(
+                                    id: 'c3pt_${DateTime.now().millisecondsSinceEpoch}',
+                                    p1: vm.sketchInteractiveStartPoint!,
+                                    p2: vm.sketchInteractiveMidPoint!,
+                                    p3: snapped,
+                                    isConstruction: vm.isSketchConstructionMode,
+                                  ));
+                                  vm.clearSketchInteractiveState();
+                                  vm.activeSketchTool = 'select_entity';
+                                  setState(() {});
+                                  _rebuildGpuCadModel();
+                                  return;
+                                }
+                              }
+                              // --- ELLIPSE (3 Clicks: Center -> Major Axis Tip -> Minor Axis Radius) ---
+                              else if (tool == 'ellipse' || tool == 'arc_ellipse') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  return;
+                                } else if (vm.sketchInteractiveMidPoint == null) {
+                                  vm.setInteractiveSketchMid(snapped);
+                                  return;
+                                } else {
+                                  final center = vm.sketchInteractiveStartPoint!;
+                                  final majorTip = vm.sketchInteractiveMidPoint!;
+                                  final majorVec = majorTip - center;
+                                  final rx = majorVec.distance.clamp(1.0, 10000.0);
+                                  final rot = math.atan2(majorVec.dy, majorVec.dx);
+                                  final ry = (snapped - center).distance.clamp(1.0, 10000.0);
+                                  vm.addPrimitiveEntityToActivePlane(CADEllipseEntity(
+                                    id: 'ellipse_${DateTime.now().millisecondsSinceEpoch}',
+                                    center: center,
+                                    radiusX: rx,
+                                    radiusY: ry,
+                                    rotationRad: rot,
+                                    sweepAngleRad: tool == 'arc_ellipse' ? math.pi : 2.0 * math.pi,
+                                    isConstruction: vm.isSketchConstructionMode,
+                                  ));
+                                  vm.clearSketchInteractiveState();
+                                  vm.activeSketchTool = 'select_entity';
+                                  setState(() {});
+                                  _rebuildGpuCadModel();
+                                  return;
+                                }
+                              }
+                              // --- TANGENT ARC & CENTER POINT ARC & CONIC ---
+                              else if (tool == 'arc_tangent') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  return;
+                                } else {
+                                  final p0 = vm.sketchInteractiveStartPoint!;
+                                  vm.addPrimitiveEntityToActivePlane(CADTangentArcEntity(
+                                    id: 'tarc_${DateTime.now().millisecondsSinceEpoch}',
+                                    startPoint: p0,
+                                    endPoint: snapped,
+                                    startTangentDir: const Offset(1.0, 0.0),
+                                    isConstruction: vm.isSketchConstructionMode,
+                                  ));
+                                  vm.clearSketchInteractiveState();
+                                  vm.activeSketchTool = 'select_entity';
+                                  setState(() {});
+                                  return;
+                                }
+                              } else if (tool == 'arc_center') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  return;
+                                } else if (vm.sketchInteractiveMidPoint == null) {
+                                  vm.setInteractiveSketchMid(snapped);
+                                  return;
+                                } else {
+                                  final c = vm.sketchInteractiveStartPoint!;
+                                  final pStart = vm.sketchInteractiveMidPoint!;
+                                  final r = (pStart - c).distance.clamp(1.0, 10000.0);
+                                  final a0 = math.atan2(pStart.dy - c.dy, pStart.dx - c.dx);
+                                  final a1 = math.atan2(snapped.dy - c.dy, snapped.dx - c.dx);
+                                  double sweep = a1 - a0;
+                                  while (sweep <= 0) {
+                                    sweep += 2.0 * math.pi;
+                                  }
+                                  vm.addPrimitiveEntityToActivePlane(CADCenterPointArcEntity(
+                                    id: 'cparc_${DateTime.now().millisecondsSinceEpoch}',
+                                    center: c,
+                                    radius: r,
+                                    startAngleRad: a0,
+                                    sweepAngleRad: sweep,
+                                    isConstruction: vm.isSketchConstructionMode,
+                                  ));
+                                  vm.clearSketchInteractiveState();
+                                  vm.activeSketchTool = 'select_entity';
+                                  setState(() {});
+                                  return;
+                                }
+                              } else if (tool == 'conic') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  return;
+                                } else if (vm.sketchInteractiveMidPoint == null) {
+                                  vm.setInteractiveSketchMid(snapped);
+                                  return;
+                                } else {
+                                  vm.addPrimitiveEntityToActivePlane(CADConicEntity(
+                                    id: 'conic_${DateTime.now().millisecondsSinceEpoch}',
+                                    startPoint: vm.sketchInteractiveStartPoint!,
+                                    endPoint: vm.sketchInteractiveMidPoint!,
+                                    apexControlPoint: snapped,
+                                    rho: 0.5,
+                                    isConstruction: vm.isSketchConstructionMode,
+                                  ));
+                                  vm.clearSketchInteractiveState();
+                                  vm.activeSketchTool = 'select_entity';
+                                  setState(() {});
+                                  return;
+                                }
+                              }
+                              // --- INSCRIBED & CIRCUMSCRIBED POLYGONS (Center -> Radius) ---
+                              else if (tool == 'polygon_inscribed' || tool == 'polygon_circumscribed') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  vm.setVcbState(label: '⬡ Polygon (6 Sides)', value: 'R: 0.0 mm', hint: 'Click radius point, or type side count (3..50)');
+                                  setState(() {});
+                                  return;
+                                } else {
+                                  final center = vm.sketchInteractiveStartPoint!;
+                                  final r = (snapped - center).distance;
+                                  if (r > 0.5) {
+                                    final rot = math.atan2(snapped.dy - center.dy, snapped.dx - center.dx);
+                                    vm.addPrimitiveEntityToActivePlane(CADRegularPolygonEntity(
+                                      id: 'poly_${DateTime.now().millisecondsSinceEpoch}',
+                                      center: center,
+                                      radius: r,
+                                      sides: 6,
+                                      rotationRad: rot,
+                                      isInscribed: tool == 'polygon_inscribed',
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    ));
+                                    vm.clearSketchInteractiveState();
+                                    vm.activeSketchTool = 'select_entity';
+                                    setState(() {});
+                                    _rebuildGpuCadModel();
+                                    return;
+                                  }
+                                }
+                              }
+                              // --- FIT SPLINE & BEZIER ---
+                              else if (tool == 'spline' || tool == 'bezier') {
+                                if (vm.sketchPolylinePoints.length >= 2 &&
+                                    (snapped - vm.sketchPolylinePoints.last).distance < 3.0) {
+                                  vm.addPrimitiveEntityToActivePlane(CADSplineEntity(
+                                    id: 'spline_${DateTime.now().millisecondsSinceEpoch}',
+                                    controlPoints: List.from(vm.sketchPolylinePoints),
+                                    isBezier: tool == 'bezier',
+                                    isConstruction: vm.isSketchConstructionMode,
+                                  ));
+                                  vm.clearSketchInteractiveState();
+                                  vm.activeSketchTool = 'select_entity';
+                                  setState(() {});
+                                  return;
+                                } else {
+                                  vm.addSketchPolylinePoint(snapped);
+                                  setState(() {});
+                                  return;
+                                }
+                              }
+                              // --- SKETCH OBROUND SLOT (Start Center -> End Center) ---
+                              else if (tool == 'sketch_slot') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  return;
+                                } else {
+                                  final p0 = vm.sketchInteractiveStartPoint!;
+                                  if ((snapped - p0).distance > 1.0) {
+                                    vm.addPrimitiveEntityToActivePlane(CADSlotEntity(
+                                      id: 'slot_${DateTime.now().millisecondsSinceEpoch}',
+                                      startCenter: p0,
+                                      endCenter: snapped,
+                                      diameter: 20.0,
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    ));
+                                    vm.clearSketchInteractiveState();
+                                    vm.activeSketchTool = 'select_entity';
+                                    setState(() {});
+                                    return;
+                                  }
+                                }
+                              }
+                              // --- STANDALONE POINT & TEXT ---
+                              else if (tool == 'point') {
+                                vm.addPrimitiveEntityToActivePlane(CADPointEntity(
+                                  id: 'pt_${DateTime.now().millisecondsSinceEpoch}',
+                                  position: snapped,
+                                ));
+                                setState(() {});
+                                return;
+                              } else if (tool == 'text') {
+                                vm.addPrimitiveEntityToActivePlane(CADTextEntity(
+                                  id: 'txt_${DateTime.now().millisecondsSinceEpoch}',
+                                  origin: snapped,
+                                  text: 'TRUFOLD',
+                                  heightMm: 16.0,
+                                ));
+                                vm.activeSketchTool = 'select_entity';
+                                setState(() {});
+                                return;
+                              }
+                              // --- SKETCH MODIFY: TRIM ('M'), EXTEND, SPLIT ---
+                              else if (tool == 'trim') {
+                                if (OnshapeSketchModifyEngine.trimAtPoint(plane, localPoint)) {
+                                  vm.activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(plane);
+                                  vm.notifyDocChanged();
+                                  setState(() {});
+                                }
+                                return;
+                              } else if (tool == 'extend') {
+                                if (OnshapeSketchModifyEngine.extendAtPoint(plane, localPoint)) {
+                                  vm.activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(plane);
+                                  vm.notifyDocChanged();
+                                  setState(() {});
+                                }
+                                return;
+                              } else if (tool == 'split') {
+                                if (OnshapeSketchModifyEngine.splitAtPoint(plane, localPoint)) {
+                                  vm.activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(plane);
+                                  vm.notifyDocChanged();
+                                  setState(() {});
+                                }
+                                return;
                               } else {
                                 // Selection mode: hit test primitive entities on active plane
                                 CADPrimitiveEntity? hitPrimitive;
@@ -1510,6 +1818,19 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   } else if (p is CADPolylineEntity) {
                                     for (int i = 0; i < p.points.length - 1; i++) {
                                       if (_distanceToSegment(localPoint, p.points[i], p.points[i + 1]) <= 5.0) {
+                                        hitPrimitive = p;
+                                        break;
+                                      }
+                                    }
+                                    if (hitPrimitive != null) break;
+                                  } else if (p is CADPointEntity) {
+                                    if ((localPoint - p.position).distance <= 6.0) {
+                                      hitPrimitive = p;
+                                      break;
+                                    }
+                                  } else {
+                                    for (final seg in p.toLineSegments()) {
+                                      if (_distanceToSegment(localPoint, seg.start, seg.end) <= 6.0) {
                                         hitPrimitive = p;
                                         break;
                                       }
@@ -2080,25 +2401,29 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   cursor: _getCursorForToolMode(vm),
                                   child: ListenableBuilder(
                                     listenable: _cameraRepaintNotifier,
-                                    builder: (context, _) => (_isGpuAvailable && _scene != null && _isSceneReady)
-                                        ? RepaintBoundary(child: SceneView(_scene!))
-                                        : RepaintBoundary(
-                                            child: CustomPaint(
-                                              size: Size.infinite,
-                                              painter: FlutterPaint3dPainter(
-                                                mesh: mesh,
-                                                azimuthDeg: _azimuthDeg,
-                                                elevationDeg: _elevationDeg,
-                                                zoom: _zoom,
-                                                pan: _pan,
-                                                showWireframe: vm.onshapeRenderMode != OnshapeRenderMode.shadedWithoutEdges,
-                                                isGlassMode: vm.onshapeRenderMode == OnshapeRenderMode.translucent,
-                                                isOrthoProjection: vm.isOrthoProjection,
-                                                selectedFaceId: vm.doc.selectedPartId ?? vm.doc.selectedFaceId,
-                                                pivotOverride: _cameraPivot,
+                                    builder: (context, _) {
+                                      final bool useGpu = (vm.renderEngine == Cad3dEngineMode.flutterGpu) &&
+                                          _isGpuAvailable && _scene != null && _isSceneReady;
+                                      return useGpu
+                                          ? RepaintBoundary(child: SceneView(_scene!))
+                                          : RepaintBoundary(
+                                              child: CustomPaint(
+                                                size: Size.infinite,
+                                                painter: FlutterPaint3dPainter(
+                                                  mesh: mesh,
+                                                  azimuthDeg: _azimuthDeg,
+                                                  elevationDeg: _elevationDeg,
+                                                  zoom: _zoom,
+                                                  pan: _pan,
+                                                  showWireframe: vm.onshapeRenderMode != OnshapeRenderMode.shadedWithoutEdges,
+                                                  isGlassMode: vm.onshapeRenderMode == OnshapeRenderMode.translucent,
+                                                  isOrthoProjection: vm.isOrthoProjection,
+                                                  selectedFaceId: vm.doc.selectedPartId ?? vm.doc.selectedFaceId,
+                                                  pivotOverride: _cameraPivot,
+                                                ),
                                               ),
-                                            ),
-                                          ),
+                                            );
+                                    },
                                   ),
                                 ),
                               ),
@@ -3269,6 +3594,11 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
 
     // 2. DIRECT 3D SKETCHING ON THE MODEL (REAL-TIME 3D):
     if (vm.isSketchMode) {
+      // CRITICAL FIX: When sketching on an active 3D CADSketchPlane, Listener.onPointerDown
+      // handles all 2-click primitive creation and selection. Do NOT run legacy 1-click tap hole punching!
+      if (vm.activeSketchPlane != null) {
+        return;
+      }
       final part = vm.doc.parts.where((p) => p.id == vm.sketchPartId).firstOrNull ?? vm.selectedPart;
       if (part == null) return;
 

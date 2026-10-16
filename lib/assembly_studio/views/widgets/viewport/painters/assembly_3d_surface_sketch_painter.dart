@@ -355,6 +355,51 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             }
           }
         }
+      } else if (prim is CADPointEntity) {
+        final ptScr = toScreen(prim.position);
+        if (ptScr != Offset.zero) {
+          canvas.drawCircle(ptScr, 3.5, Paint()..color = strokePaint.color);
+          canvas.drawLine(ptScr - const Offset(5, 0), ptScr + const Offset(5, 0), Paint()..color = strokePaint.color..strokeWidth = 1.2);
+          canvas.drawLine(ptScr - const Offset(0, 5), ptScr + const Offset(0, 5), Paint()..color = strokePaint.color..strokeWidth = 1.2);
+          if (isSel) {
+            _drawHandle(canvas, ptScr);
+          }
+        }
+      } else {
+        // Universal renderer for AlignedRect, Ellipse, CenterPointArc, Conic, RegularPolygon, Spline/Bezier, Slot, and Text
+        final segs = prim.toLineSegments();
+        if (segs.isNotEmpty) {
+          final path = Path();
+          for (final s in segs) {
+            final pA = toScreen(s.start);
+            final pB = toScreen(s.end);
+            if (pA != Offset.zero && pB != Offset.zero) {
+              path.moveTo(pA.dx, pA.dy);
+              path.lineTo(pB.dx, pB.dy);
+            }
+          }
+          canvas.drawPath(path, haloPaint);
+          if (prim.isConstruction) {
+            _drawDashedPath(canvas, path, strokePaint);
+          } else {
+            canvas.drawPath(path, strokePaint);
+          }
+        }
+        // Draw construction inscribed/circumscribed circle for RegularPolygon
+        if (prim is CADRegularPolygonEntity) {
+          final cPath = Path();
+          for (int i = 0; i <= 36; i++) {
+            final a = (2.0 * math.pi * i) / 36;
+            final pt = toScreen(prim.center + Offset(math.cos(a), math.sin(a)) * prim.radius);
+            if (i == 0) {
+              cPath.moveTo(pt.dx, pt.dy);
+            } else {
+              cPath.lineTo(pt.dx, pt.dy);
+            }
+          }
+          _drawDashedPath(canvas, cPath, Paint()..color = const Color(0xFF38BDF8)..strokeWidth = 1.0..style = PaintingStyle.stroke);
+          _drawDimensionBadge(canvas, toScreen(prim.center), '${prim.sides}x');
+        }
       }
     }
 

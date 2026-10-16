@@ -125,15 +125,18 @@ class FlutterSceneCadMeshBuilder {
         } else {
           faceColor = vm.Vector4(mc.r, mc.g, mc.b, 1.0);
         }
-      } else if (poly.faceId.startsWith('BORE_') || poly.faceId.contains('_bore_') || poly.faceId.startsWith('RIM_')) {
-        // Deep bore wall / sheet thickness rim steel
-        faceColor = vm.Vector4(0.42, 0.55, 0.65, 1.0);
-      } else if (poly.faceId.endsWith('_BOT')) {
-        // Back / bottom surface slightly darker tone
-        faceColor = vm.Vector4(0.50, 0.63, 0.72, 1.0);
+      } else if (poly.faceId.startsWith('BORE_') || poly.faceId.contains('_bore_') || poly.faceId.startsWith('RIM_') || poly.faceId.contains('_rim')) {
+        // Deep bore wall / sheet thickness rim steel: darker tone
+        faceColor = vm.Vector4(0.38, 0.50, 0.60, 1.0);
+      } else if (poly.faceId.endsWith('_BOT') || poly.faceId.contains('_bot')) {
+        // Underside / bottom surface
+        faceColor = vm.Vector4(0.44, 0.56, 0.66, 1.0);
+      } else if (poly.faceId.contains('flange') || poly.faceId.contains('leg_v') || poly.faceId.contains('side')) {
+        // Side / vertical flange surfaces
+        faceColor = vm.Vector4(0.50, 0.62, 0.72, 1.0);
       } else {
-        // Authentic Onshape Radiant Steel-Blue (SS4)
-        faceColor = vm.Vector4(0.58, 0.70, 0.79, 1.0);
+        // Authentic Onshape Radiant Steel-Blue top surfaces
+        faceColor = vm.Vector4(0.56, 0.68, 0.78, 1.0);
       }
 
       currentBuilder.color(faceColor);
@@ -155,31 +158,21 @@ class FlutterSceneCadMeshBuilder {
         builder: currentBuilder,
       );
 
-      // Requirement 1: Only 1 border line per segment (skip bottom/inner/wall/rim duplicates and welds)
-      final isInternalFace = poly.faceId.endsWith('_BOT') ||
-          poly.faceId.endsWith('_inner') ||
-          poly.faceId.contains('_slot_') ||
-          poly.faceId.contains('_wall_') ||
-          poly.faceId.contains('_bore_') ||
+      // Filter only strictly internal tessellation/bore/inner faces; external end caps, rims, and slots emit boundary edges
+      final isInternalFace = poly.faceId.contains('_inner') ||
+          poly.faceId.contains('_bore') ||
           poly.faceId.startsWith('BORE_') ||
-          poly.faceId.startsWith('RIM_') ||
           poly.faceId.startsWith('CHAMFER_') ||
+          poly.faceId.startsWith('FILLET_CAP') ||
           poly.faceId.startsWith('weld_');
 
       if (shouldDrawWireframe && poly.drawWireframe && !isInternalFace) {
-        final lenN = math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
-        final nx = lenN > 1e-4 ? (n.x / lenN) * 0.05 : 0.0;
-        final ny = lenN > 1e-4 ? (n.y / lenN) * 0.05 : 0.0;
-        final nz = lenN > 1e-4 ? (n.z / lenN) * 0.05 : 0.0;
-
         // 1. Boundary lines from SheetMetal unfold if available, otherwise from polygon vertices
         if (poly.boundaryLines.isNotEmpty) {
           for (final seg in poly.boundaryLines) {
             if (seg.length >= 2) {
               for (int i = 0; i < seg.length - 1; i++) {
-                final p1 = CadPoint3D(seg[i].x + nx, seg[i].y + ny, seg[i].z + nz);
-                final p2 = CadPoint3D(seg[i + 1].x + nx, seg[i + 1].y + ny, seg[i + 1].z + nz);
-                rawBoundarySegs.add((p1, p2));
+                rawBoundarySegs.add((seg[i], seg[i + 1]));
               }
             }
           }
@@ -187,21 +180,34 @@ class FlutterSceneCadMeshBuilder {
           for (int i = 0; i < poly.vertices.length; i++) {
             final v1 = poly.vertices[i];
             final v2 = poly.vertices[(i + 1) % poly.vertices.length];
-            final p1 = CadPoint3D(v1.x + nx, v1.y + ny, v1.z + nz);
-            final p2 = CadPoint3D(v2.x + nx, v2.y + ny, v2.z + nz);
-            rawBoundarySegs.add((p1, p2));
+            rawBoundarySegs.add((v1, v2));
           }
         }
 
         // 2. Cutout holes and voids outline loops (punch holes, slots, coupler cuts)
         for (final hole in poly.holes) {
           if (hole.length >= 3) {
-            for (int i = 0; i < hole.length; i++) {
-              final h1 = hole[i];
-              final h2 = hole[(i + 1) % hole.length];
-              final p1 = CadPoint3D(h1.x + nx, h1.y + ny, h1.z + nz);
-              final p2 = CadPoint3D(h2.x + nx, h2.y + ny, h2.z + nz);
-              rawBoundarySegs.add((p1, p2));
+            // Sanitize hole loop: strip consecutive duplicate points
+            final sanitizedHole = <CadPoint3D>[];
+            for (final pt in hole) {
+              if (sanitizedHole.isEmpty ||
+                  (pt.x - sanitizedHole.last.x).abs() > 1e-4 ||
+                  (pt.y - sanitizedHole.last.y).abs() > 1e-4 ||
+                  (pt.z - sanitizedHole.last.z).abs() > 1e-4) {
+                sanitizedHole.add(pt);
+              }
+            }
+            if (sanitizedHole.length > 2 &&
+                (sanitizedHole.first.x - sanitizedHole.last.x).abs() <= 1e-4 &&
+                (sanitizedHole.first.y - sanitizedHole.last.y).abs() <= 1e-4 &&
+                (sanitizedHole.first.z - sanitizedHole.last.z).abs() <= 1e-4) {
+              sanitizedHole.removeLast();
+            }
+
+            for (int i = 0; i < sanitizedHole.length; i++) {
+              final h1 = sanitizedHole[i];
+              final h2 = sanitizedHole[(i + 1) % sanitizedHole.length];
+              rawBoundarySegs.add((h1, h2));
             }
           }
         }
@@ -233,42 +239,22 @@ class FlutterSceneCadMeshBuilder {
       }
     }
 
-    // Requirement 2: Weld/snap intersecting boundary endpoints within floating-point tolerance (0.15 mm)
-    // Preserves smooth curved bend fillet arc facets without collapsing them into sharp straight chords.
+    // Canonical segment deduplication (_dedupedSegments): each 3D crease edge emitted exactly once!
     if (shouldDrawWireframe && rawBoundarySegs.isNotEmpty) {
-      final weldedVertices = <CadPoint3D>[];
-      const double snapTolerance = 0.15;
-      const double snapTolSq = snapTolerance * snapTolerance;
-
-      CadPoint3D snapVertex(CadPoint3D pt) {
-        for (final v in weldedVertices) {
-          final dx = v.x - pt.x;
-          final dy = v.y - pt.y;
-          final dz = v.z - pt.z;
-          if (dx.abs() <= snapTolerance && dy.abs() <= snapTolerance && dz.abs() <= snapTolerance) {
-            if ((dx * dx + dy * dy + dz * dz) <= snapTolSq) {
-              return v;
-            }
-          }
-        }
-        weldedVertices.add(pt);
-        return pt;
-      }
-
       final addedEdgeKeys = <String>{};
 
       for (final seg in rawBoundarySegs) {
-        final a = snapVertex(seg.$1);
-        final b = snapVertex(seg.$2);
+        final a = seg.$1;
+        final b = seg.$2;
         final dx = b.x - a.x;
         final dy = b.y - a.y;
         final dz = b.z - a.z;
-        if (dx * dx + dy * dy + dz * dz > 0.01) {
-          final kA = '${a.x.toStringAsFixed(2)}_${a.y.toStringAsFixed(2)}_${a.z.toStringAsFixed(2)}';
-          final kB = '${b.x.toStringAsFixed(2)}_${b.y.toStringAsFixed(2)}_${b.z.toStringAsFixed(2)}';
+        if (dx * dx + dy * dy + dz * dz > 1e-6) {
+          final kA = '${(a.x * 1000).round()}_${(a.y * 1000).round()}_${(a.z * 1000).round()}';
+          final kB = '${(b.x * 1000).round()}_${(b.y * 1000).round()}_${(b.z * 1000).round()}';
           if (kA == kB) continue;
 
-          final edgeKey = kA.compareTo(kB) <= 0 ? '$kA--$kB' : '$kB--$kA';
+          final edgeKey = kA.compareTo(kB) <= 0 ? '$kA|$kB' : '$kB|$kA';
           if (!addedEdgeKeys.add(edgeKey)) continue;
 
           edgePositions.addAll([
@@ -295,8 +281,9 @@ class FlutterSceneCadMeshBuilder {
         final matSettings = preferences.materialSettings;
         material = PhysicallyBasedMaterial()
           ..doubleSided = true
-          ..metallicFactor = matSettings.isPlastic ? 0.0 : 0.05
-          ..roughnessFactor = 0.25
+          ..depthLayer = 0
+          ..metallicFactor = matSettings.isPlastic ? 0.0 : 0.04
+          ..roughnessFactor = 0.22
           ..baseColorFactor = vm.Vector4(1.0, 1.0, 1.0, 1.0);
       }
 
@@ -311,10 +298,11 @@ class FlutterSceneCadMeshBuilder {
       final transOpacity = preferences.transparencyLevel.clamp(0.05, 0.95);
       final transMat = PhysicallyBasedMaterial()
         ..doubleSided = true
+        ..depthLayer = 0
         ..alphaMode = AlphaMode.blend
         ..baseColorFactor = vm.Vector4(1.0, 1.0, 1.0, transOpacity)
-        ..metallicFactor = 0.08
-        ..roughnessFactor = 0.50;
+        ..metallicFactor = 0.04
+        ..roughnessFactor = 0.40;
       final transMesh = Mesh(transGeometry, transMat);
       final transNode = Node(name: 'TranslucentCadBody', mesh: transMesh);
       rootNode.add(transNode);
@@ -325,13 +313,14 @@ class FlutterSceneCadMeshBuilder {
       final lineData = LineSegmentData(
         positions: Float32List.fromList(edgePositions),
       );
-      final computedLineWidth = (preferences.lineWidth * 1.25).clamp(0.75, 2.0);
-      final lineGeometry = LineSegmentsGeometry(lineData, width: computedLineWidth, normalOffset: 0.08);
+      final computedLineWidth = (preferences.lineWidth * 0.025).clamp(0.015, 0.045);
+      final lineGeometry = LineSegmentsGeometry(lineData, width: computedLineWidth, normalOffset: 0.0);
       final boundaryColor = preferences.highlightBoundaryEdges
           ? preferences.boundaryEdgeColor
-          : const Color(0xFF000000); // Solid Pitch Black (SS3 & SS4)
+          : const Color(0xFF000000); // Pure solid pitch black
       final lineMat = UnlitMaterial()
         ..doubleSided = true
+        ..depthLayer = 2 // Hardware-ordered depth layer: draws over coplanar faces at any distance!
         ..baseColorFactor = vm.Vector4(
           boundaryColor.r,
           boundaryColor.g,
@@ -348,11 +337,12 @@ class FlutterSceneCadMeshBuilder {
       final tangentLineData = LineSegmentData(
         positions: Float32List.fromList(tangentPositions),
       );
-      final computedPhantomWidth = (preferences.phantomTangentEdgeWidth * 0.7).clamp(0.3, 3.5);
-      final tangentGeometry = LineSegmentsGeometry(tangentLineData, width: computedPhantomWidth);
+      final computedPhantomWidth = (preferences.phantomTangentEdgeWidth * 0.02).clamp(0.01, 0.035);
+      final tangentGeometry = LineSegmentsGeometry(tangentLineData, width: computedPhantomWidth, normalOffset: 0.0);
       final tColor = preferences.phantomTangentEdgeColor;
       final tangentMat = UnlitMaterial()
         ..doubleSided = true
+        ..depthLayer = 2
         ..baseColorFactor = vm.Vector4(
           tColor.r,
           tColor.g,

@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:trufold_studio/assembly_studio/models/onshape_toolbar_items.dart';
 import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmodel.dart';
 import 'package:trufold_studio/assembly_studio/views/widgets/toolbar/assembly_onshape_toolbar.dart';
-import 'package:trufold_studio/assembly_studio/views/widgets/toolbar/onshape_toolbar_widgets.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -54,7 +53,7 @@ void main() {
       final midpoint = lineGroup.items.firstWhere((it) => it.id == 'midpoint_line');
 
       expect(line.isImplemented, isTrue);
-      expect(midpoint.isImplemented, isFalse);
+      expect(midpoint.isImplemented, isTrue);
     });
 
     testWidgets('AssemblyOnshapeToolbar switches between 3D and Sketch toolbars', (tester) async {

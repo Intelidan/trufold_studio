@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../sheet_metal_studio/models/cad_constraint.dart';
+import '../../sheet_metal_studio/models/cad_primitives.dart';
 import '../viewmodels/assembly_studio_viewmodel.dart';
 import 'theme/assembly_studio_theme.dart';
 import 'widgets/assembly_scene_hierarchy_tree.dart';
@@ -343,6 +344,7 @@ class _AssemblyStudioScreenState extends State<AssemblyStudioScreen> {
     final welds = _viewModel.doc.welds.length;
     final tool = _viewModel.activeToolMode.name.toUpperCase();
     final axis = _viewModel.lockedAxis == GizmoAxis.none ? 'FREE' : _viewModel.lockedAxis.name.toUpperCase();
+    final isGpu = _viewModel.renderEngine == Cad3dEngineMode.flutterGpu;
 
     return Container(
       height: 20,
@@ -351,24 +353,68 @@ class _AssemblyStudioScreenState extends State<AssemblyStudioScreen> {
         color: theme.statusBarBackground,
         border: Border(top: BorderSide(color: theme.statusBarBorder, width: 0.8)),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            const Icon(Icons.check_circle_outline_rounded, size: 10, color: Color(0xFF34D399)),
-            const SizedBox(width: 5),
-            Text('Ready', style: TextStyle(fontSize: 8.5, color: theme.textTertiary)),
-            const SizedBox(width: 12),
-            Text('Tool: $tool', style: TextStyle(fontSize: 8.5, color: theme.accentSky)),
-            const SizedBox(width: 12),
-            Text('Axis Lock: $axis', style: TextStyle(fontSize: 8.5, color: theme.accentAmber)),
-            const SizedBox(width: 24),
-            Text(
-              'Scene: $parts Parts • $welds Welds • Snap: ${_viewModel.snapToGrid ? "ON" : "OFF"} • 15° Protractor: ${_viewModel.snapTo15Degrees ? "ON" : "OFF"} • Theme: ${_viewModel.isLightBackground ? "LIGHT" : "DARK"}',
-              style: TextStyle(fontSize: 8, color: theme.textMuted),
+      child: Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline_rounded, size: 10, color: Color(0xFF34D399)),
+                  const SizedBox(width: 5),
+                  Text('Ready', style: TextStyle(fontSize: 8.5, color: theme.textTertiary)),
+                  const SizedBox(width: 12),
+                  Text('Tool: $tool', style: TextStyle(fontSize: 8.5, color: theme.accentSky)),
+                  const SizedBox(width: 12),
+                  Text('Axis Lock: $axis', style: TextStyle(fontSize: 8.5, color: theme.accentAmber)),
+                  const SizedBox(width: 24),
+                  Text(
+                    'Scene: $parts Parts • $welds Welds • Snap: ${_viewModel.snapToGrid ? "ON" : "OFF"} • 15° Protractor: ${_viewModel.snapTo15Degrees ? "ON" : "OFF"} • Theme: ${_viewModel.isLightBackground ? "LIGHT" : "DARK"}',
+                    style: TextStyle(fontSize: 8, color: theme.textMuted),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: 'Active 3D Engine: ${_viewModel.renderEngine.label}\nClick to toggle between GPU and 2D Canvas',
+            child: InkWell(
+              onTap: _viewModel.toggleRenderEngine,
+              borderRadius: BorderRadius.circular(3),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: isGpu ? const Color(0xFF064E3B).withValues(alpha: 0.5) : const Color(0xFF0C4A6E).withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: isGpu ? const Color(0xFF10B981) : const Color(0xFF0284C7),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isGpu ? Icons.speed_rounded : Icons.brush_rounded,
+                      size: 9,
+                      color: isGpu ? const Color(0xFF34D399) : const Color(0xFF38BDF8),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isGpu ? 'Engine: Flutter GPU' : 'Engine: 2D Canvas',
+                      style: TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.bold,
+                        color: isGpu ? const Color(0xFF34D399) : const Color(0xFF38BDF8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

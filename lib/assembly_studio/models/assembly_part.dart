@@ -622,6 +622,9 @@ class AssemblyPart {
   }
 
   /// Transforms a World point into local part coordinates (inverse of toWorld).
+  CadPoint3D worldToLocal(CadPoint3D worldPt) => toLocal(worldPt);
+
+  /// Transforms a World point into local part coordinates (inverse of toWorld).
   CadPoint3D toLocal(CadPoint3D w) {
     final x = w.x - position.x;
     final y = w.y - position.y;
@@ -1254,7 +1257,7 @@ class AssemblyPart {
     );
 
     // Inner Top Flange (real thickness T, Item 4)
-    final innerTopHoles = topHoles.map((loop) => loop.map((pt) => CadPoint3D(pt.x, pt.y, H - T)).toList()).toList();
+    final innerTopHoles = _buildFlangeHoles('flange_top', H, fDir, throughOnly: true).map((loop) => loop.map((pt) => CadPoint3D(pt.x, pt.y, H - T)).toList()).toList();
     thickPolys.add(
       CadFoldedPolygon3D(
         faceId: '${id}_inner_flange_top',
@@ -1266,7 +1269,7 @@ class AssemblyPart {
     );
 
     // Inner Web face (real thickness T, Item 4)
-    final innerWebHoles = webHoles.map((loop) => loop.map((pt) => CadPoint3D(pt.x, T * fDir, pt.z)).toList()).toList();
+    final innerWebHoles = _buildWebHoles(throughOnly: true).map((loop) => loop.map((pt) => CadPoint3D(pt.x, T * fDir, pt.z)).toList()).toList();
     thickPolys.add(
       CadFoldedPolygon3D(
         faceId: '${id}_inner_web',
@@ -1291,7 +1294,7 @@ class AssemblyPart {
     );
 
     // Inner Bottom Flange (real thickness T, Item 4)
-    final innerBottomHoles = bottomHoles.map((loop) => loop.map((pt) => CadPoint3D(pt.x, pt.y, T)).toList()).toList();
+    final innerBottomHoles = _buildFlangeHoles('flange_bottom', 0.0, fDir, throughOnly: true).map((loop) => loop.map((pt) => CadPoint3D(pt.x, pt.y, T)).toList()).toList();
     thickPolys.add(
       CadFoldedPolygon3D(
         faceId: '${id}_inner_flange_bottom',
@@ -2274,11 +2277,18 @@ class AssemblyPart {
     );
   }
 
-  List<List<CadPoint3D>> _buildWebHoles() {
+  List<List<CadPoint3D>> _buildWebHoles({bool throughOnly = false}) {
     final webHoles = <List<CadPoint3D>>[];
     for (final sk in sketches) {
       if (sk.isSurfaceImpress) continue; // Surface impress draws on surface without cutting
-      if (sk.targetFace == 'web' || sk.targetFace.endsWith('_web') || sk.targetFace.isEmpty) {
+      if (throughOnly && !sk.isPassThrough && sk.cutDepthMm < thickness) continue;
+      final isWebLike = sk.targetFace == 'web' ||
+          sk.targetFace.endsWith('_web') ||
+          sk.targetFace.endsWith('_front') ||
+          sk.targetFace.endsWith('_leg_v') ||
+          sk.targetFace.endsWith('_bar_top') ||
+          sk.targetFace.isEmpty;
+      if (isWebLike) {
         if (sk.customPolygonPoints != null && sk.customPolygonPoints!.length >= 3) {
           final pts = sk.customPolygonPoints!
               .map((p) => CadPoint3D(sk.localCenter.x + p.dx, 0.0, sk.localCenter.y + p.dy))
@@ -2303,10 +2313,11 @@ class AssemblyPart {
     return webHoles;
   }
 
-  List<List<CadPoint3D>> _buildFlangeHoles(String faceKey, double zCoord, double fDir) {
+  List<List<CadPoint3D>> _buildFlangeHoles(String faceKey, double zCoord, double fDir, {bool throughOnly = false}) {
     final flgHoles = <List<CadPoint3D>>[];
     for (final sk in sketches) {
       if (sk.isSurfaceImpress) continue;
+      if (throughOnly && !sk.isPassThrough && sk.cutDepthMm < thickness) continue;
       if (sk.targetFace == faceKey || sk.targetFace.endsWith(faceKey)) {
         final cy = sk.localCenter.y * fDir;
         if (sk.customPolygonPoints != null && sk.customPolygonPoints!.length >= 3) {

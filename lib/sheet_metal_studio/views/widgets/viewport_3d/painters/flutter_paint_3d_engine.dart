@@ -144,9 +144,16 @@ class FlutterPaint3dPainter extends CustomPainter {
 
       final isWeld = poly.faceId.startsWith('weld_');
       final isFillet = poly.faceId.startsWith('FILLET_');
-      final isBore = poly.faceId.startsWith('BORE_') || poly.faceId.contains('_slot_') || poly.faceId.contains('_wall_') || poly.faceId.contains('_bore_');
-      final isInner = poly.faceId.endsWith('_inner') || poly.faceId.endsWith('_BOT');
-      final isRim = poly.faceId.startsWith('RIM_') || poly.faceId.startsWith('FILLET_CAP') || poly.faceId.startsWith('CHAMFER_');
+      final isBore = poly.faceId.startsWith('BORE_') ||
+          poly.faceId.contains('_slot_') ||
+          poly.faceId.contains('_wall_') ||
+          poly.faceId.contains('_bore');
+      final isRim = poly.faceId.contains('_rim') ||
+          poly.faceId.contains('_cap') ||
+          poly.faceId.contains('_end_cap') ||
+          poly.faceId.startsWith('RIM_') ||
+          poly.faceId.startsWith('FILLET_CAP') ||
+          poly.faceId.startsWith('CHAMFER_');
       final isFaceSelected = (poly.faceId == selectedFaceId) || (selectedFaceId != null && poly.faceId.startsWith(selectedFaceId!));
       final isFaceHovered = (poly.faceId == hoveredFaceId);
       final isBendHighlighted =
@@ -170,7 +177,7 @@ class FlutterPaint3dPainter extends CustomPainter {
       // Solid/Glass Opaque Mode: Selective back-face culling
       // Thickness shell (RIM, CHAMFER, FILLET_CAP) is culled when back-facing in solid mode.
       if (mesh.thicknessPolygons.isNotEmpty) {
-        final isRimOrChamfer = poly.faceId.startsWith('RIM_') || poly.faceId.startsWith('CHAMFER_') || poly.faceId.startsWith('FILLET_CAP');
+        final isRimOrChamfer = isRim;
         if (!isRimOrChamfer) {
           // In glass mode: _BOT face is suppressed — top face at alpha + opaque rim avoids hollow look
           if (isGlassMode && poly.faceId.endsWith('_BOT')) continue;
@@ -201,26 +208,32 @@ class FlutterPaint3dPainter extends CustomPainter {
         }
       }
 
-      // Dual-light CAD View-Space "Headlight" illumination (Phase 1 of Walkthrough):
-      // Key light L1 locked top-left of camera (-0.25, 0.35, 0.90)
-      // Fill light L2 locked bottom-right (0.40, -0.30, 0.60)
+      // Onshape-Grade Studio 3-Light + Hemisphere Ambient + GGX Specular Shading (v4.0 Spec Section 5)
       final lenCN = math.sqrt(nx2 * nx2 + ny2 * ny2 + nz2 * nz2);
       final cnX = lenCN > 1e-6 ? nx2 / lenCN : 0.0;
       final cnY = lenCN > 1e-6 ? ny2 / lenCN : 0.0;
       final cnZ = lenCN > 1e-6 ? nz2 / lenCN : 1.0;
 
-      final dotL1 = (cnX * (-0.2506) + cnY * 0.3509 + cnZ * 0.9023).clamp(-1.0, 1.0);
-      final diff1 = math.max(0.0, dotL1);
+      // Key light L1 locked top-left of camera (-0.32, 0.42, 0.85)
+      final dotL1 = (cnX * (-0.32) + cnY * 0.42 + cnZ * 0.85).clamp(-1.0, 1.0);
+      // Fill light L2 locked bottom-right (0.48, -0.25, 0.84)
+      final dotL2 = (cnX * 0.48 + cnY * (-0.25) + cnZ * 0.84).clamp(-1.0, 1.0);
 
-      final dotL2 = (cnX * 0.5121 + cnY * (-0.3841) + cnZ * 0.7682).clamp(-1.0, 1.0);
-      final diff2 = math.max(0.0, dotL2) * 0.35;
+      // Studio hemisphere ambient + wrap diffuse
+      final hemiFactor = (cnY * 0.5 + 0.5) * 0.16 + 0.34;
+      final wrapKey = math.max((dotL1 + 0.25) / 1.25, 0.0);
+      final diff2 = math.max(0.0, dotL2) * 0.22;
+      final diffuseFactor = wrapKey * 0.52 + diff2;
 
-      // Concentrated Specular Shine (exponent 48.0 creates the tight Onshape highlight stripe)
-      final dotH1 = (cnX * (-0.1285) + cnY * 0.1799 + cnZ * 0.9753).clamp(0.0, 1.0);
-      final spec = math.pow(dotH1, 48.0) * (isWeld ? 0.65 : 0.55);
+      // Half-vector for key light specular highlight
+      final dotH1 = (cnX * (-0.17) + cnY * 0.23 + cnZ * 0.96).clamp(0.0, 1.0);
+      const roughness = 0.24;
+      const a2 = roughness * roughness * roughness * roughness;
+      final denom = dotH1 * dotH1 * (a2 - 1.0) + 1.0;
+      final dGgx = a2 / math.max(math.pi * denom * denom, 0.001);
+      final spec = math.min(dGgx * math.max(0.0, dotL1) * 0.045, 0.38);
 
-      const ambientFactor = 0.35;
-      final diffuseFactor = diff1 * 0.65 + diff2;
+      final totalTone = (hemiFactor + diffuseFactor).clamp(0.25, 1.05);
 
       final baseColor = poly.color;
       Color shadedColor;
@@ -233,9 +246,9 @@ class FlutterPaint3dPainter extends CustomPainter {
       } else {
         shadedColor = Color.from(
           alpha: 1.0,
-          red: (baseColor.r * (ambientFactor + diffuseFactor) + spec).clamp(0.0, 1.0),
-          green: (baseColor.g * (ambientFactor + diffuseFactor) + spec).clamp(0.0, 1.0),
-          blue: (baseColor.b * (ambientFactor + diffuseFactor) + spec).clamp(0.0, 1.0),
+          red: (baseColor.r * totalTone + spec).clamp(0.0, 1.0),
+          green: (baseColor.g * totalTone + spec).clamp(0.0, 1.0),
+          blue: (baseColor.b * totalTone + spec).clamp(0.0, 1.0),
         );
       }
 
@@ -283,18 +296,37 @@ class FlutterPaint3dPainter extends CustomPainter {
       for (int hIdx = 0; hIdx < poly.holes.length; hIdx++) {
         final hole = poly.holes[hIdx];
         if (hole.length >= 3) {
-          final hPts = hole.map((hv) => project(hv).pt).toList();
-          final hPath = Path()..moveTo(hPts.first.dx, hPts.first.dy);
-          for (int i = 1; i < hPts.length; i++) {
-            hPath.lineTo(hPts[i].dx, hPts[i].dy);
+          // Sanitize hole loop: remove consecutive near-duplicate points (preventing NaN / spike miters!)
+          final sanitized = <CadPoint3D>[];
+          for (final pt in hole) {
+            if (sanitized.isEmpty ||
+                (pt.x - sanitized.last.x).abs() > 1e-4 ||
+                (pt.y - sanitized.last.y).abs() > 1e-4 ||
+                (pt.z - sanitized.last.z).abs() > 1e-4) {
+              sanitized.add(pt);
+            }
           }
-          hPath.close();
-          holePaths.add(hPath);
+          if (sanitized.length > 2 &&
+              (sanitized.first.x - sanitized.last.x).abs() <= 1e-4 &&
+              (sanitized.first.y - sanitized.last.y).abs() <= 1e-4 &&
+              (sanitized.first.z - sanitized.last.z).abs() <= 1e-4) {
+            sanitized.removeLast();
+          }
 
-          final punchId = hIdx < poly.holePunchIds.length ? poly.holePunchIds[hIdx] : null;
-          if (punchId != null && (punchId == selectedPunchId || punchId == hoveredPunchId)) {
-            selectedHolesPath.addPath(hPath, Offset.zero);
-            hasSelectedHoles = true;
+          if (sanitized.length >= 3) {
+            final hPts = sanitized.map((hv) => project(hv).pt).toList();
+            final hPath = Path()..moveTo(hPts.first.dx, hPts.first.dy);
+            for (int i = 1; i < hPts.length; i++) {
+              hPath.lineTo(hPts[i].dx, hPts[i].dy);
+            }
+            hPath.close();
+            holePaths.add(hPath);
+
+            final punchId = hIdx < poly.holePunchIds.length ? poly.holePunchIds[hIdx] : null;
+            if (punchId != null && (punchId == selectedPunchId || punchId == hoveredPunchId)) {
+              selectedHolesPath.addPath(hPath, Offset.zero);
+              hasSelectedHoles = true;
+            }
           }
         }
       }
@@ -316,80 +348,52 @@ class FlutterPaint3dPainter extends CustomPainter {
 
       // Fix 1 & 2: Deterministic depth bias by face type so nearly coplanar faces always
       // sort in the correct category order regardless of camera rotation.
-      // Categories (higher number = drawn later = in front):
-      //   0 = _BOT plate face        (always behind)
-      //   1 = FILLET_ inner surface  (concave, behind plate)
-      //   2 = BORE_ bore walls       (inside hole)
-      //   3 = Normal top plate face  (middle)
-      //   4 = FILLET_OUT_ convex     (outside of bend)
-      //   5 = RIM_/CHAMFER_/FILLET_CAP (always in front)
       final faceTypePriority = _facePriority(poly.faceId);
-      // Apply a small categorical depth offset so two faces with identical projected depths
-      // sort deterministically by category. Offset is 0.015 per priority level (small enough
-      // not to visually displace faces relative to their true 3D positions).
       avgDepth += (faceTypePriority - 3) * 0.015;
 
       // Stroke boundaryLines if provided, or deduplicate outer boundary edges
       Path? strokePath;
-      if (poly.boundaryLines.isNotEmpty) {
-        strokePath = Path();
-        for (final line in poly.boundaryLines) {
-          if (line.length >= 2) {
-            for (int i = 0; i < line.length - 1; i++) {
-              final pA = line[i];
-              final pB = line[i + 1];
-              final kA = '${(pA.x * 5).round()}_${(pA.y * 5).round()}_${(pA.z * 5).round()}';
-              final kB = '${(pB.x * 5).round()}_${(pB.y * 5).round()}_${(pB.z * 5).round()}';
-              if (kA == kB) continue;
-              final edgeKey = kA.compareTo(kB) <= 0 ? '$kA--$kB' : '$kB--$kA';
-              if (!addedWireframeEdgeKeys.add(edgeKey)) continue;
+      final isInternalOrShellFace = isFillet || isBore || isWeld || poly.faceId.contains('_inner') || !poly.drawWireframe;
 
-              final prjA = project(pA).pt;
-              final prjB = project(pB).pt;
-              strokePath.moveTo(prjA.dx, prjA.dy);
-              strokePath.lineTo(prjB.dx, prjB.dy);
-            }
-          }
-        }
-      } else if (isFillet || isBore || isInner || isRim || isWeld || !poly.drawWireframe) {
+      if (isInternalOrShellFace) {
         // Suppress wireframe borders on curved fillets, bore hole walls, welds,
-        // and internal / thickness shell faces.
+        // and internal hidden faces (inner webs, inner flanges)
         strokePath = null;
       } else if (showWireframe) {
-        // Fallback for models without explicit boundaryLines: deduplicate outer perimeter edges
         strokePath = Path();
-        for (int i = 0; i < poly.vertices.length; i++) {
-          final pA = poly.vertices[i];
-          final pB = poly.vertices[(i + 1) % poly.vertices.length];
-          final kA = '${(pA.x * 5).round()}_${(pA.y * 5).round()}_${(pA.z * 5).round()}';
-          final kB = '${(pB.x * 5).round()}_${(pB.y * 5).round()}_${(pB.z * 5).round()}';
-          if (kA == kB) continue;
-          final edgeKey = kA.compareTo(kB) <= 0 ? '$kA--$kB' : '$kB--$kA';
-          if (!addedWireframeEdgeKeys.add(edgeKey)) continue;
+        if (poly.boundaryLines.isNotEmpty) {
+          for (final line in poly.boundaryLines) {
+            if (line.length >= 2) {
+              for (int i = 0; i < line.length - 1; i++) {
+                final pA = line[i];
+                final pB = line[i + 1];
+                final kA = '${(pA.x * 1000).round()}_${(pA.y * 1000).round()}_${(pA.z * 1000).round()}';
+                final kB = '${(pB.x * 1000).round()}_${(pB.y * 1000).round()}_${(pB.z * 1000).round()}';
+                if (kA == kB) continue;
+                final edgeKey = kA.compareTo(kB) <= 0 ? '$kA|$kB' : '$kB|$kA';
+                if (!addedWireframeEdgeKeys.add(edgeKey)) continue;
 
-          final prjA = project(pA).pt;
-          final prjB = project(pB).pt;
-          strokePath.moveTo(prjA.dx, prjA.dy);
-          strokePath.lineTo(prjB.dx, prjB.dy);
-        }
-
-        // Holes / cutouts outline loops
-        for (final hole in poly.holes) {
-          if (hole.length >= 2) {
-            for (int i = 0; i < hole.length; i++) {
-              final pA = hole[i];
-              final pB = hole[(i + 1) % hole.length];
-              final kA = '${(pA.x * 5).round()}_${(pA.y * 5).round()}_${(pA.z * 5).round()}';
-              final kB = '${(pB.x * 5).round()}_${(pB.y * 5).round()}_${(pB.z * 5).round()}';
-              if (kA == kB) continue;
-              final edgeKey = kA.compareTo(kB) <= 0 ? '$kA--$kB' : '$kB--$kA';
-              if (!addedWireframeEdgeKeys.add(edgeKey)) continue;
-
-              final prjA = project(pA).pt;
-              final prjB = project(pB).pt;
-              strokePath.moveTo(prjA.dx, prjA.dy);
-              strokePath.lineTo(prjB.dx, prjB.dy);
+                final prjA = project(pA).pt;
+                final prjB = project(pB).pt;
+                strokePath.moveTo(prjA.dx, prjA.dy);
+                strokePath.lineTo(prjB.dx, prjB.dy);
+              }
             }
+          }
+        } else if (poly.vertices.length >= 3) {
+          for (int i = 0; i < poly.vertices.length; i++) {
+            final pA = poly.vertices[i];
+            final pB = poly.vertices[(i + 1) % poly.vertices.length];
+            final kA = '${(pA.x * 1000).round()}_${(pA.y * 1000).round()}_${(pA.z * 1000).round()}';
+            final kB = '${(pB.x * 1000).round()}_${(pB.y * 1000).round()}_${(pB.z * 1000).round()}';
+            if (kA == kB) continue;
+            final edgeKey = kA.compareTo(kB) <= 0 ? '$kA|$kB' : '$kB|$kA';
+            if (!addedWireframeEdgeKeys.add(edgeKey)) continue;
+
+            final prjA = project(pA).pt;
+            final prjB = project(pB).pt;
+            strokePath.moveTo(prjA.dx, prjA.dy);
+            strokePath.lineTo(prjB.dx, prjB.dy);
           }
         }
       }
@@ -626,11 +630,11 @@ class FlutterPaint3dPainter extends CustomPainter {
     final facePaint = Paint()..style = PaintingStyle.fill;
     final edgePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.15
+      ..strokeWidth = 1.25
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true
-      ..color = const Color(0xFF000000);
+      ..color = const Color(0xFF000000); // Pure solid pitch black
 
     final highlightEdgePaint = Paint()
       ..style = PaintingStyle.stroke
@@ -640,12 +644,12 @@ class FlutterPaint3dPainter extends CustomPainter {
       ..color = const Color(0xFF0284C7);
 
     final holeRimPaint = Paint()
-      ..color = const Color(0xFF000000)
+      ..color = const Color(0xFF000000) // Pure solid pitch black
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true
-      ..strokeWidth = 1.15;
+      ..strokeWidth = 1.25;
 
     final holeHighlightPaint = Paint()
       ..color = const Color(0xFF00E5FF)
@@ -653,7 +657,7 @@ class FlutterPaint3dPainter extends CustomPainter {
       ..strokeWidth = 2.0;
 
     final cutLinePaint = Paint()
-      ..color = const Color(0xFF0F172A)
+      ..color = const Color(0xFF000000)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6
       ..strokeCap = StrokeCap.round;
@@ -725,7 +729,9 @@ class FlutterPaint3dPainter extends CustomPainter {
         facePaint.color = drawColor;
         final seamBleedPaint = Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.6
+          ..strokeWidth = 0.75
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
           ..isAntiAlias = true
           ..color = drawColor;
 
@@ -749,19 +755,22 @@ class FlutterPaint3dPainter extends CustomPainter {
         }
       }
 
-      // Draw crisp hole rims strictly clipped to face boundary (no floating circles!)
+      // Draw crisp hole rims strictly clipped to face boundary (no floating circles, zero radial spikes!)
       if (item.holesPath != null && !isGlassMode) {
-        canvas.save();
         if (item.clipBoundary != null) {
+          canvas.save();
           canvas.clipPath(item.clipBoundary!);
-        } else if (item.strokePath != null) {
-          canvas.clipPath(item.strokePath!);
+          canvas.drawPath(item.holesPath!, holeRimPaint);
+          if (item.selectedHolesPath != null) {
+            canvas.drawPath(item.selectedHolesPath!, holeHighlightPaint);
+          }
+          canvas.restore();
+        } else {
+          canvas.drawPath(item.holesPath!, holeRimPaint);
+          if (item.selectedHolesPath != null) {
+            canvas.drawPath(item.selectedHolesPath!, holeHighlightPaint);
+          }
         }
-        canvas.drawPath(item.holesPath!, holeRimPaint);
-        if (item.selectedHolesPath != null) {
-          canvas.drawPath(item.selectedHolesPath!, holeHighlightPaint);
-        }
-        canvas.restore();
       }
 
       // Draw laser cut lines on the face surface

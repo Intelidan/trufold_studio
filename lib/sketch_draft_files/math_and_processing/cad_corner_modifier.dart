@@ -12,7 +12,7 @@ extension on Offset {
 
 class CADCornerModifier {
   static List<CADLineSegment> applyChamfer({required CADLineSegment segA, required CADLineSegment segB, required double offsetMm}) {
-    double offset = offsetMm / 100.0;
+    final double offset = offsetMm; // Fixed: 1 unit = 1.0 mm (do not divide by 100!)
     final res = _vertex(segA, segB);
     if (res == null) return [];
     final Offset v = res['v']!;
@@ -34,7 +34,7 @@ class CADCornerModifier {
   }
 
   static List<CADLineSegment> applyFillet({required CADLineSegment segA, required CADLineSegment segB, required double radiusMm, int resCount = 8}) {
-    double rad = radiusMm / 100.0;
+    final double rad = radiusMm; // Fixed: 1 unit = 1.0 mm
     final res = _vertex(segA, segB);
     if (res == null) return [];
     final Offset v = res['v']!;
@@ -71,10 +71,11 @@ class CADCornerModifier {
   }
 
   static Map<String, dynamic>? _vertex(CADLineSegment a, CADLineSegment b) {
-    if ((a.start - b.start).distance < 0.005) return {'v': a.start, 'sA': true, 'sB': true};
-    if ((a.start - b.end).distance < 0.005) return {'v': a.start, 'sA': true, 'sB': false};
-    if ((a.end - b.start).distance < 0.005) return {'v': a.end, 'sA': false, 'sB': true};
-    if ((a.end - b.end).distance < 0.005) return {'v': a.end, 'sA': false, 'sB': false};
+    const double tol = 0.25; // 0.25 mm tolerance
+    if ((a.start - b.start).distance < tol) return {'v': a.start, 'sA': true, 'sB': true};
+    if ((a.start - b.end).distance < tol) return {'v': a.start, 'sA': true, 'sB': false};
+    if ((a.end - b.start).distance < tol) return {'v': a.end, 'sA': false, 'sB': true};
+    if ((a.end - b.end).distance < tol) return {'v': a.end, 'sA': false, 'sB': false};
     return null;
   }
 }

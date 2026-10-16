@@ -396,6 +396,10 @@ class GeometricConstraintSolver {
             case CadConstraintType.radius:
             case CadConstraintType.diameter:
             case CadConstraintType.tangent:
+            case CadConstraintType.midpoint:
+            case CadConstraintType.normal:
+            case CadConstraintType.pierce:
+            case CadConstraintType.curvature:
               ok = true; // Accepted in tolerance
               break;
           }

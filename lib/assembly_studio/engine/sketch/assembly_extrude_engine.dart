@@ -448,10 +448,17 @@ class AssemblyExtrudeEngine {
         // Create custom sketch void cut feature on target
         final cx = profilePoints.map((p) => p.dx).reduce((a, b) => a + b) / profilePoints.length;
         final cy = profilePoints.map((p) => p.dy).reduce((a, b) => a + b) / profilePoints.length;
+        final worldVec = plane.toWorld(Offset(cx, cy));
+        final local3D = target.worldToLocal(CadPoint3D(worldVec.x, worldVec.y, worldVec.z));
+        final faceId = plane.targetFaceId ?? 'web';
+        final partLocalCenter = (faceId.contains('flange_top') || faceId.contains('flange_bot') || faceId.contains('bar_top'))
+            ? CadPoint2D(local3D.x, local3D.y.abs())
+            : CadPoint2D(local3D.x, local3D.z);
+
         final cutFeature = AssemblySketchFeature(
           id: 'cut_${DateTime.now().millisecondsSinceEpoch}',
           featureType: 'extruded_cut',
-          localCenter: CadPoint2D(cx, cy),
+          localCenter: partLocalCenter,
           widthMm: solidMesh.boundWidth > 0 ? solidMesh.boundWidth : 20.0,
           heightMm: solidMesh.boundLength > 0 ? solidMesh.boundLength : 20.0,
           targetFace: plane.targetFaceId ?? 'web',

@@ -17,6 +17,10 @@ enum CadConstraintType {
   equal,
   symmetric,
   collinear,
+  midpoint,
+  normal,
+  pierce,
+  curvature,
   fixed,
 
   // Dimensional constraints
@@ -47,6 +51,14 @@ enum CadConstraintType {
         return 'Symmetric';
       case CadConstraintType.collinear:
         return 'Collinear';
+      case CadConstraintType.midpoint:
+        return 'Midpoint';
+      case CadConstraintType.normal:
+        return 'Normal';
+      case CadConstraintType.pierce:
+        return 'Pierce';
+      case CadConstraintType.curvature:
+        return 'Curvature';
       case CadConstraintType.fixed:
         return 'Fixed';
       case CadConstraintType.distance:
@@ -82,6 +94,14 @@ enum CadConstraintType {
         return '⇋';
       case CadConstraintType.collinear:
         return '⎻';
+      case CadConstraintType.midpoint:
+        return '⌖';
+      case CadConstraintType.normal:
+        return '⊥';
+      case CadConstraintType.pierce:
+        return '✕';
+      case CadConstraintType.curvature:
+        return '∿';
       case CadConstraintType.fixed:
         return '🔒';
       case CadConstraintType.distance:
@@ -102,6 +122,7 @@ enum CadConstraintType {
       case CadConstraintType.fixed:
       case CadConstraintType.radius:
       case CadConstraintType.diameter:
+      case CadConstraintType.pierce:
         return false;
       default:
         return true;

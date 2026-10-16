@@ -527,3 +527,557 @@ class CADWorkspaceSnapshot {
           .map((s) => CADLineSegment(id: s.id, start: s.start, end: s.end, isDeleted: s.isDeleted, isConstruction: s.isConstruction))
           .toList();
 }
+
+/// 1. Midpoint Line (01_lines/02_midpoint_line.svg)
+/// Click 1 = Midpoint (center), Click 2 = Endpoint -> extends symmetrically to (2*center - endPoint, endPoint).
+class CADMidpointLineEntity extends CADLineEntity {
+  Offset get midpoint => Offset((start.dx + end.dx) / 2.0, (start.dy + end.dy) / 2.0);
+
+  CADMidpointLineEntity({
+    required super.id,
+    required Offset midpoint,
+    required Offset endpoint,
+    super.isSelected,
+    super.isConstruction,
+    super.isProjected,
+  }) : super(
+          start: Offset(2.0 * midpoint.dx - endpoint.dx, 2.0 * midpoint.dy - endpoint.dy),
+          end: endpoint,
+        );
+
+  void updateFromMidpointAndEnd(Offset mid, Offset endPt) {
+    start = Offset(2.0 * mid.dx - endPt.dx, 2.0 * mid.dy - endPt.dy);
+    end = endPt;
+  }
+}
+
+/// 2. Aligned Rectangle (02_rectangles/03_aligned_rectangle.svg)
+/// 3-Click Angled Rectangle: p1 -> p2 defines primary edge & angle; p3 defines perpendicular height.
+class CADAlignedRectangleEntity extends CADPrimitiveEntity {
+  Offset corner1;
+  Offset corner2;
+  double height; // Signed perpendicular offset from edge (corner1 -> corner2)
+  bool hasDiagonalConstruction;
+
+  CADAlignedRectangleEntity({
+    required super.id,
+    required this.corner1,
+    required this.corner2,
+    required this.height,
+    this.hasDiagonalConstruction = false,
+    super.isSelected,
+    super.isConstruction,
+    super.isProjected,
+    super.featureType,
+    super.isPassThrough,
+    super.depthMm,
+  });
+
+  double get width => (corner2 - corner1).distance;
+
+  List<Offset> get corners {
+    final edge = corner2 - corner1;
+    final len = edge.distance;
+    final dir = len > 1e-5 ? edge / len : const Offset(1.0, 0.0);
+    final perp = Offset(-dir.dy, dir.dx) * height;
+    return [
+      corner1,
+      corner2,
+      corner2 + perp,
+      corner1 + perp,
+    ];
+  }
+
+  @override
+  List<CADLineSegment> toLineSegments({int curveResolution = 36}) {
+    final c = corners;
+    return [
+      CADLineSegment(id: '${id}_e0', start: c[0], end: c[1], isConstruction: isConstruction),
+      CADLineSegment(id: '${id}_e1', start: c[1], end: c[2], isConstruction: isConstruction),
+      CADLineSegment(id: '${id}_e2', start: c[2], end: c[3], isConstruction: isConstruction),
+      CADLineSegment(id: '${id}_e3', start: c[3], end: c[0], isConstruction: isConstruction),
+    ];
+  }
+}
+
+/// 3. 3-Point Perimeter Circle (03_circles_and_ellipses/02_3_point_circle.svg)
+/// Defined by 3 perimeter points (p1, p2, p3); automatically computes circumcenter & radius.
+class CADThreePointCircleEntity extends CADCircleEntity {
+  Offset p1;
+  Offset p2;
+  Offset p3;
+
+  CADThreePointCircleEntity({
+    required super.id,
+    required this.p1,
+    required this.p2,
+    required this.p3,
+    super.isSelected,
+    super.isConstruction,
+  }) : super(
+          center: _computeCenter(p1, p2, p3),
+          radius: _computeRadius(p1, p2, p3),
+        );
+
+  void recomputeFromThreePoints() {
+    center = _computeCenter(p1, p2, p3);
+    radius = _computeRadius(p1, p2, p3);
+  }
+
+  static Offset _computeCenter(Offset a, Offset b, Offset c) {
+    final d = 2.0 * (a.dx * (b.dy - c.dy) + b.dx * (c.dy - a.dy) + c.dx * (a.dy - b.dy));
+    if (d.abs() < 1e-6) return (a + c) * 0.5;
+    final a2 = a.dx * a.dx + a.dy * a.dy;
+    final b2 = b.dx * b.dx + b.dy * b.dy;
+    final c2 = c.dx * c.dx + c.dy * c.dy;
+    final ux = (a2 * (b.dy - c.dy) + b2 * (c.dy - a.dy) + c2 * (a.dy - b.dy)) / d;
+    final uy = (a2 * (c.dx - b.dx) + b2 * (a.dx - c.dx) + c2 * (b.dx - a.dx)) / d;
+    return Offset(ux, uy);
+  }
+
+  static double _computeRadius(Offset a, Offset b, Offset c) {
+    final center = _computeCenter(a, b, c);
+    return (a - center).distance.clamp(0.1, 10000.0);
+  }
+}
+
+/// 4. Ellipse & Elliptical Arc (03_circles_and_ellipses/03_ellipse.svg & 04_elliptical_arc.svg)
+/// 3-Click Ellipse: Click 1 = Center, Click 2 = Major Axis tip (defines radiusX & rotationRad), Click 3 = Minor radiusY.
+class CADEllipseEntity extends CADPrimitiveEntity {
+  Offset center;
+  double radiusX;
+  double radiusY;
+  double rotationRad;
+  double startAngleRad;
+  double sweepAngleRad;
+
+  CADEllipseEntity({
+    required super.id,
+    required this.center,
+    required this.radiusX,
+    required this.radiusY,
+    this.rotationRad = 0.0,
+    this.startAngleRad = 0.0,
+    this.sweepAngleRad = 2.0 * math.pi,
+    super.isSelected,
+    super.isConstruction,
+    super.isProjected,
+  });
+
+  bool get isFullEllipse => (sweepAngleRad.abs() - 2.0 * math.pi).abs() < 1e-3;
+
+  Offset pointAtParam(double tAngle) {
+    final lx = radiusX * math.cos(tAngle);
+    final ly = radiusY * math.sin(tAngle);
+    final cosR = math.cos(rotationRad);
+    final sinR = math.sin(rotationRad);
+    return Offset(
+      center.dx + lx * cosR - ly * sinR,
+      center.dy + lx * sinR + ly * cosR,
+    );
+  }
+
+  @override
+  List<CADLineSegment> toLineSegments({int curveResolution = 48}) {
+    final segs = <CADLineSegment>[];
+    Offset prev = pointAtParam(startAngleRad);
+    for (int i = 1; i <= curveResolution; i++) {
+      final t = startAngleRad + sweepAngleRad * (i / curveResolution);
+      final curr = pointAtParam(t);
+      segs.add(CADLineSegment(
+        id: '${id}_el_$i',
+        start: prev,
+        end: curr,
+        isConstruction: isConstruction,
+      ));
+      prev = curr;
+    }
+    return segs;
+  }
+}
+
+/// 5. Center Point Arc (04_arcs_and_conics/03_center_point_arc.svg)
+/// 3-Click Arc: Click 1 = Center, Click 2 = Start Point (sets radius & startAngle), Click 3 = End Angle.
+class CADCenterPointArcEntity extends CADPrimitiveEntity {
+  Offset center;
+  double radius;
+  double startAngleRad;
+  double sweepAngleRad;
+
+  CADCenterPointArcEntity({
+    required super.id,
+    required this.center,
+    required this.radius,
+    required this.startAngleRad,
+    required this.sweepAngleRad,
+    super.isSelected,
+    super.isConstruction,
+  });
+
+  Offset get startPoint => Offset(
+        center.dx + radius * math.cos(startAngleRad),
+        center.dy + radius * math.sin(startAngleRad),
+      );
+
+  Offset get endPoint => Offset(
+        center.dx + radius * math.cos(startAngleRad + sweepAngleRad),
+        center.dy + radius * math.sin(startAngleRad + sweepAngleRad),
+      );
+
+  @override
+  List<CADLineSegment> toLineSegments({int curveResolution = 32}) {
+    final segs = <CADLineSegment>[];
+    final steps = math.max(8, (curveResolution * (sweepAngleRad.abs() / (2.0 * math.pi))).round());
+    Offset prev = startPoint;
+    for (int i = 1; i <= steps; i++) {
+      final a = startAngleRad + sweepAngleRad * (i / steps);
+      final curr = Offset(center.dx + radius * math.cos(a), center.dy + radius * math.sin(a));
+      segs.add(CADLineSegment(id: '${id}_cparc_$i', start: prev, end: curr, isConstruction: isConstruction));
+      prev = curr;
+    }
+    return segs;
+  }
+}
+
+/// 6. Tangent Arc (04_arcs_and_conics/02_tangent_arc.svg — onshape.pdf p. 30)
+/// 2-Click Arc: Starts at [startPoint] with locked unit tangent vector [startTangentDir], ending at [endPoint].
+class CADTangentArcEntity extends CADArcEntity {
+  Offset startTangentDir;
+
+  CADTangentArcEntity({
+    required super.id,
+    required super.startPoint,
+    required super.endPoint,
+    required this.startTangentDir,
+    super.isSelected,
+    super.isConstruction,
+  }) : super(
+          pointOnArc: _computeTangentArcMidpoint(startPoint, endPoint, startTangentDir),
+        );
+
+  void updateEndPoint(Offset nextEnd) {
+    endPoint = nextEnd;
+    pointOnArc = _computeTangentArcMidpoint(startPoint, endPoint, startTangentDir);
+  }
+
+  static Offset _computeTangentArcMidpoint(Offset p0, Offset p1, Offset tangentDir) {
+    final chord = p1 - p0;
+    final chordLen = chord.distance;
+    if (chordLen < 1e-4) return (p0 + p1) * 0.5;
+    final tLen = tangentDir.distance;
+    final tUnit = tLen > 1e-5 ? tangentDir / tLen : const Offset(1.0, 0.0);
+    // Normal to start tangent is (-tUnit.dy, tUnit.dx)
+    final n = Offset(-tUnit.dy, tUnit.dx);
+    final denom = 2.0 * (chord.dx * n.dx + chord.dy * n.dy);
+    if (denom.abs() < 1e-5) return (p0 + p1) * 0.5;
+    final rSigned = (chord.dx * chord.dx + chord.dy * chord.dy) / denom;
+    final center = p0 + n * rSigned;
+    final r = rSigned.abs();
+    final a0 = math.atan2(p0.dy - center.dy, p0.dx - center.dx);
+    final a1 = math.atan2(p1.dy - center.dy, p1.dx - center.dx);
+    double sweep = a1 - a0;
+    // Ensure initial arc velocity along sweep matches tUnit
+    final initTangent = Offset(-math.sin(a0), math.cos(a0));
+    final dot = initTangent.dx * tUnit.dx + initTangent.dy * tUnit.dy;
+    if (dot >= 0) {
+      while (sweep <= 0) {
+        sweep += 2.0 * math.pi;
+      }
+    } else {
+      while (sweep >= 0) {
+        sweep -= 2.0 * math.pi;
+      }
+    }
+    final midAngle = a0 + sweep * 0.5;
+    return Offset(center.dx + r * math.cos(midAngle), center.dy + r * math.sin(midAngle));
+  }
+}
+
+/// 7. Conic Curve (04_arcs_and_conics/05_conic.svg)
+/// Rational quadratic Bézier conic through startPoint, apexPoint, endPoint with rho in (0.05..0.95).
+/// rho = 0.5 is a parabola, rho < 0.5 is an ellipse, rho > 0.5 is a hyperbola.
+class CADConicEntity extends CADPrimitiveEntity {
+  Offset startPoint;
+  Offset endPoint;
+  Offset apexControlPoint;
+  double rho; // Default 0.5
+
+  CADConicEntity({
+    required super.id,
+    required this.startPoint,
+    required this.endPoint,
+    required this.apexControlPoint,
+    this.rho = 0.5,
+    super.isSelected,
+    super.isConstruction,
+  });
+
+  Offset evaluateAt(double t) {
+    final w = rho / (1.0 - rho).clamp(0.05, 20.0);
+    final u = 1.0 - t;
+    final b0 = u * u;
+    final b1 = 2.0 * u * t * w;
+    final b2 = t * t;
+    final denom = b0 + b1 + b2;
+    return (startPoint * b0 + apexControlPoint * b1 + endPoint * b2) / denom;
+  }
+
+  @override
+  List<CADLineSegment> toLineSegments({int curveResolution = 32}) {
+    final segs = <CADLineSegment>[];
+    Offset prev = startPoint;
+    for (int i = 1; i <= curveResolution; i++) {
+      final curr = evaluateAt(i / curveResolution);
+      segs.add(CADLineSegment(id: '${id}_conic_$i', start: prev, end: curr, isConstruction: isConstruction));
+      prev = curr;
+    }
+    return segs;
+  }
+}
+
+/// 8. Inscribed & Circumscribed Regular Polygon (05_polygons/01 & 02)
+/// Supports N = 3..50 sides with construction circle.
+class CADRegularPolygonEntity extends CADPrimitiveEntity {
+  Offset center;
+  double radius;
+  int sides; // 3..50 (default 6)
+  double rotationRad;
+  bool isInscribed; // true = radius is to vertex; false = radius is apothem to flat side midpoint
+
+  CADRegularPolygonEntity({
+    required super.id,
+    required this.center,
+    required this.radius,
+    this.sides = 6,
+    this.rotationRad = 0.0,
+    this.isInscribed = true,
+    super.isSelected,
+    super.isConstruction,
+    super.featureType,
+    super.isPassThrough,
+    super.depthMm,
+  });
+
+  double get vertexRadius => isInscribed ? radius : radius / math.cos(math.pi / sides.clamp(3, 50));
+
+  List<Offset> get vertices {
+    final n = sides.clamp(3, 50);
+    final rV = vertexRadius;
+    return List.generate(n, (i) {
+      final a = rotationRad + (2.0 * math.pi * i) / n;
+      return Offset(center.dx + rV * math.cos(a), center.dy + rV * math.sin(a));
+    });
+  }
+
+  @override
+  List<CADLineSegment> toLineSegments({int curveResolution = 36}) {
+    final pts = vertices;
+    final segs = <CADLineSegment>[];
+    for (int i = 0; i < pts.length; i++) {
+      segs.add(CADLineSegment(
+        id: '${id}_poly_$i',
+        start: pts[i],
+        end: pts[(i + 1) % pts.length],
+        isConstruction: isConstruction,
+      ));
+    }
+    return segs;
+  }
+}
+
+/// 9. Fit-Point Spline & Bézier Curve (06_splines/01_spline.svg & 02_bezier.svg)
+class CADSplineEntity extends CADPrimitiveEntity {
+  final List<Offset> controlPoints;
+  final bool isBezier; // false = Catmull-Rom interpolating fit spline; true = De Casteljau Bézier
+  final bool isClosed;
+
+  CADSplineEntity({
+    required super.id,
+    required this.controlPoints,
+    this.isBezier = false,
+    this.isClosed = false,
+    super.isSelected,
+    super.isConstruction,
+  });
+
+  void insertControlPoint(Offset pt) {
+    if (controlPoints.length < 2) {
+      controlPoints.add(pt);
+      return;
+    }
+    int bestInsertIdx = controlPoints.length;
+    double bestDist = double.infinity;
+    for (int i = 0; i < controlPoints.length - 1; i++) {
+      final mid = (controlPoints[i] + controlPoints[i + 1]) * 0.5;
+      final d = (pt - mid).distance;
+      if (d < bestDist) {
+        bestDist = d;
+        bestInsertIdx = i + 1;
+      }
+    }
+    controlPoints.insert(bestInsertIdx, pt);
+  }
+
+  @override
+  List<CADLineSegment> toLineSegments({int curveResolution = 48}) {
+    if (controlPoints.length < 2) return [];
+    if (controlPoints.length == 2) {
+      return [CADLineSegment(id: '${id}_sp_0', start: controlPoints[0], end: controlPoints[1], isConstruction: isConstruction)];
+    }
+
+    final sampled = <Offset>[];
+    if (isBezier) {
+      for (int i = 0; i <= curveResolution; i++) {
+        sampled.add(_deCasteljau(controlPoints, i / curveResolution));
+      }
+    } else {
+      // Catmull-Rom C1 interpolating spline through all fit points
+      final pts = <Offset>[
+        isClosed ? controlPoints.last : controlPoints.first,
+        ...controlPoints,
+        isClosed ? controlPoints.first : controlPoints.last,
+        if (isClosed) controlPoints[1],
+      ];
+      const int subSteps = 12;
+      for (int i = 0; i < pts.length - 3; i++) {
+        final p0 = pts[i];
+        final p1 = pts[i + 1];
+        final p2 = pts[i + 2];
+        final p3 = pts[i + 3];
+        for (int s = 0; s <= subSteps; s++) {
+          if (i > 0 && s == 0) continue;
+          final t = s / subSteps;
+          final t2 = t * t;
+          final t3 = t2 * t;
+          final x = 0.5 * ((2.0 * p1.dx) + (-p0.dx + p2.dx) * t + (2.0 * p0.dx - 5.0 * p1.dx + 4.0 * p2.dx - p3.dx) * t2 + (-p0.dx + 3.0 * p1.dx - 3.0 * p2.dx + p3.dx) * t3);
+          final y = 0.5 * ((2.0 * p1.dy) + (-p0.dy + p2.dy) * t + (2.0 * p0.dy - 5.0 * p1.dy + 4.0 * p2.dy - p3.dy) * t2 + (-p0.dy + 3.0 * p1.dy - 3.0 * p2.dy + p3.dy) * t3);
+          sampled.add(Offset(x, y));
+        }
+      }
+    }
+
+    final segs = <CADLineSegment>[];
+    for (int i = 0; i < sampled.length - 1; i++) {
+      segs.add(CADLineSegment(id: '${id}_sp_$i', start: sampled[i], end: sampled[i + 1], isConstruction: isConstruction));
+    }
+    return segs;
+  }
+
+  static Offset _deCasteljau(List<Offset> pts, double t) {
+    List<Offset> work = List.from(pts);
+    while (work.length > 1) {
+      final next = <Offset>[];
+      for (int i = 0; i < work.length - 1; i++) {
+        next.add(Offset.lerp(work[i], work[i + 1], t)!);
+      }
+      work = next;
+    }
+    return work.first;
+  }
+}
+
+/// 10. Sketch Obround Slot (08_sketch_modify/07_slot.svg)
+/// True Onshape Slot: Centerline from [startCenter] to [endCenter] with [diameter] (two parallel lines + two 180° semicircular caps).
+class CADSlotEntity extends CADPrimitiveEntity {
+  Offset startCenter;
+  Offset endCenter;
+  double diameter;
+
+  CADSlotEntity({
+    required super.id,
+    required this.startCenter,
+    required this.endCenter,
+    this.diameter = 20.0,
+    super.isSelected,
+    super.isConstruction,
+    super.featureType,
+    super.isPassThrough,
+    super.depthMm,
+  });
+
+  double get radius => diameter * 0.5;
+
+  @override
+  List<CADLineSegment> toLineSegments({int curveResolution = 32}) {
+    final axis = endCenter - startCenter;
+    final len = axis.distance;
+    final u = len > 1e-5 ? axis / len : const Offset(1.0, 0.0);
+    final n = Offset(-u.dy, u.dx);
+    final r = radius;
+    final baseAngle = math.atan2(n.dy, n.dx);
+
+    final pts = <Offset>[];
+    final capSteps = math.max(8, curveResolution ~/ 2);
+
+    // End cap around endCenter from -n to +n
+    for (int i = 0; i <= capSteps; i++) {
+      final a = (baseAngle - math.pi) + math.pi * (i / capSteps);
+      pts.add(endCenter + Offset(math.cos(a), math.sin(a)) * r);
+    }
+    // Start cap around startCenter from +n to -n
+    for (int i = 0; i <= capSteps; i++) {
+      final a = baseAngle + math.pi * (i / capSteps);
+      pts.add(startCenter + Offset(math.cos(a), math.sin(a)) * r);
+    }
+
+    final segs = <CADLineSegment>[];
+    for (int i = 0; i < pts.length; i++) {
+      segs.add(CADLineSegment(
+        id: '${id}_slot_$i',
+        start: pts[i],
+        end: pts[(i + 1) % pts.length],
+        isConstruction: isConstruction,
+      ));
+    }
+    return segs;
+  }
+}
+
+/// 11. Standalone Sketch Point (07_point_text_project/01_point.svg)
+class CADPointEntity extends CADPrimitiveEntity {
+  Offset position;
+
+  CADPointEntity({
+    required super.id,
+    required this.position,
+    super.isSelected,
+    super.isProjected,
+    super.sourceEntityId,
+  }) : super(isConstruction: true);
+
+  @override
+  List<CADLineSegment> toLineSegments({int curveResolution = 36}) => const [];
+}
+
+/// 12. Parametric 2D Sketch Text Entity (07_point_text_project/02_text.svg)
+class CADTextEntity extends CADPrimitiveEntity {
+  Offset origin;
+  String text;
+  double heightMm;
+
+  CADTextEntity({
+    required super.id,
+    required this.origin,
+    required this.text,
+    this.heightMm = 15.0,
+    super.isSelected,
+    super.isConstruction,
+  });
+
+  double get widthMm => math.max(heightMm, text.length * heightMm * 0.62);
+
+  @override
+  List<CADLineSegment> toLineSegments({int curveResolution = 36}) {
+    // Bounding frame for extrusion/engraving profile
+    final p1 = origin;
+    final p2 = Offset(origin.dx + widthMm, origin.dy);
+    final p3 = Offset(origin.dx + widthMm, origin.dy + heightMm);
+    final p4 = Offset(origin.dx, origin.dy + heightMm);
+    return [
+      CADLineSegment(id: '${id}_t0', start: p1, end: p2, isConstruction: isConstruction),
+      CADLineSegment(id: '${id}_t1', start: p2, end: p3, isConstruction: isConstruction),
+      CADLineSegment(id: '${id}_t2', start: p3, end: p4, isConstruction: isConstruction),
+      CADLineSegment(id: '${id}_t3', start: p4, end: p1, isConstruction: isConstruction),
+    ];
+  }
+}
