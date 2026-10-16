@@ -22,10 +22,10 @@ class AssemblyViewportDialogs {
             final report = vm.evaluateLadderCompliance();
 
             return Dialog(
-              backgroundColor: const Color(0xFF0F172A),
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: report.badgeColor.withValues(alpha: 0.6), width: 1.5),
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
               ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 620, maxHeight: 680),
@@ -46,11 +46,11 @@ class AssemblyViewportDialogs {
                               children: [
                                 const Text(
                                   'OSHA 1910 & EN ISO 14122-4 Audit',
-                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                                 ),
-                                Text(
+                                const Text(
                                   'Automated Live Industrial Safety Verification',
-                                  style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.6)),
+                                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                                 ),
                               ],
                             ),
@@ -58,7 +58,7 @@ class AssemblyViewportDialogs {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: report.badgeColor.withValues(alpha: 0.2),
+                              color: report.badgeColor.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(color: report.badgeColor, width: 1.0),
                             ),
@@ -70,7 +70,7 @@ class AssemblyViewportDialogs {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      const Divider(color: Color(0xFF334155), height: 1),
+                      const Divider(color: Color(0xFFE2E8F0), height: 1),
                       const SizedBox(height: 12),
 
                       // Checklist items
@@ -83,9 +83,9 @@ class AssemblyViewportDialogs {
                             return Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1E293B),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: item.statusColor.withValues(alpha: 0.4), width: 1.0),
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: item.statusColor.withValues(alpha: 0.3), width: 1.0),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -97,7 +97,7 @@ class AssemblyViewportDialogs {
                                       Expanded(
                                         child: Text(
                                           item.title,
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
                                         ),
                                       ),
                                       Container(
@@ -111,9 +111,9 @@ class AssemblyViewportDialogs {
                                     ],
                                   ),
                                   const SizedBox(height: 6),
-                                  Text('Standard: ${item.standardCode}', style: const TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8))),
+                                  Text('Standard: ${item.standardCode}', style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B))),
                                   const SizedBox(height: 4),
-                                  Text(item.description, style: const TextStyle(fontSize: 11, color: Color(0xFFCBD5E1))),
+                                  Text(item.description, style: const TextStyle(fontSize: 11, color: Color(0xFF334155))),
                                   const SizedBox(height: 6),
                                   Row(
                                     children: [
@@ -123,17 +123,17 @@ class AssemblyViewportDialogs {
                                           style: TextStyle(
                                             fontSize: 10.5,
                                             fontStyle: FontStyle.italic,
-                                            color: item.isPass ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                                            color: item.isPass ? const Color(0xFF16A34A) : const Color(0xFFD97706),
                                           ),
                                         ),
                                       ),
                                       if (!item.isPass && item.fixActionId.isNotEmpty)
                                         ElevatedButton.icon(
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(0xFF0284C7),
+                                            backgroundColor: const Color(0xFF0076CE),
                                             foregroundColor: Colors.white,
                                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                                             visualDensity: VisualDensity.compact,
                                           ),
                                           icon: const Icon(Icons.flash_on_rounded, size: 13),
@@ -176,10 +176,10 @@ class AssemblyViewportDialogs {
                             Expanded(
                               child: ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF10B981),
+                                  backgroundColor: const Color(0xFF16A34A),
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(vertical: 10),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                                 ),
                                 icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
                                 label: const Text('Auto-Fix All Issues', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
@@ -192,10 +192,10 @@ class AssemblyViewportDialogs {
                           if (!report.isCompliant) const SizedBox(width: 10),
                           OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF94A3B8),
-                              side: const BorderSide(color: Color(0xFF475569)),
+                              foregroundColor: const Color(0xFF64748B),
+                              side: const BorderSide(color: Color(0xFFCBD5E1)),
                               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                             ),
                             onPressed: () => Navigator.of(ctx).pop(),
                             child: const Text('Close', style: TextStyle(fontSize: 12)),
@@ -223,10 +223,10 @@ class AssemblyViewportDialogs {
         final bom = vm.generateBillOfMaterials();
 
         return Dialog(
-          backgroundColor: const Color(0xFF0F172A),
+          backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Color(0xFF38BDF8), width: 1.5),
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
           ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 820, maxHeight: 680),
@@ -239,7 +239,7 @@ class AssemblyViewportDialogs {
                   // Header
                   Row(
                     children: [
-                      const Icon(Icons.inventory_2_rounded, color: Color(0xFF38BDF8), size: 26),
+                      const Icon(Icons.inventory_2_rounded, color: Color(0xFF0076CE), size: 26),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -247,11 +247,11 @@ class AssemblyViewportDialogs {
                           children: [
                             Text(
                               'Bill of Materials & Cut List (${bom.assemblyTitle})',
-                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                             ),
                             const Text(
                               'Fabrication Part Takeoff, Profile Cut Lengths & Weld Metrics',
-                              style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                              style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                             ),
                           ],
                         ),
@@ -259,13 +259,13 @@ class AssemblyViewportDialogs {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                          color: const Color(0xFF0076CE).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF38BDF8), width: 1.0),
+                          border: Border.all(color: const Color(0xFF0076CE), width: 1.0),
                         ),
                         child: Text(
                           '${bom.totalPartCount} PARTS',
-                          style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 11),
+                          style: const TextStyle(color: Color(0xFF0076CE), fontWeight: FontWeight.bold, fontSize: 11),
                         ),
                       ),
                     ],
@@ -275,17 +275,17 @@ class AssemblyViewportDialogs {
                   // Stat Summary Cards
                   Row(
                     children: [
-                      _buildBomStatBox('Total Weight', '${bom.totalWeightKg.toStringAsFixed(1)} kg', const Color(0xFF10B981)),
+                      _buildBomStatBox('Total Weight', '${bom.totalWeightKg.toStringAsFixed(1)} kg', const Color(0xFF16A34A)),
                       const SizedBox(width: 8),
-                      _buildBomStatBox('Cut Parts', '${bom.totalPartCount} pcs', const Color(0xFF38BDF8)),
+                      _buildBomStatBox('Cut Parts', '${bom.totalPartCount} pcs', const Color(0xFF0076CE)),
                       const SizedBox(width: 8),
-                      _buildBomStatBox('Fillet Welds', '${bom.totalWeldCount} joints', const Color(0xFFF59E0B)),
+                      _buildBomStatBox('Fillet Welds', '${bom.totalWeldCount} joints', const Color(0xFFD97706)),
                       const SizedBox(width: 8),
-                      _buildBomStatBox('Weld Seam', '${(bom.totalWeldLengthMm / 1000.0).toStringAsFixed(2)} m', const Color(0xFFE2E8F0)),
+                      _buildBomStatBox('Weld Seam', '${(bom.totalWeldLengthMm / 1000.0).toStringAsFixed(2)} m', const Color(0xFF334155)),
                     ],
                   ),
                   const SizedBox(height: 14),
-                  const Divider(color: Color(0xFF334155), height: 1),
+                  const Divider(color: Color(0xFFE2E8F0), height: 1),
                   const SizedBox(height: 10),
 
                   // Table
@@ -305,7 +305,7 @@ class AssemblyViewportDialogs {
                         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                         children: [
                           TableRow(
-                            decoration: const BoxDecoration(color: Color(0xFF1E293B)),
+                            decoration: const BoxDecoration(color: Color(0xFFF1F5F9)),
                             children: [
                               _buildTh('#'),
                               _buildTh('Mark'),
@@ -320,11 +320,11 @@ class AssemblyViewportDialogs {
                           ...bom.items.map((it) {
                             return TableRow(
                               decoration: const BoxDecoration(
-                                border: Border(bottom: BorderSide(color: Color(0xFF1E293B), width: 1.0)),
+                                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.0)),
                               ),
                               children: [
                                 _buildTd(it.itemNumber),
-                                _buildTd(it.partMark, bold: true, color: const Color(0xFF38BDF8)),
+                                _buildTd(it.partMark, bold: true, color: const Color(0xFF0076CE)),
                                 _buildTd(it.description),
                                 _buildTd(it.profile),
                                 _buildTd('${it.quantity}'),
@@ -345,10 +345,10 @@ class AssemblyViewportDialogs {
                     children: [
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0284C7),
+                          backgroundColor: const Color(0xFF0076CE),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                         ),
                         icon: const Icon(Icons.file_download_rounded, size: 16),
                         label: const Text('Export CSV', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
@@ -358,12 +358,13 @@ class AssemblyViewportDialogs {
                         },
                       ),
                       const SizedBox(width: 10),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF334155),
-                          foregroundColor: Colors.white,
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF334155),
+                          side: const BorderSide(color: Color(0xFFCBD5E1)),
+                          backgroundColor: const Color(0xFFF8FAFC),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                         ),
                         icon: const Icon(Icons.copy_rounded, size: 16),
                         label: const Text('Copy Markdown', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
@@ -375,10 +376,10 @@ class AssemblyViewportDialogs {
                       const Spacer(),
                       OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF94A3B8),
-                          side: const BorderSide(color: Color(0xFF475569)),
+                          foregroundColor: const Color(0xFF64748B),
+                          side: const BorderSide(color: Color(0xFFCBD5E1)),
                           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                         ),
                         onPressed: () => Navigator.of(ctx).pop(),
                         child: const Text('Close', style: TextStyle(fontSize: 12)),
@@ -399,14 +400,14 @@ class AssemblyViewportDialogs {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
+          color: const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.0),
+          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 9.5, color: Color(0xFF94A3B8))),
+            Text(title, style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B))),
             const SizedBox(height: 2),
             Text(
               value,
@@ -423,13 +424,13 @@ class AssemblyViewportDialogs {
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       child: Text(
         label,
-        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8)),
+        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
         textAlign: TextAlign.left,
       ),
     );
   }
 
-  static Widget _buildTd(String val, {bool bold = false, Color color = Colors.white}) {
+  static Widget _buildTd(String val, {bool bold = false, Color color = const Color(0xFF0F172A)}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
       child: Text(
@@ -480,10 +481,10 @@ class AssemblyViewportDialogs {
             }
 
             return Dialog(
-              backgroundColor: const Color(0xFF0F172A),
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Color(0xFF6366F1), width: 1.5),
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.0),
               ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
@@ -497,8 +498,8 @@ class AssemblyViewportDialogs {
                         children: [
                           Container(
                             padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(color: const Color(0xFF6366F1).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-                            child: const Icon(Icons.hub_rounded, color: Color(0xFF818CF8), size: 22),
+                            decoration: BoxDecoration(color: const Color(0xFF0076CE).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                            child: const Icon(Icons.hub_rounded, color: Color(0xFF0076CE), size: 22),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -507,9 +508,9 @@ class AssemblyViewportDialogs {
                               children: const [
                                 Text(
                                   'Magnetic Snap & Coupling',
-                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                                 ),
-                                Text('Attract & link entities via magnetic snap points', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                                Text('Attract & link entities via magnetic snap points', style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
                               ],
                             ),
                           ),
@@ -518,25 +519,25 @@ class AssemblyViewportDialogs {
                       const SizedBox(height: 18),
                       const Text(
                         'Magnetic Point 1 (Anchor Entity)',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFE2E8F0)),
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                       ),
                       const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
+                          color: const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF334155)),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<(AssemblyPart, AssemblyMagneticSpot)>(
                             value: selectedItem1,
                             isExpanded: true,
-                            dropdownColor: const Color(0xFF1E293B),
+                            dropdownColor: Colors.white,
                             items: spotsList.map((item) {
                               return DropdownMenuItem(
                                 value: item,
-                                child: Text('${item.$1.name} • ${item.$2.name}', style: const TextStyle(fontSize: 12, color: Colors.white)),
+                                child: Text('${item.$1.name} • ${item.$2.name}', style: const TextStyle(fontSize: 12, color: Color(0xFF0F172A))),
                               );
                             }).toList(),
                             onChanged: (newVal) {
@@ -556,30 +557,30 @@ class AssemblyViewportDialogs {
                       const SizedBox(height: 14),
                       const Text(
                         'Magnetic Point 2 (Attracted Entity)',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFE2E8F0)),
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                       ),
                       const SizedBox(height: 4),
                       const Text(
                         'Note: Selecting a magnetic point from the same entity is disabled.',
-                        style: TextStyle(fontSize: 9.5, color: Color(0xFF94A3B8)),
+                        style: TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
                       ),
                       const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
+                          color: const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF334155)),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<(AssemblyPart, AssemblyMagneticSpot)>(
                             value: availableFor2.contains(selectedItem2) ? selectedItem2 : (availableFor2.isNotEmpty ? availableFor2.first : null),
                             isExpanded: true,
-                            dropdownColor: const Color(0xFF1E293B),
+                            dropdownColor: Colors.white,
                             items: availableFor2.map((item) {
                               return DropdownMenuItem(
                                 value: item,
-                                child: Text('${item.$1.name} • ${item.$2.name}', style: const TextStyle(fontSize: 12, color: Color(0xFF38BDF8))),
+                                child: Text('${item.$1.name} • ${item.$2.name}', style: const TextStyle(fontSize: 12, color: Color(0xFF0076CE))),
                               );
                             }).toList(),
                             onChanged: (newVal) {
@@ -596,21 +597,21 @@ class AssemblyViewportDialogs {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                          color: const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.3)),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: const [
-                            Icon(Icons.info_outline_rounded, color: Color(0xFF818CF8), size: 16),
+                            Icon(Icons.info_outline_rounded, color: Color(0xFF0076CE), size: 16),
                             SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 'Upon linking, Entity 2 will be attracted and joined to Entity 1. '
                                 'Unlike welded joints, magnetically linked entities can rotate in place without breaking the joint. '
                                 'The magnetic joint can also be broken on demand.',
-                                style: TextStyle(fontSize: 10.5, color: Color(0xFFCBD5E1), height: 1.35),
+                                style: TextStyle(fontSize: 10.5, color: Color(0xFF334155), height: 1.35),
                               ),
                             ),
                           ],
@@ -622,17 +623,17 @@ class AssemblyViewportDialogs {
                         children: [
                           TextButton(
                             onPressed: () => Navigator.of(ctx).pop(),
-                            child: const Text('Cancel', style: TextStyle(color: Color(0xFF94A3B8))),
+                            child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
                             icon: const Icon(Icons.check_rounded, size: 16),
                             label: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF6366F1),
+                              backgroundColor: const Color(0xFF0076CE),
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                             ),
                             onPressed: () {
                               final success = vm.createMagneticJoint(

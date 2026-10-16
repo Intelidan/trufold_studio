@@ -79,6 +79,27 @@ flutter:
     - assets/dxf_templates/trunking_accessories/
     - assets/dxf_templates/trunking_accessories/trunking_cover/
     - assets/icons/
+    - assets/icons/onshape/
+    - assets/icons/onshape/01_3d_modelling_toolbar/01_base_features/
+    - assets/icons/onshape/01_3d_modelling_toolbar/02_edge_and_body_features/
+    - assets/icons/onshape/01_3d_modelling_toolbar/03_pattern_and_mirror/
+    - assets/icons/onshape/01_3d_modelling_toolbar/04_part_modification/
+    - assets/icons/onshape/01_3d_modelling_toolbar/05_direct_editing/
+    - assets/icons/onshape/01_3d_modelling_toolbar/06_surfaces/
+    - assets/icons/onshape/01_3d_modelling_toolbar/07_curves/
+    - assets/icons/onshape/01_3d_modelling_toolbar/08_reference_and_variables/
+    - assets/icons/onshape/01_3d_modelling_toolbar/09_frames/
+    - assets/icons/onshape/01_3d_modelling_toolbar/10_sheet_metal_and_pcb/
+    - assets/icons/onshape/02_sketch_toolbar/01_lines/
+    - assets/icons/onshape/02_sketch_toolbar/02_rectangles/
+    - assets/icons/onshape/02_sketch_toolbar/03_circles_and_ellipses/
+    - assets/icons/onshape/02_sketch_toolbar/04_arcs_and_conics/
+    - assets/icons/onshape/02_sketch_toolbar/05_polygons/
+    - assets/icons/onshape/02_sketch_toolbar/06_splines/
+    - assets/icons/onshape/02_sketch_toolbar/07_point_text_project/
+    - assets/icons/onshape/02_sketch_toolbar/08_sketch_modify/
+    - assets/icons/onshape/02_sketch_toolbar/09_pattern_and_insert/
+    - assets/icons/onshape/02_sketch_toolbar/10_constraints/
     - assets/images/
     - assets/materials/
     - assets/materials/master_materials.fmat

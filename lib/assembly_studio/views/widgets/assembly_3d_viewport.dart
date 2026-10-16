@@ -53,6 +53,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   late Offset _pan;
   bool _isTurntable = true;
   bool _isPanToolActive = false;
+  final ValueNotifier<int> _cameraRepaintNotifier = ValueNotifier<int>(0);
 
   // Flutter Scene (Impeller GPU Engine)
   Scene? _scene;
@@ -81,10 +82,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   bool _isMovingEntity = false;
   CadPoint3D? _moveBaseWorldPoint;
   CadPoint3D? _moveBaseStartWorldPoint;
-
-  // 3D Parametric Surface Sketching Local State
-  Offset? _sketchLineStartLocal;
-  final List<Offset> _sketchPolylinePoints = [];
+  final List<AssemblySnapPoint> _cachedMoveOtherSnapPoints = [];
 
   // Subtle in-viewport warning banner (Item 5.1 / SS5)
   String? _subtleWarningText;
@@ -213,6 +211,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _weldStopwatch.stop();
     _snapAnimator.dispose();
     _cursorScreenPosNotifier.dispose();
+    _cameraRepaintNotifier.dispose();
     widget.viewModel.removeListener(_onViewModelChanged);
     _viewportFocusNode.dispose();
     _vcbController.dispose();
@@ -459,6 +458,13 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     final target = right * (_pan.dx * unitsPerPixel) + up * (_pan.dy * unitsPerPixel);
     final eye = target + d * orbitDist;
     _cameraNode.lookAtFrom(eye, target, up: up);
+
+    // Camera-locked CAD Headlight rig (Phase 1 / Solution C of Walkthrough):
+    // Locks directional key light (-0.25 right, 0.35 up, 0.90 forward) to camera view space
+    if (_scene != null) {
+      final lightDir = (right * (-0.25) + up * 0.35 + d * 0.90).normalized();
+      _scene!.directionalLight = DirectionalLight(direction: lightDir, intensity: 2.5, castsShadow: false);
+    }
   }
 
   void _onViewModelChanged() {
@@ -489,6 +495,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       _elevationDeg = widget.viewModel.elevationDeg;
       _zoom = widget.viewModel.zoom;
       _pan = widget.viewModel.pan;
+      if (widget.viewModel.cameraPivotOverride != null) {
+        _cameraPivot = widget.viewModel.cameraPivotOverride!;
+      }
     });
     if (!_isVcbUserTyping && !_vcbFocusNode.hasFocus && widget.viewModel.vcbValue.isNotEmpty && _vcbController.text != widget.viewModel.vcbValue) {
       _vcbController.text = widget.viewModel.vcbValue;
@@ -498,63 +507,53 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   }
 
   void _orbitCamera(double dAz, double dEl) {
-    if (_scene != null && _scene!.renderScale > 0.86) {
-      _scene!.renderScale = 0.85;
-    }
-    setState(() {
-      _azimuthDeg = (_azimuthDeg + dAz) % 360.0;
-      _elevationDeg = (_elevationDeg + dEl).clamp(-89.0, 89.0);
-      widget.viewModel.azimuthDeg = _azimuthDeg;
-      widget.viewModel.elevationDeg = _elevationDeg;
-    });
+    _azimuthDeg = (_azimuthDeg + dAz) % 360.0;
+    _elevationDeg = (_elevationDeg + dEl).clamp(-89.0, 89.0);
+    widget.viewModel.azimuthDeg = _azimuthDeg;
+    widget.viewModel.elevationDeg = _elevationDeg;
+    _cameraRepaintNotifier.value++;
     _updateGpuCamera();
   }
 
   void _panCamera(Offset delta) {
-    if (_scene != null && _scene!.renderScale > 0.86) {
-      _scene!.renderScale = 0.85;
-    }
-    setState(() {
-      _pan += delta;
-      widget.viewModel.pan = _pan;
-    });
+    _pan += delta;
+    widget.viewModel.pan = _pan;
+    _cameraRepaintNotifier.value++;
     _updateGpuCamera();
   }
 
   void _zoomCamera(double factor) {
-    setState(() {
-      _zoom = (_zoom * factor).clamp(0.02, 120.0);
-      widget.viewModel.zoom = _zoom;
-    });
+    _zoom = (_zoom * factor).clamp(0.02, 120.0);
+    widget.viewModel.zoom = _zoom;
+    _cameraRepaintNotifier.value++;
     _updateGpuCamera();
   }
 
   void _zoomToFit() {
-    setState(() {
-      _pan = Offset.zero;
-      _azimuthDeg = 45.0;
-      _elevationDeg = 30.0;
-      final mesh = widget.viewModel.assemblyMesh;
-      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
-      _cameraFitDim = maxDim > 0 ? maxDim : 600.0;
-      _cameraPivot = mesh.center;
-      _cameraInitialized = true;
-      _zoom = (850.0 / _cameraFitDim).clamp(0.4, 2.5);
-      widget.viewModel.azimuthDeg = _azimuthDeg;
-      widget.viewModel.elevationDeg = _elevationDeg;
-      widget.viewModel.pan = _pan;
-      widget.viewModel.zoom = _zoom;
-    });
+    _pan = Offset.zero;
+    _azimuthDeg = 45.0;
+    _elevationDeg = 30.0;
+    final mesh = widget.viewModel.assemblyMesh;
+    final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+    _cameraFitDim = maxDim > 0 ? maxDim : 600.0;
+    _cameraPivot = mesh.center;
+    _cameraInitialized = true;
+    _zoom = (850.0 / _cameraFitDim).clamp(0.4, 2.5);
+    widget.viewModel.azimuthDeg = _azimuthDeg;
+    widget.viewModel.elevationDeg = _elevationDeg;
+    widget.viewModel.pan = _pan;
+    widget.viewModel.zoom = _zoom;
+    _cameraRepaintNotifier.value++;
+    setState(() {});
     _updateGpuCamera();
   }
 
   void _setCameraFromAngles(double az, double el) {
-    setState(() {
-      _azimuthDeg = az % 360.0;
-      _elevationDeg = el.clamp(-89.0, 89.0);
-      widget.viewModel.azimuthDeg = _azimuthDeg;
-      widget.viewModel.elevationDeg = _elevationDeg;
-    });
+    _azimuthDeg = az % 360.0;
+    _elevationDeg = el.clamp(-89.0, 89.0);
+    widget.viewModel.azimuthDeg = _azimuthDeg;
+    widget.viewModel.elevationDeg = _elevationDeg;
+    _cameraRepaintNotifier.value++;
     _updateGpuCamera();
   }
 
@@ -637,19 +636,38 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     );
   }
 
+  AssemblySnapPoint? _findNearestSnapPointAcrossParts(Iterable<AssemblyPart> parts, Offset cursorScreen, Size size, FoldedMeshResult mesh) {
+    final candidatePoints = <AssemblySnapPoint>[];
+    for (final p in parts) {
+      if (!p.isVisible) continue;
+      candidatePoints.addAll(AssemblyDockingEngine.getAllSnapPointsForPart(p, cachedMesh: mesh));
+    }
+    return AssemblyDockingEngine.findNearestSnapPoint(
+      screenCursor: cursorScreen,
+      candidates: candidatePoints,
+      projectPoint: (pt) => _projectPoint(pt, size, mesh),
+      maxPixelDistance: widget.viewModel.magneticSnapDistancePx,
+    );
+  }
+
   MouseCursor _getCursorForToolMode(AssemblyStudioViewModel vm) {
-    if (_isOrbitingWithMouse || vm.activeToolMode == SketchUpToolMode.orbit) return SystemMouseCursors.none;
-    if (_isPanningWithMouse || vm.activeToolMode == SketchUpToolMode.pan || _isPanToolActive) return SystemMouseCursors.none;
-    if (vm.activeToolMode == SketchUpToolMode.select) return SystemMouseCursors.none;
-    if (vm.activeToolMode == SketchUpToolMode.move) return SystemMouseCursors.none;
-    if (vm.activeToolMode == SketchUpToolMode.rotate) return SystemMouseCursors.none;
+    if (vm.isSketchMode) return SystemMouseCursors.precise;
+    if (_isOrbitingWithMouse || vm.activeToolMode == SketchUpToolMode.orbit) return SystemMouseCursors.allScroll;
+    if (_isPanningWithMouse || vm.activeToolMode == SketchUpToolMode.pan || _isPanToolActive) return SystemMouseCursors.grab;
+    if (vm.activeToolMode == SketchUpToolMode.select) return SystemMouseCursors.basic;
+    if (vm.activeToolMode == SketchUpToolMode.move) {
+      if (_isMovingEntity || _draggingPart != null) return SystemMouseCursors.grabbing;
+      if (_hoveredSnapPointModel != null) return SystemMouseCursors.precise;
+      return SystemMouseCursors.basic;
+    }
+    if (vm.activeToolMode == SketchUpToolMode.rotate) return SystemMouseCursors.basic;
     if (_snapDragSourceSnap != null) return SystemMouseCursors.grabbing;
-    if (_hoveredSnapPoint != null) return SystemMouseCursors.none;
+    if (_hoveredSnapPoint != null) return SystemMouseCursors.basic;
     if (vm.pendingPlacement != null) return SystemMouseCursors.precise;
-    if (_draggingPart != null) return SystemMouseCursors.none;
-    if (vm.activeToolMode == SketchUpToolMode.weld) return SystemMouseCursors.none;
+    if (_draggingPart != null) return SystemMouseCursors.grabbing;
+    if (vm.activeToolMode == SketchUpToolMode.weld) return SystemMouseCursors.precise;
     if (vm.activeToolMode == SketchUpToolMode.magnetic) return SystemMouseCursors.precise;
-    return SystemMouseCursors.none;
+    return SystemMouseCursors.basic;
   }
 
   @override
@@ -662,1952 +680,2363 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         _lastViewportSize = size;
 
-        return Focus(
-          focusNode: _viewportFocusNode,
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent) {
-              bool isCtrl = false;
-              bool isShift = false;
-              bool isAlt = false;
-              try {
-                isCtrl = HardwareKeyboard.instance.isControlPressed;
-                isShift = HardwareKeyboard.instance.isShiftPressed;
-                isAlt = HardwareKeyboard.instance.isAltPressed;
-              } catch (_) {}
+        return ClipRect(
+          child: Focus(
+            focusNode: _viewportFocusNode,
+            autofocus: true,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent) {
+                bool isCtrl = false;
+                bool isShift = false;
+                bool isAlt = false;
+                try {
+                  isCtrl = HardwareKeyboard.instance.isControlPressed;
+                  isShift = HardwareKeyboard.instance.isShiftPressed;
+                  isAlt = HardwareKeyboard.instance.isAltPressed;
+                } catch (_) {}
 
-              if (isAlt && event.logicalKey == LogicalKeyboardKey.keyT) {
-                vm.toggleBackgroundMode();
-                return KeyEventResult.handled;
-              }
+                if (isAlt && event.logicalKey == LogicalKeyboardKey.keyT) {
+                  vm.toggleBackgroundMode();
+                  return KeyEventResult.handled;
+                }
 
-              if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyZ) {
-                if (isShift) {
+                if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyZ) {
+                  if (isShift) {
+                    vm.redo();
+                  } else {
+                    vm.undo();
+                  }
+                  return KeyEventResult.handled;
+                } else if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyY) {
                   vm.redo();
-                } else {
-                  vm.undo();
-                }
-                return KeyEventResult.handled;
-              } else if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyY) {
-                vm.redo();
-                return KeyEventResult.handled;
-              } else if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyG) {
-                if (isShift) {
-                  vm.ungroupSelectedParts();
-                } else {
-                  vm.groupSelectedParts();
-                }
-                return KeyEventResult.handled;
-              } else if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyD) {
-                vm.duplicateSelectedPart();
-                return KeyEventResult.handled;
-              } else if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyA) {
-                vm.selectAllParts();
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.keyO && !isCtrl) {
-                // SketchUp Camera Orbit Tool (Key: O)
-                vm.setToolMode(SketchUpToolMode.orbit);
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.keyH && !isCtrl) {
-                // SketchUp Camera Pan Tool (Key: H)
-                vm.setToolMode(SketchUpToolMode.pan);
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.keyS && !isCtrl) {
-                // Focus plane/surface, normal view alignment, activate real-time direct sketch
-                if (!vm.isSketchMode) {
-                  if (vm.doc.selectedFaceId != null) {
-                    vm.focusPartAndEnterSketch(vm.selectedPart?.id, faceId: vm.doc.selectedFaceId);
+                  return KeyEventResult.handled;
+                } else if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyG) {
+                  if (isShift) {
+                    vm.ungroupSelectedParts();
                   } else {
-                    vm.focusPartAndEnterSketch(vm.selectedPart?.id);
+                    vm.groupSelectedParts();
                   }
-                } else {
-                  vm.alignCameraToActivePlaneNormal();
-                }
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.keyM) {
-                // SketchUp Move Tool
-                vm.setToolMode(SketchUpToolMode.move);
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.keyR || event.logicalKey == LogicalKeyboardKey.keyQ) {
-                // SketchUp Rotate Tool
-                vm.setToolMode(SketchUpToolMode.rotate);
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.keyB) {
-                // SketchUp Auto-Span Face-to-Face Bridging Tool
-                vm.setToolMode(SketchUpToolMode.bridge);
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.keyW) {
-                // Interactive Draft-Line Welding Tool
-                vm.setToolMode(SketchUpToolMode.weld);
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.keyJ) {
-                // Magnetic Snap & Coupling Tool
-                vm.setToolMode(SketchUpToolMode.magnetic);
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.space || event.logicalKey == LogicalKeyboardKey.keyV) {
-                // SketchUp Select Tool (Requirement 5)
-                _cancelRotation(vm);
-                if (_draggingPart != null || _draggedParts.isNotEmpty) {
-                  for (final part in _draggedParts) {
-                    final startPos = _draggedPartsStartPos[part.id];
-                    if (startPos != null) part.position = startPos;
-                  }
-                  _draggingPart = null;
-                  _draggedParts.clear();
-                  _draggedPartsStartPos.clear();
-                  _partDragStartScreen = null;
-                }
-                if (vm.bridgeSourcePartId != null) vm.cancelBridge();
-                vm.setToolMode(SketchUpToolMode.select);
-                setState(() {});
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.keyF) {
-                _zoomToFit();
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                // SketchUp Red Axis constraint (X) - strictly locks movement direction
-                vm.toggleLockedAxis(GizmoAxis.x);
-                final isLocked = vm.lockedAxis == GizmoAxis.x;
-                vm.setVcbState(
-                  label: 'Axis Lock',
-                  value: isLocked ? 'Red Axis [X] Locked' : 'Axis Unlocked',
-                  hint: isLocked ? 'Movement locked to X axis • Press → again or ↓ to unlock' : 'Free movement',
-                );
-                if (vm.activeToolMode == SketchUpToolMode.rotate) {
-                  _rotateAxis = isLocked ? GizmoAxis.x : GizmoAxis.z;
-                  if (_lastHoverScreenPos != null) {
-                    _handleRotatePointerHover(_lastHoverScreenPos!, size, mesh, vm);
-                  }
-                } else if (vm.activeToolMode == SketchUpToolMode.move && _isMovingEntity && _draggingPart != null) {
-                  if (_lastHoverScreenPos != null) {
-                    _handleMovePointerMove(_lastHoverScreenPos!, size, mesh, vm);
-                  }
-                }
-                setState(() {});
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                // SketchUp Green Axis constraint (Y) - strictly locks movement direction
-                vm.toggleLockedAxis(GizmoAxis.y);
-                final isLocked = vm.lockedAxis == GizmoAxis.y;
-                vm.setVcbState(
-                  label: 'Axis Lock',
-                  value: isLocked ? 'Green Axis [Y] Locked' : 'Axis Unlocked',
-                  hint: isLocked ? 'Movement locked to Y axis • Press ← again or ↓ to unlock' : 'Free movement',
-                );
-                if (vm.activeToolMode == SketchUpToolMode.rotate) {
-                  _rotateAxis = isLocked ? GizmoAxis.y : GizmoAxis.z;
-                  if (_lastHoverScreenPos != null) {
-                    _handleRotatePointerHover(_lastHoverScreenPos!, size, mesh, vm);
-                  }
-                } else if (vm.activeToolMode == SketchUpToolMode.move && _isMovingEntity && _draggingPart != null) {
-                  if (_lastHoverScreenPos != null) {
-                    _handleMovePointerMove(_lastHoverScreenPos!, size, mesh, vm);
-                  }
-                }
-                setState(() {});
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                // SketchUp Blue Axis constraint (Z) - strictly locks movement direction
-                vm.toggleLockedAxis(GizmoAxis.z);
-                final isLocked = vm.lockedAxis == GizmoAxis.z;
-                vm.setVcbState(
-                  label: 'Axis Lock',
-                  value: isLocked ? 'Blue Axis [Z] Locked' : 'Axis Unlocked',
-                  hint: isLocked ? 'Movement locked to Z axis • Press ↑ again or ↓ to unlock' : 'Free movement',
-                );
-                if (vm.activeToolMode == SketchUpToolMode.rotate) {
-                  _rotateAxis = isLocked ? GizmoAxis.z : GizmoAxis.z;
-                  if (_lastHoverScreenPos != null) {
-                    _handleRotatePointerHover(_lastHoverScreenPos!, size, mesh, vm);
-                  }
-                } else if (vm.activeToolMode == SketchUpToolMode.move && _isMovingEntity && _draggingPart != null) {
-                  if (_lastHoverScreenPos != null) {
-                    _handleMovePointerMove(_lastHoverScreenPos!, size, mesh, vm);
-                  }
-                }
-                setState(() {});
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                // SketchUp Unlock / Clear Axis constraint
-                vm.clearLockedAxis();
-                vm.setVcbState(label: 'Axis Lock', value: 'Unlocked (Free)', hint: 'Free movement across all 3 axes');
-                if (vm.activeToolMode == SketchUpToolMode.rotate) {
-                  _rotateAxis = GizmoAxis.z;
-                  if (_lastHoverScreenPos != null) {
-                    _handleRotatePointerHover(_lastHoverScreenPos!, size, mesh, vm);
-                  }
-                } else if (vm.activeToolMode == SketchUpToolMode.move && _isMovingEntity && _draggingPart != null) {
-                  if (_lastHoverScreenPos != null) {
-                    _handleMovePointerMove(_lastHoverScreenPos!, size, mesh, vm);
-                  }
-                }
-                setState(() {});
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.controlLeft || event.logicalKey == LogicalKeyboardKey.controlRight) {
-                if (vm.activeToolMode == SketchUpToolMode.rotate) {
-                  _isRotateCopyMode = !_isRotateCopyMode;
-                  vm.setVcbState(label: vm.vcbLabel, value: vm.vcbValue, hint: _isRotateCopyMode ? 'Rotational Copy Mode ON (+)' : 'Rotate Mode');
-                  setState(() {});
                   return KeyEventResult.handled;
-                }
-              } else if (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace) {
-                if (_vcbFocusNode.hasFocus) {
-                  return KeyEventResult.ignored;
-                }
-                if (event.logicalKey == LogicalKeyboardKey.backspace && _vcbController.text.isNotEmpty) {
-                  _vcbController.text = _vcbController.text.substring(0, _vcbController.text.length - 1);
-                  vm.vcbValue = _vcbController.text;
-                  vm.notifyDocChanged();
+                } else if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyD) {
+                  vm.duplicateSelectedPart();
                   return KeyEventResult.handled;
-                }
-                if (vm.selectedWeldId != null) {
-                  vm.deleteSelectedWeld();
+                } else if (isCtrl && event.logicalKey == LogicalKeyboardKey.keyA) {
+                  vm.selectAllParts();
                   return KeyEventResult.handled;
-                }
-                if (vm.selectedPart != null) {
-                  vm.deleteSelectedPart();
+                } else if (event.logicalKey == LogicalKeyboardKey.keyO && !isCtrl) {
+                  // SketchUp Camera Orbit Tool (Key: O)
+                  vm.setToolMode(SketchUpToolMode.orbit);
                   return KeyEventResult.handled;
-                }
-              } else if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                if (_vcbController.text.isNotEmpty || vm.vcbValue.isNotEmpty) {
-                  final input = _vcbController.text.isNotEmpty ? _vcbController.text : vm.vcbValue;
-                  _isVcbUserTyping = false;
-                  if (_isMovingEntity) {
-                    _applyVcbTextToMovingEntity(input, vm);
-                    _commitEntityMove(vm);
-                    _vcbController.clear();
-                    _viewportFocusNode.requestFocus();
+                } else if (event.logicalKey == LogicalKeyboardKey.keyH && !isCtrl) {
+                  if (vm.isSketchMode) {
+                    vm.applySketchConstraint(CadConstraintType.horizontal);
                     return KeyEventResult.handled;
                   }
-                  if (vm.activeToolMode == SketchUpToolMode.rotate && (_rotatePhase == RotateToolPhase.rotatingAngle || _draggedParts.isNotEmpty)) {
-                    _applyVcbTextToRotatingEntity(input, vm);
-                    _commitRotation(vm);
-                    _vcbController.clear();
-                    _viewportFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-                  vm.submitVcbInput(input);
-                  _vcbController.clear();
-                  _viewportFocusNode.requestFocus();
+                  // SketchUp Camera Pan Tool (Key: H)
+                  vm.setToolMode(SketchUpToolMode.pan);
                   return KeyEventResult.handled;
-                }
-                if (vm.isSketchMode) {
-                  vm.finishSketch();
-                  return KeyEventResult.handled;
-                }
-              } else if (event.logicalKey == LogicalKeyboardKey.escape) {
-                _isVcbUserTyping = false;
-                bool cancelledActiveAction = false;
-                if (vm.latestWeldEvaluation != null) {
-                  vm.clearWeldEvaluation();
-                  cancelledActiveAction = true;
-                }
-                if (vm.activeToolMode == SketchUpToolMode.rotate && (_rotatePhase != RotateToolPhase.awaitingCenter || _draggedParts.isNotEmpty)) {
-                  _cancelRotation(vm);
-                  cancelledActiveAction = true;
-                }
-                if (_isMovingEntity || _draggingPart != null || _draggedParts.isNotEmpty) {
-                  _cancelEntityMove(vm);
-                  cancelledActiveAction = true;
-                }
-                if (_draggingGizmoAxis != GizmoAxis.none) {
-                  if (vm.selectedPart != null && _gizmoDragStartPartPos != null) {
-                    vm.selectedPart!.position = _gizmoDragStartPartPos!;
-                    if (_gizmoDragStartPartRot != null) {
-                      vm.selectedPart!.rotationDeg = _gizmoDragStartPartRot!;
+                } else if (event.logicalKey == LogicalKeyboardKey.keyS && !isCtrl) {
+                  // Onshape Shortcut: Shift+S or S -> Focus plane/surface, normal view alignment, activate sketch
+                  if (!vm.isSketchMode) {
+                    if (vm.isPlaneSelectionMode) {
+                      vm.exitPlaneSelectionMode();
+                    } else if (vm.doc.selectedFaceId != null) {
+                      vm.focusPartAndEnterSketch(vm.selectedPart?.id, faceId: vm.doc.selectedFaceId);
+                    } else {
+                      vm.enterPlaneSelectionMode();
                     }
-                    vm.notifyDocChanged();
-                  }
-                  _draggingGizmoAxis = GizmoAxis.none;
-                  setState(() {});
-                  cancelledActiveAction = true;
-                }
-                if (vm.pendingPlacement != null) {
-                  vm.cancelPendingPlacement();
-                  cancelledActiveAction = true;
-                }
-                if (vm.activeToolMode == SketchUpToolMode.bridge && vm.bridgeSourcePartId != null) {
-                  vm.cancelBridge();
-                  cancelledActiveAction = true;
-                }
-                if (cancelledActiveAction) {
-                  return KeyEventResult.handled;
-                }
-                if (vm.activeToolMode != SketchUpToolMode.select) {
-                  vm.setToolMode(SketchUpToolMode.select);
-                  _rotatePhase = RotateToolPhase.awaitingCenter;
-                  _rotateCenterPoint = null;
-                  _rotateBaselinePoint = null;
-                  _rotateCurrentArmPoint = null;
-                  _moveBaseWorldPoint = null;
-                  _moveBaseStartWorldPoint = null;
-                  vm.clearLockedAxis();
-                  setState(() {});
-                  return KeyEventResult.handled;
-                }
-                if (_vcbController.text.isNotEmpty) {
-                  _vcbController.clear();
-                  vm.vcbValue = '';
-                  vm.notifyDocChanged();
-                  return KeyEventResult.handled;
-                }
-                if (vm.doc.selectedPartIds.isNotEmpty) {
-                  vm.clearSelection(force: true);
-                  return KeyEventResult.handled;
-                }
-                if (vm.selectedWeldId != null) {
-                  vm.selectWeld(null);
-                  return KeyEventResult.handled;
-                }
-                if (vm.lockedAxis != GizmoAxis.none) {
-                  vm.clearLockedAxis();
-                  return KeyEventResult.handled;
-                }
-                if (vm.isSketchMode) {
-                  vm.finishSketch();
-                  return KeyEventResult.handled;
-                }
-              }
-
-              if (!isCtrl && event.character != null && event.character!.isNotEmpty && !_vcbFocusNode.hasFocus) {
-                final char = event.character!;
-                if (RegExp(r'^[0-9\.\,\*\x\X\/\-\+]$').hasMatch(char)) {
-                  if (!_isVcbUserTyping) {
-                    _isVcbUserTyping = true;
-                    _vcbController.text = char;
                   } else {
-                    _vcbController.text += char;
+                    vm.alignCameraToActivePlaneNormal();
                   }
-                  vm.setVcbState(label: vm.vcbLabel, value: _vcbController.text);
                   return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.keyN && !isCtrl) {
+                  // Onshape Universal Shortcut: N -> View Normal To Sketch Plane / Face
+                  vm.alignCameraToActivePlaneNormal();
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.keyP && !isCtrl) {
+                  // Onshape Shortcut: P -> Toggle Datum Planes Visibility (or with Shift in sketch mode: Project)
+                  if (vm.isSketchMode && isShift) {
+                    vm.toggleProjectGeometryMode();
+                  } else {
+                    vm.toggleDatumPlanesVisibility();
+                  }
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.keyU && !isCtrl) {
+                  // Onshape Sketch Shortcut: U -> Use / Project 3D Geometry
+                  if (vm.isSketchMode) {
+                    vm.toggleProjectGeometryMode();
+                    return KeyEventResult.handled;
+                  }
+                } else if ((event.logicalKey == LogicalKeyboardKey.keyQ || event.logicalKey == LogicalKeyboardKey.keyX) && !isCtrl) {
+                  // Onshape Sketch Shortcut: Q / X -> Toggle Construction Geometry Mode
+                  if (vm.isSketchMode) {
+                    vm.toggleSketchConstructionMode();
+                    return KeyEventResult.handled;
+                  }
+                  // Rotate fallback
+                  vm.setToolMode(SketchUpToolMode.rotate);
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.keyE && !isCtrl) {
+                  // Onshape Modeling Shortcut: Shift+E or E -> Extrude Feature Dialog
+                  // In Sketch Mode without Shift: Equal Constraint (E)
+                  if (isShift || !vm.isSketchMode) {
+                    if (vm.isSketchMode || vm.activeSketchPlane != null || vm.doc.selectedFaceId != null) {
+                      vm.toggleExtrudeMode();
+                      return KeyEventResult.handled;
+                    }
+                  } else if (vm.isSketchMode) {
+                    vm.applySketchConstraint(CadConstraintType.equal);
+                    return KeyEventResult.handled;
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.keyC && !isCtrl) {
+                  // Onshape Sketch Shortcut: C -> Circle Tool
+                  if (vm.isSketchMode) {
+                    vm.activeSketchTool = 'circle';
+                    vm.clearSketchInteractiveState();
+                    return KeyEventResult.handled;
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.keyL && !isCtrl) {
+                  // Onshape Sketch Shortcut: L -> Line Tool
+                  if (vm.isSketchMode) {
+                    vm.activeSketchTool = 'line';
+                    vm.clearSketchInteractiveState();
+                    return KeyEventResult.handled;
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.keyA && !isCtrl) {
+                  // Onshape Sketch Shortcut: A -> 3-Point Arc Tool
+                  if (vm.isSketchMode) {
+                    vm.activeSketchTool = 'arc_3point';
+                    vm.clearSketchInteractiveState();
+                    return KeyEventResult.handled;
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.keyG && !isCtrl) {
+                  // Onshape Sketch Shortcut: G -> Corner Rectangle Tool
+                  if (vm.isSketchMode) {
+                    vm.activeSketchTool = 'rectangle';
+                    vm.clearSketchInteractiveState();
+                    return KeyEventResult.handled;
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.keyD && !isCtrl) {
+                  // Onshape Sketch Shortcut: D -> Dimension Tool
+                  if (vm.isSketchMode) {
+                    vm.activeSketchTool = 'dimension';
+                    return KeyEventResult.handled;
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.keyI && !isCtrl) {
+                  // Onshape Constraint: I -> Coincident Constraint
+                  if (vm.isSketchMode) {
+                    vm.applySketchConstraint(CadConstraintType.coincident);
+                    return KeyEventResult.handled;
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.keyT && !isCtrl) {
+                  // Onshape Constraint: T -> Tangent Constraint
+                  if (vm.isSketchMode) {
+                    vm.applySketchConstraint(CadConstraintType.tangent);
+                    return KeyEventResult.handled;
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.keyM) {
+                  // SketchUp Move Tool
+                  vm.setToolMode(SketchUpToolMode.move);
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
+                  if (vm.isSketchMode) {
+                    // Onshape Sketch Shortcut: R -> Center Rectangle Tool
+                    vm.activeSketchTool = 'center_rect';
+                    vm.clearSketchInteractiveState();
+                    return KeyEventResult.handled;
+                  }
+                  // SketchUp Rotate Tool
+                  vm.setToolMode(SketchUpToolMode.rotate);
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.keyB) {
+                  if (vm.isSketchMode) {
+                    // Onshape Constraint: B -> Parallel Constraint
+                    vm.applySketchConstraint(CadConstraintType.parallel);
+                    return KeyEventResult.handled;
+                  }
+                  // SketchUp Auto-Span Face-to-Face Bridging Tool
+                  vm.setToolMode(SketchUpToolMode.bridge);
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.keyW) {
+                  // Interactive Draft-Line Welding Tool
+                  vm.setToolMode(SketchUpToolMode.weld);
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.keyJ) {
+                  // Magnetic Snap & Coupling Tool
+                  vm.setToolMode(SketchUpToolMode.magnetic);
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.space || event.logicalKey == LogicalKeyboardKey.keyV) {
+                  // SketchUp Select Tool (Requirement 5)
+                  _cancelRotation(vm);
+                  if (_draggingPart != null || _draggedParts.isNotEmpty) {
+                    for (final part in _draggedParts) {
+                      final startPos = _draggedPartsStartPos[part.id];
+                      if (startPos != null) part.position = startPos;
+                    }
+                    _draggingPart = null;
+                    _draggedParts.clear();
+                    _draggedPartsStartPos.clear();
+                    _partDragStartScreen = null;
+                  }
+                  if (vm.bridgeSourcePartId != null) vm.cancelBridge();
+                  vm.setToolMode(SketchUpToolMode.select);
+                  setState(() {});
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.keyF) {
+                  _zoomToFit();
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                  // SketchUp Red Axis constraint (X) - strictly locks movement direction
+                  vm.toggleLockedAxis(GizmoAxis.x);
+                  final isLocked = vm.lockedAxis == GizmoAxis.x;
+                  vm.setVcbState(
+                    label: 'Axis Lock',
+                    value: isLocked ? 'Red Axis [X] Locked' : 'Axis Unlocked',
+                    hint: isLocked ? 'Movement locked to X axis • Press → again or ↓ to unlock' : 'Free movement',
+                  );
+                  if (vm.activeToolMode == SketchUpToolMode.rotate) {
+                    _rotateAxis = isLocked ? GizmoAxis.x : GizmoAxis.z;
+                    if (_lastHoverScreenPos != null) {
+                      _handleRotatePointerHover(_lastHoverScreenPos!, size, mesh, vm);
+                    }
+                  } else if (vm.activeToolMode == SketchUpToolMode.move && _isMovingEntity && _draggingPart != null) {
+                    if (_lastHoverScreenPos != null) {
+                      _handleMovePointerMove(_lastHoverScreenPos!, size, mesh, vm);
+                    }
+                  }
+                  setState(() {});
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                  // SketchUp Green Axis constraint (Y) - strictly locks movement direction
+                  vm.toggleLockedAxis(GizmoAxis.y);
+                  final isLocked = vm.lockedAxis == GizmoAxis.y;
+                  vm.setVcbState(
+                    label: 'Axis Lock',
+                    value: isLocked ? 'Green Axis [Y] Locked' : 'Axis Unlocked',
+                    hint: isLocked ? 'Movement locked to Y axis • Press ← again or ↓ to unlock' : 'Free movement',
+                  );
+                  if (vm.activeToolMode == SketchUpToolMode.rotate) {
+                    _rotateAxis = isLocked ? GizmoAxis.y : GizmoAxis.z;
+                    if (_lastHoverScreenPos != null) {
+                      _handleRotatePointerHover(_lastHoverScreenPos!, size, mesh, vm);
+                    }
+                  } else if (vm.activeToolMode == SketchUpToolMode.move && _isMovingEntity && _draggingPart != null) {
+                    if (_lastHoverScreenPos != null) {
+                      _handleMovePointerMove(_lastHoverScreenPos!, size, mesh, vm);
+                    }
+                  }
+                  setState(() {});
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                  // SketchUp Blue Axis constraint (Z) - strictly locks movement direction
+                  vm.toggleLockedAxis(GizmoAxis.z);
+                  final isLocked = vm.lockedAxis == GizmoAxis.z;
+                  vm.setVcbState(
+                    label: 'Axis Lock',
+                    value: isLocked ? 'Blue Axis [Z] Locked' : 'Axis Unlocked',
+                    hint: isLocked ? 'Movement locked to Z axis • Press ↑ again or ↓ to unlock' : 'Free movement',
+                  );
+                  if (vm.activeToolMode == SketchUpToolMode.rotate) {
+                    _rotateAxis = isLocked ? GizmoAxis.z : GizmoAxis.z;
+                    if (_lastHoverScreenPos != null) {
+                      _handleRotatePointerHover(_lastHoverScreenPos!, size, mesh, vm);
+                    }
+                  } else if (vm.activeToolMode == SketchUpToolMode.move && _isMovingEntity && _draggingPart != null) {
+                    if (_lastHoverScreenPos != null) {
+                      _handleMovePointerMove(_lastHoverScreenPos!, size, mesh, vm);
+                    }
+                  }
+                  setState(() {});
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                  // SketchUp Unlock / Clear Axis constraint
+                  vm.clearLockedAxis();
+                  vm.setVcbState(label: 'Axis Lock', value: 'Unlocked (Free)', hint: 'Free movement across all 3 axes');
+                  if (vm.activeToolMode == SketchUpToolMode.rotate) {
+                    _rotateAxis = GizmoAxis.z;
+                    if (_lastHoverScreenPos != null) {
+                      _handleRotatePointerHover(_lastHoverScreenPos!, size, mesh, vm);
+                    }
+                  } else if (vm.activeToolMode == SketchUpToolMode.move && _isMovingEntity && _draggingPart != null) {
+                    if (_lastHoverScreenPos != null) {
+                      _handleMovePointerMove(_lastHoverScreenPos!, size, mesh, vm);
+                    }
+                  }
+                  setState(() {});
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.controlLeft || event.logicalKey == LogicalKeyboardKey.controlRight) {
+                  if (vm.activeToolMode == SketchUpToolMode.rotate) {
+                    _isRotateCopyMode = !_isRotateCopyMode;
+                    vm.setVcbState(label: vm.vcbLabel, value: vm.vcbValue, hint: _isRotateCopyMode ? 'Rotational Copy Mode ON (+)' : 'Rotate Mode');
+                    setState(() {});
+                    return KeyEventResult.handled;
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace) {
+                  if (_vcbFocusNode.hasFocus) {
+                    return KeyEventResult.ignored;
+                  }
+                  if (event.logicalKey == LogicalKeyboardKey.backspace && _vcbController.text.isNotEmpty) {
+                    _vcbController.text = _vcbController.text.substring(0, _vcbController.text.length - 1);
+                    vm.vcbValue = _vcbController.text;
+                    vm.notifyDocChanged();
+                    return KeyEventResult.handled;
+                  }
+                  if (vm.selectedWeldId != null) {
+                    vm.deleteSelectedWeld();
+                    return KeyEventResult.handled;
+                  }
+                  if (vm.selectedPart != null) {
+                    vm.deleteSelectedPart();
+                    return KeyEventResult.handled;
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+                  if (vm.isExtrudeMode) {
+                    vm.executeExtrudeFeature();
+                    return KeyEventResult.handled;
+                  }
+                  if (_vcbController.text.isNotEmpty || vm.vcbValue.isNotEmpty) {
+                    final input = _vcbController.text.isNotEmpty ? _vcbController.text : vm.vcbValue;
+                    _isVcbUserTyping = false;
+                    if (_isMovingEntity) {
+                      _applyVcbTextToMovingEntity(input, vm);
+                      _commitEntityMove(vm);
+                      _vcbController.clear();
+                      _viewportFocusNode.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    if (vm.activeToolMode == SketchUpToolMode.rotate && (_rotatePhase == RotateToolPhase.rotatingAngle || _draggedParts.isNotEmpty)) {
+                      _applyVcbTextToRotatingEntity(input, vm);
+                      _commitRotation(vm);
+                      _vcbController.clear();
+                      _viewportFocusNode.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    vm.submitVcbInput(input);
+                    _vcbController.clear();
+                    _viewportFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  if (vm.isSketchMode) {
+                    vm.finishSketch();
+                    return KeyEventResult.handled;
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+                  _isVcbUserTyping = false;
+                  bool cancelledActiveAction = false;
+                  if (vm.isExtrudeMode) {
+                    vm.closeExtrudeDialog();
+                    cancelledActiveAction = true;
+                  }
+                  if (vm.sketchInteractiveStartPoint != null || vm.sketchPolylinePoints.isNotEmpty) {
+                    vm.clearSketchInteractiveState();
+                    cancelledActiveAction = true;
+                  }
+                  if (vm.isProjectGeometryMode) {
+                    vm.exitProjectGeometryMode();
+                    cancelledActiveAction = true;
+                  }
+                  if (vm.isPlaneSelectionMode) {
+                    vm.exitPlaneSelectionMode();
+                    cancelledActiveAction = true;
+                  }
+                  if (vm.latestWeldEvaluation != null) {
+                    vm.clearWeldEvaluation();
+                    cancelledActiveAction = true;
+                  }
+                  if (vm.activeToolMode == SketchUpToolMode.rotate && (_rotatePhase != RotateToolPhase.awaitingCenter || _draggedParts.isNotEmpty)) {
+                    _cancelRotation(vm);
+                    cancelledActiveAction = true;
+                  }
+                  if (_isMovingEntity || _draggingPart != null || _draggedParts.isNotEmpty) {
+                    _cancelEntityMove(vm);
+                    cancelledActiveAction = true;
+                  }
+                  if (_draggingGizmoAxis != GizmoAxis.none) {
+                    if (vm.selectedPart != null && _gizmoDragStartPartPos != null) {
+                      vm.selectedPart!.position = _gizmoDragStartPartPos!;
+                      if (_gizmoDragStartPartRot != null) {
+                        vm.selectedPart!.rotationDeg = _gizmoDragStartPartRot!;
+                      }
+                      vm.notifyDocChanged();
+                    }
+                    _draggingGizmoAxis = GizmoAxis.none;
+                    setState(() {});
+                    cancelledActiveAction = true;
+                  }
+                  if (vm.pendingPlacement != null) {
+                    vm.cancelPendingPlacement();
+                    cancelledActiveAction = true;
+                  }
+                  if (vm.activeToolMode == SketchUpToolMode.bridge && vm.bridgeSourcePartId != null) {
+                    vm.cancelBridge();
+                    cancelledActiveAction = true;
+                  }
+                  if (cancelledActiveAction) {
+                    return KeyEventResult.handled;
+                  }
+                  if (vm.activeToolMode != SketchUpToolMode.select) {
+                    vm.setToolMode(SketchUpToolMode.select);
+                    _rotatePhase = RotateToolPhase.awaitingCenter;
+                    _rotateCenterPoint = null;
+                    _rotateBaselinePoint = null;
+                    _rotateCurrentArmPoint = null;
+                    _moveBaseWorldPoint = null;
+                    _moveBaseStartWorldPoint = null;
+                    vm.clearLockedAxis();
+                    setState(() {});
+                    return KeyEventResult.handled;
+                  }
+                  if (_vcbController.text.isNotEmpty) {
+                    _vcbController.clear();
+                    vm.vcbValue = '';
+                    vm.notifyDocChanged();
+                    return KeyEventResult.handled;
+                  }
+                  if (vm.doc.selectedPartIds.isNotEmpty) {
+                    vm.clearSelection(force: true);
+                    return KeyEventResult.handled;
+                  }
+                  if (vm.selectedWeldId != null) {
+                    vm.selectWeld(null);
+                    return KeyEventResult.handled;
+                  }
+                  if (vm.lockedAxis != GizmoAxis.none) {
+                    vm.clearLockedAxis();
+                    return KeyEventResult.handled;
+                  }
+                  if (vm.isExtrudeMode) {
+                    vm.closeExtrudeDialog();
+                    return KeyEventResult.handled;
+                  }
+                  if (vm.isSketchMode) {
+                    vm.finishSketch();
+                    return KeyEventResult.handled;
+                  }
+                }
+
+                if (!isCtrl && event.character != null && event.character!.isNotEmpty && !_vcbFocusNode.hasFocus) {
+                  final char = event.character!;
+                  if (RegExp(r'^[0-9\.\,\*\x\X\/\-\+]$').hasMatch(char)) {
+                    if (!_isVcbUserTyping) {
+                      _isVcbUserTyping = true;
+                      _vcbController.text = char;
+                    } else {
+                      _vcbController.text += char;
+                    }
+                    vm.setVcbState(label: vm.vcbLabel, value: _vcbController.text);
+                    return KeyEventResult.handled;
+                  }
                 }
               }
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: vm.isLightBackground
-                  ? const RadialGradient(center: Alignment(0.0, -0.20), radius: 1.35, colors: [Color(0xFFFFFFFF), Color(0xFFE2E8F0)])
-                  : const RadialGradient(center: Alignment(0.0, -0.15), radius: 1.25, colors: [Color(0xFF262630), Color(0xFF14141A)]),
-            ),
-            child: Stack(
-              children: [
-                // =================================================================
-                // 1. PRIMARY 3D CANVAS & RAW MOUSE NAVIGATION LISTENER
-                // =================================================================
-                Positioned.fill(
-                  child: Listener(
-                    behavior: HitTestBehavior.opaque,
-                    onPointerHover: (event) {
-                      _lastHoverScreenPos = event.localPosition;
-                      _cursorScreenPosNotifier.value = event.localPosition;
+              return KeyEventResult.ignored;
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: vm.isLightBackground
+                    ? const RadialGradient(center: Alignment(0.0, -0.20), radius: 1.35, colors: [Color(0xFFFFFFFF), Color(0xFFE2E8F0)])
+                    : const RadialGradient(center: Alignment(0.0, -0.15), radius: 1.25, colors: [Color(0xFF262630), Color(0xFF14141A)]),
+              ),
+              child: Stack(
+                children: [
+                  // =================================================================
+                  // 1. PRIMARY 3D CANVAS & RAW MOUSE NAVIGATION LISTENER
+                  // =================================================================
+                  Positioned.fill(
+                    child: Listener(
+                      behavior: HitTestBehavior.opaque,
+                      onPointerHover: (event) {
+                        _lastHoverScreenPos = event.localPosition;
+                        _cursorScreenPosNotifier.value = event.localPosition;
 
-                      // Snap point hover & magnetic attraction for selection/move/rotate tools (Requirement 4)
-                      final isSnapTool = !vm.isSketchMode && (
-                        vm.activeToolMode == SketchUpToolMode.select ||
-                        vm.activeToolMode == SketchUpToolMode.move ||
-                        vm.activeToolMode == SketchUpToolMode.rotate
-                      );
-                      if (isSnapTool && !_isOrbitingWithMouse && !_isPanningWithMouse && !_isMovingEntity) {
-                        _handleMagneticSnapHover(event.localPosition, size, mesh, vm);
-                      }
-
-                      if (vm.isSketchMode && vm.activeSketchPlane != null && !_isOrbitingWithMouse && !_isPanningWithMouse) {
-                        _updateSketchHover(event.localPosition, size, mesh, vm);
-                      }
-
-                      if (vm.activeToolMode == SketchUpToolMode.rotate) {
-                        _handleRotatePointerHover(event.localPosition, size, mesh, vm);
-                      } else if (vm.activeToolMode == SketchUpToolMode.magnetic) {
-                        _handleMagneticPointerHover(event.localPosition, size, mesh, vm);
-                      } else if (vm.activeToolMode == SketchUpToolMode.move) {
-                        if (_isMovingEntity && _draggingPart != null) {
-                          _handleMovePointerMove(event.localPosition, size, mesh, vm);
+                        // Snap point hover & magnetic attraction for selection/move/rotate tools (Requirement 4)
+                        final isSnapTool =
+                            !vm.isSketchMode &&
+                            (vm.activeToolMode == SketchUpToolMode.select ||
+                                vm.activeToolMode == SketchUpToolMode.move ||
+                                vm.activeToolMode == SketchUpToolMode.rotate);
+                        if (isSnapTool && !_isOrbitingWithMouse && !_isPanningWithMouse && !_isMovingEntity) {
+                          _handleMagneticSnapHover(event.localPosition, size, mesh, vm);
                         }
-                      }
-                    },
-                    onPointerDown: (event) {
-                      _viewportFocusNode.requestFocus();
-                      final selectedPart = vm.selectedPart;
 
-                      // 1a. Immediate Middle Mouse Button Pan / Orbit Activation (Requirement 1 & 2)
-                      final isMiddle = (event.buttons & kTertiaryButton) != 0 || (event.buttons & kMiddleMouseButton) != 0;
-                      if (isMiddle) {
-                        bool isShift = false;
-                        try {
-                          isShift = HardwareKeyboard.instance.isShiftPressed;
-                        } catch (_) {}
-                        if (isShift) {
-                          _isOrbitingWithMouse = true;
-                        } else {
-                          _isPanningWithMouse = true;
-                        }
-                        setState(() {});
-                        return;
-                      }
-
-                      // 1b. Draft-Line Welding Tool Start
-                      if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.weld && (event.buttons & kPrimaryMouseButton) != 0) {
-                        _weldDraftStartScreen = event.localPosition;
-                        _weldDraftPath.clear();
-                        _weldDraftPath.add(event.localPosition);
-                        _weld3DPoints.clear();
-                        _weldTimestamps.clear();
-                        _weldStopwatch.reset();
-                        _weldStopwatch.start();
-                        _weldTimestamps.add(0.0);
-                        _weldHitPartIds.clear();
-                        _weldSparks.clear();
-                        _weldFlickerPhase = 0.0;
-                        _isDrawingWeld = true;
-                        _startWeldPhysicsLoop();
-                        final (rayOrigin, rayDir) = _getRayFromScreen(event.localPosition, size, mesh);
-                        final hit = AssemblyRaycaster.raycast(rayOrigin: rayOrigin, rayDirection: rayDir, mesh: mesh);
-                        if (hit != null) {
-                          _weld3DPoints.add(hit.hitPoint);
-                          final p = vm.findPartForFaceId(hit.polygon.faceId);
-                          if (p != null) _weldHitPartIds.add(p.id);
-                        }
-                        _spawnWeldSparks(event.localPosition);
-                        setState(() {});
-                        return;
-                      }
-
-                      // 1c. Direct Sketch Entity Interaction & Parametric Drawing
-                      if (vm.isSketchMode && (event.buttons & kPrimaryMouseButton) != 0) {
-                        final plane = vm.activeSketchPlane;
-                        if (plane != null) {
-                          final localPoint = _unprojectScreenToPlane(event.localPosition, plane, size, mesh);
-                          if (localPoint != null) {
-                            final snapped = vm.activePlaneHoverLocal ?? localPoint;
-                            final tool = vm.activeSketchTool;
-
-                            if (tool == 'rectangle' || tool == 'rect') {
-                              final newRect = CADRectangleEntity(
-                                id: 'rect_${DateTime.now().millisecondsSinceEpoch}',
-                                startPoint: Offset(snapped.dx - 15.0, snapped.dy - 10.0),
-                                width: 30.0,
-                                height: 20.0,
-                                isPassThrough: true,
-                                depthMm: 5.0,
-                              );
-                              vm.addPrimitiveEntityToActivePlane(newRect);
-                              vm.activeSketchTool = 'select_entity';
-                              setState(() {});
-                              _rebuildGpuCadModel();
-                              return;
-                            } else if (tool == 'circle' || tool == 'hole') {
-                              final newCircle = CADCircleEntity(
-                                id: 'circle_${DateTime.now().millisecondsSinceEpoch}',
-                                center: snapped,
-                                radius: 12.0,
-                                isPassThrough: true,
-                                depthMm: 5.0,
-                              );
-                              vm.addPrimitiveEntityToActivePlane(newCircle);
-                              vm.activeSketchTool = 'select_entity';
-                              setState(() {});
-                              _rebuildGpuCadModel();
-                              return;
-                            } else if (tool == 'line') {
-                              if (_sketchLineStartLocal == null) {
-                                _sketchLineStartLocal = snapped;
-                                setState(() {});
-                                return;
+                        if (vm.isPlaneSelectionMode && !_isOrbitingWithMouse && !_isPanningWithMouse) {
+                          final hitPlane = _findPlaneUnderScreenCursor(event.localPosition, size, mesh, vm);
+                          if (hitPlane != null) {
+                            vm.setHoveredPlane(hitPlane.id);
+                          } else {
+                            final hitPoly = _findFrontmostPolygonUnderCursor(event.localPosition, size, mesh);
+                            if (hitPoly != null) {
+                              final hitPart = vm.findPartForFaceId(hitPoly.faceId);
+                              if (hitPart != null) {
+                                vm.setHoveredPlane('face:${hitPart.id}:${hitPoly.faceId}');
                               } else {
-                                final newLine = CADLineEntity(
-                                  id: 'line_${DateTime.now().millisecondsSinceEpoch}',
-                                  start: _sketchLineStartLocal!,
-                                  end: snapped,
-                                );
-                                vm.addPrimitiveEntityToActivePlane(newLine);
-                                _sketchLineStartLocal = null;
-                                vm.activeSketchTool = 'select_entity';
-                                setState(() {});
-                                _rebuildGpuCadModel();
-                                return;
-                              }
-                            } else if (tool == 'polyline') {
-                              if (_sketchPolylinePoints.isNotEmpty && (snapped - _sketchPolylinePoints.first).distance < 6.0 && _sketchPolylinePoints.length >= 2) {
-                                _sketchPolylinePoints.add(_sketchPolylinePoints.first);
-                                final newPoly = CADPolylineEntity(
-                                  id: 'polyline_${DateTime.now().millisecondsSinceEpoch}',
-                                  points: List.from(_sketchPolylinePoints),
-                                  isClosed: true,
-                                );
-                                vm.addPrimitiveEntityToActivePlane(newPoly);
-                                _sketchPolylinePoints.clear();
-                                vm.activeSketchTool = 'select_entity';
-                                setState(() {});
-                                _rebuildGpuCadModel();
-                                return;
-                              } else {
-                                _sketchPolylinePoints.add(snapped);
-                                setState(() {});
-                                return;
+                                vm.setHoveredPlane(null);
                               }
                             } else {
-                              // Selection mode: hit test primitive entities on active plane
-                              CADPrimitiveEntity? hitPrimitive;
-                              for (final p in plane.primitives.reversed) {
-                                if (p is CADRectangleEntity) {
-                                  final r = Rect.fromLTWH(p.startPoint.dx, p.startPoint.dy, p.width, p.height);
-                                  if (r.inflate(5.0).contains(localPoint)) {
-                                    hitPrimitive = p;
-                                    break;
-                                  }
-                                } else if (p is CADCircleEntity) {
-                                  if ((localPoint - p.center).distance <= p.radius + 5.0) {
-                                    hitPrimitive = p;
-                                    break;
-                                  }
-                                } else if (p is CADLineEntity) {
-                                  if (_distanceToSegment(localPoint, p.start, p.end) <= 5.0) {
-                                    hitPrimitive = p;
-                                    break;
-                                  }
-                                } else if (p is CADPolylineEntity) {
-                                  for (int i = 0; i < p.points.length - 1; i++) {
-                                    if (_distanceToSegment(localPoint, p.points[i], p.points[i + 1]) <= 5.0) {
-                                      hitPrimitive = p;
-                                      break;
-                                    }
-                                  }
-                                  if (hitPrimitive != null) break;
-                                }
-                              }
-
-                              if (hitPrimitive != null) {
-                                vm.selectSketchPrimitive(hitPrimitive);
-                                setState(() {});
-                                return;
-                              } else {
-                                vm.selectSketchPrimitive(null);
-                              }
+                              vm.setHoveredPlane(null);
                             }
                           }
                         }
 
-                        final targetPart = vm.doc.parts.where((p) => p.id == vm.sketchPartId).firstOrNull ?? vm.selectedPart;
-                        if (targetPart != null) {
-                          final hitFeature = _hitTestSketchFeature(event.localPosition, size, mesh, targetPart);
-                          if (hitFeature != null) {
-                            if (hitFeature.matedRungPartId != null || vm.isPartBonded(targetPart.id)) {
-                              vm.selectSketchFeature(hitFeature.id);
-                              vm.setVcbState(label: '🔒 Welded / Mated Entity', value: 'Locked by Weld', hint: 'Break weld joint first to move or drag.');
-                              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                                SnackBar(
-                                  duration: const Duration(seconds: 4),
-                                  content: Text('Entity "${hitFeature.featureType}" is welded/bonded. Break weld first to move.'),
-                                  action: SnackBarAction(
-                                    label: 'Break Weld',
-                                    textColor: const Color(0xFFEF4444),
-                                    onPressed: () {
-                                      vm.breakAllBondsForPart(targetPart.id);
-                                    },
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-                            _draggingFeature = hitFeature;
-                            _featureDragStartScreen = event.localPosition;
-                            _featureDragStartPos = hitFeature.localCenter;
-                            vm.selectSketchFeature(hitFeature.id);
-                            return;
+                        if (vm.isSketchMode && vm.activeSketchPlane != null && !_isOrbitingWithMouse && !_isPanningWithMouse) {
+                          if (vm.isProjectGeometryMode) {
+                            _updateProjectGeometryHover(event.localPosition, size, mesh, vm);
+                          } else {
+                            _updateSketchHover(event.localPosition, size, mesh, vm);
                           }
                         }
-                      }
 
-                      if ((event.buttons & kSecondaryMouseButton) != 0) {
-                        _secondaryDownPos = event.localPosition;
-                      }
-
-                      // 2. SketchUp 3-Click Rotate Tool: Center, Baseline, Angle Sweep
-                      if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.rotate && (event.buttons & kPrimaryMouseButton) != 0) {
-                        _handleRotatePointerDown(event.localPosition, size, mesh, vm);
-                        return;
-                      }
-
-                      // 2b. Check if pointer hits a Gizmo handle (Move)
-                      if (selectedPart != null && !vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.move) {
-                        final hitAxis = _hitTestGizmo(event.localPosition, size, mesh, selectedPart, vm.gizmoMode);
-                        if (hitAxis != GizmoAxis.none) {
-                          if (vm.isPartBonded(selectedPart.id)) {
-                            vm.setVcbState(label: '🔒 Welded Entity', value: 'Locked by Weld', hint: 'Break weld joint first to move/rotate with Gizmo.');
-                            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                              SnackBar(
-                                duration: const Duration(seconds: 4),
-                                content: Text('Part "${selectedPart.name}" is welded. Break weld joint first to move with Gizmo.'),
-                                action: SnackBarAction(
-                                  label: 'Break Weld',
-                                  textColor: const Color(0xFFEF4444),
-                                  onPressed: () {
-                                    vm.breakAllBondsForPart(selectedPart.id);
-                                  },
-                                ),
-                              ),
-                            );
-                            return;
+                        if (vm.activeToolMode == SketchUpToolMode.rotate) {
+                          _handleRotatePointerHover(event.localPosition, size, mesh, vm);
+                        } else if (vm.activeToolMode == SketchUpToolMode.magnetic) {
+                          _handleMagneticPointerHover(event.localPosition, size, mesh, vm);
+                        } else if (vm.activeToolMode == SketchUpToolMode.move) {
+                          if (_isMovingEntity && _draggingPart != null) {
+                            _handleMovePointerMove(event.localPosition, size, mesh, vm);
+                          } else {
+                            _handleMovePreGrabHover(event.localPosition, size, mesh, vm);
                           }
-                          _draggingGizmoAxis = hitAxis;
-                          _gizmoDragStartScreen = event.localPosition;
-                          _gizmoDragStartPartPos = selectedPart.position;
-                          _gizmoDragStartPartRot = selectedPart.rotationDeg;
-                          return;
                         }
-                      }
+                      },
+                      onPointerDown: (event) {
+                        _viewportFocusNode.requestFocus();
+                        final selectedPart = vm.selectedPart;
 
-                      _draggingGizmoAxis = GizmoAxis.none;
-
-                      // 2c. Magnetic Snap Tool Point Click
-                      if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.magnetic && (event.buttons & kPrimaryMouseButton) != 0) {
-                        _handleMagneticPointerDown(event.localPosition, size, mesh, vm);
-                        return;
-                      }
-
-                      // 3. Direct Whole-Part Group Selection, Weld Picking, Move, and In-Place Rotate
-                      if (!vm.isSketchMode && (event.buttons & kPrimaryMouseButton) != 0 && vm.pendingPlacement == null) {
-                        // Proximity picking for weld beads (Item 5)
-                        final clickedWeld = _findNearestWeldUnderScreenCursor(event.localPosition, size, mesh, vm, maxScreenDist: 14.0);
-                        if (clickedWeld != null) {
-                          vm.selectWeld(clickedWeld.id);
-                          _rebuildGpuCadModel(force: true);
+                        // 1a. Immediate Middle Mouse Button Pan / Orbit Activation (Requirement 1 & 2)
+                        final isMiddle = (event.buttons & kTertiaryButton) != 0 || (event.buttons & kMiddleMouseButton) != 0;
+                        if (isMiddle) {
+                          bool isShift = false;
+                          try {
+                            isShift = HardwareKeyboard.instance.isShiftPressed;
+                          } catch (_) {}
+                          if (isShift) {
+                            _isOrbitingWithMouse = true;
+                          } else {
+                            _isPanningWithMouse = true;
+                          }
                           setState(() {});
                           return;
                         }
 
-                        final hitPoly = _findFrontmostPolygonUnderCursor(event.localPosition, size, mesh);
-                        if (hitPoly != null) {
-                          // Check if hit a weld bead directly
-                          if (hitPoly.faceId.startsWith('weld_')) {
-                            final weldId = hitPoly.faceId.substring('weld_'.length);
-                            vm.selectWeld(weldId);
-                            _rebuildGpuCadModel(force: true);
+                        // 1b. Draft-Line Welding Tool Start
+                        if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.weld && (event.buttons & kPrimaryMouseButton) != 0) {
+                          _weldDraftStartScreen = event.localPosition;
+                          _weldDraftPath.clear();
+                          _weldDraftPath.add(event.localPosition);
+                          _weld3DPoints.clear();
+                          _weldTimestamps.clear();
+                          _weldStopwatch.reset();
+                          _weldStopwatch.start();
+                          _weldTimestamps.add(0.0);
+                          _weldHitPartIds.clear();
+                          _weldSparks.clear();
+                          _weldFlickerPhase = 0.0;
+                          _isDrawingWeld = true;
+                          _startWeldPhysicsLoop();
+                          final (rayOrigin, rayDir) = _getRayFromScreen(event.localPosition, size, mesh);
+                          final hit = AssemblyRaycaster.raycast(rayOrigin: rayOrigin, rayDirection: rayDir, mesh: mesh);
+                          if (hit != null) {
+                            _weld3DPoints.add(hit.hitPoint);
+                            final p = vm.findPartForFaceId(hit.polygon.faceId);
+                            if (p != null) _weldHitPartIds.add(p.id);
+                          }
+                          _spawnWeldSparks(event.localPosition);
+                          setState(() {});
+                          return;
+                        }
+
+                        // 1b-2. Direct Plane Selection Mode (Click datum plane, construction plane, or solid face)
+                        if (vm.isPlaneSelectionMode && (event.buttons & kPrimaryMouseButton) != 0) {
+                          final hitPlane = _findPlaneUnderScreenCursor(event.localPosition, size, mesh, vm);
+                          if (hitPlane != null) {
+                            vm.selectPlaneForSketch(hitPlane);
                             setState(() {});
                             return;
                           }
-
-                          final hitPart = vm.findPartForFaceId(hitPoly.faceId);
-                          if (hitPart != null) {
-                            vm.doc.selectedFaceId = hitPoly.faceId;
-
-                            // Direct 3D Face Sketch Mode Activation (Key: S or Sketch tool)
-                            if (vm.activeToolMode == SketchUpToolMode.sketch) {
+                          final hitPoly = _findFrontmostPolygonUnderCursor(event.localPosition, size, mesh);
+                          if (hitPoly != null) {
+                            final hitPart = vm.findPartForFaceId(hitPoly.faceId);
+                            if (hitPart != null) {
                               vm.activateSketchOnFacePolygon(hitPoly, partId: hitPart.id);
+                              vm.exitPlaneSelectionMode();
                               setState(() {});
                               return;
                             }
+                          }
+                        }
 
-                            bool isShift = false;
-                            bool isCtrl = false;
-                            try {
-                              isShift = HardwareKeyboard.instance.isShiftPressed;
-                              isCtrl = HardwareKeyboard.instance.isControlPressed;
-                            } catch (_) {}
-
-                            // Auto-Span Face-to-Face Bridging Tool (Key: B)
-                            if (vm.activeToolMode == SketchUpToolMode.bridge) {
-                              if (vm.bridgeSourcePartId == null) {
-                                vm.startBridge(hitPart.id);
-                              } else if (vm.bridgeSourcePartId != hitPart.id) {
-                                vm.bridgeParts(vm.bridgeSourcePartId!, hitPart.id);
-                              } else {
-                                vm.cancelBridge();
-                              }
+                        // 1b-3. Extrude 3D Arrow Manipulator Drag Start (Phase 5)
+                        if (vm.isExtrudeMode && vm.activeSketchPlane != null && (event.buttons & kPrimaryMouseButton) != 0) {
+                          final plane = vm.activeSketchPlane!;
+                          final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(plane);
+                          final val = CADProfileValidator.validateProfile(segments);
+                          if (val.isValidClosedLoop && val.orderedPathVertices.length >= 3) {
+                            final pts = val.orderedPathVertices;
+                            final cx = pts.map((p) => p.dx).reduce((a, b) => a + b) / pts.length;
+                            final cy = pts.map((p) => p.dy).reduce((a, b) => a + b) / pts.length;
+                            final base3d = CadPoint3D(
+                              plane.origin.x + plane.xAxis.normalized().x * cx + plane.yAxis.normalized().x * cy,
+                              plane.origin.y + plane.xAxis.normalized().y * cx + plane.yAxis.normalized().y * cy,
+                              plane.origin.z + plane.xAxis.normalized().z * cx + plane.yAxis.normalized().z * cy,
+                            );
+                            final dist = vm.extrudeParams.distanceMm;
+                            final tip3d = CadPoint3D(
+                              base3d.x + plane.normal.normalized().x * dist,
+                              base3d.y + plane.normal.normalized().y * dist,
+                              base3d.z + plane.normal.normalized().z * dist,
+                            );
+                            final scrTip = _projectPoint(tip3d, size, mesh);
+                            if ((event.localPosition - scrTip).distance < 28.0) {
+                              vm.isExtrudeArrowDragging = true;
+                              vm.extrudeDragStartScreen = event.localPosition;
+                              vm.extrudeDragStartDistance = dist;
+                              setState(() {});
                               return;
                             }
+                          }
+                        }
 
-                            if (vm.activeToolMode == SketchUpToolMode.select) {
-                              final now = DateTime.now();
-                              if (_lastClickTime != null && _lastClickedPartId == hitPart.id && now.difference(_lastClickTime!).inMilliseconds < 450) {
-                                _clickCount++;
+                        // 1c. Direct Sketch Entity Interaction & Parametric Drawing
+                        if (vm.isSketchMode && (event.buttons & kPrimaryMouseButton) != 0) {
+                          if (vm.isProjectGeometryMode) {
+                            _handleProjectGeometryClick(event.localPosition, size, mesh, vm);
+                            return;
+                          }
+
+                          final plane = vm.activeSketchPlane;
+                          if (plane != null) {
+                            final localPoint = _unprojectScreenToPlane(event.localPosition, plane, size, mesh);
+                            if (localPoint != null) {
+                              final snapped = vm.activePlaneHoverLocal ?? localPoint;
+                              final tool = vm.activeSketchTool;
+
+                              if (tool == 'rectangle' || tool == 'rect') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  vm.setVcbState(label: '📐 Dimensions (W x H)', value: '0.0 x 0.0 mm', hint: 'Click 2nd corner, or type dimensions');
+                                  setState(() {});
+                                  return;
+                                } else {
+                                  final pStart = vm.sketchInteractiveStartPoint!;
+                                  final w = (snapped.dx - pStart.dx).abs();
+                                  final h = (snapped.dy - pStart.dy).abs();
+                                  if (w > 0.1 && h > 0.1) {
+                                    final topLeft = Offset(math.min(pStart.dx, snapped.dx), math.min(pStart.dy, snapped.dy));
+                                    final newRect = CADRectangleEntity(
+                                      id: 'rect_${DateTime.now().millisecondsSinceEpoch}',
+                                      startPoint: topLeft,
+                                      width: w,
+                                      height: h,
+                                      isPassThrough: true,
+                                      depthMm: 5.0,
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    );
+                                    vm.addPrimitiveEntityToActivePlane(newRect);
+                                    vm.clearSketchInteractiveState();
+                                    vm.activeSketchTool = 'select_entity';
+                                    setState(() {});
+                                    _rebuildGpuCadModel();
+                                    return;
+                                  }
+                                }
+                              } else if (tool == 'center_rect') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  vm.setVcbState(label: '📐 Center Rect (W x H)', value: '0.0 x 0.0 mm', hint: 'Click corner, or type dimensions');
+                                  setState(() {});
+                                  return;
+                                } else {
+                                  final pCenter = vm.sketchInteractiveStartPoint!;
+                                  final w = 2.0 * (snapped.dx - pCenter.dx).abs();
+                                  final h = 2.0 * (snapped.dy - pCenter.dy).abs();
+                                  if (w > 0.1 && h > 0.1) {
+                                    final newCenterRect = CADCenterRectangleEntity(
+                                      id: 'center_rect_${DateTime.now().millisecondsSinceEpoch}',
+                                      center: pCenter,
+                                      width: w,
+                                      height: h,
+                                      isPassThrough: true,
+                                      depthMm: 5.0,
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    );
+                                    vm.addPrimitiveEntityToActivePlane(newCenterRect);
+                                    vm.clearSketchInteractiveState();
+                                    vm.activeSketchTool = 'select_entity';
+                                    setState(() {});
+                                    _rebuildGpuCadModel();
+                                    return;
+                                  }
+                                }
+                              } else if (tool == 'circle' || tool == 'hole') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  vm.setVcbState(label: '⭕ Diameter (Ø)', value: 'Ø 0.0 mm', hint: 'Click edge to set radius, or type diameter');
+                                  setState(() {});
+                                  return;
+                                } else {
+                                  final pCenter = vm.sketchInteractiveStartPoint!;
+                                  final radius = (snapped - pCenter).distance;
+                                  if (radius > 0.1) {
+                                    final newCircle = CADCircleEntity(
+                                      id: 'circle_${DateTime.now().millisecondsSinceEpoch}',
+                                      center: pCenter,
+                                      radius: radius,
+                                      isPassThrough: true,
+                                      depthMm: 5.0,
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    );
+                                    vm.addPrimitiveEntityToActivePlane(newCircle);
+                                    vm.clearSketchInteractiveState();
+                                    vm.activeSketchTool = 'select_entity';
+                                    setState(() {});
+                                    _rebuildGpuCadModel();
+                                    return;
+                                  }
+                                }
+                              } else if (tool == 'arc_3point') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  vm.setVcbState(label: '⌒ 3-Pt Arc', value: 'Chord: 0.0 mm', hint: 'Click to place End Point of Arc');
+                                  setState(() {});
+                                  return;
+                                } else if (vm.sketchInteractiveMidPoint == null) {
+                                  if ((snapped - vm.sketchInteractiveStartPoint!).distance > 0.1) {
+                                    vm.setInteractiveSketchMid(snapped);
+                                    vm.setVcbState(label: '⌒ 3-Pt Arc Radius', value: 'Defining curvature...', hint: 'Click to place Apex/Curvature Point');
+                                    setState(() {});
+                                    return;
+                                  }
+                                } else {
+                                  final pStart = vm.sketchInteractiveStartPoint!;
+                                  final pEnd = vm.sketchInteractiveMidPoint!;
+                                  final newArc = CADArcEntity(
+                                    id: 'arc_${DateTime.now().millisecondsSinceEpoch}',
+                                    startPoint: pStart,
+                                    endPoint: pEnd,
+                                    pointOnArc: snapped,
+                                    isConstruction: vm.isSketchConstructionMode,
+                                  );
+                                  vm.addPrimitiveEntityToActivePlane(newArc);
+                                  vm.clearSketchInteractiveState();
+                                  vm.activeSketchTool = 'select_entity';
+                                  setState(() {});
+                                  _rebuildGpuCadModel();
+                                  return;
+                                }
+                              } else if (tool == 'line') {
+                                if (vm.sketchInteractiveStartPoint == null) {
+                                  vm.setInteractiveSketchStart(snapped);
+                                  vm.setVcbState(label: '📏 Line Length', value: '0.0 mm', hint: 'Click next point, or Escape to end chaining');
+                                  setState(() {});
+                                  return;
+                                } else {
+                                  final pStart = vm.sketchInteractiveStartPoint!;
+                                  if ((snapped - pStart).distance > 0.1) {
+                                    final newLine = CADLineEntity(
+                                      id: 'line_${DateTime.now().millisecondsSinceEpoch}',
+                                      start: pStart,
+                                      end: snapped,
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    );
+                                    vm.addPrimitiveEntityToActivePlane(newLine);
+                                    // Continuous chaining: next segment starts where current finished
+                                    vm.setInteractiveSketchStart(snapped);
+                                    setState(() {});
+                                    _rebuildGpuCadModel();
+                                    return;
+                                  }
+                                }
+                              } else if (tool == 'polyline') {
+                                if (vm.sketchPolylinePoints.isNotEmpty &&
+                                    (snapped - vm.sketchPolylinePoints.first).distance < 6.0 &&
+                                    vm.sketchPolylinePoints.length >= 2) {
+                                  vm.addSketchPolylinePoint(vm.sketchPolylinePoints.first);
+                                  final newPoly = CADPolylineEntity(
+                                    id: 'polyline_${DateTime.now().millisecondsSinceEpoch}',
+                                    points: List.from(vm.sketchPolylinePoints),
+                                    isClosed: true,
+                                    isConstruction: vm.isSketchConstructionMode,
+                                  );
+                                  vm.addPrimitiveEntityToActivePlane(newPoly);
+                                  vm.clearSketchInteractiveState();
+                                  vm.activeSketchTool = 'select_entity';
+                                  setState(() {});
+                                  _rebuildGpuCadModel();
+                                  return;
+                                } else {
+                                  vm.addSketchPolylinePoint(snapped);
+                                  setState(() {});
+                                  return;
+                                }
                               } else {
-                                _clickCount = 1;
-                                _lastClickedPartId = hitPart.id;
-                              }
-                              _lastClickTime = now;
+                                // Selection mode: hit test primitive entities on active plane
+                                CADPrimitiveEntity? hitPrimitive;
+                                for (final p in plane.primitives.reversed) {
+                                  if (p is CADRectangleEntity) {
+                                    final r = Rect.fromLTWH(p.startPoint.dx, p.startPoint.dy, p.width, p.height);
+                                    if (r.inflate(5.0).contains(localPoint)) {
+                                      hitPrimitive = p;
+                                      break;
+                                    }
+                                  } else if (p is CADCenterRectangleEntity) {
+                                    final r = Rect.fromCenter(center: p.center, width: p.width, height: p.height);
+                                    if (r.inflate(5.0).contains(localPoint)) {
+                                      hitPrimitive = p;
+                                      break;
+                                    }
+                                  } else if (p is CADCircleEntity) {
+                                    if ((localPoint - p.center).distance <= p.radius + 5.0) {
+                                      hitPrimitive = p;
+                                      break;
+                                    }
+                                  } else if (p is CADArcEntity) {
+                                    final geom = p.computeCircumcircle();
+                                    if (geom != null) {
+                                      final d = (localPoint - geom.center).distance;
+                                      if ((d - geom.radius).abs() <= 6.0) {
+                                        hitPrimitive = p;
+                                        break;
+                                      }
+                                    } else {
+                                      if (_distanceToSegment(localPoint, p.startPoint, p.endPoint) <= 5.0) {
+                                        hitPrimitive = p;
+                                        break;
+                                      }
+                                    }
+                                  } else if (p is CADLineEntity) {
+                                    if (_distanceToSegment(localPoint, p.start, p.end) <= 5.0) {
+                                      hitPrimitive = p;
+                                      break;
+                                    }
+                                  } else if (p is CADPolylineEntity) {
+                                    for (int i = 0; i < p.points.length - 1; i++) {
+                                      if (_distanceToSegment(localPoint, p.points[i], p.points[i + 1]) <= 5.0) {
+                                        hitPrimitive = p;
+                                        break;
+                                      }
+                                    }
+                                    if (hitPrimitive != null) break;
+                                  }
+                                }
 
-                              if (_clickCount == 2) {
-                                vm.focusPartAndEnterSketch(hitPart.id, faceId: hitPoly.faceId);
-                                return;
+                                if (hitPrimitive != null) {
+                                  if (HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isControlPressed) {
+                                    vm.toggleSketchEntityMultiSelection(hitPrimitive.id);
+                                  } else {
+                                    vm.selectSketchPrimitive(hitPrimitive);
+                                  }
+                                  setState(() {});
+                                  return;
+                                } else {
+                                  vm.selectSketchPrimitive(null);
+                                }
                               }
-
-                              if (isCtrl) {
-                                vm.togglePartSelection(hitPart.id);
-                              } else if (isShift) {
-                                vm.addToSelection(hitPart.id);
-                              } else {
-                                vm.selectPart(hitPart.id);
-                              }
-                              return;
                             }
+                          }
 
-                            if (vm.activeToolMode == SketchUpToolMode.move) {
-                              if (vm.isPartBonded(hitPart.id)) {
-                                vm.setVcbState(label: '🔒 Welded Entity', value: 'Locked by Weld', hint: 'Break weld joint first to move.');
+                          final targetPart = vm.doc.parts.where((p) => p.id == vm.sketchPartId).firstOrNull ?? vm.selectedPart;
+                          if (targetPart != null) {
+                            final hitFeature = _hitTestSketchFeature(event.localPosition, size, mesh, targetPart);
+                            if (hitFeature != null) {
+                              if (hitFeature.matedRungPartId != null || vm.isPartBonded(targetPart.id)) {
+                                vm.selectSketchFeature(hitFeature.id);
+                                vm.setVcbState(label: '🔒 Welded / Mated Entity', value: 'Locked by Weld', hint: 'Break weld joint first to move or drag.');
                                 ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                                   SnackBar(
                                     duration: const Duration(seconds: 4),
-                                    content: Text('Part "${hitPart.name}" is welded. Break weld joint first to move.'),
+                                    content: Text('Entity "${hitFeature.featureType}" is welded/bonded. Break weld first to move.'),
                                     action: SnackBarAction(
                                       label: 'Break Weld',
                                       textColor: const Color(0xFFEF4444),
                                       onPressed: () {
-                                        vm.breakAllBondsForPart(hitPart.id);
+                                        vm.breakAllBondsForPart(targetPart.id);
                                       },
                                     ),
                                   ),
                                 );
                                 return;
                               }
-
-                              if (_isMovingEntity && _draggingPart != null) {
-                                _commitEntityMove(vm);
-                                return;
-                              }
-
-                              if (!vm.doc.selectedPartIds.contains(hitPart.id)) {
-                                vm.selectPart(hitPart.id);
-                              }
-
-                              _draggingPart = hitPart;
-                              _partDragStartScreen = event.localPosition;
-                              _hasMovedPart = false;
-                              _isMovingEntity = true;
-                              _isVcbUserTyping = false;
-
-                              final groupParts = hitPart.groupId != null ? vm.doc.parts.where((p) => p.groupId == hitPart.groupId).toList() : <AssemblyPart>[];
-                              _draggedParts.clear();
-                              _draggedParts.addAll(groupParts.isNotEmpty ? groupParts : [hitPart]);
-                              _draggedPartsStartPos.clear();
-                              for (final p in _draggedParts) {
-                                _draggedPartsStartPos[p.id] = p.position;
-                              }
-                              _snapshotDraggedWelds(vm);
-
-                              // Pickup from clicked snap point OR clicked surface point (never defaulting to bottom snap point, SS2)
-                              final nearestSnap = _findNearestSnapPointForPart(hitPart, event.localPosition, size, mesh);
-                              final surfaceHit = _findFrontmostRaycastHit(event.localPosition, size, mesh);
-                              _moveBaseWorldPoint = nearestSnap?.worldPosition ?? surfaceHit?.hitPoint ?? hitPart.position;
-                              _moveBaseStartWorldPoint = _moveBaseWorldPoint;
-
-                              vm.setVcbState(
-                                label: 'Distance',
-                                value: vm.formatLength(0.0),
-                                hint: 'Click destination point or type distance in VCB (e.g. 150)',
-                              );
-                              setState(() {});
+                              _draggingFeature = hitFeature;
+                              _featureDragStartScreen = event.localPosition;
+                              _featureDragStartPos = hitFeature.localCenter;
+                              vm.selectSketchFeature(hitFeature.id);
                               return;
                             }
                           }
-                        } else {
-                          if (vm.activeToolMode == SketchUpToolMode.move) {
-                            if (_isMovingEntity && _draggingPart != null) {
-                              _commitEntityMove(vm);
+                        }
+
+                        if ((event.buttons & kSecondaryMouseButton) != 0) {
+                          _secondaryDownPos = event.localPosition;
+                        }
+
+                        // 2. SketchUp 3-Click Rotate Tool: Center, Baseline, Angle Sweep
+                        if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.rotate && (event.buttons & kPrimaryMouseButton) != 0) {
+                          _handleRotatePointerDown(event.localPosition, size, mesh, vm);
+                          return;
+                        }
+
+                        // 2a. SketchUp 2-Click Move Tool - Commit Placement (Click 2)
+                        if (!vm.isSketchMode &&
+                            vm.activeToolMode == SketchUpToolMode.move &&
+                            _isMovingEntity &&
+                            _draggingPart != null &&
+                            (event.buttons & kPrimaryMouseButton) != 0) {
+                          _commitEntityMove(vm);
+                          return;
+                        }
+
+                        // 2b. Check if pointer hits a Gizmo handle (Move)
+                        if (selectedPart != null && !vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.move) {
+                          final hitAxis = _hitTestGizmo(event.localPosition, size, mesh, selectedPart, vm.gizmoMode);
+                          if (hitAxis != GizmoAxis.none) {
+                            if (vm.isPartBonded(selectedPart.id)) {
+                              vm.setVcbState(label: '🔒 Welded Entity', value: 'Locked by Weld', hint: 'Break weld joint first to move/rotate with Gizmo.');
+                              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                                SnackBar(
+                                  duration: const Duration(seconds: 4),
+                                  content: Text('Part "${selectedPart.name}" is welded. Break weld joint first to move with Gizmo.'),
+                                  action: SnackBarAction(
+                                    label: 'Break Weld',
+                                    textColor: const Color(0xFFEF4444),
+                                    onPressed: () {
+                                      vm.breakAllBondsForPart(selectedPart.id);
+                                    },
+                                  ),
+                                ),
+                              );
                               return;
-                            } else if (vm.selectedPart != null) {
-                              final partToMove = vm.selectedPart!;
-                              if (vm.isPartBonded(partToMove.id)) {
+                            }
+                            _draggingGizmoAxis = hitAxis;
+                            _gizmoDragStartScreen = event.localPosition;
+                            _gizmoDragStartPartPos = selectedPart.position;
+                            _gizmoDragStartPartRot = selectedPart.rotationDeg;
+                            return;
+                          }
+                        }
+
+                        _draggingGizmoAxis = GizmoAxis.none;
+
+                        // 2b-2. SketchUp Move Tool - Click 1 (Base Grab) on active bounding box snap point
+                        if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.move && !_isMovingEntity && (event.buttons & kPrimaryMouseButton) != 0) {
+                          final snapToGrab =
+                              _hoveredSnapPointModel ??
+                              _findNearestSnapPointAcrossParts(
+                                vm.selectedPart != null ? [vm.selectedPart!, ...vm.doc.parts.where((p) => p.id != vm.selectedPart!.id)] : vm.doc.parts,
+                                event.localPosition,
+                                size,
+                                mesh,
+                              );
+                          if (snapToGrab != null) {
+                            final part = vm.doc.parts.where((p) => p.id == snapToGrab.partId).firstOrNull;
+                            if (part != null) {
+                              if (vm.isPartBonded(part.id)) {
                                 vm.setVcbState(label: '🔒 Welded Entity', value: 'Locked by Weld', hint: 'Break weld joint first to move.');
                                 return;
                               }
-                              _draggingPart = partToMove;
-                              _partDragStartScreen = event.localPosition;
-                              _hasMovedPart = false;
-                              _isMovingEntity = true;
-                              _isVcbUserTyping = false;
-
-                              final groupParts = partToMove.groupId != null
-                                  ? vm.doc.parts.where((p) => p.groupId == partToMove.groupId).toList()
-                                  : <AssemblyPart>[];
-                              _draggedParts.clear();
-                              _draggedParts.addAll(groupParts.isNotEmpty ? groupParts : [partToMove]);
-                              _draggedPartsStartPos.clear();
-                              for (final p in _draggedParts) {
-                                _draggedPartsStartPos[p.id] = p.position;
+                              if (!vm.doc.selectedPartIds.contains(part.id)) {
+                                vm.selectPart(part.id);
                               }
-                              _snapshotDraggedWelds(vm);
-
-                              // Pickup from clicked snap point OR clicked surface point (never defaulting to bottom snap point, SS2)
-                              final nearestSnap = _findNearestSnapPointForPart(partToMove, event.localPosition, size, mesh);
-                              final surfaceHit = _findFrontmostRaycastHit(event.localPosition, size, mesh);
-                              _moveBaseWorldPoint = nearestSnap?.worldPosition ?? surfaceHit?.hitPoint ?? partToMove.position;
-                              _moveBaseStartWorldPoint = _moveBaseWorldPoint;
-
-                              vm.setVcbState(label: 'Distance', value: vm.formatLength(0.0), hint: 'Move mouse or type distance in VCB (e.g. 150)');
-                              setState(() {});
+                              _startEntityMove(part, snapToGrab.worldPosition, event.localPosition, vm);
                               return;
                             }
                           }
-                          if (vm.activeToolMode == SketchUpToolMode.select) {
-                            _selectionBoxStart = event.localPosition;
-                            _selectionBoxCurrent = event.localPosition;
+                        }
+
+                        // 2c. Magnetic Snap Tool Point Click
+                        if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.magnetic && (event.buttons & kPrimaryMouseButton) != 0) {
+                          _handleMagneticPointerDown(event.localPosition, size, mesh, vm);
+                          return;
+                        }
+
+                        // 3. Direct Whole-Part Group Selection, Weld Picking, Move, and In-Place Rotate
+                        if (!vm.isSketchMode && (event.buttons & kPrimaryMouseButton) != 0 && vm.pendingPlacement == null) {
+                          // Proximity picking for weld beads (Item 5)
+                          final clickedWeld = _findNearestWeldUnderScreenCursor(event.localPosition, size, mesh, vm, maxScreenDist: 14.0);
+                          if (clickedWeld != null) {
+                            vm.selectWeld(clickedWeld.id);
+                            _rebuildGpuCadModel(force: true);
                             setState(() {});
+                            return;
                           }
-                        }
-                      }
-                    },
-                    onPointerMove: (event) {
-                      if (_snapAnimator.isSnapping) return;
-                      _lastHoverScreenPos = event.localPosition;
-                      _cursorScreenPosNotifier.value = event.localPosition;
 
-                      if (_selectionBoxStart != null) {
-                        setState(() {
-                          _selectionBoxCurrent = event.localPosition;
-                        });
-                        return;
-                      }
+                          final hitPoly = _findFrontmostPolygonUnderCursor(event.localPosition, size, mesh);
+                          if (hitPoly != null) {
+                            // Check if hit a weld bead directly
+                            if (hitPoly.faceId.startsWith('weld_')) {
+                              final weldId = hitPoly.faceId.substring('weld_'.length);
+                              vm.selectWeld(weldId);
+                              _rebuildGpuCadModel(force: true);
+                              setState(() {});
+                              return;
+                            }
 
-                      if (_draggingFeature != null) {
-                        _handleFeatureDragUpdate(event.localPosition, size, mesh);
-                        return;
-                      }
+                            final hitPart = vm.findPartForFaceId(hitPoly.faceId);
+                            if (hitPart != null) {
+                              vm.doc.selectedFaceId = hitPoly.faceId;
 
-                      if (_draggingGizmoAxis != GizmoAxis.none) {
-                        _handleGizmoDragUpdate(event.localPosition, size, mesh);
-                        return;
-                      }
-
-                      final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
-                      final isMiddle = (event.buttons & kTertiaryButton) != 0 || (event.buttons & kMiddleMouseButton) != 0;
-                      final isPrimary = (event.buttons & kPrimaryMouseButton) != 0;
-
-                      bool isShiftPressed = false;
-                      bool isCtrlPressed = false;
-                      bool isAltPressed = false;
-                      try {
-                        isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
-                        isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
-                        isAltPressed = HardwareKeyboard.instance.isAltPressed;
-                      } catch (_) {}
-
-                      final isPan =
-                          (isMiddle && !isShiftPressed) ||
-                          (isSecondary && (isShiftPressed || isCtrlPressed)) ||
-                          (isPrimary && _isPanToolActive) ||
-                          (isPrimary && isShiftPressed && _isPanToolActive);
-                      final isOrbit =
-                          (isMiddle && isShiftPressed) ||
-                          (isSecondary && !isShiftPressed && !isCtrlPressed) ||
-                          (isPrimary && vm.activeToolMode == SketchUpToolMode.orbit);
-
-                      if (isPan) {
-                        _isPanningWithMouse = true;
-                        final panDelta = isAltPressed
-                            ? (event.delta.dx.abs() > event.delta.dy.abs() ? Offset(event.delta.dx, 0.0) : Offset(0.0, event.delta.dy))
-                            : event.delta;
-                        _panCamera(panDelta);
-                        return;
-                      } else if (isOrbit) {
-                        _isOrbitingWithMouse = true;
-                        if (isAltPressed) {
-                          if (event.delta.dx.abs() > event.delta.dy.abs()) {
-                            _orbitCamera(-event.delta.dx * 0.5, 0.0);
-                          } else {
-                            _orbitCamera(0.0, -event.delta.dy * 0.5);
-                          }
-                        } else {
-                          _orbitCamera(-event.delta.dx * 0.5, -event.delta.dy * 0.5);
-                        }
-                        return;
-                      }
-
-                      if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld && isPrimary) {
-                        if (_weldDraftPath.isEmpty) {
-                          _weldDraftPath.add(event.localPosition);
-                        } else {
-                          final lastPt = _weldDraftPath.last;
-                          final dist = (event.localPosition - lastPt).distance;
-                          if (dist >= 3.0) {
-                            final smoothedPt = Offset.lerp(lastPt, event.localPosition, 0.65)!;
-                            _weldDraftPath.add(smoothedPt);
-                          }
-                        }
-                        final (rayOrigin, rayDir) = _getRayFromScreen(event.localPosition, size, mesh);
-                        final hit = AssemblyRaycaster.raycast(rayOrigin: rayOrigin, rayDirection: rayDir, mesh: mesh);
-                        if (hit != null) {
-                          if (_weld3DPoints.isEmpty || _weld3DPoints.last.distanceTo(hit.hitPoint) > 2.0) {
-                            _weld3DPoints.add(hit.hitPoint);
-                            _weldTimestamps.add(_weldStopwatch.elapsedMilliseconds / 1000.0);
-                          }
-                          final p = vm.findPartForFaceId(hit.polygon.faceId);
-                          if (p != null) _weldHitPartIds.add(p.id);
-                        }
-                        _weldFlickerPhase += 0.08;
-                        _spawnWeldSparks(event.localPosition);
-                        _updateWeldSparks(0.016);
-                        setState(() {});
-                        return;
-                      }
-
-                      if (vm.activeToolMode == SketchUpToolMode.rotate) {
-                        _handleRotatePointerMove(event.localPosition, size, mesh, vm);
-                        return;
-                      }
-
-                      if (vm.activeToolMode == SketchUpToolMode.move && _isMovingEntity && _draggingPart != null) {
-                        _handleMovePointerMove(event.localPosition, size, mesh, vm);
-                        return;
-                      }
-                    },
-                    onPointerUp: (event) {
-                      _isOrbitingWithMouse = false;
-                      _isPanningWithMouse = false;
-                      if (_scene != null && _scene!.renderScale != 1.0) {
-                        _scene!.renderScale = 1.0;
-                      }
-                      if (_selectionBoxStart != null && _selectionBoxCurrent != null) {
-                        final start = _selectionBoxStart!;
-                        final current = _selectionBoxCurrent!;
-                        final rect = Rect.fromPoints(start, current);
-                        bool isShift = false;
-                        bool isCtrl = false;
-                        try {
-                          isShift = HardwareKeyboard.instance.isShiftPressed;
-                          isCtrl = HardwareKeyboard.instance.isControlPressed;
-                        } catch (_) {}
-                        if (rect.width > 4 || rect.height > 4) {
-                          final isCrossing = current.dx < start.dx;
-                          final matchingPartIds = <String>{};
-                          for (final part in vm.doc.parts) {
-                            if (!part.isVisible) continue;
-                            final corners2d = _getPartScreenCorners(part, size, mesh);
-                            if (corners2d.isEmpty) continue;
-                            if (isCrossing) {
-                              final anyInside = corners2d.any((pt) => rect.contains(pt));
-                              final partRect = Rect.fromPoints(
-                                Offset(corners2d.map((p) => p.dx).reduce(math.min), corners2d.map((p) => p.dy).reduce(math.min)),
-                                Offset(corners2d.map((p) => p.dx).reduce(math.max), corners2d.map((p) => p.dy).reduce(math.max)),
-                              );
-                              if (anyInside || rect.overlaps(partRect)) {
-                                matchingPartIds.add(part.id);
+                              // Direct 3D Face Sketch Mode Activation (Key: S or Sketch tool)
+                              if (vm.activeToolMode == SketchUpToolMode.sketch) {
+                                vm.activateSketchOnFacePolygon(hitPoly, partId: hitPart.id);
+                                setState(() {});
+                                return;
                               }
-                            } else {
-                              final allInside = corners2d.every((pt) => rect.contains(pt));
-                              if (allInside) {
-                                matchingPartIds.add(part.id);
+
+                              bool isShift = false;
+                              bool isCtrl = false;
+                              try {
+                                isShift = HardwareKeyboard.instance.isShiftPressed;
+                                isCtrl = HardwareKeyboard.instance.isControlPressed;
+                              } catch (_) {}
+
+                              // Auto-Span Face-to-Face Bridging Tool (Key: B)
+                              if (vm.activeToolMode == SketchUpToolMode.bridge) {
+                                if (vm.bridgeSourcePartId == null) {
+                                  vm.startBridge(hitPart.id);
+                                } else if (vm.bridgeSourcePartId != hitPart.id) {
+                                  vm.bridgeParts(vm.bridgeSourcePartId!, hitPart.id);
+                                } else {
+                                  vm.cancelBridge();
+                                }
+                                return;
+                              }
+
+                              if (vm.activeToolMode == SketchUpToolMode.select) {
+                                final now = DateTime.now();
+                                if (_lastClickTime != null && _lastClickedPartId == hitPart.id && now.difference(_lastClickTime!).inMilliseconds < 450) {
+                                  _clickCount++;
+                                } else {
+                                  _clickCount = 1;
+                                  _lastClickedPartId = hitPart.id;
+                                }
+                                _lastClickTime = now;
+
+                                if (_clickCount == 2) {
+                                  vm.focusPartAndEnterSketch(hitPart.id, faceId: hitPoly.faceId);
+                                  return;
+                                }
+
+                                if (isCtrl) {
+                                  vm.togglePartSelection(hitPart.id);
+                                } else if (isShift) {
+                                  vm.addToSelection(hitPart.id);
+                                } else {
+                                  vm.selectPart(hitPart.id);
+                                }
+                                return;
+                              }
+
+                              if (vm.activeToolMode == SketchUpToolMode.move) {
+                                if (vm.isPartBonded(hitPart.id)) {
+                                  vm.setVcbState(label: '🔒 Welded Entity', value: 'Locked by Weld', hint: 'Break weld joint first to move.');
+                                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                                    SnackBar(
+                                      duration: const Duration(seconds: 4),
+                                      content: Text('Part "${hitPart.name}" is welded. Break weld joint first to move.'),
+                                      action: SnackBarAction(
+                                        label: 'Break Weld',
+                                        textColor: const Color(0xFFEF4444),
+                                        onPressed: () {
+                                          vm.breakAllBondsForPart(hitPart.id);
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                if (!vm.doc.selectedPartIds.contains(hitPart.id)) {
+                                  vm.selectPart(hitPart.id);
+                                }
+
+                                // Pickup from clicked snap point OR clicked surface point
+                                final nearestSnap = _findNearestSnapPointForPart(hitPart, event.localPosition, size, mesh);
+                                final surfaceHit = _findFrontmostRaycastHit(event.localPosition, size, mesh);
+                                final baseAnchor = nearestSnap?.worldPosition ?? surfaceHit?.hitPoint ?? hitPart.position;
+                                _startEntityMove(hitPart, baseAnchor, event.localPosition, vm, mesh: mesh);
+                                return;
                               }
                             }
-                          }
-                          if (isCtrl) {
-                            vm.doc.selectedPartIds.addAll(matchingPartIds);
-                          } else if (isShift) {
-                            vm.doc.selectedPartIds.removeAll(matchingPartIds);
                           } else {
-                            vm.doc.selectedPartIds = matchingPartIds;
-                            vm.doc.selectedPartId = matchingPartIds.isNotEmpty ? matchingPartIds.first : null;
-                          }
-                          vm.notifyDocChanged();
-                        } else {
-                          // Single click on empty canvas deselects
-                          if (vm.activeToolMode == SketchUpToolMode.select && !isShift && !isCtrl) {
-                            vm.clearSelection();
+                            if (vm.activeToolMode == SketchUpToolMode.move) {
+                              if (vm.selectedPart != null) {
+                                final partToMove = vm.selectedPart!;
+                                if (vm.isPartBonded(partToMove.id)) {
+                                  vm.setVcbState(label: '🔒 Welded Entity', value: 'Locked by Weld', hint: 'Break weld joint first to move.');
+                                  return;
+                                }
+                                final nearestSnap = _findNearestSnapPointForPart(partToMove, event.localPosition, size, mesh);
+                                final surfaceHit = _findFrontmostRaycastHit(event.localPosition, size, mesh);
+                                final baseAnchor = nearestSnap?.worldPosition ?? surfaceHit?.hitPoint ?? partToMove.position;
+                                _startEntityMove(partToMove, baseAnchor, event.localPosition, vm, mesh: mesh);
+                                return;
+                              }
+                            }
+                            if (vm.activeToolMode == SketchUpToolMode.select) {
+                              _selectionBoxStart = event.localPosition;
+                              _selectionBoxCurrent = event.localPosition;
+                              setState(() {});
+                            }
                           }
                         }
-                        setState(() {
-                          _selectionBoxStart = null;
-                          _selectionBoxCurrent = null;
-                        });
-                      }
+                      },
+                      onPointerMove: (event) {
+                        if (_snapAnimator.isSnapping) return;
+                        _lastHoverScreenPos = event.localPosition;
+                        _cursorScreenPosNotifier.value = event.localPosition;
 
-                      if (vm.activeToolMode == SketchUpToolMode.move && _draggingPart != null && _partDragStartScreen != null) {
-                        if (_hasMovedPart && (event.localPosition - _partDragStartScreen!).distance > 10.0) {
-                          _commitEntityMove(vm);
+                        if (_selectionBoxStart != null) {
+                          setState(() {
+                            _selectionBoxCurrent = event.localPosition;
+                          });
+                          return;
                         }
-                      }
 
-                      if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld) {
+                        // Extrude 3D Arrow Manipulator Dragging (Phase 5)
+                        if (vm.isExtrudeMode && vm.isExtrudeArrowDragging && vm.extrudeDragStartScreen != null && vm.activeSketchPlane != null) {
+                          final delta = event.localPosition - vm.extrudeDragStartScreen!;
+                          final plane = vm.activeSketchPlane!;
+                          final baseScr = _projectPoint(CadPoint3D(plane.origin.x, plane.origin.y, plane.origin.z), size, mesh);
+                          final tipScr = _projectPoint(
+                            CadPoint3D(
+                              plane.origin.x + plane.normal.normalized().x * 50.0,
+                              plane.origin.y + plane.normal.normalized().y * 50.0,
+                              plane.origin.z + plane.normal.normalized().z * 50.0,
+                            ),
+                            size,
+                            mesh,
+                          );
+                          final normScr = tipScr - baseScr;
+                          final normLen = normScr.distance;
+                          if (normLen > 1.0) {
+                            final unit = normScr / normLen;
+                            final projDist = (delta.dx * unit.dx + delta.dy * unit.dy);
+                            final mmDelta = projDist * (50.0 / normLen);
+                            final newDist = (vm.extrudeDragStartDistance + mmDelta);
+                            vm.updateExtrudeDistance(double.parse(newDist.toStringAsFixed(1)));
+                          }
+                          return;
+                        }
+
+                        if (_draggingFeature != null) {
+                          _handleFeatureDragUpdate(event.localPosition, size, mesh);
+                          return;
+                        }
+
+                        if (_draggingGizmoAxis != GizmoAxis.none) {
+                          _handleGizmoDragUpdate(event.localPosition, size, mesh);
+                          return;
+                        }
+
+                        final isSecondary = (event.buttons & kSecondaryMouseButton) != 0;
+                        final isMiddle = (event.buttons & kTertiaryButton) != 0 || (event.buttons & kMiddleMouseButton) != 0;
+                        final isPrimary = (event.buttons & kPrimaryMouseButton) != 0;
+
+                        bool isShiftPressed = false;
+                        bool isCtrlPressed = false;
+                        bool isAltPressed = false;
+                        try {
+                          isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
+                          isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
+                          isAltPressed = HardwareKeyboard.instance.isAltPressed;
+                        } catch (_) {}
+
+                        final isPan =
+                            (isMiddle && !isShiftPressed) ||
+                            (isSecondary && (isShiftPressed || isCtrlPressed)) ||
+                            (isPrimary && _isPanToolActive) ||
+                            (isPrimary && isShiftPressed && _isPanToolActive);
+                        final isOrbit =
+                            (isMiddle && isShiftPressed) ||
+                            (isSecondary && !isShiftPressed && !isCtrlPressed) ||
+                            (isPrimary && vm.activeToolMode == SketchUpToolMode.orbit);
+
+                        if (isPan) {
+                          _isPanningWithMouse = true;
+                          final panDelta = isAltPressed
+                              ? (event.delta.dx.abs() > event.delta.dy.abs() ? Offset(event.delta.dx, 0.0) : Offset(0.0, event.delta.dy))
+                              : event.delta;
+                          _panCamera(panDelta);
+                          return;
+                        } else if (isOrbit) {
+                          _isOrbitingWithMouse = true;
+                          if (isAltPressed) {
+                            if (event.delta.dx.abs() > event.delta.dy.abs()) {
+                              _orbitCamera(-event.delta.dx * 0.38, 0.0);
+                            } else {
+                              _orbitCamera(0.0, -event.delta.dy * 0.38);
+                            }
+                          } else {
+                            _orbitCamera(-event.delta.dx * 0.38, -event.delta.dy * 0.38);
+                          }
+                          return;
+                        }
+
+                        if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld && isPrimary) {
+                          if (_weldDraftPath.isEmpty) {
+                            _weldDraftPath.add(event.localPosition);
+                          } else {
+                            final lastPt = _weldDraftPath.last;
+                            final dist = (event.localPosition - lastPt).distance;
+                            if (dist >= 3.0) {
+                              final smoothedPt = Offset.lerp(lastPt, event.localPosition, 0.65)!;
+                              _weldDraftPath.add(smoothedPt);
+                            }
+                          }
+                          final (rayOrigin, rayDir) = _getRayFromScreen(event.localPosition, size, mesh);
+                          final hit = AssemblyRaycaster.raycast(rayOrigin: rayOrigin, rayDirection: rayDir, mesh: mesh);
+                          if (hit != null) {
+                            if (_weld3DPoints.isEmpty || _weld3DPoints.last.distanceTo(hit.hitPoint) > 2.0) {
+                              _weld3DPoints.add(hit.hitPoint);
+                              _weldTimestamps.add(_weldStopwatch.elapsedMilliseconds / 1000.0);
+                            }
+                            final p = vm.findPartForFaceId(hit.polygon.faceId);
+                            if (p != null) _weldHitPartIds.add(p.id);
+                          }
+                          _weldFlickerPhase += 0.08;
+                          _spawnWeldSparks(event.localPosition);
+                          _updateWeldSparks(0.016);
+                          setState(() {});
+                          return;
+                        }
+
+                        if (vm.activeToolMode == SketchUpToolMode.rotate) {
+                          _handleRotatePointerMove(event.localPosition, size, mesh, vm);
+                          return;
+                        }
+
+                        if (vm.activeToolMode == SketchUpToolMode.move && _isMovingEntity && _draggingPart != null) {
+                          _handleMovePointerMove(event.localPosition, size, mesh, vm);
+                          return;
+                        }
+                      },
+                      onPointerUp: (event) {
+                        _isOrbitingWithMouse = false;
+                        _isPanningWithMouse = false;
+                        if (vm.isExtrudeArrowDragging) {
+                          vm.isExtrudeArrowDragging = false;
+                          vm.extrudeDragStartScreen = null;
+                          setState(() {});
+                        }
+                        if (_selectionBoxStart != null && _selectionBoxCurrent != null) {
+                          final start = _selectionBoxStart!;
+                          final current = _selectionBoxCurrent!;
+                          final rect = Rect.fromPoints(start, current);
+                          bool isShift = false;
+                          bool isCtrl = false;
+                          try {
+                            isShift = HardwareKeyboard.instance.isShiftPressed;
+                            isCtrl = HardwareKeyboard.instance.isControlPressed;
+                          } catch (_) {}
+                          if (rect.width > 4 || rect.height > 4) {
+                            final isCrossing = current.dx < start.dx;
+                            final matchingPartIds = <String>{};
+                            for (final part in vm.doc.parts) {
+                              if (!part.isVisible) continue;
+                              final corners2d = _getPartScreenCorners(part, size, mesh);
+                              if (corners2d.isEmpty) continue;
+                              if (isCrossing) {
+                                final anyInside = corners2d.any((pt) => rect.contains(pt));
+                                final partRect = Rect.fromPoints(
+                                  Offset(corners2d.map((p) => p.dx).reduce(math.min), corners2d.map((p) => p.dy).reduce(math.min)),
+                                  Offset(corners2d.map((p) => p.dx).reduce(math.max), corners2d.map((p) => p.dy).reduce(math.max)),
+                                );
+                                if (anyInside || rect.overlaps(partRect)) {
+                                  matchingPartIds.add(part.id);
+                                }
+                              } else {
+                                final allInside = corners2d.every((pt) => rect.contains(pt));
+                                if (allInside) {
+                                  matchingPartIds.add(part.id);
+                                }
+                              }
+                            }
+                            if (isCtrl) {
+                              vm.doc.selectedPartIds.addAll(matchingPartIds);
+                            } else if (isShift) {
+                              vm.doc.selectedPartIds.removeAll(matchingPartIds);
+                            } else {
+                              vm.doc.selectedPartIds = matchingPartIds;
+                              vm.doc.selectedPartId = matchingPartIds.isNotEmpty ? matchingPartIds.first : null;
+                            }
+                            vm.notifyDocChanged();
+                          } else {
+                            // Single click on empty canvas deselects
+                            if (!isShift && !isCtrl && !_isMovingEntity) {
+                              vm.clearSelection();
+                            }
+                          }
+                          setState(() {
+                            _selectionBoxStart = null;
+                            _selectionBoxCurrent = null;
+                          });
+                        }
+
+                        if (vm.activeToolMode == SketchUpToolMode.move && _draggingPart != null && _partDragStartScreen != null) {
+                          if (_hasMovedPart && (event.localPosition - _partDragStartScreen!).distance > 10.0) {
+                            _commitEntityMove(vm);
+                          }
+                        }
+
+                        if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld) {
+                          _isDrawingWeld = false;
+                          _processWeldDraft(event.localPosition, size, mesh, vm);
+                          _weldDraftPath.clear();
+                          _weldDraftStartScreen = null;
+                          _weld3DPoints.clear();
+                          _weldHitPartIds.clear();
+                          _weldSparks.clear();
+                          setState(() {});
+                          return;
+                        }
+
+                        if (vm.activeToolMode == SketchUpToolMode.rotate && _hasRotatedPart) {
+                          _commitRotation(vm);
+                        }
+
+                        _draggingGizmoAxis = GizmoAxis.none;
+                        _gizmoDragStartScreen = null;
+                        _gizmoDragStartPartPos = null;
+                        _gizmoDragStartPartRot = null;
+                        _draggingFeature = null;
+                        _featureDragStartScreen = null;
+                        _featureDragStartPos = null;
+
+                        if (_secondaryDownPos != null) {
+                          final dist = (event.localPosition - _secondaryDownPos!).distance;
+                          if (dist < 6.0) {
+                            final hitPoly = _findFrontmostPolygonUnderCursor(event.localPosition, size, mesh);
+                            if (hitPoly != null) {
+                              final hitPart = vm.findPartForFaceId(hitPoly.faceId);
+                              if (hitPart != null && !vm.doc.selectedPartIds.contains(hitPart.id)) {
+                                vm.selectPart(hitPart.id);
+                              }
+                            }
+                            _showContextMenu(event.position);
+                          }
+                          _secondaryDownPos = null;
+                        }
+                        setState(() {});
+                      },
+                      onPointerCancel: (_) {
+                        _isOrbitingWithMouse = false;
+                        _isPanningWithMouse = false;
+                        _cursorScreenPosNotifier.value = null;
+                        _draggingPart = null;
+                        _partDragStartScreen = null;
+                        _hasMovedPart = false;
+                        _rotatingPart = null;
+                        _partRotateStartScreen = null;
+                        _hasRotatedPart = false;
+                        _draggedParts.clear();
+                        _draggedPartsStartPos.clear();
+                        _draggedPartsStartRot.clear();
+                        _secondaryDownPos = null;
+                        _draggingGizmoAxis = GizmoAxis.none;
+                        _gizmoDragStartScreen = null;
+                        _gizmoDragStartPartPos = null;
+                        _gizmoDragStartPartRot = null;
+                        _draggingFeature = null;
+                        _featureDragStartScreen = null;
+                        _featureDragStartPos = null;
                         _isDrawingWeld = false;
-                        _processWeldDraft(event.localPosition, size, mesh, vm);
                         _weldDraftPath.clear();
                         _weldDraftStartScreen = null;
                         _weld3DPoints.clear();
                         _weldHitPartIds.clear();
                         _weldSparks.clear();
                         setState(() {});
-                        return;
-                      }
-
-                      if (vm.activeToolMode == SketchUpToolMode.rotate && _hasRotatedPart) {
-                        _commitRotation(vm);
-                      }
-
-                      _draggingGizmoAxis = GizmoAxis.none;
-                      _gizmoDragStartScreen = null;
-                      _gizmoDragStartPartPos = null;
-                      _gizmoDragStartPartRot = null;
-                      _draggingFeature = null;
-                      _featureDragStartScreen = null;
-                      _featureDragStartPos = null;
-
-                      if (_secondaryDownPos != null) {
-                        final dist = (event.localPosition - _secondaryDownPos!).distance;
-                        if (dist < 6.0) {
-                          final hitPoly = _findFrontmostPolygonUnderCursor(event.localPosition, size, mesh);
-                          if (hitPoly != null) {
-                            final hitPart = vm.findPartForFaceId(hitPoly.faceId);
-                            if (hitPart != null && !vm.doc.selectedPartIds.contains(hitPart.id)) {
-                              vm.selectPart(hitPart.id);
-                            }
-                          }
-                          _showContextMenu(event.position);
-                        }
-                        _secondaryDownPos = null;
-                      }
-                      setState(() {});
-                    },
-                    onPointerCancel: (_) {
-                      _isOrbitingWithMouse = false;
-                      _isPanningWithMouse = false;
-                      _cursorScreenPosNotifier.value = null;
-                      _draggingPart = null;
-                      _partDragStartScreen = null;
-                      _hasMovedPart = false;
-                      _rotatingPart = null;
-                      _partRotateStartScreen = null;
-                      _hasRotatedPart = false;
-                      _draggedParts.clear();
-                      _draggedPartsStartPos.clear();
-                      _draggedPartsStartRot.clear();
-                      _secondaryDownPos = null;
-                      _draggingGizmoAxis = GizmoAxis.none;
-                      _gizmoDragStartScreen = null;
-                      _gizmoDragStartPartPos = null;
-                      _gizmoDragStartPartRot = null;
-                      _draggingFeature = null;
-                      _featureDragStartScreen = null;
-                      _featureDragStartPos = null;
-                      _isDrawingWeld = false;
-                      _weldDraftPath.clear();
-                      _weldDraftStartScreen = null;
-                      _weld3DPoints.clear();
-                      _weldHitPartIds.clear();
-                      _weldSparks.clear();
-                      setState(() {});
-                    },
-                    onPointerSignal: (pointerSignal) {
-                      if (pointerSignal is PointerScrollEvent) {
-                        final factor = pointerSignal.scrollDelta.dy < 0 ? 1.20 : 0.82;
-                        _zoomCamera(factor);
-                      }
-                    },
-                    child: DragTarget<PendingPartPlacement>(
-                      onWillAcceptWithDetails: (details) => true,
-                      onAcceptWithDetails: (details) {
-                        final renderBox = context.findRenderObject() as RenderBox?;
-                        final localPos = renderBox != null ? renderBox.globalToLocal(details.offset) : details.offset;
-                        final worldPos = _screenToWorldGround(localPos, size, mesh);
-                        vm.setPendingPlacement(details.data);
-                        vm.placePendingPartAt(worldPos);
                       },
-                      builder: (context, candidateData, rejectedData) {
-                        final isDraggingOver = candidateData.isNotEmpty;
+                      onPointerSignal: (pointerSignal) {
+                        if (pointerSignal is PointerScrollEvent) {
+                          final dy = pointerSignal.scrollDelta.dy;
+                          final factor = math.exp(-dy * 0.0010).clamp(0.92, 1.08);
+                          _zoomCamera(factor);
+                        }
+                      },
+                      child: DragTarget<PendingPartPlacement>(
+                        onWillAcceptWithDetails: (details) => true,
+                        onAcceptWithDetails: (details) {
+                          final renderBox = context.findRenderObject() as RenderBox?;
+                          final localPos = _lastHoverScreenPos ?? (renderBox != null ? renderBox.globalToLocal(details.offset) : details.offset);
+                          final worldPos = _screenToWorldGround(localPos, size, mesh);
+                          vm.setPendingPlacement(details.data);
+                          vm.placePendingPartAt(worldPos);
+                          _rebuildGpuCadModel(force: true);
+                          setState(() {});
+                        },
+                        builder: (context, candidateData, rejectedData) {
+                          final isDraggingOver = candidateData.isNotEmpty;
 
-                        return Stack(
-                          children: [
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onDoubleTap: _zoomToFit,
-                              onTapUp: (details) {
-                                if (vm.isSketchMode || vm.pendingPlacement != null) {
-                                  _handleTapUp(details.localPosition, size, mesh);
-                                }
-                              },
-                              child: MouseRegion(
-                                cursor: _getCursorForToolMode(vm),
-                                child: (_isGpuAvailable && _scene != null && _isSceneReady)
-                                    ? RepaintBoundary(child: SceneView(_scene!))
-                                    : RepaintBoundary(
-                                        child: CustomPaint(
-                                          size: Size.infinite,
-                                          painter: FlutterPaint3dPainter(
-                                            mesh: mesh,
-                                            azimuthDeg: _azimuthDeg,
-                                            elevationDeg: _elevationDeg,
-                                            zoom: _zoom,
-                                            pan: _pan,
-                                            showWireframe: vm.onshapeRenderMode != OnshapeRenderMode.shadedWithoutEdges,
-                                            isGlassMode: vm.onshapeRenderMode == OnshapeRenderMode.translucent,
-                                            isOrthoProjection: vm.isOrthoProjection,
-                                            selectedFaceId: vm.doc.selectedPartId ?? vm.doc.selectedFaceId,
+                          return Stack(
+                            children: [
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onDoubleTap: _zoomToFit,
+                                onTapUp: (details) {
+                                  if (vm.isSketchMode || vm.pendingPlacement != null) {
+                                    _handleTapUp(details.localPosition, size, mesh);
+                                  }
+                                },
+                                child: MouseRegion(
+                                  cursor: _getCursorForToolMode(vm),
+                                  child: ListenableBuilder(
+                                    listenable: _cameraRepaintNotifier,
+                                    builder: (context, _) => (_isGpuAvailable && _scene != null && _isSceneReady)
+                                        ? RepaintBoundary(child: SceneView(_scene!))
+                                        : RepaintBoundary(
+                                            child: CustomPaint(
+                                              size: Size.infinite,
+                                              painter: FlutterPaint3dPainter(
+                                                mesh: mesh,
+                                                azimuthDeg: _azimuthDeg,
+                                                elevationDeg: _elevationDeg,
+                                                zoom: _zoom,
+                                                pan: _pan,
+                                                showWireframe: vm.onshapeRenderMode != OnshapeRenderMode.shadedWithoutEdges,
+                                                isGlassMode: vm.onshapeRenderMode == OnshapeRenderMode.translucent,
+                                                isOrthoProjection: vm.isOrthoProjection,
+                                                selectedFaceId: vm.doc.selectedPartId ?? vm.doc.selectedFaceId,
+                                                pivotOverride: _cameraPivot,
+                                              ),
+                                            ),
                                           ),
-                                        ),
-                                      ),
+                                  ),
+                                ),
                               ),
-                            ),
-                            if (isDraggingOver)
-                              Positioned.fill(
-                                child: IgnorePointer(
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: const Color(0xFF0284C7), width: 2.5),
-                                      color: const Color(0xFF0284C7).withValues(alpha: 0.08),
-                                    ),
-                                    alignment: Alignment.center,
+                              if (isDraggingOver)
+                                Positioned.fill(
+                                  child: IgnorePointer(
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF0F172A).withValues(alpha: 0.88),
-                                        borderRadius: BorderRadius.circular(8),
-                                        boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 3))],
+                                        border: Border.all(color: const Color(0xFF0284C7), width: 2.5),
+                                        color: const Color(0xFF0284C7).withValues(alpha: 0.08),
                                       ),
-                                      child: const Text(
-                                        'Release mouse to place part here',
-                                        style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                      alignment: Alignment.center,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF0F172A).withValues(alpha: 0.88),
+                                          borderRadius: BorderRadius.circular(8),
+                                          boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 3))],
+                                        ),
+                                        child: const Text(
+                                          'Release mouse to place part here',
+                                          style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+
+                  if (vm.selectedWeldId != null) Positioned(top: 56, left: 0, right: 0, child: AssemblySelectedWeldBanner(viewModel: vm)),
+
+                  // =================================================================
+                  // 1e. MULTI-PART SELECTION & BATCH WELD BANNER
+                  // =================================================================
+                  if (vm.selectedPartIds.length >= 2)
+                    Positioned(
+                      bottom: 80,
+                      left: 0,
+                      right: 0,
+                      child: AssemblySelectionToolbar(viewModel: vm, onPromptGroupNameAndGroup: () => _promptGroupNameAndGroup(vm)),
+                    ),
+
+                  // =================================================================
+                  // 1b-0. GLOBAL 3D SCENE AXES (Red X, Green Y, Blue Z - SS1)
+                  // =================================================================
+                  if (vm.showGlobalAxes)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: _GlobalSceneAxesPainter(size: size, mesh: mesh, projectPoint: (pt) => _projectPoint(pt, size, mesh)),
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 1b-0b. 3D DATUM & CONSTRUCTION PLANES LAYER (Phase 1)
+                  // =================================================================
+                  if (vm.isPlaneSelectionMode || vm.isSketchMode || vm.showDatumPlanes || vm.showConstructionPlanes || vm.showOriginTriad)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: Assembly3DPlanePainter(viewModel: vm, projectPoint: (pt) => _projectPoint(pt, size, mesh)),
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 1b. SKETCHUP TRANSLUCENT BOUNDING BOX OVERLAY (Requirement 7 / SS3)
+                  // =================================================================
+                  if (!vm.isSketchMode && (vm.selectedPart != null || vm.selectedPartIds.isNotEmpty || _hoveredSnapPointModel != null))
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: _SelectedPartBoundingBoxPainter(
+                            selectedParts: vm.doc.parts
+                                .where((p) => p.isVisible && (p.id == vm.selectedPart?.id || vm.selectedPartIds.contains(p.id)))
+                                .toList(),
+                            allParts: vm.doc.parts.where((p) => p.isVisible).toList(),
+                            size: size,
+                            mesh: mesh,
+                            projectPoint: (pt) => _projectPoint(pt, size, mesh),
+                            hoveredSnapPoint: _hoveredSnapPointModel,
+                            moveBasePoint: _moveBaseWorldPoint,
+                            snapDragSourceSnap: _snapDragSourceSnap,
+                            snapDragTargetSnap: _snapDragTargetSnap,
+                            highlightedTargetPartId: _snapAnimator.highlightedPartId,
+                            targetScaleFactor: _snapAnimator.targetScaleFactor,
+                            currentSnapDragScreenPos: _currentSnapDragScreenPos,
+                            showSnapLabel: vm.activeToolMode != SketchUpToolMode.move,
+                            zoom: _zoom,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 2. 3D INTERACTIVE GIZMO LAYER (NON-BLOCKING OVERLAY - MOVE)
+                  // =================================================================
+                  if (vm.selectedPart != null && !vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.move)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: _AssemblyGizmoPainter(
+                            selectedPart: vm.selectedPart!,
+                            size: size,
+                            mesh: mesh,
+                            azimuthDeg: _azimuthDeg,
+                            elevationDeg: _elevationDeg,
+                            zoom: _zoom,
+                            pan: _pan,
+                            isOrthoProjection: vm.isOrthoProjection,
+                            gizmoMode: vm.gizmoMode,
+                            activeAxis: _draggingGizmoAxis,
+                            lockedAxis: vm.lockedAxis,
+                            projectPoint: (pt) => _projectPoint(pt, size, mesh),
+                            customCenter3d: _moveBaseWorldPoint ?? vm.selectedPart!.position,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 2a. SKETCHUP 3D PROTRACTOR ROTATE TOOL OVERLAY
+                  // =================================================================
+                  if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.rotate)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: _SketchUpProtractorOverlayPainter(
+                            phase: _rotatePhase,
+                            centerPoint: _rotateCenterPoint,
+                            baselinePoint: _rotateBaselinePoint,
+                            currentArmPoint: _rotateCurrentArmPoint,
+                            hoverPoint: _rotateHoverWorldPos,
+                            activeAxis: vm.lockedAxis != GizmoAxis.none ? vm.lockedAxis : _rotateAxis,
+                            currentAngleDeg: _rotateCurrentAngleDeg,
+                            isCopyMode: _isRotateCopyMode,
+                            cursorScreenPos: _lastHoverScreenPos,
+                            size: size,
+                            mesh: mesh,
+                            projectPoint: (pt) => _projectPoint(pt, size, mesh),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 2a-2. SKETCHUP MOVE / ORBIT / PAN VECTOR CURSOR OVERLAYS (SS1)
+                  // =================================================================
+                  if (_isOrbitingWithMouse || (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.orbit))
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: ValueListenableBuilder<Offset?>(
+                          valueListenable: _cursorScreenPosNotifier,
+                          builder: (context, cursorPos, _) {
+                            return CustomPaint(
+                              size: Size.infinite,
+                              painter: _SketchUpOrbitCursorPainter(cursorScreenPos: cursorPos ?? _lastHoverScreenPos),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                  if (_isPanningWithMouse || (!vm.isSketchMode && (vm.activeToolMode == SketchUpToolMode.pan || _isPanToolActive)))
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: ValueListenableBuilder<Offset?>(
+                          valueListenable: _cursorScreenPosNotifier,
+                          builder: (context, cursorPos, _) {
+                            return CustomPaint(
+                              size: Size.infinite,
+                              painter: _SketchUpPanCursorPainter(cursorScreenPos: cursorPos ?? _lastHoverScreenPos),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                  if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.move && !_isOrbitingWithMouse && !_isPanningWithMouse)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: ValueListenableBuilder<Offset?>(
+                          valueListenable: _cursorScreenPosNotifier,
+                          builder: (context, cursorPos, _) {
+                            return CustomPaint(
+                              size: Size.infinite,
+                              painter: _SketchUpMoveBadgeOverlayPainter(
+                                cursorScreenPos: cursorPos ?? _lastHoverScreenPos,
+                                isCopyMode: HardwareKeyboard.instance.isControlPressed,
                               ),
-                          ],
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                  if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.select && !_isOrbitingWithMouse && !_isPanningWithMouse)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: ValueListenableBuilder<Offset?>(
+                          valueListenable: _cursorScreenPosNotifier,
+                          builder: (context, cursorPos, _) {
+                            final pos = cursorPos ?? _lastHoverScreenPos;
+                            if (pos == null) return const SizedBox.shrink();
+                            return CustomPaint(
+                              size: Size.infinite,
+                              painter: _CadSelectionPointerOverlayPainter(cursorScreenPos: pos, isSnapped: _hoveredSnapPointModel != null),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 2a-2. 3D PARAMETRIC SURFACE SKETCH OVERLAY (GRIDS, INFERENCES, PRIMITIVES)
+                  // =================================================================
+                  if (vm.isSketchMode && vm.activeSketchPlane != null)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: Assembly3DSurfaceSketchPainter(viewModel: vm, projectPoint: (pt) => _projectPoint(pt, size, mesh)),
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 2a-3. 3D FEATURE EXTRUSION PREVIEW & ARROW MANIPULATOR (Phase 5)
+                  // =================================================================
+                  if (vm.isExtrudeMode && vm.activeSketchPlane != null)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: Assembly3DExtrudePainter(viewModel: vm, projectPoint: (pt) => _projectPoint(pt, size, mesh)),
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 2b. 3D INTERACTIVE SKETCH ENTITY OVERLAY (HIGHLIGHTS, BENDS, LABELS)
+                  // =================================================================
+                  if (vm.isSketchMode && (vm.sketchPartId != null || vm.selectedPart != null))
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: _AssemblyEntityOverlayPainter(
+                            part: vm.doc.parts.where((p) => p.id == vm.sketchPartId).firstOrNull ?? vm.selectedPart!,
+                            size: size,
+                            mesh: mesh,
+                            selectedFeatureId: vm.selectedSketchFeatureId,
+                            draggingFeatureId: _draggingFeature?.id,
+                            projectPoint: (pt) => _projectPoint(pt, size, mesh),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 2b-0. SELECTED WELD HIGHLIGHT OVERLAY (Item 2)
+                  // =================================================================
+                  if (vm.selectedWeldId != null)
+                    Builder(
+                      builder: (context) {
+                        final selWeld = vm.doc.welds.where((w) => w.id == vm.selectedWeldId).firstOrNull;
+                        if (selWeld == null) return const SizedBox.shrink();
+                        CadPoint3D u = selWeld.weldAxis;
+                        final uLen = math.sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+                        if (uLen > 1e-4) {
+                          u = CadPoint3D(u.x / uLen, u.y / uLen, u.z / uLen);
+                        } else {
+                          u = const CadPoint3D(1.0, 0.0, 0.0);
+                        }
+                        final halfLen = selWeld.weldLengthMm / 2.0;
+                        final p0 = CadPoint3D(selWeld.weldPoint.x - u.x * halfLen, selWeld.weldPoint.y - u.y * halfLen, selWeld.weldPoint.z - u.z * halfLen);
+                        final p1 = CadPoint3D(selWeld.weldPoint.x + u.x * halfLen, selWeld.weldPoint.y + u.y * halfLen, selWeld.weldPoint.z + u.z * halfLen);
+                        final scr0 = _projectPoint(p0, size, mesh);
+                        final scr1 = _projectPoint(p1, size, mesh);
+                        return Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(
+                              painter: AssemblySelectedWeldHighlightPainter(screenStart: scr0, screenEnd: scr1),
+                            ),
+                          ),
                         );
                       },
                     ),
-                  ),
-                ),
 
-                if (vm.selectedWeldId != null) Positioned(top: 56, left: 0, right: 0, child: AssemblySelectedWeldBanner(viewModel: vm)),
-
-                // =================================================================
-                // 1e. MULTI-PART SELECTION & BATCH WELD BANNER
-                // =================================================================
-                if (vm.selectedPartIds.length >= 2)
-                  Positioned(
-                    bottom: 80,
-                    left: 0,
-                    right: 0,
-                    child: AssemblySelectionToolbar(viewModel: vm, onPromptGroupNameAndGroup: () => _promptGroupNameAndGroup(vm)),
-                  ),
-
-                // =================================================================
-                // 1b-0. GLOBAL 3D SCENE AXES (Red X, Green Y, Blue Z - SS1)
-                // =================================================================
-                if (vm.showGlobalAxes)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: _GlobalSceneAxesPainter(size: size, mesh: mesh, projectPoint: (pt) => _projectPoint(pt, size, mesh)),
-                      ),
-                    ),
-                  ),
-
-                // =================================================================
-                // 1b. SKETCHUP TRANSLUCENT BOUNDING BOX OVERLAY (Requirement 7 / SS3)
-                // =================================================================
-                if (!vm.isSketchMode && (vm.selectedPart != null || vm.selectedPartIds.isNotEmpty || _hoveredSnapPointModel != null))
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: _SelectedPartBoundingBoxPainter(
-                          selectedParts: vm.doc.parts.where((p) => p.isVisible && (p.id == vm.selectedPart?.id || vm.selectedPartIds.contains(p.id))).toList(),
-                          allParts: vm.doc.parts.where((p) => p.isVisible).toList(),
-                          size: size,
-                          mesh: mesh,
-                          projectPoint: (pt) => _projectPoint(pt, size, mesh),
-                          hoveredSnapPoint: _hoveredSnapPointModel,
-                          moveBasePoint: _moveBaseWorldPoint,
-                          snapDragSourceSnap: _snapDragSourceSnap,
-                          snapDragTargetSnap: _snapDragTargetSnap,
-                          highlightedTargetPartId: _snapAnimator.highlightedPartId,
-                          targetScaleFactor: _snapAnimator.targetScaleFactor,
-                          currentSnapDragScreenPos: _currentSnapDragScreenPos,
-                          showSnapLabel: vm.activeToolMode != SketchUpToolMode.move,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // =================================================================
-                // 2. 3D INTERACTIVE GIZMO LAYER (NON-BLOCKING OVERLAY - MOVE)
-                // =================================================================
-                if (vm.selectedPart != null && !vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.move)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: _AssemblyGizmoPainter(
-                          selectedPart: vm.selectedPart!,
-                          size: size,
-                          mesh: mesh,
-                          azimuthDeg: _azimuthDeg,
-                          elevationDeg: _elevationDeg,
-                          zoom: _zoom,
-                          pan: _pan,
-                          isOrthoProjection: vm.isOrthoProjection,
-                          gizmoMode: vm.gizmoMode,
-                          activeAxis: _draggingGizmoAxis,
-                          lockedAxis: vm.lockedAxis,
-                          projectPoint: (pt) => _projectPoint(pt, size, mesh),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // =================================================================
-                // 2a. SKETCHUP 3D PROTRACTOR ROTATE TOOL OVERLAY
-                // =================================================================
-                if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.rotate)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: _SketchUpProtractorOverlayPainter(
-                          phase: _rotatePhase,
-                          centerPoint: _rotateCenterPoint,
-                          baselinePoint: _rotateBaselinePoint,
-                          currentArmPoint: _rotateCurrentArmPoint,
-                          hoverPoint: _rotateHoverWorldPos,
-                          activeAxis: vm.lockedAxis != GizmoAxis.none ? vm.lockedAxis : _rotateAxis,
-                          currentAngleDeg: _rotateCurrentAngleDeg,
-                          isCopyMode: _isRotateCopyMode,
-                          cursorScreenPos: _lastHoverScreenPos,
-                          size: size,
-                          mesh: mesh,
-                          projectPoint: (pt) => _projectPoint(pt, size, mesh),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // =================================================================
-                // 2a-2. SKETCHUP MOVE / ORBIT / PAN VECTOR CURSOR OVERLAYS (SS1)
-                // =================================================================
-                if (_isOrbitingWithMouse || (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.orbit))
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: ValueListenableBuilder<Offset?>(
-                        valueListenable: _cursorScreenPosNotifier,
-                        builder: (context, cursorPos, _) {
-                          return CustomPaint(
-                            size: Size.infinite,
-                            painter: _SketchUpOrbitCursorPainter(cursorScreenPos: cursorPos ?? _lastHoverScreenPos),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-
-                if (_isPanningWithMouse || (!vm.isSketchMode && (vm.activeToolMode == SketchUpToolMode.pan || _isPanToolActive)))
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: ValueListenableBuilder<Offset?>(
-                        valueListenable: _cursorScreenPosNotifier,
-                        builder: (context, cursorPos, _) {
-                          return CustomPaint(
-                            size: Size.infinite,
-                            painter: _SketchUpPanCursorPainter(cursorScreenPos: cursorPos ?? _lastHoverScreenPos),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-
-                if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.move && !_isOrbitingWithMouse && !_isPanningWithMouse)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: ValueListenableBuilder<Offset?>(
-                        valueListenable: _cursorScreenPosNotifier,
-                        builder: (context, cursorPos, _) {
-                          return CustomPaint(
-                            size: Size.infinite,
-                            painter: _SketchUpMoveBadgeOverlayPainter(
-                              cursorScreenPos: cursorPos ?? _lastHoverScreenPos,
-                              isCopyMode: HardwareKeyboard.instance.isControlPressed,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-
-                if (!vm.isSketchMode && vm.activeToolMode == SketchUpToolMode.select && !_isOrbitingWithMouse && !_isPanningWithMouse)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: ValueListenableBuilder<Offset?>(
-                        valueListenable: _cursorScreenPosNotifier,
-                        builder: (context, cursorPos, _) {
-                          final pos = cursorPos ?? _lastHoverScreenPos;
-                          if (pos == null) return const SizedBox.shrink();
-                          return CustomPaint(
-                            size: Size.infinite,
-                            painter: _CadSelectionPointerOverlayPainter(
-                              cursorScreenPos: pos,
-                              isSnapped: _hoveredSnapPointModel != null,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-
-                // =================================================================
-                // 2a-2. 3D PARAMETRIC SURFACE SKETCH OVERLAY (GRIDS, INFERENCES, PRIMITIVES)
-                // =================================================================
-                if (vm.isSketchMode && vm.activeSketchPlane != null)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: Assembly3DSurfaceSketchPainter(
-                          viewModel: vm,
-                          projectPoint: (pt) => _projectPoint(pt, size, mesh),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // =================================================================
-                // 2b. 3D INTERACTIVE SKETCH ENTITY OVERLAY (HIGHLIGHTS, BENDS, LABELS)
-                // =================================================================
-                if (vm.isSketchMode && (vm.sketchPartId != null || vm.selectedPart != null))
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: _AssemblyEntityOverlayPainter(
-                          part: vm.doc.parts.where((p) => p.id == vm.sketchPartId).firstOrNull ?? vm.selectedPart!,
-                          size: size,
-                          mesh: mesh,
-                          selectedFeatureId: vm.selectedSketchFeatureId,
-                          draggingFeatureId: _draggingFeature?.id,
-                          projectPoint: (pt) => _projectPoint(pt, size, mesh),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // =================================================================
-                // 2b-0. SELECTED WELD HIGHLIGHT OVERLAY (Item 2)
-                // =================================================================
-                if (vm.selectedWeldId != null)
-                  Builder(
-                    builder: (context) {
-                      final selWeld = vm.doc.welds.where((w) => w.id == vm.selectedWeldId).firstOrNull;
-                      if (selWeld == null) return const SizedBox.shrink();
-                      CadPoint3D u = selWeld.weldAxis;
-                      final uLen = math.sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
-                      if (uLen > 1e-4) {
-                        u = CadPoint3D(u.x / uLen, u.y / uLen, u.z / uLen);
-                      } else {
-                        u = const CadPoint3D(1.0, 0.0, 0.0);
-                      }
-                      final halfLen = selWeld.weldLengthMm / 2.0;
-                      final p0 = CadPoint3D(selWeld.weldPoint.x - u.x * halfLen, selWeld.weldPoint.y - u.y * halfLen, selWeld.weldPoint.z - u.z * halfLen);
-                      final p1 = CadPoint3D(selWeld.weldPoint.x + u.x * halfLen, selWeld.weldPoint.y + u.y * halfLen, selWeld.weldPoint.z + u.z * halfLen);
-                      final scr0 = _projectPoint(p0, size, mesh);
-                      final scr1 = _projectPoint(p1, size, mesh);
-                      return Positioned.fill(
-                        child: IgnorePointer(
-                          child: CustomPaint(
-                            painter: AssemblySelectedWeldHighlightPainter(
-                              screenStart: scr0,
-                              screenEnd: scr1,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-
-                // =================================================================
-                // 2b. WELD JOINT STYLE SELECTION TOOLBAR (welding_simulation_docs.md)
-                // =================================================================
-                if (vm.activeToolMode == SketchUpToolMode.weld || vm.selectedWeldId != null)
-                  AssemblyWeldJointStyleToolbar(
-                    viewModel: vm,
-                    position: _jointToolbarOffset,
-                    onDragUpdate: (details) {
-                      setState(() {
-                        _jointToolbarOffset += details.delta;
-                      });
-                    },
-                    onToggleMinimize: () => setState(() => vm.toggleJointToolbarMinimized()),
-                    onClose: () => setState(() => vm.toggleJointStyleToolbar()),
-                  ),
-
-                // =================================================================
-                // 2b-2. WELD QUALITY EVALUATION CARD & DEFECT SIDEBAR (welding_simulation_docs.md)
-                // =================================================================
-                if (vm.latestWeldEvaluation != null)
-                  AssemblyWeldQualityHUD(
-                    viewModel: vm,
-                    onAnomalyTap: (pos) => _smoothAnimateCameraTo(pos, targetZoom: 5.5),
-                    onInspectSeam: () {
-                      final selectedWeld = vm.selectedWeld;
-                      if (selectedWeld != null) {
-                        _smoothAnimateCameraTo(selectedWeld.weldPoint, targetZoom: 5.0);
-                      } else if (vm.doc.welds.isNotEmpty) {
-                        _smoothAnimateCameraTo(vm.doc.welds.last.weldPoint, targetZoom: 5.0);
-                      }
-                    },
-                    onResetCam: _resetCamera,
-                    onDismiss: () => vm.clearWeldEvaluation(),
-                    onToggleCardMinimize: () => setState(() => vm.toggleQualityCardMinimized()),
-                    onToggleSidebarMinimize: () => setState(() => vm.toggleAnomalySidebarMinimized()),
-                  ),
-
-                // =================================================================
-                // 2c. INTERACTIVE REAL-WORLD WELDING TORCH BRUSH, ARC LAMP & SPARKS
-                // =================================================================
-                if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld && _weldDraftPath.isNotEmpty)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: AssemblyWeldLampPainter(torchPosition: _weldDraftPath.last, isWelding: _isDrawingWeld, flickerPhase: _weldFlickerPhase),
-                      ),
-                    ),
-                  ),
-
-                if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld && _weldDraftPath.isNotEmpty)
-                  Builder(
-                    builder: (context) {
-                      double dynamicBeadRadius = 11.5;
-                      double dynamicSpacing = 9.0;
-                      if (_weld3DPoints.isNotEmpty || mesh.allPolygons.isNotEmpty) {
-                        final refPt = _weld3DPoints.isNotEmpty ? _weld3DPoints.last : mesh.center;
-                        final p0 = _projectPoint(refPt, size, mesh);
-                        final p1 = _projectPoint(CadPoint3D(refPt.x + 10.0, refPt.y, refPt.z), size, mesh);
-                        final p2 = _projectPoint(CadPoint3D(refPt.x, refPt.y + 10.0, refPt.z), size, mesh);
-                        final p3 = _projectPoint(CadPoint3D(refPt.x, refPt.y, refPt.z + 10.0), size, mesh);
-                        final d1 = (p1 - p0).distance / 10.0;
-                        final d2 = (p2 - p0).distance / 10.0;
-                        final d3 = (p3 - p0).distance / 10.0;
-                        final pxPerMm = math.max(d1, math.max(d2, d3));
-                        if (pxPerMm > 0.02) {
-                          dynamicBeadRadius = (pxPerMm * 4.5).clamp(2.5, 45.0);
-                          dynamicSpacing = (dynamicBeadRadius * 0.72).clamp(1.8, 32.0);
-                        }
-                      }
-                      return Positioned.fill(
-                        child: IgnorePointer(
-                          child: CustomPaint(
-                            size: Size.infinite,
-                            painter: _WeldBeadsBrushPainter(
-                              path: AssemblyWeldSmoothingHelper.smooth2DPath(_weldDraftPath),
-                              isFinished: false,
-                              beadRadius: dynamicBeadRadius,
-                              scallopSpacing: dynamicSpacing,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-
-                if (vm.activeToolMode == SketchUpToolMode.weld && _weldSparks.isNotEmpty)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: _WeldSparksPainter(sparks: _weldSparks),
-                      ),
-                    ),
-                  ),
-
-                if (vm.activeToolMode == SketchUpToolMode.weld && !_isOrbitingWithMouse && !_isPanningWithMouse)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: ValueListenableBuilder<Offset?>(
-                        valueListenable: _cursorScreenPosNotifier,
-                        builder: (context, cursorPos, _) {
-                          return CustomPaint(
-                            size: Size.infinite,
-                            painter: _SketchUpWeldingTorchCursorPainter(cursorScreenPos: cursorPos ?? _lastHoverScreenPos, isWelding: _isDrawingWeld),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-
-                // =================================================================
-                // 2d. 3D MAGNETIC SNAP SPOTS & COUPLING OVERLAY
-                // =================================================================
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: CustomPaint(
-                      size: Size.infinite,
-                      painter: _MagneticSpotsOverlayPainter(
-                        parts: vm.doc.parts.where((p) => p.isVisible).toList(),
-                        magneticJoints: vm.doc.magneticJoints,
-                        isMagneticToolActive: vm.activeToolMode == SketchUpToolMode.magnetic,
-                        hoverPoint: _magneticHoverPoint,
-                        projectPoint: (pt) => _projectPoint(pt, size, mesh),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Contextual Banner for Auto-Span Bridging Tool (Key: B)
-                // Contextual Banner for Auto-Span Bridging Tool (Key: B)
-                if (vm.activeToolMode == SketchUpToolMode.bridge)
-                  Positioned(
-                    top: 62,
-                    left: 70,
-                    right: 120,
-                    child: Center(
-                      child: Material(
-                        color: Colors.transparent,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A).withValues(alpha: 0.94),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFF38BDF8), width: 1.2),
-                            boxShadow: [BoxShadow(color: const Color(0xFF38BDF8).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
-                          ),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.horizontal_distribute_rounded, color: Color(0xFF38BDF8), size: 16),
-                                const SizedBox(width: 8),
-                                Text(
-                                  vm.bridgeSourcePartId == null
-                                      ? 'Auto-Span Bridge: Click first stile / part'
-                                      : 'Bridging: Click destination stile to bridge with auto rungs & welds',
-                                  style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(width: 10),
-                                InkWell(
-                                  onTap: () {
-                                    vm.cancelBridge();
-                                    vm.setToolMode(SketchUpToolMode.select);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                    child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // Contextual Banner for Interactive Weld Tool (Key: W)
-                if (vm.activeToolMode == SketchUpToolMode.weld)
-                  Positioned(
-                    top: 62,
-                    left: 70,
-                    right: 120,
-                    child: Center(
-                      child: Material(
-                        color: Colors.transparent,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A).withValues(alpha: 0.94),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFFF59E0B), width: 1.2),
-                            boxShadow: [BoxShadow(color: const Color(0xFFF59E0B).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
-                          ),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.blur_linear_rounded, color: Color(0xFFF59E0B), size: 16),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Weld Tool: Click and drag draft line across entity seam to weld',
-                                  style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(width: 10),
-                                InkWell(
-                                  onTap: () => vm.setToolMode(SketchUpToolMode.select),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                    child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // Contextual Banner for Magnetic Tool (Key: J)
-                if (vm.activeToolMode == SketchUpToolMode.magnetic)
-                  Positioned(
-                    top: 62,
-                    left: 70,
-                    right: 120,
-                    child: Center(
-                      child: Material(
-                        color: Colors.transparent,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A).withValues(alpha: 0.94),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFF818CF8), width: 1.2),
-                            boxShadow: [BoxShadow(color: const Color(0xFF818CF8).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
-                          ),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.hub_rounded, color: Color(0xFF818CF8), size: 16),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Magnetic Tool: Click surface to place spot',
-                                  style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(width: 10),
-                                InkWell(
-                                  onTap: () => _showMagneticCouplingDialog(context, vm),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(color: const Color(0xFF6366F1), borderRadius: BorderRadius.circular(12)),
-                                    child: const Text(
-                                      'Link Spots Dialog',
-                                      style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                InkWell(
-                                  onTap: () => vm.setToolMode(SketchUpToolMode.select),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                    child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // Contextual In-Viewport Warning Banner (Item 5.1 / SS5)
-                if (_subtleWarningText != null)
-                  Positioned(
-                    top: 104,
-                    left: 70,
-                    right: 120,
-                    child: Center(
-                      child: Material(
-                        color: Colors.transparent,
-                        child: Container(
-                          constraints: BoxConstraints(maxWidth: math.max(200.0, size.width - 60.0)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A).withValues(alpha: 0.94),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFFEF4444), width: 1.2),
-                            boxShadow: [BoxShadow(color: const Color(0xFFEF4444).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 16),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  _subtleWarningText!,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                              if (_subtleWarningActionLabel != null && _subtleWarningAction != null) ...[
-                                const SizedBox(width: 10),
-                                InkWell(
-                                  onTap: () {
-                                    final action = _subtleWarningAction;
-                                    _dismissSubtleWarning();
-                                    action?.call();
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(color: const Color(0xFFEF4444), borderRadius: BorderRadius.circular(12)),
-                                    child: Text(
-                                      _subtleWarningActionLabel!,
-                                      style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(width: 8),
-                              InkWell(
-                                onTap: _dismissSubtleWarning,
-                                child: Container(
-                                  padding: const EdgeInsets.all(2),
-                                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                  child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // =================================================================
-                // 3. SKETCHUP-STYLE VERTICAL TOOL PALETTE (SS2)
-                // =================================================================
-                Positioned(
-                  top: 14,
-                  left: 12,
-                  child: AssemblySketchupToolbar(viewModel: vm, onZoomExtents: _zoomToFit),
-                ),
-
-                // =================================================================
-                // 3b. FLOATING INDUSTRIAL CAD 3D NAVIGATION BAR
-                // =================================================================
-                if (!vm.isSketchMode && !vm.isCleanCanvasMode && vm.show3dNavigationBar)
-                  Positioned(
-                    top: 14,
-                    left: 60,
-                    child: Studio3dNavigationBar(
-                      onFitAll: _zoomToFit,
-                      onSelectView: (az, el) => _setCameraFromAngles(az, el),
-                      isTurntable: _isTurntable,
-                      onToggleOrbitMode: () {
-                        setState(() => _isTurntable = !_isTurntable);
-                      },
-                      isPanToolActive: _isPanToolActive,
-                      onTogglePanTool: () {
-                        setState(() => _isPanToolActive = !_isPanToolActive);
-                      },
-                      isOrtho: vm.isOrthoProjection,
-                      onToggleProjection: () {
-                        setState(() {
-                          vm.isOrthoProjection = !vm.isOrthoProjection;
-                        });
-                        _updateGpuCamera();
-                      },
-                      showBorderLines: vm.showWireframe,
-                      onToggleBorderLines: () {
-                        setState(() {
-                          vm.showWireframe = !vm.showWireframe;
-                        });
-                      },
-                      currentShadingStyle: vm.shadingStyle,
-                      onShadingStyleChanged: (style) {
-                        setState(() {
-                          vm.setShadingStyle(style);
-                        });
-                        _rebuildGpuCadModel();
-                      },
-                      currentAntiAliasing: vm.graphicsPreferences.antiAliasingQuality,
-                      onAntiAliasingChanged: (aa) {
-                        setState(() {
-                          vm.updateGraphicsPreferences((p) => p.copyWith(antiAliasingQuality: aa));
-                        });
-                      },
-                    ),
-                  ),
-
-                // =================================================================
-                // 3c. SKETCHUP-STYLE STANDARD VIEWS TOOLBAR (SS3)
-                // =================================================================
-                if (!vm.isSketchMode && vm.showViewsToolbar && !vm.isCleanCanvasMode)
-                  Positioned(
-                    top: _viewsToolbarOffset.dy,
-                    left: _viewsToolbarOffset.dx,
-                    child: AssemblySketchupViewsToolbar(
+                  // =================================================================
+                  // 2b. WELD JOINT STYLE SELECTION TOOLBAR (welding_simulation_docs.md)
+                  // =================================================================
+                  if (vm.activeToolMode == SketchUpToolMode.weld || vm.selectedWeldId != null)
+                    AssemblyWeldJointStyleToolbar(
                       viewModel: vm,
+                      position: _jointToolbarOffset,
                       onDragUpdate: (details) {
                         setState(() {
-                          _viewsToolbarOffset += details.delta;
+                          _jointToolbarOffset += details.delta;
                         });
                       },
-                      onToggleMinimize: () => setState(() => vm.toggleViewsToolbarMinimized()),
-                      onClose: () => setState(() => vm.toggleViewsToolbar()),
-                      onCenterAxes: () {
-                        setState(() {
-                          _pan = Offset.zero;
-                          widget.viewModel.pan = Offset.zero;
-                        });
-                        _updateGpuCamera();
+                      onToggleMinimize: () => setState(() => vm.toggleJointToolbarMinimized()),
+                      onClose: () => setState(() => vm.toggleJointStyleToolbar()),
+                    ),
+
+                  // =================================================================
+                  // 2b-2. WELD QUALITY EVALUATION CARD & DEFECT SIDEBAR (welding_simulation_docs.md)
+                  // =================================================================
+                  if (vm.latestWeldEvaluation != null)
+                    AssemblyWeldQualityHUD(
+                      viewModel: vm,
+                      onAnomalyTap: (pos) => _smoothAnimateCameraTo(pos, targetZoom: 5.5),
+                      onInspectSeam: () {
+                        final selectedWeld = vm.selectedWeld;
+                        if (selectedWeld != null) {
+                          _smoothAnimateCameraTo(selectedWeld.weldPoint, targetZoom: 5.0);
+                        } else if (vm.doc.welds.isNotEmpty) {
+                          _smoothAnimateCameraTo(vm.doc.welds.last.weldPoint, targetZoom: 5.0);
+                        }
                       },
-                      onResetView: _zoomToFit,
+                      onResetCam: _resetCamera,
+                      onDismiss: () => vm.clearWeldEvaluation(),
+                      onToggleCardMinimize: () => setState(() => vm.toggleQualityCardMinimized()),
+                      onToggleSidebarMinimize: () => setState(() => vm.toggleAnomalySidebarMinimized()),
+                    ),
+
+                  // =================================================================
+                  // 2c. INTERACTIVE REAL-WORLD WELDING TORCH BRUSH, ARC LAMP & SPARKS
+                  // =================================================================
+                  if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld && _weldDraftPath.isNotEmpty)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: AssemblyWeldLampPainter(torchPosition: _weldDraftPath.last, isWelding: _isDrawingWeld, flickerPhase: _weldFlickerPhase),
+                        ),
+                      ),
+                    ),
+
+                  if (vm.activeToolMode == SketchUpToolMode.weld && _isDrawingWeld && _weldDraftPath.isNotEmpty)
+                    Builder(
+                      builder: (context) {
+                        double dynamicBeadRadius = 11.5;
+                        double dynamicSpacing = 9.0;
+                        if (_weld3DPoints.isNotEmpty || mesh.allPolygons.isNotEmpty) {
+                          final refPt = _weld3DPoints.isNotEmpty ? _weld3DPoints.last : mesh.center;
+                          final p0 = _projectPoint(refPt, size, mesh);
+                          final p1 = _projectPoint(CadPoint3D(refPt.x + 10.0, refPt.y, refPt.z), size, mesh);
+                          final p2 = _projectPoint(CadPoint3D(refPt.x, refPt.y + 10.0, refPt.z), size, mesh);
+                          final p3 = _projectPoint(CadPoint3D(refPt.x, refPt.y, refPt.z + 10.0), size, mesh);
+                          final d1 = (p1 - p0).distance / 10.0;
+                          final d2 = (p2 - p0).distance / 10.0;
+                          final d3 = (p3 - p0).distance / 10.0;
+                          final pxPerMm = math.max(d1, math.max(d2, d3));
+                          if (pxPerMm > 0.02) {
+                            dynamicBeadRadius = (pxPerMm * 4.5).clamp(2.5, 45.0);
+                            dynamicSpacing = (dynamicBeadRadius * 0.72).clamp(1.8, 32.0);
+                          }
+                        }
+                        return Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(
+                              size: Size.infinite,
+                              painter: _WeldBeadsBrushPainter(
+                                path: AssemblyWeldSmoothingHelper.smooth2DPath(_weldDraftPath),
+                                isFinished: false,
+                                beadRadius: dynamicBeadRadius,
+                                scallopSpacing: dynamicSpacing,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                  if (vm.activeToolMode == SketchUpToolMode.weld && _weldSparks.isNotEmpty)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: _WeldSparksPainter(sparks: _weldSparks),
+                        ),
+                      ),
+                    ),
+
+                  if (vm.activeToolMode == SketchUpToolMode.weld && !_isOrbitingWithMouse && !_isPanningWithMouse)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: ValueListenableBuilder<Offset?>(
+                          valueListenable: _cursorScreenPosNotifier,
+                          builder: (context, cursorPos, _) {
+                            return CustomPaint(
+                              size: Size.infinite,
+                              painter: _SketchUpWeldingTorchCursorPainter(cursorScreenPos: cursorPos ?? _lastHoverScreenPos, isWelding: _isDrawingWeld),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 2d. 3D MAGNETIC SNAP SPOTS & COUPLING OVERLAY
+                  // =================================================================
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: _MagneticSpotsOverlayPainter(
+                          parts: vm.doc.parts.where((p) => p.isVisible).toList(),
+                          magneticJoints: vm.doc.magneticJoints,
+                          isMagneticToolActive: vm.activeToolMode == SketchUpToolMode.magnetic,
+                          hoverPoint: _magneticHoverPoint,
+                          projectPoint: (pt) => _projectPoint(pt, size, mesh),
+                        ),
+                      ),
                     ),
                   ),
 
-                // =================================================================
-                // 4. STUDIO VIEW CUBE 3D ORIENTATION (TOP RIGHT)
-                // =================================================================
-                if (!vm.isSketchMode)
+                  // Contextual Banner for Auto-Span Bridging Tool (Key: B)
+                  // Contextual Banner for Auto-Span Bridging Tool (Key: B)
+                  if (vm.activeToolMode == SketchUpToolMode.bridge)
+                    Positioned(
+                      top: 62,
+                      left: 70,
+                      right: 120,
+                      child: Center(
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFF38BDF8), width: 1.2),
+                              boxShadow: [BoxShadow(color: const Color(0xFF38BDF8).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
+                            ),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.horizontal_distribute_rounded, color: Color(0xFF38BDF8), size: 16),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    vm.bridgeSourcePartId == null
+                                        ? 'Auto-Span Bridge: Click first stile / part'
+                                        : 'Bridging: Click destination stile to bridge with auto rungs & welds',
+                                    style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  InkWell(
+                                    onTap: () {
+                                      vm.cancelBridge();
+                                      vm.setToolMode(SketchUpToolMode.select);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
+                                      child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Contextual Banner for Interactive Weld Tool (Key: W)
+                  if (vm.activeToolMode == SketchUpToolMode.weld)
+                    Positioned(
+                      top: 62,
+                      left: 70,
+                      right: 120,
+                      child: Center(
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFF59E0B), width: 1.2),
+                              boxShadow: [BoxShadow(color: const Color(0xFFF59E0B).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
+                            ),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.blur_linear_rounded, color: Color(0xFFF59E0B), size: 16),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Weld Tool: Click and drag draft line across entity seam to weld',
+                                    style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  InkWell(
+                                    onTap: () => vm.setToolMode(SketchUpToolMode.select),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
+                                      child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Contextual Banner for Magnetic Tool (Key: J)
+                  if (vm.activeToolMode == SketchUpToolMode.magnetic)
+                    Positioned(
+                      top: 62,
+                      left: 70,
+                      right: 120,
+                      child: Center(
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFF818CF8), width: 1.2),
+                              boxShadow: [BoxShadow(color: const Color(0xFF818CF8).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
+                            ),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.hub_rounded, color: Color(0xFF818CF8), size: 16),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Magnetic Tool: Click surface to place spot',
+                                    style: TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  InkWell(
+                                    onTap: () => _showMagneticCouplingDialog(context, vm),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(color: const Color(0xFF6366F1), borderRadius: BorderRadius.circular(12)),
+                                      child: const Text(
+                                        'Link Spots Dialog',
+                                        style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: () => vm.setToolMode(SketchUpToolMode.select),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
+                                      child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Contextual Banner for Create Sketch / Plane Selection Mode (Phase 1)
+                  if (vm.isPlaneSelectionMode) AssemblyPlaneSelectionBanner(viewModel: vm),
+
+                  // Contextual In-Viewport Warning Banner (Item 5.1 / SS5)
+                  if (_subtleWarningText != null)
+                    Positioned(
+                      top: 104,
+                      left: 70,
+                      right: 120,
+                      child: Center(
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Container(
+                            constraints: BoxConstraints(maxWidth: math.max(200.0, size.width - 60.0)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFEF4444), width: 1.2),
+                              boxShadow: [BoxShadow(color: const Color(0xFFEF4444).withValues(alpha: 0.25), blurRadius: 12, spreadRadius: 2)],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 16),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    _subtleWarningText!,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 12, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                                if (_subtleWarningActionLabel != null && _subtleWarningAction != null) ...[
+                                  const SizedBox(width: 10),
+                                  InkWell(
+                                    onTap: () {
+                                      final action = _subtleWarningAction;
+                                      _dismissSubtleWarning();
+                                      action?.call();
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(color: const Color(0xFFEF4444), borderRadius: BorderRadius.circular(12)),
+                                      child: Text(
+                                        _subtleWarningActionLabel!,
+                                        style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: _dismissSubtleWarning,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), shape: BoxShape.circle),
+                                    child: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 14),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 3. SKETCHUP-STYLE VERTICAL TOOL PALETTE (SS2)
+                  // =================================================================
+                  if (!vm.isCleanCanvasMode && vm.showSketchupToolbar)
+                    Positioned(
+                      top: 14,
+                      left: 12,
+                      child: AssemblySketchupToolbar(viewModel: vm, onZoomExtents: _zoomToFit),
+                    ),
+
+                  // =================================================================
+                  // 3b. FLOATING INDUSTRIAL CAD 3D NAVIGATION BAR
+                  // =================================================================
+                  if (!vm.isSketchMode && !vm.isCleanCanvasMode && vm.show3dNavigationBar)
+                    Positioned(
+                      top: 14,
+                      left: 60,
+                      child: Studio3dNavigationBar(
+                        onFitAll: _zoomToFit,
+                        onSelectView: (az, el) => _setCameraFromAngles(az, el),
+                        isTurntable: _isTurntable,
+                        onToggleOrbitMode: () {
+                          setState(() => _isTurntable = !_isTurntable);
+                        },
+                        isPanToolActive: _isPanToolActive,
+                        onTogglePanTool: () {
+                          setState(() => _isPanToolActive = !_isPanToolActive);
+                        },
+                        isOrtho: vm.isOrthoProjection,
+                        onToggleProjection: () {
+                          setState(() {
+                            vm.isOrthoProjection = !vm.isOrthoProjection;
+                          });
+                          _updateGpuCamera();
+                        },
+                        showBorderLines: vm.showWireframe,
+                        onToggleBorderLines: () {
+                          setState(() {
+                            vm.showWireframe = !vm.showWireframe;
+                          });
+                        },
+                        currentShadingStyle: vm.shadingStyle,
+                        onShadingStyleChanged: (style) {
+                          setState(() {
+                            vm.setShadingStyle(style);
+                          });
+                          _rebuildGpuCadModel();
+                        },
+                        currentAntiAliasing: vm.graphicsPreferences.antiAliasingQuality,
+                        onAntiAliasingChanged: (aa) {
+                          setState(() {
+                            vm.updateGraphicsPreferences((p) => p.copyWith(antiAliasingQuality: aa));
+                          });
+                        },
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 3c. SKETCHUP-STYLE STANDARD VIEWS TOOLBAR (SS3)
+                  // =================================================================
+                  if (!vm.isSketchMode && vm.showViewsToolbar && !vm.isCleanCanvasMode)
+                    Positioned(
+                      top: _viewsToolbarOffset.dy,
+                      left: _viewsToolbarOffset.dx,
+                      child: AssemblySketchupViewsToolbar(
+                        viewModel: vm,
+                        onDragUpdate: (details) {
+                          setState(() {
+                            _viewsToolbarOffset += details.delta;
+                          });
+                        },
+                        onToggleMinimize: () => setState(() => vm.toggleViewsToolbarMinimized()),
+                        onClose: () => setState(() => vm.toggleViewsToolbar()),
+                        onCenterAxes: () {
+                          setState(() {
+                            _pan = Offset.zero;
+                            widget.viewModel.pan = Offset.zero;
+                          });
+                          _updateGpuCamera();
+                        },
+                        onResetView: _zoomToFit,
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 4. STUDIO VIEW CUBE 3D ORIENTATION (TOP RIGHT)
+                  // =================================================================
                   Positioned(
                     top: 14,
                     right: 14,
-                    child: StudioViewCube(
-                      azimuthDeg: _azimuthDeg,
-                      elevationDeg: _elevationDeg,
-                      onOrbit: (dAz, dEl) => _orbitCamera(dAz, dEl),
-                      onZoomToFit: _zoomToFit,
-                      onSetView: (az, el) => _setCameraFromAngles(az, el),
-                      isPerspective: !vm.isOrthoProjection,
-                      onTogglePerspective: () {
-                        setState(() {
-                          vm.isOrthoProjection = !vm.isOrthoProjection;
-                        });
-                      },
-                      renderMode: vm.onshapeRenderMode,
-                      onRenderModeChanged: (mode) {
-                        vm.onshapeRenderMode = mode;
-                        _rebuildGpuCadModel();
-                        setState(() {});
-                      },
-                      onOpenGraphicsPreferences: () {
-                        setState(() {
-                          vm.isGraphicsPreferencesOpen = true;
-                        });
-                      },
-                      hiddenEdgesVisible: vm.graphicsPreferences.hiddenEdgesVisible,
-                      onToggleHiddenEdges: (val) {
-                        vm.updateGraphicsPreferences((p) => p.copyWith(hiddenEdgesVisible: val));
-                        _rebuildGpuCadModel();
-                        setState(() {});
-                      },
-                      tangentEdgeMode: vm.graphicsPreferences.tangentEdgeMode,
-                      onTangentEdgeModeChanged: (mode) {
-                        vm.updateGraphicsPreferences((p) => p.copyWith(tangentEdgeMode: mode));
-                        _rebuildGpuCadModel();
-                        setState(() {});
-                      },
-                      highlightBoundaryEdges: vm.graphicsPreferences.highlightBoundaryEdges,
-                      onToggleHighlightBoundaryEdges: () {
-                        vm.updateGraphicsPreferences((p) => p.copyWith(highlightBoundaryEdges: !p.highlightBoundaryEdges));
-                        _rebuildGpuCadModel();
-                        setState(() {});
-                      },
-                      isHighQuality: vm.graphicsPreferences.antiAliasingQuality == AntiAliasingQuality.high,
-                      onToggleHighQuality: () {
-                        final isHigh = vm.graphicsPreferences.antiAliasingQuality == AntiAliasingQuality.high;
-                        vm.updateGraphicsPreferences((p) => p.copyWith(antiAliasingQuality: isHigh ? AntiAliasingQuality.off : AntiAliasingQuality.high));
-                        _rebuildGpuCadModel();
-                        setState(() {});
-                      },
-                      onZoomToSelection: () {
-                        if (vm.selectedPart != null) {
-                          _pan = Offset.zero;
-                          _zoom = 1.2;
-                          _updateGpuCamera();
+                    child: ListenableBuilder(
+                      listenable: _cameraRepaintNotifier,
+                      builder: (context, _) => StudioViewCube(
+                        azimuthDeg: _azimuthDeg,
+                        elevationDeg: _elevationDeg,
+                        onOrbit: (dAz, dEl) => _orbitCamera(dAz, dEl),
+                        onZoomToFit: _zoomToFit,
+                        onSetView: (az, el) => _setCameraFromAngles(az, el),
+                        isPerspective: !vm.isOrthoProjection,
+                        onTogglePerspective: () {
+                          setState(() {
+                            vm.isOrthoProjection = !vm.isOrthoProjection;
+                          });
+                        },
+                        renderMode: vm.onshapeRenderMode,
+                        onRenderModeChanged: (mode) {
+                          vm.onshapeRenderMode = mode;
+                          _rebuildGpuCadModel();
                           setState(() {});
-                        }
-                      },
-                      onOrientNormal: () {
-                        _setCameraFromAngles(0, 0);
-                      },
-                    ),
-                  ),
-
-                // =================================================================
-                // 4.5 FLOATING GRAPHICS PREFERENCES PANEL (SS2)
-                // =================================================================
-                if (vm.isGraphicsPreferencesOpen)
-                  Positioned(
-                    top: 56,
-                    bottom: 20,
-                    right: 140,
-                    child: StudioGraphicsPreferencesPanel(
-                      preferences: vm.graphicsPreferences,
-                      snapDistancePx: vm.magneticSnapDistancePx,
-                      onSnapDistanceChanged: (val) {
-                        vm.setMagneticSnapDistance(val);
-                        setState(() {});
-                      },
-                      onChanged: (prefs) {
-                        vm.graphicsPreferences = prefs;
-                        _applyEnvironmentSettings();
-                        _rebuildGpuCadModel(force: true);
-                        setState(() {});
-                      },
-                      onClose: () {
-                        setState(() {
-                          vm.isGraphicsPreferencesOpen = false;
-                        });
-                      },
-                      onResetToDefault: () {
-                        vm.graphicsPreferences = const OnshapeGraphicsPreferences();
-                        _applyEnvironmentSettings();
-                        _rebuildGpuCadModel(force: true);
-                        setState(() {});
-                      },
-                    ),
-                  ),
-
-                // =================================================================
-                // 5. SKETCHUP-STYLE PRIMARY MOVEMENT & EDIT TOOLBAR (TOP CENTER)
-                // =================================================================
-                if (!vm.isSketchMode) Positioned(top: 14, left: 0, right: 0, child: Center(child: _buildSketchUpMovementToolbar(vm))),
-
-                // =================================================================
-                // 5.5 LIVE OSHA / ISO COMPLIANCE BADGE & CUT LIST BOM (TOP RIGHT)
-                // =================================================================
-                if (!vm.isSketchMode) Positioned(top: 14, right: 16, child: _buildTopRightStatusPill(context, vm)),
-
-                // =================================================================
-                // 6. ONSHAPE-STYLE DIRECT 3D FACE SKETCH HUD (WHEN SKETCHING)
-                // =================================================================
-                if (vm.isSketchMode) Positioned(top: 14, left: 14, right: 14, child: _buildOnshapeSketchHUD(vm)),
-
-                // =================================================================
-                // 6b. ONSHAPE / FUSION 360 PARAMETRIC DIMENSION & FEATURE MODIFIER PANEL
-                // =================================================================
-                if (vm.isSketchMode && vm.selectedSketchEntity != null)
-                  Positioned(
-                    top: 65,
-                    right: 16,
-                    child: AssemblySketchParameterPanel(
-                      viewModel: vm,
-                      onRebuildModel: () {
-                        setState(() {});
-                        _rebuildGpuCadModel();
-                      },
-                    ),
-                  ),
-
-                // =================================================================
-                // 7. SELECTED PART / WELD STATUS PILL (BOTTOM CENTER)
-                // =================================================================
-                if (vm.selectedPart != null && !vm.isSketchMode)
-                  Positioned(bottom: 16, left: 16, right: 260, child: Center(child: _buildBottomQuickActionBar(vm))),
-                if (vm.selectedWeld != null && !vm.isSketchMode)
-                  Positioned(bottom: 16, left: 16, right: 260, child: Center(child: _buildSelectedWeldStatusBar(context, vm))),
-
-                // =================================================================
-                // 8. TWO-WAY SELECTION BOX OVERLAY (WINDOW / CROSSING)
-                // =================================================================
-                if (_selectionBoxStart != null && _selectionBoxCurrent != null)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _TwoWaySelectionBoxPainter(start: _selectionBoxStart!, current: _selectionBoxCurrent!),
+                        },
+                        onOpenGraphicsPreferences: () {
+                          setState(() {
+                            vm.isGraphicsPreferencesOpen = true;
+                          });
+                        },
+                        hiddenEdgesVisible: vm.graphicsPreferences.hiddenEdgesVisible,
+                        onToggleHiddenEdges: (val) {
+                          vm.updateGraphicsPreferences((p) => p.copyWith(hiddenEdgesVisible: val));
+                          _rebuildGpuCadModel();
+                          setState(() {});
+                        },
+                        tangentEdgeMode: vm.graphicsPreferences.tangentEdgeMode,
+                        onTangentEdgeModeChanged: (mode) {
+                          vm.updateGraphicsPreferences((p) => p.copyWith(tangentEdgeMode: mode));
+                          _rebuildGpuCadModel();
+                          setState(() {});
+                        },
+                        highlightBoundaryEdges: vm.graphicsPreferences.highlightBoundaryEdges,
+                        onToggleHighlightBoundaryEdges: () {
+                          vm.updateGraphicsPreferences((p) => p.copyWith(highlightBoundaryEdges: !p.highlightBoundaryEdges));
+                          _rebuildGpuCadModel();
+                          setState(() {});
+                        },
+                        isHighQuality: vm.graphicsPreferences.antiAliasingQuality == AntiAliasingQuality.high,
+                        onToggleHighQuality: () {
+                          final isHigh = vm.graphicsPreferences.antiAliasingQuality == AntiAliasingQuality.high;
+                          vm.updateGraphicsPreferences((p) => p.copyWith(antiAliasingQuality: isHigh ? AntiAliasingQuality.off : AntiAliasingQuality.high));
+                          _rebuildGpuCadModel();
+                          setState(() {});
+                        },
+                        onZoomToSelection: () {
+                          if (vm.selectedPart != null) {
+                            _pan = Offset.zero;
+                            _zoom = 1.2;
+                            _updateGpuCamera();
+                            setState(() {});
+                          }
+                        },
+                        onOrientNormal: () {
+                          _setCameraFromAngles(0, 0);
+                        },
                       ),
                     ),
                   ),
 
-                // =================================================================
-                // 9. SKETCHUP MEASUREMENTS VCB HUD (BOTTOM RIGHT)
-                // =================================================================
-                Positioned(bottom: 16, right: 16, child: _buildMeasurementsVcbHud(vm)),
+                  // =================================================================
+                  // 4.5 FLOATING GRAPHICS PREFERENCES PANEL (SS2)
+                  // =================================================================
+                  if (vm.isGraphicsPreferencesOpen)
+                    Positioned(
+                      top: 56,
+                      bottom: 20,
+                      right: 140,
+                      child: StudioGraphicsPreferencesPanel(
+                        preferences: vm.graphicsPreferences,
+                        snapDistancePx: vm.magneticSnapDistancePx,
+                        onSnapDistanceChanged: (val) {
+                          vm.setMagneticSnapDistance(val);
+                          setState(() {});
+                        },
+                        onChanged: (prefs) {
+                          vm.graphicsPreferences = prefs;
+                          _applyEnvironmentSettings();
+                          _rebuildGpuCadModel(force: true);
+                          setState(() {});
+                        },
+                        onClose: () {
+                          setState(() {
+                            vm.isGraphicsPreferencesOpen = false;
+                          });
+                        },
+                        onResetToDefault: () {
+                          vm.graphicsPreferences = const OnshapeGraphicsPreferences();
+                          _applyEnvironmentSettings();
+                          _rebuildGpuCadModel(force: true);
+                          setState(() {});
+                        },
+                      ),
+                    ),
 
-                // =================================================================
-                // 10. CANVAS CONTROLS & TOOLBAR VISIBILITY MANAGER (BOTTOM LEFT)
-                // =================================================================
-                if (!vm.isSketchMode) AssemblyCanvasControlsHUD(viewModel: vm, onResetPositions: _resetToolbarPositions),
-              ],
+                  // =================================================================
+                  // 5. SKETCHUP-STYLE PRIMARY MOVEMENT & EDIT TOOLBAR (TOP CENTER)
+                  // =================================================================
+                  if (!vm.isSketchMode && vm.showMovementToolbar)
+                    Positioned(top: 14, left: 0, right: 0, child: Center(child: _buildSketchUpMovementToolbar(vm))),
+
+                  // =================================================================
+                  // 5.5 LIVE OSHA / ISO COMPLIANCE BADGE & CUT LIST BOM (TOP RIGHT)
+                  // =================================================================
+                  if (!vm.isSketchMode && !vm.isCleanCanvasMode) Positioned(top: 14, right: 16, child: _buildTopRightStatusPill(context, vm)),
+
+                  // =================================================================
+                  // 6. ONSHAPE FLOATING SKETCH FEATURE DIALOG CARD (TOP-LEFT)
+                  // =================================================================
+                  if (vm.isSketchMode) Positioned(top: 0, left: 0, child: _buildOnshapeSketchHUD(vm)),
+
+                  // =================================================================
+                  // 6a. ONSHAPE DIRECT 3D SKETCH TOOLBAR HUD (TOP-RIGHT)
+                  // =================================================================
+                  if (vm.isSketchMode && vm.showLegacySketchHud) Positioned(top: 14, right: 16, child: AssemblySketchHud(viewModel: vm)),
+
+                  // =================================================================
+                  // 6b. ONSHAPE / FUSION 360 PARAMETRIC DIMENSION & FEATURE MODIFIER PANEL
+                  // =================================================================
+                  if (vm.isSketchMode && vm.selectedSketchEntity != null)
+                    Positioned(
+                      top: 65,
+                      right: 248,
+                      child: AssemblySketchParameterPanel(
+                        viewModel: vm,
+                        onRebuildModel: () {
+                          setState(() {});
+                          _rebuildGpuCadModel();
+                        },
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 6c. FUSION 360 SKETCH PALETTE HUD
+                  // =================================================================
+                  if (vm.isSketchMode && vm.showLegacySketchPalette && vm.activeSketchPlane != null) AssemblySketchPalette(viewModel: vm),
+
+                  // =================================================================
+                  // 6d. FUSION 360 3D EXTRUDE INSPECTOR DIALOG (Phase 5)
+                  // =================================================================
+                  if (vm.isExtrudeMode && vm.activeSketchPlane != null) Positioned(top: 80, right: 248, child: AssemblyExtrudeDialog(viewModel: vm)),
+
+                  // =================================================================
+                  // 7. SELECTED PART / WELD STATUS PILL (BOTTOM CENTER)
+                  // =================================================================
+                  if (vm.selectedPart != null && !vm.isSketchMode)
+                    Positioned(
+                      bottom: vm.timelineItems.isNotEmpty ? 58 : 16,
+                      left: 16,
+                      right: 260,
+                      child: Center(child: _buildBottomQuickActionBar(vm)),
+                    ),
+                  if (vm.selectedWeld != null && !vm.isSketchMode)
+                    Positioned(
+                      bottom: vm.timelineItems.isNotEmpty ? 58 : 16,
+                      left: 16,
+                      right: 260,
+                      child: Center(child: _buildSelectedWeldStatusBar(context, vm)),
+                    ),
+
+                  // =================================================================
+                  // 8. TWO-WAY SELECTION BOX OVERLAY (WINDOW / CROSSING)
+                  // =================================================================
+                  if (_selectionBoxStart != null && _selectionBoxCurrent != null)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _TwoWaySelectionBoxPainter(start: _selectionBoxStart!, current: _selectionBoxCurrent!),
+                        ),
+                      ),
+                    ),
+
+                  // =================================================================
+                  // 9. SKETCHUP MEASUREMENTS VCB HUD (BOTTOM RIGHT)
+                  // =================================================================
+                  Positioned(bottom: 16, right: 16, child: _buildMeasurementsVcbHud(vm)),
+
+                  // =================================================================
+                  // 10. CANVAS CONTROLS & TOOLBAR VISIBILITY MANAGER (BOTTOM LEFT)
+                  // =================================================================
+                  if (!vm.isSketchMode && !vm.isCleanCanvasMode) AssemblyCanvasControlsHUD(viewModel: vm, onResetPositions: _resetToolbarPositions),
+
+                  // =================================================================
+                  // 11. AUTODESK FUSION 360 PARAMETRIC TIMELINE (BOTTOM)
+                  // =================================================================
+                  if (!vm.isSketchMode && !vm.isCleanCanvasMode && vm.timelineItems.isNotEmpty)
+                    Positioned(bottom: 16, left: 104, right: 264, child: AssemblyParametricTimeline(viewModel: vm)),
+
+                  // =================================================================
+                  // 12. PARAMETRIC CAD & VIEWPORT SETTINGS MODAL DIALOG
+                  // =================================================================
+                  if (vm.isCadSettingsOpen) Positioned.fill(child: AssemblyCadSettingsDialog(viewModel: vm)),
+                ],
+              ),
             ),
           ),
         );
@@ -2697,7 +3126,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       var newY = _gizmoDragStartPartPos!.y + axisWorldDir.y * mmDelta;
       var newZ = _gizmoDragStartPartPos!.z + axisWorldDir.z * mmDelta;
 
-      if (widget.viewModel.snapToGrid) {
+      bool isShift = false;
+      try {
+        isShift = HardwareKeyboard.instance.isShiftPressed;
+      } catch (_) {}
+
+      if (isShift && widget.viewModel.snapToGrid) {
         final step = widget.viewModel.gridStepMm;
         newX = (newX / step).round() * step;
         newY = (newY / step).round() * step;
@@ -2725,7 +3159,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
           break;
       }
 
-      if (widget.viewModel.snapToGrid) {
+      bool isShift = false;
+      try {
+        isShift = HardwareKeyboard.instance.isShiftPressed;
+      } catch (_) {}
+
+      if (isShift && widget.viewModel.snapToGrid) {
         rx = widget.viewModel.snapRotationAngle(rx);
         ry = widget.viewModel.snapRotationAngle(ry);
         rz = widget.viewModel.snapRotationAngle(rz);
@@ -3032,12 +3471,187 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     return plane.toLocal(hitWorld);
   }
 
+  CADSketchPlane? _findPlaneUnderScreenCursor(Offset screenPos, Size size, FoldedMeshResult mesh, AssemblyStudioViewModel vm) {
+    if (!vm.isPlaneSelectionMode && !vm.showDatumPlanes && !vm.showConstructionPlanes) return null;
+
+    final (rayOrigin, rayDir) = _getRayFromScreen(screenPos, size, mesh);
+    CADSketchPlane? bestPlane;
+    double closestT = double.infinity;
+
+    for (final plane in vm.allAvailablePlanes) {
+      if (!plane.isVisible) continue;
+      final res = plane.intersectRay(rayOrigin, rayDir);
+      if (res.hit && res.t > 0 && res.t < closestT) {
+        closestT = res.t;
+        bestPlane = plane;
+      }
+    }
+    return bestPlane;
+  }
+
   void _updateSketchHover(Offset screenPos, Size size, FoldedMeshResult mesh, AssemblyStudioViewModel vm) {
     final plane = vm.activeSketchPlane;
     if (plane == null) return;
     final localPos = _unprojectScreenToPlane(screenPos, plane, size, mesh);
     if (localPos == null) return;
     vm.updateSketchPlaneHover(localPos);
+    _updateInteractiveSketchVcb(vm, vm.activePlaneHoverLocal ?? localPos);
+  }
+
+  void _updateInteractiveSketchVcb(AssemblyStudioViewModel vm, Offset currentLocal) {
+    if (!vm.isSketchMode || vm.activeSketchPlane == null) return;
+    final tool = vm.activeSketchTool;
+    final pStart = vm.sketchInteractiveStartPoint;
+
+    if (pStart != null) {
+      if (tool == 'rectangle' || tool == 'rect') {
+        final w = (currentLocal.dx - pStart.dx).abs();
+        final h = (currentLocal.dy - pStart.dy).abs();
+        vm.setVcbState(
+          label: '📐 Dimensions (W x H)',
+          value: '${w.toStringAsFixed(1)} x ${h.toStringAsFixed(1)} mm',
+          hint: 'Click 2nd corner, or type dimensions (e.g. 50, 30)',
+        );
+      } else if (tool == 'center_rect') {
+        final w = 2.0 * (currentLocal.dx - pStart.dx).abs();
+        final h = 2.0 * (currentLocal.dy - pStart.dy).abs();
+        vm.setVcbState(
+          label: '📐 Center Rect (W x H)',
+          value: '${w.toStringAsFixed(1)} x ${h.toStringAsFixed(1)} mm',
+          hint: 'Click corner, or type dimensions (e.g. 60, 40)',
+        );
+      } else if (tool == 'circle' || tool == 'hole') {
+        final r = (currentLocal - pStart).distance;
+        final dia = r * 2.0;
+        vm.setVcbState(
+          label: '⭕ Diameter (Ø)',
+          value: 'Ø ${dia.toStringAsFixed(1)} mm (R: ${r.toStringAsFixed(1)})',
+          hint: 'Click edge, or type radius/diameter',
+        );
+      } else if (tool == 'arc_3point') {
+        if (vm.sketchInteractiveMidPoint == null) {
+          final chord = (currentLocal - pStart).distance;
+          vm.setVcbState(label: '⌒ 3-Pt Arc Chord', value: 'Chord: ${chord.toStringAsFixed(1)} mm', hint: 'Click to place End Point of Arc');
+        } else {
+          final pEnd = vm.sketchInteractiveMidPoint!;
+          final arcTemp = CADArcEntity(id: 'vcb_arc', startPoint: pStart, endPoint: pEnd, pointOnArc: currentLocal);
+          final geom = arcTemp.computeCircumcircle();
+          if (geom != null) {
+            vm.setVcbState(
+              label: '⌒ 3-Pt Arc Radius',
+              value: 'R: ${geom.radius.toStringAsFixed(1)} mm (Sweep: ${(geom.sweep * 180 / math.pi).abs().toStringAsFixed(1)}°)',
+              hint: 'Click to place Apex/Curvature Point',
+            );
+          } else {
+            vm.setVcbState(label: '⌒ 3-Pt Arc', value: 'Collinear', hint: 'Move cursor away from chord line to define curvature');
+          }
+        }
+      } else if (tool == 'line') {
+        final len = (currentLocal - pStart).distance;
+        final angleRad = math.atan2(currentLocal.dy - pStart.dy, currentLocal.dx - pStart.dx);
+        final angleDeg = (angleRad * 180 / math.pi).toStringAsFixed(1);
+        vm.setVcbState(
+          label: '📏 Line Length & Angle',
+          value: '${len.toStringAsFixed(1)} mm  ∠ $angleDeg°',
+          hint: 'Click next vertex, or press Escape to finish chaining',
+        );
+      }
+    } else if (vm.sketchPolylinePoints.isNotEmpty) {
+      final lastPt = vm.sketchPolylinePoints.last;
+      final len = (currentLocal - lastPt).distance;
+      vm.setVcbState(
+        label: '📐 Polyline (Segment ${vm.sketchPolylinePoints.length})',
+        value: 'L: ${len.toStringAsFixed(1)} mm (${vm.sketchPolylinePoints.length} vertices)',
+        hint: 'Click near start point to close, or Escape to cancel',
+      );
+    }
+  }
+
+  void _updateProjectGeometryHover(Offset screenPos, Size size, FoldedMeshResult mesh, AssemblyStudioViewModel vm) {
+    if (mesh.allPolygons.isEmpty || size.width <= 0 || size.height <= 0) {
+      vm.setHoveredProjectable(entityId: null);
+      return;
+    }
+
+    // 1. Check for closest vertex (within 14px threshold on screen)
+    CadPoint3D? bestVertex;
+    double bestVertexDist = 14.0;
+    for (final poly in mesh.allPolygons) {
+      for (final v in poly.vertices) {
+        final scr = _projectPoint(v, size, mesh);
+        if (scr == Offset.zero) continue;
+        final d = (screenPos - scr).distance;
+        if (d < bestVertexDist) {
+          bestVertexDist = d;
+          bestVertex = v;
+        }
+      }
+    }
+
+    if (bestVertex != null) {
+      vm.setHoveredProjectable(entityId: 'v_${bestVertex.x.toInt()}_${bestVertex.y.toInt()}_${bestVertex.z.toInt()}', point: bestVertex);
+      return;
+    }
+
+    // 2. Check for closest edge (within 12px threshold on screen)
+    List<CadPoint3D>? bestEdge;
+    double bestEdgeDist = 12.0;
+    String? bestEdgeId;
+    for (final poly in mesh.allPolygons) {
+      if (poly.vertices.length < 2) continue;
+      for (int i = 0; i < poly.vertices.length; i++) {
+        final v1 = poly.vertices[i];
+        final v2 = poly.vertices[(i + 1) % poly.vertices.length];
+        final scr1 = _projectPoint(v1, size, mesh);
+        final scr2 = _projectPoint(v2, size, mesh);
+        if (scr1 == Offset.zero && scr2 == Offset.zero) continue;
+        final d = _distToSegment(screenPos, scr1, scr2);
+        if (d < bestEdgeDist) {
+          bestEdgeDist = d;
+          bestEdge = [v1, v2];
+          bestEdgeId = '${poly.faceId}_edge_$i';
+        }
+      }
+    }
+
+    if (bestEdge != null) {
+      vm.setHoveredProjectable(entityId: bestEdgeId, edge: bestEdge);
+      return;
+    }
+
+    // 3. Check for frontmost polygon face
+    final hitPoly = _findFrontmostPolygonUnderCursor(screenPos, size, mesh);
+    if (hitPoly != null) {
+      vm.setHoveredProjectable(entityId: 'face:${hitPoly.faceId}');
+      return;
+    }
+
+    vm.setHoveredProjectable(entityId: null);
+  }
+
+  void _handleProjectGeometryClick(Offset screenPos, Size size, FoldedMeshResult mesh, AssemblyStudioViewModel vm) {
+    if (vm.activeSketchPlane == null) return;
+
+    if (vm.hoveredProjectablePoint != null) {
+      vm.project3DVertexToActivePlane(vm.hoveredProjectablePoint!, sourceId: vm.hoveredProjectableEntityId);
+      setState(() {});
+      _rebuildGpuCadModel();
+      return;
+    }
+
+    if (vm.hoveredProjectableEdge != null && vm.hoveredProjectableEdge!.length >= 2) {
+      vm.project3DEdgeToActivePlane(vm.hoveredProjectableEdge![0], vm.hoveredProjectableEdge![1], sourceId: vm.hoveredProjectableEntityId);
+      setState(() {});
+      _rebuildGpuCadModel();
+      return;
+    }
+
+    final hitPoly = _findFrontmostPolygonUnderCursor(screenPos, size, mesh);
+    if (hitPoly != null) {
+      vm.project3DFaceToActivePlane(hitPoly, sourceId: hitPoly.faceId);
+      setState(() {});
+      _rebuildGpuCadModel();
+    }
   }
 
   double _distanceToSegment(Offset p, Offset a, Offset b) {
@@ -3163,7 +3777,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       final pivot = _cameraPivot;
       final worldPt = vm_math.Vector3(p.x - pivot.x, p.y - pivot.y, p.z - pivot.z);
       final screenPt = camera.worldToScreen(worldPt, size);
-      return screenPt ?? Offset.zero;
+      if (screenPt != null) return screenPt;
+      return _projectPointPaint(p, size, mesh);
     }
     return _projectPointPaint(p, size, mesh);
   }
@@ -3199,10 +3814,20 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   }
 
   // ---------------------------------------------------------------------------
-  // ONSHAPE DIRECT 3D SKETCH HUD
+  // ONSHAPE FLOATING SKETCH FEATURE DIALOG
   // ---------------------------------------------------------------------------
   Widget _buildOnshapeSketchHUD(AssemblyStudioViewModel vm) {
-    return AssemblySketchHud(viewModel: vm);
+    return AssemblyOnshapeSketchDialog(
+      viewModel: vm,
+      onAccept: () {
+        vm.finishSketch();
+        setState(() {});
+      },
+      onCancel: () {
+        vm.exitSketchMode();
+        setState(() {});
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -3350,6 +3975,26 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     );
   }
 
+  /// Intersects the camera-facing billboard view plane passing through planeOrigin
+  /// for silky-smooth, continuous 60FPS mouse dragging without oblique distortion or jumping
+  CadPoint3D _intersectCameraViewPlane(Offset screenPos, Size size, FoldedMeshResult mesh, CadPoint3D planeOrigin) {
+    final (rayOrigin, rayDir) = _getRayFromScreen(screenPos, size, mesh);
+    final (_, centerRayDir) = _getRayFromScreen(Offset(size.width / 2.0, size.height / 2.0), size, mesh);
+    final rLen = centerRayDir.length;
+    final normal = rLen > 1e-6 ? (centerRayDir / rLen) : vm_math.Vector3(0.0, 0.0, 1.0);
+
+    final denom = rayDir.dot(normal);
+    if (denom.abs() > 1e-5) {
+      final diff = vm_math.Vector3(planeOrigin.x - rayOrigin.x, planeOrigin.y - rayOrigin.y, planeOrigin.z - rayOrigin.z);
+      final t = diff.dot(normal) / denom;
+      if (t > 0) {
+        final hit = rayOrigin + rayDir * t;
+        return CadPoint3D(hit.x, hit.y, hit.z);
+      }
+    }
+    return planeOrigin;
+  }
+
   double _calculateSignedAngleDeg({required CadPoint3D center, required CadPoint3D baselinePt, required CadPoint3D currentPt, required GizmoAxis axis}) {
     return AssemblyRotateMathHelper.calculateSignedAngleDeg(center: center, baselinePt: baselinePt, currentPt: currentPt, axis: axis);
   }
@@ -3426,6 +4071,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     if (_hasMovedPart) {
       vm.recordHistory();
     }
+    final snapLabel = _hoveredSnapPointModel != null ? ' • Snapped to ${_hoveredSnapPointModel!.label}' : '';
     _isMovingEntity = false;
     _moveBaseWorldPoint = null;
     _moveBaseStartWorldPoint = null;
@@ -3436,11 +4082,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _hasMovedPart = false;
     _draggedParts.clear();
     _draggedPartsStartPos.clear();
+    _cachedMoveOtherSnapPoints.clear();
     _clearDraggedWelds();
     vm.invalidateMeshCache();
     _rebuildGpuCadModel(force: true);
     vm.notifyDocChanged();
-    vm.setVcbState(label: 'Move', value: 'Placed', hint: 'Click entity point or surface to move again');
+    vm.setVcbState(label: 'Move', value: 'Placed', hint: 'Click entity point or surface to move again$snapLabel');
     setState(() {});
   }
 
@@ -3462,6 +4109,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _hasMovedPart = false;
     _draggedParts.clear();
     _draggedPartsStartPos.clear();
+    _cachedMoveOtherSnapPoints.clear();
     vm.invalidateMeshCache();
     _rebuildGpuCadModel(force: true);
     vm.notifyDocChanged();
@@ -3731,6 +4379,82 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     }
   }
 
+  void _startEntityMove(AssemblyPart hitPart, CadPoint3D baseAnchor, Offset screenPos, AssemblyStudioViewModel vm, {FoldedMeshResult? mesh}) {
+    _draggingPart = hitPart;
+    _partDragStartScreen = screenPos;
+    _hasMovedPart = false;
+    _isMovingEntity = true;
+    _isVcbUserTyping = false;
+
+    final groupParts = hitPart.groupId != null ? vm.doc.parts.where((p) => p.groupId == hitPart.groupId).toList() : <AssemblyPart>[];
+    _draggedParts.clear();
+    _draggedParts.addAll(groupParts.isNotEmpty ? groupParts : [hitPart]);
+    _draggedPartsStartPos.clear();
+    for (final p in _draggedParts) {
+      _draggedPartsStartPos[p.id] = p.position;
+    }
+    _snapshotDraggedWelds(vm);
+
+    _moveBaseWorldPoint = baseAnchor;
+    _moveBaseStartWorldPoint = _moveBaseWorldPoint;
+
+    // Pre-cache other visible parts snap points for zero-overhead 120 FPS movement
+    _cachedMoveOtherSnapPoints.clear();
+    for (final p in vm.doc.parts) {
+      if (!p.isVisible || _draggedParts.any((dp) => dp.id == p.id)) continue;
+      _cachedMoveOtherSnapPoints.addAll(AssemblyDockingEngine.getAllSnapPointsForPart(p, cachedMesh: mesh));
+    }
+
+    final axisLockStr = vm.lockedAxis == GizmoAxis.x
+        ? ' [X Red]'
+        : (vm.lockedAxis == GizmoAxis.y ? ' [Y Green]' : (vm.lockedAxis == GizmoAxis.z ? ' [Z Blue]' : ''));
+    vm.setVcbState(
+      label: 'Distance$axisLockStr',
+      value: vm.formatLength(0.0),
+      hint: 'Move mouse freely to translate • Click to place anywhere • Esc to cancel',
+    );
+    setState(() {});
+  }
+
+  void _handleMovePreGrabHover(Offset localPos, Size size, FoldedMeshResult mesh, AssemblyStudioViewModel vm) {
+    final candidatePoints = <AssemblySnapPoint>[];
+    if (vm.selectedPart != null) {
+      candidatePoints.addAll(AssemblyDockingEngine.getAllSnapPointsForPart(vm.selectedPart!, cachedMesh: mesh));
+    } else {
+      for (final p in vm.doc.parts) {
+        if (!p.isVisible) continue;
+        candidatePoints.addAll(AssemblyDockingEngine.getAllSnapPointsForPart(p, cachedMesh: mesh));
+      }
+    }
+
+    final targetSnap = AssemblyDockingEngine.findNearestSnapPoint(
+      screenCursor: localPos,
+      candidates: candidatePoints,
+      projectPoint: (pt) => _projectPoint(pt, size, mesh),
+      maxPixelDistance: widget.viewModel.magneticSnapDistancePx,
+    );
+
+    if (targetSnap != null) {
+      if (_hoveredSnapPointModel?.id != targetSnap.id) {
+        _hoveredSnapPointModel = targetSnap;
+        _hoveredSnapPoint = targetSnap.worldPosition;
+        vm.setVcbState(label: 'Move [M]', value: targetSnap.label, hint: 'Click to grab anchor point • Arrow keys lock axis');
+        setState(() {});
+      }
+    } else {
+      if (_hoveredSnapPointModel != null) {
+        _hoveredSnapPointModel = null;
+        _hoveredSnapPoint = null;
+        vm.setVcbState(
+          label: 'Move [M]',
+          value: vm.selectedPart != null ? vm.selectedPart!.name : 'Ready',
+          hint: 'Click entity point or surface to grab • Arrow keys lock axis',
+        );
+        setState(() {});
+      }
+    }
+  }
+
   void _handleMovePointerMove(Offset localPos, Size size, FoldedMeshResult mesh, AssemblyStudioViewModel vm) {
     if (_draggingPart == null || _draggedParts.isEmpty) return;
 
@@ -3740,18 +4464,24 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
 
     CadPoint3D worldDelta;
 
-    // Detect candidate snap points on other visible parts (excluding currently moving parts)
-    final otherSnapPoints = <AssemblySnapPoint>[];
-    for (final p in vm.doc.parts) {
-      if (!p.isVisible || _draggedParts.any((dp) => dp.id == p.id)) continue;
-      otherSnapPoints.addAll(AssemblyDockingEngine.getAllSnapPointsForPart(p, cachedMesh: mesh));
-    }
+    // Detect candidate snap points on other visible parts (using pre-cached snap points for 120 FPS)
+    final otherSnapPoints = _cachedMoveOtherSnapPoints.isNotEmpty
+        ? _cachedMoveOtherSnapPoints
+        : () {
+            final pts = <AssemblySnapPoint>[];
+            for (final p in vm.doc.parts) {
+              if (!p.isVisible || _draggedParts.any((dp) => dp.id == p.id)) continue;
+              pts.addAll(AssemblyDockingEngine.getAllSnapPointsForPart(p, cachedMesh: mesh));
+            }
+            return pts;
+          }();
 
+    final double snapMaxPx = 14.0;
     final targetSnap = AssemblyDockingEngine.findNearestSnapPoint(
       screenCursor: localPos,
       candidates: otherSnapPoints,
       projectPoint: (pt) => _projectPoint(pt, size, mesh),
-      maxPixelDistance: 18.0,
+      maxPixelDistance: snapMaxPx,
     );
 
     if (targetSnap != null) {
@@ -3820,17 +4550,10 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         }
       }
 
-      final precisionStep = vm.precisionMovementStepMm;
-      if (precisionStep > 0) {
-        s = (s / precisionStep).round() * precisionStep;
-      } else if (vm.snapToGrid) {
-        final step = vm.gridStepMm;
-        s = (s / step).round() * step;
-      }
-
+      // Silky-smooth, continuous 120 FPS movement along locked axis (no stepped jumping)
       worldDelta = CadPoint3D(axisWorldDir.x * s, axisWorldDir.y * s, axisWorldDir.z * s);
     } else {
-      // 2. Free movement: check snap candidates across other parts first, else intersect plane
+      // 2. Free movement: check snap candidates across other parts first, else intersect camera billboard plane
       if (targetSnap != null) {
         worldDelta = CadPoint3D(
           targetSnap.worldPosition.x - baseAnchor.x,
@@ -3838,23 +4561,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
           targetSnap.worldPosition.z - baseAnchor.z,
         );
       } else {
-        final hitPlanePos = _intersectPlane(localPos, size, mesh, GizmoAxis.z, baseAnchor);
-        var dx = hitPlanePos.x - baseAnchor.x;
-        var dy = hitPlanePos.y - baseAnchor.y;
-        var dz = hitPlanePos.z - baseAnchor.z;
+        final hitPlanePos = _intersectCameraViewPlane(localPos, size, mesh, baseAnchor);
+        final dx = hitPlanePos.x - baseAnchor.x;
+        final dy = hitPlanePos.y - baseAnchor.y;
+        final dz = hitPlanePos.z - baseAnchor.z;
 
-        final precisionStep = vm.precisionMovementStepMm;
-        if (precisionStep > 0) {
-          dx = (dx / precisionStep).round() * precisionStep;
-          dy = (dy / precisionStep).round() * precisionStep;
-          dz = (dz / precisionStep).round() * precisionStep;
-        } else if (vm.snapToGrid) {
-          final step = vm.gridStepMm;
-          dx = (dx / step).round() * step;
-          dy = (dy / step).round() * step;
-          dz = (dz / step).round() * step;
-        }
-
+        // Silky-smooth, continuous 120 FPS free camera-plane movement (no stepped jumping)
         worldDelta = CadPoint3D(dx, dy, dz);
       }
     }
@@ -3871,13 +4583,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     // Keep base anchor point moving synchronously
     _moveBaseWorldPoint = CadPoint3D(baseAnchor.x + worldDelta.x, baseAnchor.y + worldDelta.y, baseAnchor.z + worldDelta.z);
 
-    // Synchronous GPU and mesh update
+    // Synchronous lightweight repaint without blocking GPU reallocation
     vm.invalidateMeshCache();
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastGpuRebuildMs >= 16) {
-      _lastGpuRebuildMs = now;
-      _rebuildGpuCadModel(force: true);
-    }
+    setState(() {});
 
     final dist = math.sqrt(worldDelta.x * worldDelta.x + worldDelta.y * worldDelta.y + worldDelta.z * worldDelta.z);
     final axisLockStr = vm.lockedAxis == GizmoAxis.x
@@ -3970,13 +4678,19 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
         mesh: mesh,
         projectPoint: (pt) => _projectPoint(pt, size, mesh),
       );
-      final snappedAngle = AssemblyRotateMathHelper.snapRotateAngle(
-        rawAngleDeg: rawAngle,
-        cursorScreen: localPos,
-        centerScreen: centerScreen,
-        screenRadius: screenRadius,
-        snapToGrid: vm.snapToGrid,
-      );
+      bool isShift = false;
+      try {
+        isShift = HardwareKeyboard.instance.isShiftPressed;
+      } catch (_) {}
+      final snappedAngle = isShift
+          ? AssemblyRotateMathHelper.snapRotateAngle(
+              rawAngleDeg: rawAngle,
+              cursorScreen: localPos,
+              centerScreen: centerScreen,
+              screenRadius: screenRadius,
+              snapToGrid: true,
+            )
+          : (rawAngle * 10.0).round() / 10.0;
       _rotateCurrentAngleDeg = snappedAngle;
 
       if (_isRotateCopyMode && !_hasClonedForRotate && _draggedParts.isNotEmpty) {
@@ -4013,7 +4727,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       );
       vm.invalidateMeshCache();
       final now = DateTime.now().millisecondsSinceEpoch;
-      if (now - _lastGpuRebuildMs >= 16) {
+      if (now - _lastGpuRebuildMs >= 32) {
         _lastGpuRebuildMs = now;
         _rebuildGpuCadModel(force: true);
       }

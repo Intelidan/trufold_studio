@@ -10,12 +10,7 @@ class AssemblyMovementToolbar extends StatelessWidget {
   final VoidCallback onRebuildGpu;
   final VoidCallback onShowMagneticCouplingDialog;
 
-  const AssemblyMovementToolbar({
-    super.key,
-    required this.viewModel,
-    required this.onRebuildGpu,
-    required this.onShowMagneticCouplingDialog,
-  });
+  const AssemblyMovementToolbar({super.key, required this.viewModel, required this.onRebuildGpu, required this.onShowMagneticCouplingDialog});
 
   @override
   Widget build(BuildContext context) {
@@ -25,21 +20,10 @@ class AssemblyMovementToolbar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
       decoration: BoxDecoration(
-        color: isLight
-            ? const Color(0xFFFFFFFF).withValues(alpha: 0.96)
-            : const Color(0xFF14141A).withValues(alpha: 0.94),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2C2C38),
-          width: 1.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isLight ? const Color(0x18000000) : const Color(0x33000000),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        border: Border.all(color: const Color(0xFFCBD5E1), width: 1.0),
+        boxShadow: const [BoxShadow(color: Color(0x18000000), blurRadius: 10, offset: Offset(0, 3))],
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -97,11 +81,7 @@ class AssemblyMovementToolbar extends StatelessWidget {
               onPressed: () => vm.setToolMode(SketchUpToolMode.magnetic),
             ),
             const SizedBox(width: 5),
-            Container(
-              width: 1.0,
-              height: 18,
-              color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C),
-            ),
+            Container(width: 1.0, height: 18, color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C)),
             const SizedBox(width: 5),
             _buildToolItem(
               isLight: isLight,
@@ -113,11 +93,7 @@ class AssemblyMovementToolbar extends StatelessWidget {
             ),
             if (vm.selectedPart != null && vm.isPartBonded(vm.selectedPart!.id)) ...[
               const SizedBox(width: 5),
-              Container(
-                width: 1.0,
-                height: 18,
-                color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C),
-              ),
+              Container(width: 1.0, height: 18, color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C)),
               const SizedBox(width: 5),
               _buildToolItem(
                 isLight: isLight,
@@ -130,11 +106,7 @@ class AssemblyMovementToolbar extends StatelessWidget {
             ],
             if (vm.selectedPart != null && vm.isPartMagneticallyLinked(vm.selectedPart!.id)) ...[
               const SizedBox(width: 5),
-              Container(
-                width: 1.0,
-                height: 18,
-                color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C),
-              ),
+              Container(width: 1.0, height: 18, color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C)),
               const SizedBox(width: 5),
               _buildToolItem(
                 isLight: isLight,
@@ -147,11 +119,7 @@ class AssemblyMovementToolbar extends StatelessWidget {
             ],
             if (vm.doc.parts.where((p) => p.magneticSpots.isNotEmpty).length >= 2) ...[
               const SizedBox(width: 5),
-              Container(
-                width: 1.0,
-                height: 18,
-                color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C),
-              ),
+              Container(width: 1.0, height: 18, color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C)),
               const SizedBox(width: 5),
               _buildToolItem(
                 isLight: isLight,
@@ -163,11 +131,7 @@ class AssemblyMovementToolbar extends StatelessWidget {
               ),
             ],
             const SizedBox(width: 5),
-            Container(
-              width: 1.0,
-              height: 18,
-              color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C),
-            ),
+            Container(width: 1.0, height: 18, color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C)),
             const SizedBox(width: 5),
             PopupMenuButton<CadMaterialPresetType>(
               tooltip: 'Material Finish & PBR Shaders',
@@ -208,10 +172,7 @@ class AssemblyMovementToolbar extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
                   color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
-                  border: Border.all(
-                    color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
-                    width: 0.8,
-                  ),
+                  border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF334155), width: 0.8),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -220,11 +181,7 @@ class AssemblyMovementToolbar extends StatelessWidget {
                     const SizedBox(width: 4),
                     Text(
                       vm.graphicsPreferences.materialSettings.preset.label.split(' ').first,
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w600,
-                        color: isLight ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                      ),
+                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: isLight ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9)),
                     ),
                     const Icon(Icons.arrow_drop_down, size: 14),
                   ],
@@ -232,11 +189,7 @@ class AssemblyMovementToolbar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 5),
-            Container(
-              width: 1.0,
-              height: 18,
-              color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C),
-            ),
+            Container(width: 1.0, height: 18, color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF2E2E3C)),
             const SizedBox(width: 5),
             _buildToolItem(
               isLight: isLight,
@@ -260,7 +213,7 @@ class AssemblyMovementToolbar extends StatelessWidget {
     Color? accentColor,
     required VoidCallback onPressed,
   }) {
-    final activeCol = accentColor ?? const Color(0xFF0284C7);
+    final activeCol = accentColor ?? const Color(0xFF0076CE);
     return Tooltip(
       message: label,
       child: InkWell(
@@ -268,29 +221,18 @@ class AssemblyMovementToolbar extends StatelessWidget {
         onTap: onPressed,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-          decoration: BoxDecoration(
-            color: isActive ? activeCol : Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
-          ),
+          decoration: BoxDecoration(color: isActive ? activeCol : Colors.transparent, borderRadius: BorderRadius.circular(4)),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                size: 13,
-                color: isActive
-                    ? Colors.white
-                    : (accentColor ?? (isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8))),
-              ),
+              Icon(icon, size: 13, color: isActive ? Colors.white : (accentColor ?? const Color(0xFF475569))),
               const SizedBox(width: 4),
               Text(
                 label.split(' ').first,
                 style: TextStyle(
                   fontSize: 9.5,
                   fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
-                  color: isActive
-                      ? Colors.white
-                      : (accentColor ?? (isLight ? const Color(0xFF1E293B) : const Color(0xFFCBD5E1))),
+                  color: isActive ? Colors.white : (accentColor ?? const Color(0xFF0F172A)),
                 ),
               ),
             ],

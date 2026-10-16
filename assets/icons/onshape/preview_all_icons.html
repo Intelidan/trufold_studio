@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Onshape Icon Set - Interactive Menus & Sub-Menus</title>
+<style>
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #f2f4f7;
+        margin: 0;
+        padding: 32px;
+        color: #1d2939;
+    }
+    h1 {
+        text-align: center;
+        font-size: 24px;
+        letter-spacing: 0.5px;
+        margin-bottom: 28px;
+    }
+    .toolbar-section {
+        background: #fff;
+        border: 1px solid #d0d5dd;
+        border-radius: 8px;
+        padding: 20px 24px 280px 24px;
+        margin-bottom: 36px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
+    .toolbar-section h2 {
+        margin: 0 0 14px 0;
+        font-size: 18px;
+        color: #101828;
+    }
+    .onshape-toolbar {
+        display: inline-flex;
+        align-items: center;
+        background: #f9fafb;
+        border: 1px solid #d0d5dd;
+        border-radius: 4px;
+        padding: 4px 8px;
+        gap: 2px;
+        flex-wrap: wrap;
+    }
+    .toolbar-group {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+    }
+    .tool-btn, .caret-btn {
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 5px;
+        transition: background 0.12s;
+    }
+    .tool-btn img {
+        width: 24px;
+        height: 24px;
+    }
+    .caret-btn {
+        padding: 8px 3px;
+    }
+    .tool-btn:hover, .caret-btn:hover, .caret-btn.active {
+        background: #e4e7ec;
+        border-color: #cbd0d8;
+    }
+    .divider {
+        width: 1px;
+        height: 24px;
+        background: #d0d5dd;
+        margin: 0 4px;
+    }
+    .dropdown-menu {
+        display: none;
+        position: absolute;
+        top: 38px;
+        left: 0;
+        min-width: 250px;
+        background: #fff;
+        border: 1px solid #b0b7c3;
+        border-radius: 4px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.14);
+        z-index: 100;
+        padding: 4px 0;
+        max-height: 360px;
+        overflow-y: auto;
+    }
+    .dropdown-menu.open {
+        display: block;
+    }
+    .menu-search {
+        display: flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-bottom: 1px solid #eaecf0;
+        color: #667085;
+    }
+    .menu-search input {
+        border: none;
+        outline: none;
+        width: 100%;
+        margin-left: 6px;
+        font-size: 13px;
+    }
+    .menu-item {
+        display: flex;
+        align-items: center;
+        padding: 7px 12px;
+        gap: 10px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    .menu-item:hover {
+        background: #eef4ff;
+    }
+    .menu-item img {
+        width: 22px;
+        height: 22px;
+        flex-shrink: 0;
+    }
+    .item-label {
+        flex-grow: 1;
+    }
+    .shortcut {
+        display: inline-flex;
+        gap: 3px;
+    }
+    kbd {
+        background: #f2f4f7;
+        border: 1px solid #b0b7c3;
+        border-bottom-width: 2px;
+        border-radius: 3px;
+        padding: 1px 5px;
+        font-family: inherit;
+        font-size: 11px;
+        color: #344054;
+    }
+</style>
+</head>
+<body>
+    <h1>ONSHAPE ICON SET</h1>
+    
+            <section class="toolbar-section">
+                <h2>3D Modelling Toolbar</h2>
+                <div class="onshape-toolbar">
+                    
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Extrude">
+                        <img src="01_3D_Modelling_Toolbar/01_Base_Features/01_extrude.svg" alt="Extrude">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="01 Base Features">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/01_Base_Features/01_extrude.svg">
+                        <img src="01_3D_Modelling_Toolbar/01_Base_Features/01_extrude.svg" alt="Extrude">
+                        <span class="item-label">Extrude</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>e</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/01_Base_Features/02_revolve.svg">
+                        <img src="01_3D_Modelling_Toolbar/01_Base_Features/02_revolve.svg" alt="Revolve">
+                        <span class="item-label">Revolve</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>w</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/01_Base_Features/03_sweep.svg">
+                        <img src="01_3D_Modelling_Toolbar/01_Base_Features/03_sweep.svg" alt="Sweep">
+                        <span class="item-label">Sweep</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/01_Base_Features/04_loft.svg">
+                        <img src="01_3D_Modelling_Toolbar/01_Base_Features/04_loft.svg" alt="Loft">
+                        <span class="item-label">Loft</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>l</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/01_Base_Features/05_thicken.svg">
+                        <img src="01_3D_Modelling_Toolbar/01_Base_Features/05_thicken.svg" alt="Thicken">
+                        <span class="item-label">Thicken</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/01_Base_Features/06_enclose.svg">
+                        <img src="01_3D_Modelling_Toolbar/01_Base_Features/06_enclose.svg" alt="Enclose">
+                        <span class="item-label">Enclose</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Fillet">
+                        <img src="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/01_fillet.svg" alt="Fillet">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="02 Edge and Body Features">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/01_fillet.svg">
+                        <img src="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/01_fillet.svg" alt="Fillet">
+                        <span class="item-label">Fillet</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>f</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/02_face_blend.svg">
+                        <img src="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/02_face_blend.svg" alt="Face blend">
+                        <span class="item-label">Face blend</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/03_chamfer.svg">
+                        <img src="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/03_chamfer.svg" alt="Chamfer">
+                        <span class="item-label">Chamfer</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>c</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/04_draft.svg">
+                        <img src="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/04_draft.svg" alt="Draft">
+                        <span class="item-label">Draft</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/05_body_draft.svg">
+                        <img src="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/05_body_draft.svg" alt="Body draft">
+                        <span class="item-label">Body draft</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/06_rib.svg">
+                        <img src="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/06_rib.svg" alt="Rib">
+                        <span class="item-label">Rib</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/07_shell.svg">
+                        <img src="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/07_shell.svg" alt="Shell">
+                        <span class="item-label">Shell</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/08_hole.svg">
+                        <img src="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/08_hole.svg" alt="Hole">
+                        <span class="item-label">Hole</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>h</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/09_external_thread.svg">
+                        <img src="01_3D_Modelling_Toolbar/02_Edge_and_Body_Features/09_external_thread.svg" alt="External thread">
+                        <span class="item-label">External thread</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Linear pattern">
+                        <img src="01_3D_Modelling_Toolbar/03_Pattern_and_Mirror/01_linear_pattern.svg" alt="Linear pattern">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="03 Pattern and Mirror">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/03_Pattern_and_Mirror/01_linear_pattern.svg">
+                        <img src="01_3D_Modelling_Toolbar/03_Pattern_and_Mirror/01_linear_pattern.svg" alt="Linear pattern">
+                        <span class="item-label">Linear pattern</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/03_Pattern_and_Mirror/02_circular_pattern.svg">
+                        <img src="01_3D_Modelling_Toolbar/03_Pattern_and_Mirror/02_circular_pattern.svg" alt="Circular pattern">
+                        <span class="item-label">Circular pattern</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/03_Pattern_and_Mirror/03_curve_pattern.svg">
+                        <img src="01_3D_Modelling_Toolbar/03_Pattern_and_Mirror/03_curve_pattern.svg" alt="Curve pattern">
+                        <span class="item-label">Curve pattern</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/03_Pattern_and_Mirror/04_mirror.svg">
+                        <img src="01_3D_Modelling_Toolbar/03_Pattern_and_Mirror/04_mirror.svg" alt="Mirror">
+                        <span class="item-label">Mirror</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Boolean">
+                        <img src="01_3D_Modelling_Toolbar/04_Part_Modification/01_boolean.svg" alt="Boolean">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="04 Part Modification">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/04_Part_Modification/01_boolean.svg">
+                        <img src="01_3D_Modelling_Toolbar/04_Part_Modification/01_boolean.svg" alt="Boolean">
+                        <span class="item-label">Boolean</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/04_Part_Modification/02_split.svg">
+                        <img src="01_3D_Modelling_Toolbar/04_Part_Modification/02_split.svg" alt="Split">
+                        <span class="item-label">Split</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/04_Part_Modification/03_transform.svg">
+                        <img src="01_3D_Modelling_Toolbar/04_Part_Modification/03_transform.svg" alt="Transform">
+                        <span class="item-label">Transform</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/04_Part_Modification/04_wrap.svg">
+                        <img src="01_3D_Modelling_Toolbar/04_Part_Modification/04_wrap.svg" alt="Wrap">
+                        <span class="item-label">Wrap</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/04_Part_Modification/05_decal.svg">
+                        <img src="01_3D_Modelling_Toolbar/04_Part_Modification/05_decal.svg" alt="Decal">
+                        <span class="item-label">Decal</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/04_Part_Modification/06_delete_part.svg">
+                        <img src="01_3D_Modelling_Toolbar/04_Part_Modification/06_delete_part.svg" alt="Delete part">
+                        <span class="item-label">Delete part</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Modify fillet">
+                        <img src="01_3D_Modelling_Toolbar/05_Direct_Editing/01_modify_fillet.svg" alt="Modify fillet">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="05 Direct Editing">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/05_Direct_Editing/01_modify_fillet.svg">
+                        <img src="01_3D_Modelling_Toolbar/05_Direct_Editing/01_modify_fillet.svg" alt="Modify fillet">
+                        <span class="item-label">Modify fillet</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/05_Direct_Editing/02_delete_face.svg">
+                        <img src="01_3D_Modelling_Toolbar/05_Direct_Editing/02_delete_face.svg" alt="Delete face">
+                        <span class="item-label">Delete face</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/05_Direct_Editing/03_move_face.svg">
+                        <img src="01_3D_Modelling_Toolbar/05_Direct_Editing/03_move_face.svg" alt="Move face">
+                        <span class="item-label">Move face</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/05_Direct_Editing/04_replace_face.svg">
+                        <img src="01_3D_Modelling_Toolbar/05_Direct_Editing/04_replace_face.svg" alt="Replace face">
+                        <span class="item-label">Replace face</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Plane">
+                        <img src="01_3D_Modelling_Toolbar/06_Surfaces/01_plane.svg" alt="Plane">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="06 Surfaces">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/06_Surfaces/01_plane.svg">
+                        <img src="01_3D_Modelling_Toolbar/06_Surfaces/01_plane.svg" alt="Plane">
+                        <span class="item-label">Plane</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/06_Surfaces/02_offset_surface.svg">
+                        <img src="01_3D_Modelling_Toolbar/06_Surfaces/02_offset_surface.svg" alt="Offset surface">
+                        <span class="item-label">Offset surface</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/06_Surfaces/03_boundary_surface.svg">
+                        <img src="01_3D_Modelling_Toolbar/06_Surfaces/03_boundary_surface.svg" alt="Boundary surface">
+                        <span class="item-label">Boundary surface</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/06_Surfaces/04_fill.svg">
+                        <img src="01_3D_Modelling_Toolbar/06_Surfaces/04_fill.svg" alt="Fill">
+                        <span class="item-label">Fill</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/06_Surfaces/05_move_boundary.svg">
+                        <img src="01_3D_Modelling_Toolbar/06_Surfaces/05_move_boundary.svg" alt="Move boundary">
+                        <span class="item-label">Move boundary</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/06_Surfaces/06_ruled_surface.svg">
+                        <img src="01_3D_Modelling_Toolbar/06_Surfaces/06_ruled_surface.svg" alt="Ruled surface">
+                        <span class="item-label">Ruled surface</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/06_Surfaces/07_mutual_trim.svg">
+                        <img src="01_3D_Modelling_Toolbar/06_Surfaces/07_mutual_trim.svg" alt="Mutual trim">
+                        <span class="item-label">Mutual trim</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/06_Surfaces/08_constrained_surface.svg">
+                        <img src="01_3D_Modelling_Toolbar/06_Surfaces/08_constrained_surface.svg" alt="Constrained surface">
+                        <span class="item-label">Constrained surface</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Helix">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/01_helix.svg" alt="Helix">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="07 Curves">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/01_helix.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/01_helix.svg" alt="Helix">
+                        <span class="item-label">Helix</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/02_3d_fit_spline.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/02_3d_fit_spline.svg" alt="3D fit spline">
+                        <span class="item-label">3D fit spline</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/03_projected_curve.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/03_projected_curve.svg" alt="Projected curve">
+                        <span class="item-label">Projected curve</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/04_bridging_curve.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/04_bridging_curve.svg" alt="Bridging curve">
+                        <span class="item-label">Bridging curve</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/05_composite_curve.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/05_composite_curve.svg" alt="Composite curve">
+                        <span class="item-label">Composite curve</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/06_intersection_curve.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/06_intersection_curve.svg" alt="Intersection curve">
+                        <span class="item-label">Intersection curve</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/07_trim_curve.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/07_trim_curve.svg" alt="Trim curve">
+                        <span class="item-label">Trim curve</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/08_isocline.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/08_isocline.svg" alt="Isocline">
+                        <span class="item-label">Isocline</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/09_offset_curve.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/09_offset_curve.svg" alt="Offset curve">
+                        <span class="item-label">Offset curve</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/10_isoparametric_curve.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/10_isoparametric_curve.svg" alt="Isoparametric curve">
+                        <span class="item-label">Isoparametric curve</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/11_edit_curve.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/11_edit_curve.svg" alt="Edit curve">
+                        <span class="item-label">Edit curve</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/07_Curves/12_routing_curve.svg">
+                        <img src="01_3D_Modelling_Toolbar/07_Curves/12_routing_curve.svg" alt="Routing curve">
+                        <span class="item-label">Routing curve</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Mate connector">
+                        <img src="01_3D_Modelling_Toolbar/08_Reference_and_Variables/01_mate_connector.svg" alt="Mate connector">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="08 Reference and Variables">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/08_Reference_and_Variables/01_mate_connector.svg">
+                        <img src="01_3D_Modelling_Toolbar/08_Reference_and_Variables/01_mate_connector.svg" alt="Mate connector">
+                        <span class="item-label">Mate connector</span>
+                        <span class="shortcut"><kbd>ctrl</kbd><kbd>m</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/08_Reference_and_Variables/02_derived.svg">
+                        <img src="01_3D_Modelling_Toolbar/08_Reference_and_Variables/02_derived.svg" alt="Derived">
+                        <span class="item-label">Derived</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/08_Reference_and_Variables/03_variable.svg">
+                        <img src="01_3D_Modelling_Toolbar/08_Reference_and_Variables/03_variable.svg" alt="Variable">
+                        <span class="item-label">Variable</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/08_Reference_and_Variables/04_query_variable.svg">
+                        <img src="01_3D_Modelling_Toolbar/08_Reference_and_Variables/04_query_variable.svg" alt="Query variable">
+                        <span class="item-label">Query variable</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/08_Reference_and_Variables/05_composite_part.svg">
+                        <img src="01_3D_Modelling_Toolbar/08_Reference_and_Variables/05_composite_part.svg" alt="Composite part">
+                        <span class="item-label">Composite part</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Frame">
+                        <img src="01_3D_Modelling_Toolbar/09_Frames/01_frame.svg" alt="Frame">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="09 Frames">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/09_Frames/01_frame.svg">
+                        <img src="01_3D_Modelling_Toolbar/09_Frames/01_frame.svg" alt="Frame">
+                        <span class="item-label">Frame</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/09_Frames/02_frame_trim.svg">
+                        <img src="01_3D_Modelling_Toolbar/09_Frames/02_frame_trim.svg" alt="Frame trim">
+                        <span class="item-label">Frame trim</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/09_Frames/03_gusset.svg">
+                        <img src="01_3D_Modelling_Toolbar/09_Frames/03_gusset.svg" alt="Gusset">
+                        <span class="item-label">Gusset</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/09_Frames/04_end_cap.svg">
+                        <img src="01_3D_Modelling_Toolbar/09_Frames/04_end_cap.svg" alt="End cap">
+                        <span class="item-label">End cap</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/09_Frames/05_cut_list.svg">
+                        <img src="01_3D_Modelling_Toolbar/09_Frames/05_cut_list.svg" alt="Cut list">
+                        <span class="item-label">Cut list</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Sheet metal model">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/01_sheet_metal_model.svg" alt="Sheet metal model">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="10 Sheet Metal and PCB">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/01_sheet_metal_model.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/01_sheet_metal_model.svg" alt="Sheet metal model">
+                        <span class="item-label">Sheet metal model</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/02_flange.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/02_flange.svg" alt="Flange">
+                        <span class="item-label">Flange</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/03_hem.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/03_hem.svg" alt="Hem">
+                        <span class="item-label">Hem</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/04_tab.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/04_tab.svg" alt="Tab">
+                        <span class="item-label">Tab</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/05_bend.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/05_bend.svg" alt="Bend">
+                        <span class="item-label">Bend</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/06_jog.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/06_jog.svg" alt="Jog">
+                        <span class="item-label">Jog</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/07_form.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/07_form.svg" alt="Form">
+                        <span class="item-label">Form</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/08_sheet_metal_loft.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/08_sheet_metal_loft.svg" alt="Sheet metal loft">
+                        <span class="item-label">Sheet metal loft</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/09_make_joint.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/09_make_joint.svg" alt="Make joint">
+                        <span class="item-label">Make joint</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/10_corner.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/10_corner.svg" alt="Corner">
+                        <span class="item-label">Corner</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/11_bend_relief.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/11_bend_relief.svg" alt="Bend relief">
+                        <span class="item-label">Bend relief</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/12_corner_break.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/12_corner_break.svg" alt="Corner break">
+                        <span class="item-label">Corner break</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/13_finish_sheet_metal_model.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/13_finish_sheet_metal_model.svg" alt="Finish sheet metal model">
+                        <span class="item-label">Finish sheet metal model</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/14_flex_pcb_model.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/14_flex_pcb_model.svg" alt="Flex PCB model">
+                        <span class="item-label">Flex PCB model</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/15_finish_flex_pcb_model.svg">
+                        <img src="01_3D_Modelling_Toolbar/10_Sheet_Metal_and_PCB/15_finish_flex_pcb_model.svg" alt="Finish flex PCB model">
+                        <span class="item-label">Finish flex PCB model</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                </div>
+            </section>
+        
+            <section class="toolbar-section">
+                <h2>SKETCH Toolbar</h2>
+                <div class="onshape-toolbar">
+                    
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Line">
+                        <img src="02_Sketch_Toolbar/01_Lines/01_line.svg" alt="Line">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="01 Lines">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="02_Sketch_Toolbar/01_Lines/01_line.svg">
+                        <img src="02_Sketch_Toolbar/01_Lines/01_line.svg" alt="Line">
+                        <span class="item-label">Line</span>
+                        <span class="shortcut"><kbd>l</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/01_Lines/02_midpoint_line.svg">
+                        <img src="02_Sketch_Toolbar/01_Lines/02_midpoint_line.svg" alt="Midpoint line">
+                        <span class="item-label">Midpoint line</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Corner rectangle">
+                        <img src="02_Sketch_Toolbar/02_Rectangles/01_corner_rectangle.svg" alt="Corner rectangle">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="02 Rectangles">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="02_Sketch_Toolbar/02_Rectangles/01_corner_rectangle.svg">
+                        <img src="02_Sketch_Toolbar/02_Rectangles/01_corner_rectangle.svg" alt="Corner rectangle">
+                        <span class="item-label">Corner rectangle</span>
+                        <span class="shortcut"><kbd>g</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/02_Rectangles/02_center_point_rectangle.svg">
+                        <img src="02_Sketch_Toolbar/02_Rectangles/02_center_point_rectangle.svg" alt="Center point rectangle">
+                        <span class="item-label">Center point rectangle</span>
+                        <span class="shortcut"><kbd>r</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/02_Rectangles/03_aligned_rectangle.svg">
+                        <img src="02_Sketch_Toolbar/02_Rectangles/03_aligned_rectangle.svg" alt="Aligned rectangle">
+                        <span class="item-label">Aligned rectangle</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Center point circle">
+                        <img src="02_Sketch_Toolbar/03_Circles_and_Ellipses/01_center_point_circle.svg" alt="Center point circle">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="03 Circles and Ellipses">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="02_Sketch_Toolbar/03_Circles_and_Ellipses/01_center_point_circle.svg">
+                        <img src="02_Sketch_Toolbar/03_Circles_and_Ellipses/01_center_point_circle.svg" alt="Center point circle">
+                        <span class="item-label">Center point circle</span>
+                        <span class="shortcut"><kbd>c</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/03_Circles_and_Ellipses/02_3_point_circle.svg">
+                        <img src="02_Sketch_Toolbar/03_Circles_and_Ellipses/02_3_point_circle.svg" alt="3 point circle">
+                        <span class="item-label">3 point circle</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/03_Circles_and_Ellipses/03_ellipse.svg">
+                        <img src="02_Sketch_Toolbar/03_Circles_and_Ellipses/03_ellipse.svg" alt="Ellipse">
+                        <span class="item-label">Ellipse</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="3 point arc">
+                        <img src="02_Sketch_Toolbar/04_Arcs_and_Conics/01_3_point_arc.svg" alt="3 point arc">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="04 Arcs and Conics">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="02_Sketch_Toolbar/04_Arcs_and_Conics/01_3_point_arc.svg">
+                        <img src="02_Sketch_Toolbar/04_Arcs_and_Conics/01_3_point_arc.svg" alt="3 point arc">
+                        <span class="item-label">3 point arc</span>
+                        <span class="shortcut"><kbd>a</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/04_Arcs_and_Conics/02_tangent_arc.svg">
+                        <img src="02_Sketch_Toolbar/04_Arcs_and_Conics/02_tangent_arc.svg" alt="Tangent arc">
+                        <span class="item-label">Tangent arc</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/04_Arcs_and_Conics/03_center_point_arc.svg">
+                        <img src="02_Sketch_Toolbar/04_Arcs_and_Conics/03_center_point_arc.svg" alt="Center point arc">
+                        <span class="item-label">Center point arc</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/04_Arcs_and_Conics/04_elliptical_arc.svg">
+                        <img src="02_Sketch_Toolbar/04_Arcs_and_Conics/04_elliptical_arc.svg" alt="Elliptical arc">
+                        <span class="item-label">Elliptical arc</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/04_Arcs_and_Conics/05_conic.svg">
+                        <img src="02_Sketch_Toolbar/04_Arcs_and_Conics/05_conic.svg" alt="Conic">
+                        <span class="item-label">Conic</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Inscribed polygon">
+                        <img src="02_Sketch_Toolbar/05_Polygons/01_inscribed_polygon.svg" alt="Inscribed polygon">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="05 Polygons">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="02_Sketch_Toolbar/05_Polygons/01_inscribed_polygon.svg">
+                        <img src="02_Sketch_Toolbar/05_Polygons/01_inscribed_polygon.svg" alt="Inscribed polygon">
+                        <span class="item-label">Inscribed polygon</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/05_Polygons/02_circumscribed_polygon.svg">
+                        <img src="02_Sketch_Toolbar/05_Polygons/02_circumscribed_polygon.svg" alt="Circumscribed polygon">
+                        <span class="item-label">Circumscribed polygon</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Spline">
+                        <img src="02_Sketch_Toolbar/06_Splines/01_spline.svg" alt="Spline">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="06 Splines">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="02_Sketch_Toolbar/06_Splines/01_spline.svg">
+                        <img src="02_Sketch_Toolbar/06_Splines/01_spline.svg" alt="Spline">
+                        <span class="item-label">Spline</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/06_Splines/02_bezier.svg">
+                        <img src="02_Sketch_Toolbar/06_Splines/02_bezier.svg" alt="Bezier">
+                        <span class="item-label">Bezier</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/06_Splines/03_spline_control_point.svg">
+                        <img src="02_Sketch_Toolbar/06_Splines/03_spline_control_point.svg" alt="Spline control point">
+                        <span class="item-label">Spline control point</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Point">
+                        <img src="02_Sketch_Toolbar/07_Point_Text_Project/01_point.svg" alt="Point">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="07 Point Text Project">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="02_Sketch_Toolbar/07_Point_Text_Project/01_point.svg">
+                        <img src="02_Sketch_Toolbar/07_Point_Text_Project/01_point.svg" alt="Point">
+                        <span class="item-label">Point</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/07_Point_Text_Project/02_text.svg">
+                        <img src="02_Sketch_Toolbar/07_Point_Text_Project/02_text.svg" alt="Text">
+                        <span class="item-label">Text</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/07_Point_Text_Project/03_use.svg">
+                        <img src="02_Sketch_Toolbar/07_Point_Text_Project/03_use.svg" alt="Use">
+                        <span class="item-label">Use</span>
+                        <span class="shortcut"><kbd>u</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/07_Point_Text_Project/04_intersection.svg">
+                        <img src="02_Sketch_Toolbar/07_Point_Text_Project/04_intersection.svg" alt="Intersection">
+                        <span class="item-label">Intersection</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/07_Point_Text_Project/05_construction.svg">
+                        <img src="02_Sketch_Toolbar/07_Point_Text_Project/05_construction.svg" alt="Construction">
+                        <span class="item-label">Construction</span>
+                        <span class="shortcut"><kbd>q</kbd></span>
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Fillet">
+                        <img src="02_Sketch_Toolbar/08_Sketch_Modify/01_fillet.svg" alt="Fillet">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="08 Sketch Modify">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="02_Sketch_Toolbar/08_Sketch_Modify/01_fillet.svg">
+                        <img src="02_Sketch_Toolbar/08_Sketch_Modify/01_fillet.svg" alt="Fillet">
+                        <span class="item-label">Fillet</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>f</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/08_Sketch_Modify/02_chamfer.svg">
+                        <img src="02_Sketch_Toolbar/08_Sketch_Modify/02_chamfer.svg" alt="Chamfer">
+                        <span class="item-label">Chamfer</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/08_Sketch_Modify/03_trim.svg">
+                        <img src="02_Sketch_Toolbar/08_Sketch_Modify/03_trim.svg" alt="Trim">
+                        <span class="item-label">Trim</span>
+                        <span class="shortcut"><kbd>m</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/08_Sketch_Modify/04_extend.svg">
+                        <img src="02_Sketch_Toolbar/08_Sketch_Modify/04_extend.svg" alt="Extend">
+                        <span class="item-label">Extend</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/08_Sketch_Modify/05_split.svg">
+                        <img src="02_Sketch_Toolbar/08_Sketch_Modify/05_split.svg" alt="Split">
+                        <span class="item-label">Split</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/08_Sketch_Modify/06_offset.svg">
+                        <img src="02_Sketch_Toolbar/08_Sketch_Modify/06_offset.svg" alt="Offset">
+                        <span class="item-label">Offset</span>
+                        <span class="shortcut"><kbd>o</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/08_Sketch_Modify/07_slot.svg">
+                        <img src="02_Sketch_Toolbar/08_Sketch_Modify/07_slot.svg" alt="Slot">
+                        <span class="item-label">Slot</span>
+                        
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Mirror">
+                        <img src="02_Sketch_Toolbar/09_Pattern_and_Insert/01_mirror.svg" alt="Mirror">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="09 Pattern and Insert">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="02_Sketch_Toolbar/09_Pattern_and_Insert/01_mirror.svg">
+                        <img src="02_Sketch_Toolbar/09_Pattern_and_Insert/01_mirror.svg" alt="Mirror">
+                        <span class="item-label">Mirror</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/09_Pattern_and_Insert/02_linear_pattern.svg">
+                        <img src="02_Sketch_Toolbar/09_Pattern_and_Insert/02_linear_pattern.svg" alt="Linear pattern">
+                        <span class="item-label">Linear pattern</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/09_Pattern_and_Insert/03_circular_pattern.svg">
+                        <img src="02_Sketch_Toolbar/09_Pattern_and_Insert/03_circular_pattern.svg" alt="Circular pattern">
+                        <span class="item-label">Circular pattern</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/09_Pattern_and_Insert/04_transform.svg">
+                        <img src="02_Sketch_Toolbar/09_Pattern_and_Insert/04_transform.svg" alt="Transform">
+                        <span class="item-label">Transform</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/09_Pattern_and_Insert/05_insert_dxf_or_dwg.svg">
+                        <img src="02_Sketch_Toolbar/09_Pattern_and_Insert/05_insert_dxf_or_dwg.svg" alt="Insert DXF or DWG">
+                        <span class="item-label">Insert DXF or DWG</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/09_Pattern_and_Insert/06_insert_image.svg">
+                        <img src="02_Sketch_Toolbar/09_Pattern_and_Insert/06_insert_image.svg" alt="Insert image">
+                        <span class="item-label">Insert image</span>
+                        
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/09_Pattern_and_Insert/07_dimension.svg">
+                        <img src="02_Sketch_Toolbar/09_Pattern_and_Insert/07_dimension.svg" alt="Dimension">
+                        <span class="item-label">Dimension</span>
+                        <span class="shortcut"><kbd>d</kbd></span>
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                <div class="toolbar-group">
+                    <button class="tool-btn" title="Coincident">
+                        <img src="02_Sketch_Toolbar/10_Constraints/01_coincident.svg" alt="Coincident">
+                    </button>
+                    <button class="caret-btn" onclick="toggleMenu(this)" title="10 Constraints">
+                        <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2 4l4 4 4-4" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="menu-search">
+                            <span>&#8981;</span><input type="text" placeholder="Search tools..." onkeyup="filterMenu(this)">
+                        </div>
+                        
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/01_coincident.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/01_coincident.svg" alt="Coincident">
+                        <span class="item-label">Coincident</span>
+                        <span class="shortcut"><kbd>i</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/02_concentric.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/02_concentric.svg" alt="Concentric">
+                        <span class="item-label">Concentric</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>o</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/03_parallel.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/03_parallel.svg" alt="Parallel">
+                        <span class="item-label">Parallel</span>
+                        <span class="shortcut"><kbd>b</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/04_tangent.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/04_tangent.svg" alt="Tangent">
+                        <span class="item-label">Tangent</span>
+                        <span class="shortcut"><kbd>t</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/05_horizontal.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/05_horizontal.svg" alt="Horizontal">
+                        <span class="item-label">Horizontal</span>
+                        <span class="shortcut"><kbd>h</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/06_vertical.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/06_vertical.svg" alt="Vertical">
+                        <span class="item-label">Vertical</span>
+                        <span class="shortcut"><kbd>v</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/07_perpendicular.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/07_perpendicular.svg" alt="Perpendicular">
+                        <span class="item-label">Perpendicular</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>l</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/08_equal.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/08_equal.svg" alt="Equal">
+                        <span class="item-label">Equal</span>
+                        <span class="shortcut"><kbd>e</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/09_midpoint.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/09_midpoint.svg" alt="Midpoint">
+                        <span class="item-label">Midpoint</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>m</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/10_normal.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/10_normal.svg" alt="Normal">
+                        <span class="item-label">Normal</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>k</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/11_pierce.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/11_pierce.svg" alt="Pierce">
+                        <span class="item-label">Pierce</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>g</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/12_symmetric.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/12_symmetric.svg" alt="Symmetric">
+                        <span class="item-label">Symmetric</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>q</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/13_fix.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/13_fix.svg" alt="Fix">
+                        <span class="item-label">Fix</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>j</kbd></span>
+                    </div>
+                
+                    <div class="menu-item" title="02_Sketch_Toolbar/10_Constraints/14_curvature.svg">
+                        <img src="02_Sketch_Toolbar/10_Constraints/14_curvature.svg" alt="Curvature">
+                        <span class="item-label">Curvature</span>
+                        <span class="shortcut"><kbd>shift</kbd><kbd>u</kbd></span>
+                    </div>
+                
+                    </div>
+                </div>
+                <div class="divider"></div>
+            
+                </div>
+            </section>
+        
+<script>
+    function toggleMenu(btn) {
+        const menu = btn.nextElementSibling;
+        const isOpen = menu.classList.contains('open');
+        document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('open'));
+        document.querySelectorAll('.caret-btn').forEach(b => b.classList.remove('active'));
+        if (!isOpen) {
+            menu.classList.add('open');
+            btn.classList.add('active');
+        }
+    }
+    function filterMenu(input) {
+        const filter = input.value.toLowerCase();
+        const items = input.closest('.dropdown-menu').querySelectorAll('.menu-item');
+        items.forEach(item => {
+            const text = item.querySelector('.item-label').textContent.toLowerCase();
+            item.style.display = text.includes(filter) ? 'flex' : 'none';
+        });
+    }
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.toolbar-group')) {
+            document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('open'));
+            document.querySelectorAll('.caret-btn').forEach(b => b.classList.remove('active'));
+        }
+    });
+</script>
+</body>
+</html>

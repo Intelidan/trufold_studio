@@ -19,7 +19,6 @@ class AssemblyViewportStatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final report = viewModel.evaluateLadderCompliance();
-    final isLight = viewModel.isLightBackground;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -31,19 +30,17 @@ class AssemblyViewportStatusPill extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: isLight
-                  ? const Color(0xFFFFFFFF).withValues(alpha: 0.95)
-                  : const Color(0xFF0F172A).withValues(alpha: 0.90),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: report.badgeColor.withValues(alpha: isLight ? 0.95 : 0.8),
+                color: report.badgeColor.withValues(alpha: 0.95),
                 width: 1.2,
               ),
-              boxShadow: [
+              boxShadow: const [
                 BoxShadow(
-                  color: isLight ? const Color(0x15000000) : Colors.black.withValues(alpha: 0.25),
+                  color: Color(0x15000000),
                   blurRadius: 8,
-                  offset: const Offset(0, 2),
+                  offset: Offset(0, 2),
                 ),
               ],
             ),
@@ -78,39 +75,35 @@ class AssemblyViewportStatusPill extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: isLight
-                  ? const Color(0xFFFFFFFF).withValues(alpha: 0.95)
-                  : const Color(0xFF0F172A).withValues(alpha: 0.90),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isLight
-                    ? const Color(0xFF0284C7).withValues(alpha: 0.8)
-                    : const Color(0xFF38BDF8).withValues(alpha: 0.7),
+                color: const Color(0xFF0076CE).withValues(alpha: 0.8),
                 width: 1.0,
               ),
-              boxShadow: [
+              boxShadow: const [
                 BoxShadow(
-                  color: isLight ? const Color(0x15000000) : Colors.black.withValues(alpha: 0.25),
+                  color: Color(0x15000000),
                   blurRadius: 8,
-                  offset: const Offset(0, 2),
+                  offset: Offset(0, 2),
                 ),
               ],
             ),
-            child: Row(
+            child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   Icons.inventory_2_rounded,
-                  color: isLight ? const Color(0xFF0284C7) : const Color(0xFF38BDF8),
+                  color: Color(0xFF0076CE),
                   size: 14,
                 ),
-                const SizedBox(width: 5),
+                SizedBox(width: 5),
                 Text(
                   'Cut List / BOM',
                   style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
-                    color: isLight ? const Color(0xFF0284C7) : const Color(0xFF38BDF8),
+                    color: Color(0xFF0076CE),
                   ),
                 ),
               ],

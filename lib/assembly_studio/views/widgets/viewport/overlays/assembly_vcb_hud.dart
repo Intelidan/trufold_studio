@@ -24,119 +24,85 @@ class AssemblyVcbHud extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLight = viewModel.isLightBackground;
     final hasContent = controller.text.isNotEmpty || viewModel.vcbValue.isNotEmpty;
 
     return Container(
-      width: 240,
+      constraints: const BoxConstraints(minWidth: 170, maxWidth: 240),
+      height: 28,
       decoration: BoxDecoration(
-        color: isLight
-            ? const Color(0xFFFFFFFF).withValues(alpha: 0.96)
-            : const Color(0xFF0F172A).withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(5),
         border: Border.all(
-          color: focusNode.hasFocus
-              ? const Color(0xFF38BDF8)
-              : (isLight ? const Color(0xFFCBD5E1) : const Color(0xFF334155)),
-          width: focusNode.hasFocus ? 1.5 : 1.0,
+          color: focusNode.hasFocus ? const Color(0xFF0076CE) : const Color(0xFFCBD5E1),
+          width: focusNode.hasFocus ? 1.4 : 1.0,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: isLight ? const Color(0x18000000) : Colors.black.withValues(alpha: 0.35),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: const [BoxShadow(color: Color(0x18000000), blurRadius: 8, offset: Offset(0, 2))],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      child: Column(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Row(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0284C7).withValues(alpha: 0.20),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.40)),
-                  ),
-                  child: Text(
-                    viewModel.vcbLabel.toUpperCase(),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                    style: const TextStyle(
-                      color: Color(0xFF0284C7),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
+          // 1. Compact Label Pill (Flexible to prevent overflow on long labels like '🔒 WELDED ENTITY')
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE0F2FE),
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: const Color(0xFFBAE6FD), width: 0.8),
+              ),
+              child: Text(
+                viewModel.vcbLabel.toUpperCase(),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: Color(0xFF0076CE),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
                 ),
               ),
-              const SizedBox(width: 4),
-              if (hasContent)
-                GestureDetector(
-                  onTap: onClear,
-                  child: Icon(
-                    Icons.close,
-                    size: 14,
-                    color: isLight ? const Color(0xFF64748B) : Colors.white54,
-                  ),
-                ),
-            ],
+            ),
           ),
-          const SizedBox(height: 6),
-          Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+          const SizedBox(width: 5),
+
+
+          // 2. Compact Value Field
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              style: const TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 11.5,
+                fontFamily: 'RobotoMono',
+                fontWeight: FontWeight.w600,
               ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    style: TextStyle(
-                      color: isLight ? const Color(0xFF0F172A) : Colors.white,
-                      fontSize: 13,
-                      fontFamily: 'RobotoMono',
-                      fontWeight: FontWeight.w600,
-                    ),
-                    decoration: InputDecoration(
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
-                      hintText: viewModel.vcbHint,
-                      hintStyle: TextStyle(
-                        color: isLight ? const Color(0xFF94A3B8) : Colors.white38,
-                        fontSize: 11,
-                        fontFamily: 'sans-serif',
-                      ),
-                    ),
-                    onChanged: onChanged,
-                    onSubmitted: onSubmitted,
-                  ),
-                ),
-                if (hasContent)
-                  IconButton(
-                    icon: const Icon(Icons.keyboard_return, size: 14, color: Color(0xFF0284C7)),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    tooltip: 'Submit (Enter)',
-                    onPressed: () => onSubmitted(controller.text.trim()),
-                  ),
-              ],
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+                hintText: viewModel.vcbHint,
+                hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontFamily: 'sans-serif'),
+              ),
+              onChanged: onChanged,
+              onSubmitted: onSubmitted,
             ),
           ),
+
+          // 3. Clear / Submit Controls
+          if (hasContent) ...[
+            GestureDetector(
+              onTap: onClear,
+              child: const Icon(Icons.close, size: 12, color: Color(0xFF94A3B8)),
+            ),
+            const SizedBox(width: 3),
+            GestureDetector(
+              onTap: () => onSubmitted(controller.text.trim()),
+              child: const Icon(Icons.keyboard_return_rounded, size: 13, color: Color(0xFF0076CE)),
+            ),
+          ],
         ],
       ),
     );

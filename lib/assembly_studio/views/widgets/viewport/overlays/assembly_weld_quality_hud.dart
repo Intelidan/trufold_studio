@@ -77,27 +77,27 @@ class AssemblyWeldQualityHUD extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFF7F1D1D).withValues(alpha: 0.92),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.6)),
+              border: Border.all(color: const Color(0xFFEF4444), width: 1.2),
               boxShadow: const [
-                BoxShadow(color: Color(0x66000000), blurRadius: 10, offset: Offset(0, 3)),
+                BoxShadow(color: Color(0x18000000), blurRadius: 8, offset: Offset(0, 2)),
               ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.warning_amber_rounded, color: Color(0xFFF87171), size: 14),
+                const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 14),
                 const SizedBox(width: 6),
                 Text(
                   'FAULT ANOMALIES ($count)',
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: Color(0xFFDC2626),
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.5,
                   ),
                 ),
                 const SizedBox(width: 4),
-                const Icon(Icons.keyboard_arrow_left, size: 14, color: Colors.white70),
+                const Icon(Icons.keyboard_arrow_left, size: 14, color: Color(0xFF64748B)),
               ],
             ),
           ),
@@ -116,11 +116,11 @@ class AssemblyWeldQualityHUD extends StatelessWidget {
         color: Colors.transparent,
         child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.45)),
+            border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.6)),
             boxShadow: const [
-              BoxShadow(color: Color(0x66000000), blurRadius: 16, offset: Offset(0, 6)),
+              BoxShadow(color: Color(0x18000000), blurRadius: 16, offset: Offset(0, 6)),
             ],
           ),
           child: Column(
@@ -136,7 +136,7 @@ class AssemblyWeldQualityHUD extends StatelessWidget {
                       child: Text(
                         'FAULT ANOMALY MARKS (${defects.length})',
                         style: const TextStyle(
-                          color: Color(0xFFF87171),
+                          color: Color(0xFFDC2626),
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 0.5,
@@ -146,25 +146,30 @@ class AssemblyWeldQualityHUD extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7F1D1D).withValues(alpha: 0.5),
+                        color: const Color(0xFFFEF2F2),
                         borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFFECACA)),
                       ),
-                      child: const Text('AWS D1.1', style: TextStyle(color: Colors.white70, fontSize: 8.5)),
+                      child: const Text('AWS D1.1', style: TextStyle(color: Color(0xFFB91C1C), fontSize: 8.5, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(width: 6),
-                      InkWell(
-                        onTap: onToggleSidebarMinimize ?? viewModel.toggleAnomalySidebarMinimized,
-                        borderRadius: BorderRadius.circular(3),
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(3)),
-                          child: const Icon(Icons.keyboard_arrow_right, size: 14, color: Colors.white70),
+                    InkWell(
+                      onTap: onToggleSidebarMinimize ?? viewModel.toggleAnomalySidebarMinimized,
+                      borderRadius: BorderRadius.circular(3),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
+                        child: const Icon(Icons.keyboard_arrow_right, size: 14, color: Color(0xFF64748B)),
                       ),
+                    ),
                   ],
                 ),
               ),
-              const Divider(color: Colors.white12, height: 1),
+              const Divider(color: Color(0xFFE2E8F0), height: 1),
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.all(6),
@@ -180,13 +185,13 @@ class AssemblyWeldQualityHUD extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
+                            color: const Color(0xFFF8FAFC),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.center_focus_strong, color: Color(0xFFF87171), size: 13),
+                              const Icon(Icons.center_focus_strong, color: Color(0xFFEF4444), size: 13),
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Column(
@@ -194,17 +199,17 @@ class AssemblyWeldQualityHUD extends StatelessWidget {
                                   children: [
                                     Text(
                                       '${index + 1}. ${anomaly.description}',
-                                      style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w600),
+                                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 10.5, fontWeight: FontWeight.w600),
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
                                       'X: ${anomaly.position.x.toInt()}  Y: ${anomaly.position.y.toInt()}  Z: ${anomaly.position.z.toInt()}mm',
-                                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 8.5, fontFamily: 'monospace'),
+                                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 8.5, fontFamily: 'monospace'),
                                     ),
                                   ],
                                 ),
                               ),
-                              const Icon(Icons.chevron_right, color: Colors.white38, size: 13),
+                              const Icon(Icons.chevron_right, color: Color(0xFF94A3B8), size: 13),
                             ],
                           ),
                         ),
@@ -229,14 +234,14 @@ class AssemblyWeldQualityHUD extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isPassing ? const Color(0xFF10B981) : const Color(0xFFEF4444),
               width: 1.2,
             ),
             boxShadow: const [
-              BoxShadow(color: Color(0x66000000), blurRadius: 10, offset: Offset(0, 3)),
+              BoxShadow(color: Color(0x18000000), blurRadius: 8, offset: Offset(0, 2)),
             ],
           ),
           child: Row(
@@ -245,13 +250,13 @@ class AssemblyWeldQualityHUD extends StatelessWidget {
               Icon(
                 isPassing ? Icons.verified : Icons.warning,
                 size: 14,
-                color: isPassing ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                color: isPassing ? const Color(0xFF059669) : const Color(0xFFDC2626),
               ),
               const SizedBox(width: 6),
               Text(
                 'QUALITY METRIC GRADE: ${eval.overallScore.toStringAsFixed(1)}% (${eval.letterGrade})',
                 style: TextStyle(
-                  color: isPassing ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                  color: isPassing ? const Color(0xFF059669) : const Color(0xFFDC2626),
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.4,
@@ -261,13 +266,13 @@ class AssemblyWeldQualityHUD extends StatelessWidget {
               InkWell(
                 onTap: onToggleCardMinimize ?? viewModel.toggleQualityCardMinimized,
                 borderRadius: BorderRadius.circular(3),
-                child: const Icon(Icons.keyboard_arrow_up, size: 14, color: Colors.white70),
+                child: const Icon(Icons.keyboard_arrow_up, size: 14, color: Color(0xFF64748B)),
               ),
               const SizedBox(width: 4),
               InkWell(
                 onTap: onDismiss,
                 borderRadius: BorderRadius.circular(3),
-                child: const Icon(Icons.close, size: 13, color: Colors.white54),
+                child: const Icon(Icons.close, size: 13, color: Color(0xFF94A3B8)),
               ),
             ],
           ),
@@ -283,136 +288,151 @@ class AssemblyWeldQualityHUD extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: Material(
-            color: Colors.transparent,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A).withValues(alpha: 0.95),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isPassing ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                  width: 1.5,
-                ),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x66000000), blurRadius: 16, offset: Offset(0, 4)),
-                ],
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isPassing ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                width: 1.5,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isPassing ? Icons.verified : Icons.warning,
-                              size: 15,
-                              color: isPassing ? const Color(0xFF34D399) : const Color(0xFFF87171),
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'QUALITY METRIC GRADE: ${eval.overallScore.toStringAsFixed(1)}%',
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: isPassing ? const Color(0xFF34D399) : const Color(0xFFF87171),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.4,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Row(
+              boxShadow: const [
+                BoxShadow(color: Color(0x18000000), blurRadius: 16, offset: Offset(0, 4)),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          InkWell(
-                            onTap: onToggleCardMinimize ?? viewModel.toggleQualityCardMinimized,
-                            borderRadius: BorderRadius.circular(3),
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(3)),
-                              child: const Icon(Icons.keyboard_arrow_down, size: 14, color: Colors.white70),
-                            ),
+                          Icon(
+                            isPassing ? Icons.verified : Icons.warning,
+                            size: 15,
+                            color: isPassing ? const Color(0xFF059669) : const Color(0xFFDC2626),
                           ),
                           const SizedBox(width: 6),
-                          InkWell(
-                            onTap: onDismiss,
-                            borderRadius: BorderRadius.circular(3),
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(3)),
-                              child: const Icon(Icons.close, size: 14, color: Colors.white60),
+                          Flexible(
+                            child: Text(
+                              'QUALITY METRIC GRADE: ${eval.overallScore.toStringAsFixed(1)}%',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isPassing ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.4,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: (isPassing ? const Color(0xFF065F46) : const Color(0xFF991B1B)).withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        InkWell(
+                          onTap: onToggleCardMinimize ?? viewModel.toggleQualityCardMinimized,
+                          borderRadius: BorderRadius.circular(3),
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: const Icon(Icons.keyboard_arrow_down, size: 14, color: Color(0xFF64748B)),
+                          ),
                         ),
-                        child: Text(
-                          'Speed: ${eval.speedConsistency.toInt()}% | Uniformity: ${eval.profileUniformity.toInt()}%',
-                          style: const TextStyle(color: Colors.white70, fontSize: 9.5),
+                        const SizedBox(width: 6),
+                        InkWell(
+                          onTap: onDismiss,
+                          borderRadius: BorderRadius.circular(3),
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: const Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: isPassing ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: isPassing ? const Color(0xFFA7F3D0) : const Color(0xFFFECACA)),
+                      ),
+                      child: Text(
+                        'Speed: ${eval.speedConsistency.toInt()}% | Uniformity: ${eval.profileUniformity.toInt()}%',
+                        style: TextStyle(
+                          color: isPassing ? const Color(0xFF065F46) : const Color(0xFF991B1B),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (onInspectSeam != null)
-                        TextButton.icon(
-                          style: TextButton.styleFrom(
-                            backgroundColor: const Color(0xFF0284C7).withValues(alpha: 0.3),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          onPressed: onInspectSeam,
-                          icon: const Icon(Icons.zoom_in, size: 13, color: Color(0xFF38BDF8)),
-                          label: const Text('INSPECT SEAM', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold)),
-                        ),
-                      if (onResetCam != null)
-                        TextButton.icon(
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.white.withValues(alpha: 0.1),
-                            foregroundColor: Colors.white70,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          onPressed: onResetCam,
-                          icon: const Icon(Icons.videocam_off, size: 13, color: Colors.white70),
-                          label: const Text('RESET CAM', style: TextStyle(fontSize: 9.5)),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    eval.gradeFeedback,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 10.5,
-                      fontStyle: FontStyle.italic,
                     ),
+                    if (onInspectSeam != null)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xFFE0F2FE),
+                          foregroundColor: const Color(0xFF0076CE),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        ),
+                        onPressed: onInspectSeam,
+                        icon: const Icon(Icons.zoom_in, size: 13, color: Color(0xFF0076CE)),
+                        label: const Text('INSPECT SEAM', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold)),
+                      ),
+                    if (onResetCam != null)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          foregroundColor: const Color(0xFF475569),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        ),
+                        onPressed: onResetCam,
+                        icon: const Icon(Icons.videocam_off, size: 13, color: Color(0xFF64748B)),
+                        label: const Text('RESET CAM', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  eval.gradeFeedback,
+                  style: const TextStyle(
+                    color: Color(0xFF475569),
+                    fontSize: 10.5,
+                    fontStyle: FontStyle.italic,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
+      ),
     );
   }
 }

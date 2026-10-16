@@ -2,6 +2,7 @@
 // Modularized for TruFold MVVM Architecture
 
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:trufold_studio/assembly_studio/engine/assembly_docking_engine.dart';
@@ -19,11 +20,7 @@ class AssemblyGlobalSceneAxesPainter extends CustomPainter {
   final FoldedMeshResult mesh;
   final Offset Function(CadPoint3D) projectPoint;
 
-  AssemblyGlobalSceneAxesPainter({
-    required this.size,
-    required this.mesh,
-    required this.projectPoint,
-  });
+  AssemblyGlobalSceneAxesPainter({required this.size, required this.mesh, required this.projectPoint});
 
   @override
   void paint(Canvas canvas, Size canvasSize) {
@@ -69,14 +66,7 @@ class AssemblyGlobalSceneAxesPainter extends CustomPainter {
     drawAxis(const CadPoint3D(0, 0, 100.0), const Color(0xFF0284C7));
   }
 
-  void _drawDottedLine(
-    Canvas canvas,
-    Offset p1,
-    Offset p2,
-    Paint paint, {
-    double dashLen = 3.5,
-    double spaceLen = 3.5,
-  }) {
+  void _drawDottedLine(Canvas canvas, Offset p1, Offset p2, Paint paint, {double dashLen = 3.5, double spaceLen = 3.5}) {
     final dx = p2.dx - p1.dx;
     final dy = p2.dy - p1.dy;
     final totalDist = math.sqrt(dx * dx + dy * dy);
@@ -114,6 +104,7 @@ class AssemblyGizmoPainter extends CustomPainter {
   final GizmoAxis activeAxis;
   final GizmoAxis lockedAxis;
   final Offset Function(CadPoint3D)? projectPoint;
+  final CadPoint3D? customCenter3d;
 
   AssemblyGizmoPainter({
     required this.selectedPart,
@@ -128,11 +119,12 @@ class AssemblyGizmoPainter extends CustomPainter {
     required this.activeAxis,
     this.lockedAxis = GizmoAxis.none,
     this.projectPoint,
+    this.customCenter3d,
   });
 
   @override
   void paint(Canvas canvas, Size canvasSize) {
-    final center3d = selectedPart.position;
+    final center3d = customCenter3d ?? selectedPart.position;
     final centerScreen = _project(center3d);
     if (centerScreen == Offset.zero) return;
 
@@ -250,12 +242,7 @@ class AssemblyGizmoPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: '$axisLabel (15° Snap)',
-        style: TextStyle(
-          color: isActive ? Colors.yellowAccent : color,
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          backgroundColor: const Color(0xDD0F172A),
-        ),
+        style: TextStyle(color: isActive ? Colors.yellowAccent : color, fontSize: 9, fontWeight: FontWeight.bold, backgroundColor: const Color(0xDD0F172A)),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -275,11 +262,7 @@ class AssemblyGizmoPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: label,
-        style: TextStyle(
-          color: isActive ? Colors.yellowAccent : color,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
+        style: TextStyle(color: isActive ? Colors.yellowAccent : color, fontSize: 10, fontWeight: FontWeight.bold),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -333,7 +316,8 @@ class AssemblyGizmoPainter extends CustomPainter {
         old.pan != pan ||
         old.gizmoMode != gizmoMode ||
         old.activeAxis != activeAxis ||
-        old.lockedAxis != lockedAxis;
+        old.lockedAxis != lockedAxis ||
+        old.customCenter3d != customCenter3d;
   }
 }
 
@@ -356,6 +340,7 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
   final double targetScaleFactor;
   final Offset? currentSnapDragScreenPos;
   final bool showSnapLabel;
+  final double zoom;
 
   AssemblySelectedPartBoundingBoxPainter({
     required this.selectedParts,
@@ -371,6 +356,7 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
     this.targetScaleFactor = 1.0,
     this.currentSnapDragScreenPos,
     this.showSnapLabel = true,
+    this.zoom = 1.0,
   });
 
   @override
@@ -384,12 +370,14 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
 
     if (selectedParts.isNotEmpty) {
       final wirePaint = Paint()
-        ..color = const Color(0xEE0284C7) // Crisp SketchUp selection blue wireframe
+        ..color =
+            const Color(0xEE0284C7) // Crisp SketchUp selection blue wireframe
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2;
 
       for (final part in selectedParts) {
         final corners = part.getOrientedBoundingBoxCorners();
+        // 1. Draw wireframe edges only (cyan face fill disabled per user request)
         _drawBoxEdgesFromWorldCorners(canvas, corners, wirePaint);
 
         // Extract all snapping points (corners, edge centers, hole centers, sketch endpoints)
@@ -424,12 +412,15 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
 
     final corners = targetPart.getOrientedBoundingBoxCorners();
     final haloPaint = Paint()
-      ..color = const Color(0xFF10B981) // Vibrant emerald green docking highlight
+      ..color =
+          const Color(0xFF10B981) // Vibrant emerald green docking highlight
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.4;
 
     _drawBoxEdgesFromWorldCorners(canvas, corners, haloPaint);
   }
+
+  // Bounding box faces disabled per user request (border lines only)
 
   void _drawBoxEdgesFromWorldCorners(Canvas canvas, List<CadPoint3D> corners3d, Paint wirePaint) {
     if (corners3d.length < 8) return;
@@ -455,51 +446,104 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
   }
 
   void _drawPartSnapPoints(Canvas canvas, AssemblyPart part, List<AssemblySnapPoint> snapPoints) {
-    // Very subtle, low-contrast CAD hint dots for selected entity
-    final defaultDotPaint = Paint()
-      ..color = const Color(0x3594A3B8)
-      ..style = PaintingStyle.fill;
-    final holeDotPaint = Paint()
-      ..color = const Color(0x40F59E0B)
-      ..style = PaintingStyle.fill;
-    final sketchDotPaint = Paint()
-      ..color = const Color(0x3500E5FF)
-      ..style = PaintingStyle.fill;
-
     final activePt = snapDragTargetSnap ?? hoveredSnapPoint;
 
+    // Zoom-adaptive sizing: scales down smoothly when zoomed out so hole dots don't clutter the view
+    final zoomFactor = (zoom / 1.0).clamp(0.12, 1.5);
+    final holeRadius = (1.3 * zoomFactor).clamp(0.35, 1.8);
+    final cornerRadius = (1.8 * zoomFactor).clamp(0.55, 2.2);
+    final midRadius = (1.3 * zoomFactor).clamp(0.45, 1.8);
+    final centroidRadius = (1.5 * zoomFactor).clamp(0.5, 2.0);
+    final borderStroke = (holeRadius * 0.25).clamp(0.2, 0.5);
+
+    final borderPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.9)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = borderStroke;
+
     for (final pt in snapPoints) {
-      // Activating point is skipped here and drawn with full highlight by _drawActivatingSnapPointHighlight
       if (activePt != null && pt.id == activePt.id) continue;
 
       final scr = projectPoint(pt.worldPosition);
       if (scr == Offset.zero) continue;
 
       switch (pt.type) {
+        case AssemblySnapPointType.boundingBoxCorner:
+          // SketchUp Green Corner Endpoint
+          canvas.drawCircle(
+            scr,
+            cornerRadius,
+            Paint()
+              ..color = const Color(0xFF10B981)
+              ..style = PaintingStyle.fill,
+          );
+          canvas.drawCircle(scr, cornerRadius, borderPaint);
+          break;
+        case AssemblySnapPointType.boundingBoxEdgeCenter:
+          // SketchUp Cyan Edge Midpoint
+          canvas.drawCircle(
+            scr,
+            midRadius,
+            Paint()
+              ..color = const Color(0xFF00E5FF)
+              ..style = PaintingStyle.fill,
+          );
+          canvas.drawCircle(scr, midRadius, borderPaint);
+          break;
+        case AssemblySnapPointType.boundingBoxFaceCenter:
+          // SketchUp Blue Face Center
+          canvas.drawCircle(
+            scr,
+            midRadius,
+            Paint()
+              ..color = const Color(0xFF0284C7)
+              ..style = PaintingStyle.fill,
+          );
+          canvas.drawCircle(scr, midRadius, borderPaint);
+          break;
+        case AssemblySnapPointType.boundingBoxCentroid:
+          // SketchUp Purple 3D Centroid
+          canvas.drawCircle(
+            scr,
+            centroidRadius,
+            Paint()
+              ..color = const Color(0xFFA855F7)
+              ..style = PaintingStyle.fill,
+          );
+          canvas.drawCircle(scr, centroidRadius, borderPaint);
+          break;
         case AssemblySnapPointType.holeCenter:
-          canvas.drawCircle(scr, 1.2, holeDotPaint);
+          // Parametric Cylindrical Hole Center (scales down dynamically on zoom out)
+          canvas.drawCircle(
+            scr,
+            holeRadius,
+            Paint()
+              ..color = const Color(0xFFF59E0B)
+              ..style = PaintingStyle.fill,
+          );
+          if (holeRadius >= 0.75) {
+            canvas.drawCircle(scr, holeRadius, borderPaint);
+          }
           break;
         case AssemblySnapPointType.holePerimeter:
-          canvas.drawCircle(scr, 0.9, defaultDotPaint);
+          canvas.drawCircle(
+            scr,
+            (1.0 * zoomFactor).clamp(0.5, 1.2),
+            Paint()
+              ..color = const Color(0x6094A3B8)
+              ..style = PaintingStyle.fill,
+          );
           break;
         case AssemblySnapPointType.sketchCenter:
         case AssemblySnapPointType.sketchEndpoint:
-          canvas.drawCircle(scr, 1.1, sketchDotPaint);
-          break;
-        case AssemblySnapPointType.boundingBoxCorner:
-        case AssemblySnapPointType.boundingBoxCentroid:
-        case AssemblySnapPointType.boundingBoxFaceCenter:
-        case AssemblySnapPointType.boundingBoxEdgeCenter:
-          // Subtly visible bounding box snap points for selected entity
-          final fillPaint = Paint()
-            ..color = const Color(0xCC0284C7)
-            ..style = PaintingStyle.fill;
-          final borderPaint = Paint()
-            ..color = Colors.white.withValues(alpha: 0.85)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 0.8;
-          canvas.drawCircle(scr, 2.2, fillPaint);
-          canvas.drawCircle(scr, 2.2, borderPaint);
+          canvas.drawCircle(
+            scr,
+            midRadius,
+            Paint()
+              ..color = const Color(0xFF00E5FF)
+              ..style = PaintingStyle.fill,
+          );
+          canvas.drawCircle(scr, midRadius, borderPaint);
           break;
       }
     }
@@ -551,12 +595,7 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
     if (showSnapLabel) {
       final textSpan = TextSpan(
         text: pt.label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 9.0,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.2,
-        ),
+        style: const TextStyle(color: Colors.white, fontSize: 9.0, fontWeight: FontWeight.w600, letterSpacing: 0.2),
       );
       final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
 
@@ -645,12 +684,7 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
       const badgeText = '🧲 SNAP';
       final textSpan = const TextSpan(
         text: badgeText,
-        style: TextStyle(
-          color: Color(0xFFFFFFFF),
-          fontSize: 10.0,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
-        ),
+        style: TextStyle(color: Color(0xFFFFFFFF), fontSize: 10.0, fontWeight: FontWeight.bold, letterSpacing: 0.5),
       );
       final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
 
@@ -714,12 +748,7 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
     // 5. Subtle "Base Point" badge
     final textSpan = const TextSpan(
       text: 'Base Point',
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: 9.0,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 0.3,
-      ),
+      style: TextStyle(color: Colors.white, fontSize: 9.0, fontWeight: FontWeight.bold, letterSpacing: 0.3),
     );
     final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
     final pillOffset = Offset(scr.dx + 12.0, scr.dy - 11.0);

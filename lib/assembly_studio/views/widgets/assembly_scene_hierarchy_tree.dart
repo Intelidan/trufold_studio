@@ -514,6 +514,9 @@ class _AssemblySceneHierarchyTreeState extends State<AssemblySceneHierarchyTree>
       case AssemblyPartType.iBeam:
         typeColor = const Color(0xFFFB923C); // Orange
         break;
+      case AssemblyPartType.customExtrusion:
+        typeColor = const Color(0xFF818CF8); // Indigo
+        break;
     }
 
     return Container(

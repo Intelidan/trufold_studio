@@ -28,6 +28,7 @@ enum AssemblyPartType {
   baseFootPlate,
   splicePlate,
   swingGate,
+  customExtrusion,
 }
 
 /// Joint style configuration for welding simulation per welding_simulation_docs.md
@@ -473,6 +474,7 @@ class AssemblyPart {
   String? groupId; // Virtual group id if part belongs to a group
   String? groupName; // Virtual group name (e.g. 'Rung Group 1', 'Main Frame')
   String? componentDefinitionId; // Shared definition ID for instanced components (SketchUp Component paradigm)
+  List<CadFoldedPolygon3D>? customPolygons; // Custom 3D extruded/modeled polygons
 
   bool get isComponentInstance => componentDefinitionId != null;
 
@@ -487,7 +489,7 @@ class AssemblyPart {
     this.flangeWidth = 20.0, // User requested 20mm editable flange
     this.thickness = 2.0,
     this.isFlangeOutward = false,
-    this.color = const Color(0xFF90A4AE),
+    this.color = const Color(0xFF94B5CB),
     this.isVisible = true,
     List<RailSegmentDefinition>? segments,
     List<AssemblySketchFeature>? sketches,
@@ -503,6 +505,7 @@ class AssemblyPart {
     this.groupId,
     this.groupName,
     this.componentDefinitionId,
+    this.customPolygons,
   }) : segments = segments ?? [],
        sketches = sketches ?? [],
        weldedToPartIds = weldedToPartIds ?? [],
@@ -538,6 +541,7 @@ class AssemblyPart {
     bool clearGroup = false,
     String? componentDefinitionId,
     bool clearComponent = false,
+    List<CadFoldedPolygon3D>? customPolygons,
   }) {
     return AssemblyPart(
       id: id ?? this.id,
@@ -566,6 +570,7 @@ class AssemblyPart {
       groupId: clearGroup ? null : (groupId ?? this.groupId),
       groupName: clearGroup ? null : (groupName ?? this.groupName),
       componentDefinitionId: clearComponent ? null : (componentDefinitionId ?? this.componentDefinitionId),
+      customPolygons: customPolygons ?? (this.customPolygons != null ? List.from(this.customPolygons!) : null),
     );
   }
 
@@ -645,6 +650,10 @@ class AssemblyPart {
 
   /// Generates the raw constituent 3D polygons for this part in Local coordinates.
   void _buildLocalPolygons(List<CadFoldedPolygon3D> polys, List<CadFoldedPolygon3D> thickPolys) {
+    if (customPolygons != null && customPolygons!.isNotEmpty) {
+      polys.addAll(customPolygons!);
+      return;
+    }
     switch (type) {
       case AssemblyPartType.rung:
         _buildRungPolygons(polys, thickPolys);
@@ -702,6 +711,8 @@ class AssemblyPart {
         break;
       case AssemblyPartType.swingGate:
         _buildSwingGatePolygons(polys, thickPolys);
+        break;
+      case AssemblyPartType.customExtrusion:
         break;
     }
   }
@@ -874,20 +885,64 @@ class AssemblyPart {
     return [...getBoundingBoxSnapPoints(), ...getBoundingBoxEdgeCenterPoints(), ...getHoleSnapPoints(cachedMesh: cachedMesh), ...getSketchSnapPoints()];
   }
 
+  List<CadFoldedPolygon3D>? _cachedLocalPolys;
+  List<CadFoldedPolygon3D>? _cachedLocalThickPolys;
+  CadPoint3D? _cachedWorldPos;
+  CadPoint3D? _cachedWorldRot;
+  FoldedMeshResult? _cachedWorldMeshResult;
+
+  /// Invalidates both local and world mesh caches when parameters or features change
+  void invalidateMeshCache() {
+    _cachedLocalPolys = null;
+    _cachedLocalThickPolys = null;
+    _cachedWorldMeshResult = null;
+    _cachedWorldPos = null;
+    _cachedWorldRot = null;
+  }
+
   /// Generates the complete 3D folded geometry (polygons & thickness walls) for this part in World space.
   FoldedMeshResult build3DMesh() {
-    final polys = <CadFoldedPolygon3D>[];
-    final thickPolys = <CadFoldedPolygon3D>[];
-    _buildLocalPolygons(polys, thickPolys);
+    if (_cachedWorldPos == position &&
+        _cachedWorldRot == rotationDeg &&
+        _cachedWorldMeshResult != null) {
+      return _cachedWorldMeshResult!;
+    }
+
+    if (_cachedLocalPolys == null || _cachedLocalThickPolys == null) {
+      final polys = <CadFoldedPolygon3D>[];
+      final thickPolys = <CadFoldedPolygon3D>[];
+      _buildLocalPolygons(polys, thickPolys);
+      _cachedLocalPolys = polys;
+      _cachedLocalThickPolys = thickPolys;
+    }
 
     // Transform all polygons to world coordinates
-    final worldPolys = polys.map((p) => _transformPoly(p)).toList();
-    final worldThickPolys = thickPolys.map((p) => _transformPoly(p)).toList();
+    final worldPolys = _cachedLocalPolys!.map((p) => _transformPoly(p)).toList();
+    final worldThickPolys = _cachedLocalThickPolys!.map((p) => _transformPoly(p)).toList();
 
     double bw = length;
     double bl = height;
     double bh = flangeWidth > 0 ? flangeWidth : 20.0;
-    if (type == AssemblyPartType.safetyCageHoop || type == AssemblyPartType.safetyCageBellHoop) {
+    if (customPolygons != null && customPolygons!.isNotEmpty) {
+      double minX = double.infinity, maxX = -double.infinity;
+      double minY = double.infinity, maxY = -double.infinity;
+      double minZ = double.infinity, maxZ = -double.infinity;
+      for (final poly in customPolygons!) {
+        for (final v in poly.vertices) {
+          if (v.x < minX) minX = v.x;
+          if (v.x > maxX) maxX = v.x;
+          if (v.y < minY) minY = v.y;
+          if (v.y > maxY) maxY = v.y;
+          if (v.z < minZ) minZ = v.z;
+          if (v.z > maxZ) maxZ = v.z;
+        }
+      }
+      if (minX != double.infinity) {
+        bw = (maxX - minX).abs();
+        bl = (maxY - minY).abs();
+        bh = (maxZ - minZ).abs();
+      }
+    } else if (type == AssemblyPartType.safetyCageHoop || type == AssemblyPartType.safetyCageBellHoop) {
       bw = 700.0;
       bl = 700.0;
       bh = 50.0;
@@ -897,7 +952,17 @@ class AssemblyPart {
       bh = flangeWidth > 0 ? flangeWidth : 30.0;
     }
 
-    return FoldedMeshResult(polygons: worldPolys, thicknessPolygons: worldThickPolys, boundWidth: bw, boundLength: bl, boundHeight: bh, center: position);
+    _cachedWorldPos = position;
+    _cachedWorldRot = rotationDeg;
+    _cachedWorldMeshResult = FoldedMeshResult(
+      polygons: worldPolys,
+      thicknessPolygons: worldThickPolys,
+      boundWidth: bw,
+      boundLength: bl,
+      boundHeight: bh,
+      center: position,
+    );
+    return _cachedWorldMeshResult!;
   }
 
   CadFoldedPolygon3D _transformPoly(CadFoldedPolygon3D p) {
@@ -942,8 +1007,27 @@ class AssemblyPart {
 
     polys.add(CadFoldedPolygon3D(faceId: '${id}_top_web', vertices: topFace, holes: holes, normal: webNorm, color: color));
 
+    // Inner Web face (real sheet metal thickness T, Item 4)
+    final double innerWebZ = isRungUpsideDown ? T : (rungD - T);
+    final CadPoint3D innerWebNorm = isRungUpsideDown ? const CadPoint3D(0.0, 0.0, 1.0) : const CadPoint3D(0.0, 0.0, -1.0);
+    final innerRungHoles = holes.map((loop) => loop.map((pt) => CadPoint3D(pt.x, pt.y, innerWebZ)).toList()).toList();
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_inner_web',
+        vertices: [
+          CadPoint3D(0.0, (rungW / 2.0) - T, innerWebZ),
+          CadPoint3D(L, (rungW / 2.0) - T, innerWebZ),
+          CadPoint3D(L, (-rungW / 2.0) + T, innerWebZ),
+          CadPoint3D(0.0, (-rungW / 2.0) + T, innerWebZ),
+        ],
+        holes: innerRungHoles,
+        normal: innerWebNorm,
+        color: color,
+      ),
+    );
+
     // Flanges: Y = +rungW/2 and Y = -rungW/2
-    // Front flange
+    // Outer Front flange
     polys.add(
       CadFoldedPolygon3D(
         faceId: '${id}_flange_front',
@@ -958,7 +1042,22 @@ class AssemblyPart {
       ),
     );
 
-    // Back flange
+    // Inner Front flange
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_inner_flange_front',
+        vertices: [
+          CadPoint3D(0.0, (rungW / 2.0) - T, flangeEdgeZ),
+          CadPoint3D(L, (rungW / 2.0) - T, flangeEdgeZ),
+          CadPoint3D(L, (rungW / 2.0) - T, innerWebZ),
+          CadPoint3D(0.0, (rungW / 2.0) - T, innerWebZ),
+        ],
+        normal: const CadPoint3D(0.0, -1.0, 0.0),
+        color: color,
+      ),
+    );
+
+    // Outer Back flange
     polys.add(
       CadFoldedPolygon3D(
         faceId: '${id}_flange_back',
@@ -969,6 +1068,21 @@ class AssemblyPart {
           CadPoint3D(0.0, -rungW / 2.0, webZ),
         ],
         normal: const CadPoint3D(0.0, -1.0, 0.0),
+        color: color,
+      ),
+    );
+
+    // Inner Back flange
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_inner_flange_back',
+        vertices: [
+          CadPoint3D(0.0, (-rungW / 2.0) + T, innerWebZ),
+          CadPoint3D(L, (-rungW / 2.0) + T, innerWebZ),
+          CadPoint3D(L, (-rungW / 2.0) + T, flangeEdgeZ),
+          CadPoint3D(0.0, (-rungW / 2.0) + T, flangeEdgeZ),
+        ],
+        normal: const CadPoint3D(0.0, 1.0, 0.0),
         color: color,
       ),
     );
@@ -1001,6 +1115,92 @@ class AssemblyPart {
         color: color,
       ),
     );
+
+    // Solid Cross-Section End Caps at X = 0 and X = L (Item 4)
+    // End cap at X = 0
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_0_web',
+        vertices: [
+          CadPoint3D(0.0, -rungW / 2.0, innerWebZ),
+          CadPoint3D(0.0, rungW / 2.0, innerWebZ),
+          CadPoint3D(0.0, rungW / 2.0, webZ),
+          CadPoint3D(0.0, -rungW / 2.0, webZ),
+        ],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: color,
+      ),
+    );
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_0_front',
+        vertices: [
+          CadPoint3D(0.0, (rungW / 2.0) - T, flangeEdgeZ),
+          CadPoint3D(0.0, rungW / 2.0, flangeEdgeZ),
+          CadPoint3D(0.0, rungW / 2.0, innerWebZ),
+          CadPoint3D(0.0, (rungW / 2.0) - T, innerWebZ),
+        ],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: color,
+      ),
+    );
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_0_back',
+        vertices: [
+          CadPoint3D(0.0, -rungW / 2.0, flangeEdgeZ),
+          CadPoint3D(0.0, (-rungW / 2.0) + T, flangeEdgeZ),
+          CadPoint3D(0.0, (-rungW / 2.0) + T, innerWebZ),
+          CadPoint3D(0.0, -rungW / 2.0, innerWebZ),
+        ],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: color,
+      ),
+    );
+
+    // End cap at X = L
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_L_web',
+        vertices: [
+          CadPoint3D(L, -rungW / 2.0, webZ),
+          CadPoint3D(L, rungW / 2.0, webZ),
+          CadPoint3D(L, rungW / 2.0, innerWebZ),
+          CadPoint3D(L, -rungW / 2.0, innerWebZ),
+        ],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: color,
+      ),
+    );
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_L_front',
+        vertices: [
+          CadPoint3D(L, (rungW / 2.0) - T, innerWebZ),
+          CadPoint3D(L, rungW / 2.0, innerWebZ),
+          CadPoint3D(L, rungW / 2.0, flangeEdgeZ),
+          CadPoint3D(L, (rungW / 2.0) - T, flangeEdgeZ),
+        ],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: color,
+      ),
+    );
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_L_back',
+        vertices: [
+          CadPoint3D(L, -rungW / 2.0, innerWebZ),
+          CadPoint3D(L, (-rungW / 2.0) + T, innerWebZ),
+          CadPoint3D(L, (-rungW / 2.0) + T, flangeEdgeZ),
+          CadPoint3D(L, -rungW / 2.0, flangeEdgeZ),
+        ],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: color,
+      ),
+    );
+
+    // 3D Obround Slot Bore Sidewalls (Item 4)
+    _addHoleBoreWalls(thickPolys, holes, webNorm, T);
   }
 
   void _buildStraightRailPolygons(List<CadFoldedPolygon3D> polys, List<CadFoldedPolygon3D> thickPolys) {
@@ -1053,6 +1253,30 @@ class AssemblyPart {
       ),
     );
 
+    // Inner Top Flange (real thickness T, Item 4)
+    final innerTopHoles = topHoles.map((loop) => loop.map((pt) => CadPoint3D(pt.x, pt.y, H - T)).toList()).toList();
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_inner_flange_top',
+        vertices: [CadPoint3D(0.0, F * fDir, H - T), CadPoint3D(L, F * fDir, H - T), CadPoint3D(L, T * fDir, H - T), CadPoint3D(0.0, T * fDir, H - T)],
+        holes: innerTopHoles,
+        normal: const CadPoint3D(0.0, 0.0, -1.0),
+        color: color,
+      ),
+    );
+
+    // Inner Web face (real thickness T, Item 4)
+    final innerWebHoles = webHoles.map((loop) => loop.map((pt) => CadPoint3D(pt.x, T * fDir, pt.z)).toList()).toList();
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_inner_web',
+        vertices: [CadPoint3D(0.0, T * fDir, H - T), CadPoint3D(L, T * fDir, H - T), CadPoint3D(L, T * fDir, T), CadPoint3D(0.0, T * fDir, T)],
+        holes: innerWebHoles,
+        normal: CadPoint3D(0.0, fDir, 0.0),
+        color: color,
+      ),
+    );
+
     // Bottom flange: Z = 0, Y extends by F * fDir
     final bottomHoles = _buildFlangeHoles('flange_bottom', 0.0, fDir);
     _addHoleBoreWalls(thickPolys, bottomHoles, const CadPoint3D(0.0, 0.0, -1.0), T);
@@ -1066,7 +1290,19 @@ class AssemblyPart {
       ),
     );
 
-    // End caps & Flange rims
+    // Inner Bottom Flange (real thickness T, Item 4)
+    final innerBottomHoles = bottomHoles.map((loop) => loop.map((pt) => CadPoint3D(pt.x, pt.y, T)).toList()).toList();
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_inner_flange_bottom',
+        vertices: [CadPoint3D(0.0, T * fDir, T), CadPoint3D(L, T * fDir, T), CadPoint3D(L, F * fDir, T), CadPoint3D(0.0, F * fDir, T)],
+        holes: innerBottomHoles,
+        normal: const CadPoint3D(0.0, 0.0, 1.0),
+        color: color,
+      ),
+    );
+
+    // Flange lip return rims
     thickPolys.add(
       CadFoldedPolygon3D(
         faceId: '${id}_rim_top',
@@ -1080,6 +1316,59 @@ class AssemblyPart {
         faceId: '${id}_rim_bottom',
         vertices: [CadPoint3D(0.0, F * fDir, T), CadPoint3D(L, F * fDir, T), CadPoint3D(L, F * fDir, 0.0), CadPoint3D(0.0, F * fDir, 0.0)],
         normal: CadPoint3D(0.0, fDir, 0.0),
+        color: color,
+      ),
+    );
+
+    // Solid C-Profile End Cross-Section Caps at X = 0 and X = L (Item 4)
+    // End cap at X = 0
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_0_web',
+        vertices: [CadPoint3D(0.0, 0.0, 0.0), CadPoint3D(0.0, T * fDir, 0.0), CadPoint3D(0.0, T * fDir, H), CadPoint3D(0.0, 0.0, H)],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: color,
+      ),
+    );
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_0_top',
+        vertices: [CadPoint3D(0.0, T * fDir, H - T), CadPoint3D(0.0, F * fDir, H - T), CadPoint3D(0.0, F * fDir, H), CadPoint3D(0.0, T * fDir, H)],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: color,
+      ),
+    );
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_0_bot',
+        vertices: [CadPoint3D(0.0, T * fDir, 0.0), CadPoint3D(0.0, F * fDir, 0.0), CadPoint3D(0.0, F * fDir, T), CadPoint3D(0.0, T * fDir, T)],
+        normal: const CadPoint3D(-1.0, 0.0, 0.0),
+        color: color,
+      ),
+    );
+
+    // End cap at X = L
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_L_web',
+        vertices: [CadPoint3D(L, 0.0, H), CadPoint3D(L, T * fDir, H), CadPoint3D(L, T * fDir, 0.0), CadPoint3D(L, 0.0, 0.0)],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: color,
+      ),
+    );
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_L_top',
+        vertices: [CadPoint3D(L, T * fDir, H), CadPoint3D(L, F * fDir, H), CadPoint3D(L, F * fDir, H - T), CadPoint3D(L, T * fDir, H - T)],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
+        color: color,
+      ),
+    );
+    thickPolys.add(
+      CadFoldedPolygon3D(
+        faceId: '${id}_end_cap_L_bot',
+        vertices: [CadPoint3D(L, T * fDir, T), CadPoint3D(L, F * fDir, T), CadPoint3D(L, F * fDir, 0.0), CadPoint3D(L, T * fDir, 0.0)],
+        normal: const CadPoint3D(1.0, 0.0, 0.0),
         color: color,
       ),
     );
@@ -2047,7 +2336,27 @@ class AssemblyPart {
         final v1 = loop[(i + 1) % loop.length];
         final v1In = CadPoint3D(v1.x - faceNormal.x * t, v1.y - faceNormal.y * t, v1.z - faceNormal.z * t);
         final v0In = CadPoint3D(v0.x - faceNormal.x * t, v0.y - faceNormal.y * t, v0.z - faceNormal.z * t);
-        thickPolys.add(CadFoldedPolygon3D(faceId: '${id}_bore_${h}_$i', vertices: [v0, v1, v1In, v0In], normal: faceNormal, color: const Color(0xFF334155)));
+
+        // Accurate split normal: perpendicular to rim segment and plate normal pointing inward
+        final dx = v1.x - v0.x;
+        final dy = v1.y - v0.y;
+        final dz = v1.z - v0.z;
+        final cX = dy * (-faceNormal.z) - dz * (-faceNormal.y);
+        final cY = dz * (-faceNormal.x) - dx * (-faceNormal.z);
+        final cZ = dx * (-faceNormal.y) - dy * (-faceNormal.x);
+        final len = math.sqrt(cX * cX + cY * cY + cZ * cZ);
+        final wallNorm = len > 1e-6
+            ? CadPoint3D(cX / len, cY / len, cZ / len)
+            : CadPoint3D(-faceNormal.y, faceNormal.x, 0.0);
+
+        thickPolys.add(
+          CadFoldedPolygon3D(
+            faceId: '${id}_bore_${h}_$i',
+            vertices: [v0, v1, v1In, v0In],
+            normal: wallNorm,
+            color: const Color(0xFF475569),
+          ),
+        );
       }
     }
   }
@@ -2085,7 +2394,8 @@ class AssemblyPart {
   }
 
   List<CadPoint3D> _makeObroundSlotXZ(double cx, double cy, double cz, double lengthMm, double heightMm) {
-    const int steps = 6;
+    // Phase 3 & Walkthrough: High-res smooth caps (16 segments per semi-circle)
+    const int steps = 16;
     final r = heightMm / 2.0;
     final hl = math.max(0.0, (lengthMm - heightMm) / 2.0);
     final pts = <CadPoint3D>[];
@@ -2104,7 +2414,8 @@ class AssemblyPart {
   }
 
   List<CadPoint3D> _makeObroundSlot(double cx, double cy, double cz, double lengthMm, double widthMm) {
-    const int steps = 6;
+    // Phase 3 & Walkthrough: High-res smooth caps (16 segments per semi-circle)
+    const int steps = 16;
     final r = widthMm / 2.0;
     final hl = (lengthMm - widthMm) / 2.0;
     final pts = <CadPoint3D>[];
@@ -2122,11 +2433,20 @@ class AssemblyPart {
     return pts;
   }
 
-  List<CadPoint3D> _makeOctagonHole(CadPoint3D center, double r, CadPoint3D u, CadPoint3D v) {
-    const int steps = 8;
+  /// Phase 3: Adaptive chordal circle tessellation (32 to 48 segments for true circular holes)
+  static int _getSegmentsForCircle(double radius, {double maxChordError = 0.03}) {
+    final double ratio = (maxChordError / radius).clamp(0.0001, 0.5);
+    final double angle = 2.0 * math.acos(1.0 - ratio);
+    final int segments = (2.0 * math.pi / angle).ceil();
+    return segments.clamp(32, 48);
+  }
+
+  /// Generates high-resolution circular hole loops in arbitrary 3D orientations.
+  List<CadPoint3D> _makeCircularHole(CadPoint3D center, double r, CadPoint3D u, CadPoint3D v, {int? steps}) {
+    final int segs = steps ?? _getSegmentsForCircle(r);
     final pts = <CadPoint3D>[];
-    for (int k = 0; k < steps; k++) {
-      final ang = k * 2.0 * math.pi / steps;
+    for (int k = 0; k < segs; k++) {
+      final ang = k * 2.0 * math.pi / segs;
       pts.add(
         CadPoint3D(
           center.x + u.x * r * math.cos(ang) + v.x * r * math.sin(ang),
@@ -2137,4 +2457,8 @@ class AssemblyPart {
     }
     return pts;
   }
+
+  /// Backward-compatible alias for circular holes
+  List<CadPoint3D> _makeOctagonHole(CadPoint3D center, double r, CadPoint3D u, CadPoint3D v) =>
+      _makeCircularHole(center, r, u, v);
 }

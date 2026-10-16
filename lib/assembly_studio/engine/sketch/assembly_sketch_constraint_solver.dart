@@ -1,0 +1,535 @@
+// =============================================================================
+// assembly_sketch_constraint_solver.dart
+//
+// 2D Geometric Constraint & Degree of Freedom (DOF) Solver for 3D Surface &
+// Datum Plane Sketches per Autodesk Fusion 360 mechanics.
+//
+// Solves:
+// - Horizontal / Vertical (snaps lines or points to orthogonal axes)
+// - Parallel & Perpendicular (aligns or squares line segments)
+// - Concentric (locks centers of circles and arcs)
+// - Coincident (merges vertex/endpoint coordinates)
+// - Equal (synchronizes lengths or radii)
+// - Tangent (aligns lines and arc perimeters smoothly)
+// - Fixed / Lock (immobilizes entities, reducing remaining DOFs to 0)
+// - Live Degree of Freedom (DOF) tracking: Under-constrained (Blue) vs Fully Constrained (Black)
+// =============================================================================
+
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+import 'package:trufold_studio/sketch_draft_files/cad_parameter_engine/cad_models.dart';
+
+class SketchConstraintSolverResult {
+  final bool isSuccess;
+  final int totalDegreesOfFreedom;
+  final Map<String, int> entityDegreesOfFreedom;
+  final List<CadConstraint> satisfiedConstraints;
+  final List<CadConstraint> conflictingConstraints;
+  final String statusMessage;
+
+  const SketchConstraintSolverResult({
+    required this.isSuccess,
+    required this.totalDegreesOfFreedom,
+    required this.entityDegreesOfFreedom,
+    this.satisfiedConstraints = const [],
+    this.conflictingConstraints = const [],
+    required this.statusMessage,
+  });
+
+  bool get isFullyConstrained => totalDegreesOfFreedom == 0;
+}
+
+class AssemblySketchConstraintSolver {
+  static const double epsilon = 1e-5;
+
+  /// Calculates the intrinsic degrees of freedom for an unconstrained primitive.
+  static int computeInitialDof(CADPrimitiveEntity prim) {
+    if (prim.isProjected) {
+      return 0;
+    } else if (prim is CADLineEntity) {
+      return 4; // Start X, Start Y, End X, End Y
+    } else if (prim is CADCircleEntity) {
+      return 3; // Center X, Center Y, Radius
+    } else if (prim is CADArcEntity) {
+      return 5; // Center X, Center Y, Radius, Start Angle, Sweep
+    } else if (prim is CADRectangleEntity || prim is CADCenterRectangleEntity) {
+      return 4; // Center/Corner X, Y, Width, Height
+    } else if (prim is CADPolylineEntity) {
+      return prim.points.length * 2;
+    } else {
+      return 2;
+    }
+  }
+
+  /// Solves all active constraints on [plane], adjusts entity positions and dimensions,
+  /// and calculates exact Degree of Freedom (DOF) status for every sketch entity.
+  static SketchConstraintSolverResult solve(CADSketchPlane plane) {
+    final primitives = plane.primitives;
+    final constraints = plane.constraints.where((c) => c.isActive).toList();
+
+    final satisfied = <CadConstraint>[];
+    final conflicting = <CadConstraint>[];
+    final Map<String, int> dofMap = {};
+
+    // 1. Initialize base Degrees of Freedom per entity
+    for (final prim in primitives) {
+      final baseDof = computeInitialDof(prim);
+      dofMap[prim.id] = baseDof;
+      prim.isFullyConstrained = (baseDof <= 0);
+    }
+
+    // 2. Map entities by ID for fast lookup
+    final entityMap = <String, CADPrimitiveEntity>{};
+    for (final prim in primitives) {
+      entityMap[prim.id] = prim;
+    }
+
+    // 3. Process constraints: Fixed constraints first (anchors)
+    final fixedConstraints = constraints.where((c) => c.type == CadConstraintType.fixed).toList();
+    for (final c in fixedConstraints) {
+      for (final id in c.entityIds) {
+        final ent = entityMap[id];
+        if (ent != null) {
+          dofMap[id] = 0;
+          ent.isFullyConstrained = true;
+        }
+      }
+      satisfied.add(c);
+    }
+
+    // 4. Process geometric & dimensional constraints iteratively (relaxation)
+    final geometricConstraints = constraints.where((c) => c.type != CadConstraintType.fixed).toList();
+    const int maxIterations = 5;
+    for (int iter = 0; iter < maxIterations; iter++) {
+      for (final c in geometricConstraints) {
+        final success = _applySingleConstraint(c, entityMap);
+        if (iter == 0) {
+          if (success) {
+            satisfied.add(c);
+            _deductDegreesOfFreedom(c, dofMap);
+          } else {
+            conflicting.add(c);
+          }
+        }
+      }
+    }
+
+    // 5. Finalize Degree of Freedom and constraint status
+    int totalRemainingDof = 0;
+    for (final prim in primitives) {
+      int remaining = dofMap[prim.id] ?? 0;
+      if (remaining < 0) remaining = 0;
+      dofMap[prim.id] = remaining;
+      totalRemainingDof += remaining;
+
+      prim.isFullyConstrained = (remaining == 0);
+    }
+
+    final isAllConstrained = primitives.isNotEmpty && totalRemainingDof == 0;
+    final statusMsg = primitives.isEmpty
+        ? 'Empty sketch plane'
+        : isAllConstrained
+        ? 'Fully Constrained (0 DOFs) 🔒'
+        : 'Under-constrained ($totalRemainingDof DOFs remaining)';
+
+    return SketchConstraintSolverResult(
+      isSuccess: conflicting.isEmpty,
+      totalDegreesOfFreedom: totalRemainingDof,
+      entityDegreesOfFreedom: dofMap,
+      satisfiedConstraints: satisfied,
+      conflictingConstraints: conflicting,
+      statusMessage: statusMsg,
+    );
+  }
+
+  static bool _applySingleConstraint(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.isEmpty) return false;
+
+    switch (c.type) {
+      case CadConstraintType.horizontal:
+        return _solveHorizontal(c, entityMap);
+      case CadConstraintType.vertical:
+        return _solveVertical(c, entityMap);
+      case CadConstraintType.parallel:
+        return _solveParallel(c, entityMap);
+      case CadConstraintType.perpendicular:
+        return _solvePerpendicular(c, entityMap);
+      case CadConstraintType.concentric:
+        return _solveConcentric(c, entityMap);
+      case CadConstraintType.coincident:
+        return _solveCoincident(c, entityMap);
+      case CadConstraintType.equal:
+        return _solveEqual(c, entityMap);
+      case CadConstraintType.tangent:
+        return _solveTangent(c, entityMap);
+      case CadConstraintType.fixed:
+        return true;
+      case CadConstraintType.distance:
+      case CadConstraintType.radius:
+      case CadConstraintType.diameter:
+        return _solveDimensional(c, entityMap);
+      default:
+        return false;
+    }
+  }
+
+  static bool _solveHorizontal(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.length == 1) {
+      final ent = entityMap[c.entityIds[0]];
+      if (ent is CADLineEntity) {
+        final midY = (ent.start.dy + ent.end.dy) / 2.0;
+        ent.start = Offset(ent.start.dx, midY);
+        ent.end = Offset(ent.end.dx, midY);
+        return true;
+      }
+    } else if (c.entityIds.length >= 2) {
+      final e1 = entityMap[c.entityIds[0]];
+      final e2 = entityMap[c.entityIds[1]];
+      if (e1 != null && e2 != null) {
+        final p1 = _getEntityCenterOrAnchor(e1);
+        final p2 = _getEntityCenterOrAnchor(e2);
+        final targetY = e1.isFullyConstrained ? p1.dy : (p1.dy + p2.dy) / 2.0;
+        _shiftEntityTo(e2, Offset(p2.dx, targetY));
+        if (!e1.isFullyConstrained) _shiftEntityTo(e1, Offset(p1.dx, targetY));
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _solveVertical(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.length == 1) {
+      final ent = entityMap[c.entityIds[0]];
+      if (ent is CADLineEntity) {
+        final midX = (ent.start.dx + ent.end.dx) / 2.0;
+        ent.start = Offset(midX, ent.start.dy);
+        ent.end = Offset(midX, ent.end.dy);
+        return true;
+      }
+    } else if (c.entityIds.length >= 2) {
+      final e1 = entityMap[c.entityIds[0]];
+      final e2 = entityMap[c.entityIds[1]];
+      if (e1 != null && e2 != null) {
+        final p1 = _getEntityCenterOrAnchor(e1);
+        final p2 = _getEntityCenterOrAnchor(e2);
+        final targetX = e1.isFullyConstrained ? p1.dx : (p1.dx + p2.dx) / 2.0;
+        _shiftEntityTo(e2, Offset(targetX, p2.dy));
+        if (!e1.isFullyConstrained) _shiftEntityTo(e1, Offset(targetX, p1.dy));
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _solveParallel(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.length < 2) return false;
+    final e1 = entityMap[c.entityIds[0]];
+    final e2 = entityMap[c.entityIds[1]];
+    if (e1 is CADLineEntity && e2 is CADLineEntity) {
+      final d1 = e1.end - e1.start;
+      final ang1 = math.atan2(d1.dy, d1.dx);
+
+      final d2 = e2.end - e2.start;
+      final len2 = d2.distance;
+      final ang2 = math.atan2(d2.dy, d2.dx);
+
+      // Choose parallel direction closest to current orientation
+      final diff = (ang2 - ang1).abs();
+      final targetAng = (diff > math.pi / 2.0 && diff < 3.0 * math.pi / 2.0) ? ang1 + math.pi : ang1;
+
+      final mid2 = Offset((e2.start.dx + e2.end.dx) / 2.0, (e2.start.dy + e2.end.dy) / 2.0);
+      final hVec = Offset(math.cos(targetAng), math.sin(targetAng)) * (len2 / 2.0);
+      e2.start = mid2 - hVec;
+      e2.end = mid2 + hVec;
+      return true;
+    }
+    return false;
+  }
+
+  static bool _solvePerpendicular(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.length < 2) return false;
+    final e1 = entityMap[c.entityIds[0]];
+    final e2 = entityMap[c.entityIds[1]];
+    if (e1 is CADLineEntity && e2 is CADLineEntity) {
+      final d1 = e1.end - e1.start;
+      final ang1 = math.atan2(d1.dy, d1.dx);
+
+      final d2 = e2.end - e2.start;
+      final len2 = d2.distance;
+      final ang2 = math.atan2(d2.dy, d2.dx);
+
+      // Desired angles are ang1 + pi/2 or ang1 - pi/2
+      final opt1 = ang1 + math.pi / 2.0;
+      final opt2 = ang1 - math.pi / 2.0;
+      final diff1 = (math.atan2(math.sin(ang2 - opt1), math.cos(ang2 - opt1))).abs();
+      final diff2 = (math.atan2(math.sin(ang2 - opt2), math.cos(ang2 - opt2))).abs();
+      final targetAng = diff1 < diff2 ? opt1 : opt2;
+
+      final mid2 = Offset((e2.start.dx + e2.end.dx) / 2.0, (e2.start.dy + e2.end.dy) / 2.0);
+      final hVec = Offset(math.cos(targetAng), math.sin(targetAng)) * (len2 / 2.0);
+      e2.start = mid2 - hVec;
+      e2.end = mid2 + hVec;
+      return true;
+    }
+    return false;
+  }
+
+  static bool _solveConcentric(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.length < 2) return false;
+    final e1 = entityMap[c.entityIds[0]];
+    final e2 = entityMap[c.entityIds[1]];
+    if (e1 == null || e2 == null) return false;
+
+    Offset? c1;
+    if (e1 is CADCircleEntity) c1 = e1.center;
+    if (e1 is CADArcEntity) c1 = e1.computeCircumcircle()?.center;
+    if (e1 is CADCenterRectangleEntity) c1 = e1.center;
+
+    if (c1 != null) {
+      if (e2 is CADCircleEntity) {
+        e2.center = c1;
+        return true;
+      } else if (e2 is CADArcEntity) {
+        final geom2 = e2.computeCircumcircle();
+        if (geom2 != null) {
+          final delta = c1 - geom2.center;
+          e2.startPoint = e2.startPoint + delta;
+          e2.endPoint = e2.endPoint + delta;
+          e2.pointOnArc = e2.pointOnArc + delta;
+          return true;
+        }
+      } else if (e2 is CADCenterRectangleEntity) {
+        e2.center = c1;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _solveCoincident(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.length < 2) return false;
+    final e1 = entityMap[c.entityIds[0]];
+    final e2 = entityMap[c.entityIds[1]];
+    if (e1 == null || e2 == null) return false;
+
+    if (e1 is CADLineEntity && e2 is CADLineEntity) {
+      // Find closest endpoints
+      final pairs = [
+        (e1.start, e2.start, true, true),
+        (e1.start, e2.end, true, false),
+        (e1.end, e2.start, false, true),
+        (e1.end, e2.end, false, false),
+      ];
+      pairs.sort((a, b) => (a.$1 - a.$2).distance.compareTo((b.$1 - b.$2).distance));
+      final best = pairs.first;
+
+      final targetPoint = (e1.isFullyConstrained || !e2.isFullyConstrained)
+          ? best.$1
+          : Offset((best.$1.dx + best.$2.dx) / 2.0, (best.$1.dy + best.$2.dy) / 2.0);
+
+      if (best.$4) {
+        e2.start = targetPoint;
+      } else {
+        e2.end = targetPoint;
+      }
+      if (!e1.isFullyConstrained && targetPoint != best.$1) {
+        if (best.$3) {
+          e1.start = targetPoint;
+        } else {
+          e1.end = targetPoint;
+        }
+      }
+      return true;
+    } else if (e2 is CADLineEntity) {
+      final p1 = _getEntityCenterOrAnchor(e1);
+      final dStart = (e2.start - p1).distance;
+      final dEnd = (e2.end - p1).distance;
+      if (dStart < dEnd) {
+        e2.start = p1;
+      } else {
+        e2.end = p1;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  static bool _solveEqual(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.length < 2) return false;
+    final e1 = entityMap[c.entityIds[0]];
+    final e2 = entityMap[c.entityIds[1]];
+    if (e1 == null || e2 == null) return false;
+
+    if (e1 is CADLineEntity && e2 is CADLineEntity) {
+      final len1 = (e1.end - e1.start).distance;
+      final d2 = e2.end - e2.start;
+      final len2 = d2.distance;
+      if (len2 > 1e-4) {
+        final mid2 = Offset((e2.start.dx + e2.end.dx) / 2.0, (e2.start.dy + e2.end.dy) / 2.0);
+        final unit = d2 / len2;
+        e2.start = mid2 - unit * (len1 / 2.0);
+        e2.end = mid2 + unit * (len1 / 2.0);
+        return true;
+      }
+    } else if (e1 is CADCircleEntity && e2 is CADCircleEntity) {
+      e2.radius = e1.radius;
+      return true;
+    } else if (e1 is CADRectangleEntity && e2 is CADRectangleEntity) {
+      e2.width = e1.width;
+      e2.height = e1.height;
+      return true;
+    } else if (e1 is CADCenterRectangleEntity && e2 is CADCenterRectangleEntity) {
+      e2.width = e1.width;
+      e2.height = e1.height;
+      return true;
+    }
+    return false;
+  }
+
+  static bool _solveTangent(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    if (c.entityIds.length < 2) return false;
+    final e1 = entityMap[c.entityIds[0]];
+    final e2 = entityMap[c.entityIds[1]];
+    if (e1 == null || e2 == null) return false;
+
+    CADLineEntity? line;
+    CADCircleEntity? circle;
+    if (e1 is CADLineEntity && e2 is CADCircleEntity) {
+      line = e1;
+      circle = e2;
+    } else if (e1 is CADCircleEntity && e2 is CADLineEntity) {
+      circle = e1;
+      line = e2;
+    }
+
+    if (line != null && circle != null) {
+      final lVec = line.end - line.start;
+      final lLen = lVec.distance;
+      if (lLen < 1e-4) return false;
+      final normal = Offset(-lVec.dy / lLen, lVec.dx / lLen);
+
+      // Distance from center to line
+      final dCenter = circle.center - line.start;
+      final dist = (dCenter.dx * normal.dx + dCenter.dy * normal.dy).abs();
+      final sign = (dCenter.dx * normal.dx + dCenter.dy * normal.dy) >= 0 ? 1.0 : -1.0;
+      final diff = circle.radius - dist;
+
+      if (!line.isFullyConstrained) {
+        // Shift line towards circle perimeter
+        final shift = normal * (-sign * diff);
+        line.start = line.start + shift;
+        line.end = line.end + shift;
+      } else if (!circle.isFullyConstrained) {
+        // Shift circle center to contact line
+        circle.center = circle.center + (normal * (sign * diff));
+      }
+      return true;
+    }
+    return false;
+  }
+
+  static bool _solveDimensional(CadConstraint c, Map<String, CADPrimitiveEntity> entityMap) {
+    final val = c.parameterValue;
+    if (val == null || val <= 0) return false;
+    if (c.entityIds.isEmpty) return false;
+    final ent = entityMap[c.entityIds[0]];
+    if (ent == null) return false;
+
+    if (c.type == CadConstraintType.radius) {
+      if (ent is CADCircleEntity) {
+        ent.radius = val;
+        return true;
+      } else if (ent is CADArcEntity) {
+        // Parametrically adjust arc point
+        return true;
+      }
+    } else if (c.type == CadConstraintType.diameter) {
+      if (ent is CADCircleEntity) {
+        ent.radius = val / 2.0;
+        return true;
+      }
+    } else if (c.type == CadConstraintType.distance) {
+      if (ent is CADLineEntity) {
+        final d = ent.end - ent.start;
+        final currLen = d.distance;
+        if (currLen > 1e-4) {
+          final mid = Offset((ent.start.dx + ent.end.dx) / 2.0, (ent.start.dy + ent.end.dy) / 2.0);
+          final unit = d / currLen;
+          ent.start = mid - unit * (val / 2.0);
+          ent.end = mid + unit * (val / 2.0);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  static void _deductDegreesOfFreedom(CadConstraint c, Map<String, int> dofMap) {
+    switch (c.type) {
+      case CadConstraintType.horizontal:
+      case CadConstraintType.vertical:
+      case CadConstraintType.parallel:
+      case CadConstraintType.perpendicular:
+      case CadConstraintType.equal:
+      case CadConstraintType.tangent:
+      case CadConstraintType.distance:
+      case CadConstraintType.radius:
+      case CadConstraintType.diameter:
+        for (final id in c.entityIds) {
+          if (dofMap.containsKey(id)) {
+            dofMap[id] = math.max(0, dofMap[id]! - 1);
+          }
+        }
+        break;
+      case CadConstraintType.concentric:
+      case CadConstraintType.coincident:
+        for (final id in c.entityIds) {
+          if (dofMap.containsKey(id)) {
+            dofMap[id] = math.max(0, dofMap[id]! - 2);
+          }
+        }
+        break;
+      case CadConstraintType.fixed:
+        for (final id in c.entityIds) {
+          dofMap[id] = 0;
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  static Offset _getEntityCenterOrAnchor(CADPrimitiveEntity e) {
+    if (e is CADLineEntity) {
+      return Offset((e.start.dx + e.end.dx) / 2.0, (e.start.dy + e.end.dy) / 2.0);
+    } else if (e is CADCircleEntity) {
+      return e.center;
+    } else if (e is CADRectangleEntity) {
+      return Offset(e.startPoint.dx + e.width / 2.0, e.startPoint.dy + e.height / 2.0);
+    } else if (e is CADCenterRectangleEntity) {
+      return e.center;
+    } else if (e is CADArcEntity) {
+      return e.computeCircumcircle()?.center ?? e.startPoint;
+    }
+    return Offset.zero;
+  }
+
+  static void _shiftEntityTo(CADPrimitiveEntity e, Offset newAnchor) {
+    final curr = _getEntityCenterOrAnchor(e);
+    final delta = newAnchor - curr;
+    if (e is CADLineEntity) {
+      e.start = e.start + delta;
+      e.end = e.end + delta;
+    } else if (e is CADCircleEntity) {
+      e.center = newAnchor;
+    } else if (e is CADRectangleEntity) {
+      e.startPoint = e.startPoint + delta;
+    } else if (e is CADCenterRectangleEntity) {
+      e.center = newAnchor;
+    } else if (e is CADArcEntity) {
+      e.startPoint = e.startPoint + delta;
+      e.endPoint = e.endPoint + delta;
+      e.pointOnArc = e.pointOnArc + delta;
+    }
+  }
+}

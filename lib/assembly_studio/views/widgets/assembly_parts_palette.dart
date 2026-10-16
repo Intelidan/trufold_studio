@@ -890,6 +890,10 @@ class AssemblyPartsPalette extends StatelessWidget {
         typeIcon = Icons.meeting_room_rounded;
         typeColor = const Color(0xFFEAB308);
         break;
+      case AssemblyPartType.customExtrusion:
+        typeIcon = Icons.layers_rounded;
+        typeColor = const Color(0xFF6366F1);
+        break;
     }
 
     return Container(
@@ -1438,6 +1442,13 @@ class _PartMiniaturePainter extends CustomPainter {
           ..color = const Color(0xFFFBBF24);
         canvas.drawRect(gateBorder, gateStroke);
         canvas.drawLine(Offset(w * 0.18, h * 0.5), Offset(w * 0.82, h * 0.5), gateStroke);
+        break;
+
+      case AssemblyPartType.customExtrusion:
+        final box = Rect.fromCenter(center: Offset(w * 0.5, h * 0.5), width: w * 0.6, height: h * 0.6);
+        fillPaint.color = const Color(0xFF6366F1);
+        canvas.drawRect(box, fillPaint);
+        canvas.drawRect(box, strokePaint);
         break;
     }
   }

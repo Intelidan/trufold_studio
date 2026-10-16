@@ -31,19 +31,19 @@ class AssemblyCanvasControlsHUD extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFF0F172A).withValues(alpha: 0.94),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF38BDF8), width: 1.2),
-              boxShadow: [
-                BoxShadow(color: const Color(0xFF38BDF8).withValues(alpha: 0.3), blurRadius: 10, spreadRadius: 1),
+              border: Border.all(color: const Color(0xFF0076CE), width: 1.2),
+              boxShadow: const [
+                BoxShadow(color: Color(0x1F000000), blurRadius: 10, offset: Offset(0, 3)),
               ],
             ),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.visibility_off, size: 14, color: Color(0xFF38BDF8)),
+                Icon(Icons.visibility_off, size: 14, color: Color(0xFF0076CE)),
                 SizedBox(width: 6),
                 Text(
                   'Clean Canvas Active (Tap to Restore)',
-                  style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -59,10 +59,10 @@ class AssemblyCanvasControlsHUD extends StatelessWidget {
         color: Colors.transparent,
         child: PopupMenuButton<String>(
           tooltip: 'Canvas Layout & Toolbar Visibility',
-          color: const Color(0xFF0F172A),
+          color: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: Colors.white12),
+            side: const BorderSide(color: Color(0xFFCBD5E1)),
           ),
           position: PopupMenuPosition.over,
           itemBuilder: (ctx) => [
@@ -70,12 +70,12 @@ class AssemblyCanvasControlsHUD extends StatelessWidget {
               enabled: false,
               child: Row(
                 children: [
-                  const Icon(Icons.dashboard_customize, size: 14, color: Color(0xFF38BDF8)),
+                  const Icon(Icons.dashboard_customize, size: 14, color: Color(0xFF0076CE)),
                   const SizedBox(width: 8),
                   Text(
                     'CANVAS TOOLBAR MANAGER',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.9),
                       fontSize: 10.5,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.6,
@@ -92,10 +92,10 @@ class AssemblyCanvasControlsHUD extends StatelessWidget {
                   Icon(
                     viewModel.isCleanCanvasMode ? Icons.check_box : Icons.check_box_outline_blank,
                     size: 16,
-                    color: const Color(0xFF38BDF8),
+                    color: const Color(0xFF0076CE),
                   ),
                   const SizedBox(width: 8),
-                  const Text('Clean Canvas Mode', style: TextStyle(color: Colors.white, fontSize: 11)),
+                  const Text('Clean Canvas Mode', style: TextStyle(color: Color(0xFF0F172A), fontSize: 11)),
                 ],
               ),
             ),
@@ -106,10 +106,10 @@ class AssemblyCanvasControlsHUD extends StatelessWidget {
                   Icon(
                     viewModel.showViewsToolbar ? Icons.check_box : Icons.check_box_outline_blank,
                     size: 16,
-                    color: const Color(0xFF38BDF8),
+                    color: const Color(0xFF0076CE),
                   ),
                   const SizedBox(width: 8),
-                  const Text('Standard Views Toolbar', style: TextStyle(color: Colors.white, fontSize: 11)),
+                  const Text('Standard Views Toolbar', style: TextStyle(color: Color(0xFF0F172A), fontSize: 11)),
                 ],
               ),
             ),
@@ -120,10 +120,10 @@ class AssemblyCanvasControlsHUD extends StatelessWidget {
                   Icon(
                     viewModel.showJointStyleToolbar ? Icons.check_box : Icons.check_box_outline_blank,
                     size: 16,
-                    color: const Color(0xFF38BDF8),
+                    color: const Color(0xFF0076CE),
                   ),
                   const SizedBox(width: 8),
-                  const Text('Joint Configuration Toolbar', style: TextStyle(color: Colors.white, fontSize: 11)),
+                  const Text('Joint Configuration Toolbar', style: TextStyle(color: Color(0xFF0F172A), fontSize: 11)),
                 ],
               ),
             ),
@@ -134,10 +134,10 @@ class AssemblyCanvasControlsHUD extends StatelessWidget {
                   Icon(
                     viewModel.showQualityHud ? Icons.check_box : Icons.check_box_outline_blank,
                     size: 16,
-                    color: const Color(0xFF38BDF8),
+                    color: const Color(0xFF0076CE),
                   ),
                   const SizedBox(width: 8),
-                  const Text('Weld Quality & Anomaly HUD', style: TextStyle(color: Colors.white, fontSize: 11)),
+                  const Text('Weld Quality & Anomaly HUD', style: TextStyle(color: Color(0xFF0F172A), fontSize: 11)),
                 ],
               ),
             ),
@@ -148,10 +148,10 @@ class AssemblyCanvasControlsHUD extends StatelessWidget {
                   Icon(
                     viewModel.show3dNavigationBar ? Icons.check_box : Icons.check_box_outline_blank,
                     size: 16,
-                    color: const Color(0xFF38BDF8),
+                    color: const Color(0xFF0076CE),
                   ),
                   const SizedBox(width: 8),
-                  const Text('3D Navigation Bar', style: TextStyle(color: Colors.white, fontSize: 11)),
+                  const Text('3D Navigation Bar', style: TextStyle(color: Color(0xFF0F172A), fontSize: 11)),
                 ],
               ),
             ),
@@ -160,9 +160,9 @@ class AssemblyCanvasControlsHUD extends StatelessWidget {
               value: 'reset_positions',
               child: const Row(
                 children: [
-                  Icon(Icons.restart_alt, size: 16, color: Color(0xFFF59E0B)),
+                  Icon(Icons.restart_alt, size: 16, color: Color(0xFFDC2626)),
                   SizedBox(width: 8),
-                  Text('Reset Toolbar Positions', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.bold)),
+                  Text('Reset Toolbar Positions', style: TextStyle(color: Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -193,21 +193,21 @@ class AssemblyCanvasControlsHUD extends StatelessWidget {
             height: 30,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.92),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white12),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
               boxShadow: const [
-                BoxShadow(color: Color(0x66000000), blurRadius: 8, offset: Offset(0, 2)),
+                BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 2)),
               ],
             ),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.layers_outlined, size: 14, color: Color(0xFF38BDF8)),
+                Icon(Icons.layers_outlined, size: 14, color: Color(0xFF0076CE)),
                 SizedBox(width: 5),
-                Text('Toolbars', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                Text('Toolbars', style: TextStyle(color: Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.w600)),
                 SizedBox(width: 2),
-                Icon(Icons.arrow_drop_down, size: 14, color: Colors.white70),
+                Icon(Icons.arrow_drop_down, size: 14, color: Color(0xFF64748B)),
               ],
             ),
           ),

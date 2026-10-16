@@ -41,8 +41,27 @@ class AssemblyStudioTheme {
   // Typography
   Color get textPrimary => isLight ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9);
   Color get textSecondary => isLight ? const Color(0xFF1E293B) : const Color(0xFFCBD5E1);
-  Color get textTertiary => isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8);
-  Color get textMuted => isLight ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
+  Color get textTertiary => isLight ? const Color(0xFF334155) : const Color(0xFF94A3B8);
+  Color get textMuted => isLight ? const Color(0xFF475569) : const Color(0xFF94A3B8);
+
+  // Onshape Signature CAD Colors
+  static const Color onshapeBlue = Color(0xFF0076CE);
+  static const Color onshapeBlueDark = Color(0xFF1254A1);
+  static const Color onshapeBlueLight = Color(0xFFE0F2FE);
+  static const Color onshapeCanvasBg = Color(0xFFF8FAFC);
+  static const Color onshapeToolbarBg = Colors.white;
+  static const Color onshapeBorder = Color(0xFFE2E8F0);
+  static const Color onshapeText = Color(0xFF1E293B);
+  static const Color onshapeTextMuted = Color(0xFF64748B);
+  static const Color onshapeGreen = Color(0xFF16A34A);
+  static const Color onshapeRed = Color(0xFFDC2626);
+
+  // Onshape Sketch Line & Constraint Colors
+  static const Color sketchUnderDefined = Color(0xFF0076CE); // Blue: DOFs remaining
+  static const Color sketchFullyDefined = Color(0xFF0F172A); // Black: fully constrained
+  static const Color sketchConstruction = Color(0xFF2563EB); // Blue dash-dot
+  static const Color sketchOverConstrained = Color(0xFFDC2626); // Red: conflict
+  static const Color sketchHover = Color(0xFFF59E0B); // Amber: hover highlight
 
   // Brand Accents
   Color get accentSky => isLight ? const Color(0xFF0284C7) : const Color(0xFF38BDF8);

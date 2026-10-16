@@ -12,6 +12,8 @@ import '../models/assembly_document.dart';
 import '../models/assembly_compliance.dart';
 import '../models/assembly_bom.dart';
 import '../models/weld_quality_model.dart';
+import '../models/assembly_timeline_item.dart';
+import '../models/assembly_cad_settings.dart';
 import '../engine/sketch/assembly_surface_sketch_engine.dart' hide WeldJointStyle;
 import '../../sketch_draft_files/widgets/weld_overlay_ui.dart';
 
@@ -32,15 +34,15 @@ enum RotateToolPhase {
 
 /// SketchUp-style primary tool modes.
 enum SketchUpToolMode {
-  select,   // Click to select parts / entities
-  move,     // Move / Translate tool (Key: M)
-  rotate,   // Rotate tool (Key: R / Q)
-  sketch,   // Direct 3D Face Sketch (Key: S)
-  bridge,   // Auto-Span Face-to-Face Bridging Tool (Key: B)
-  weld,     // Interactive Draft-Line Seam Weld Tool (Key: W)
+  select, // Click to select parts / entities
+  move, // Move / Translate tool (Key: M)
+  rotate, // Rotate tool (Key: R / Q)
+  sketch, // Direct 3D Face Sketch (Key: S)
+  bridge, // Auto-Span Face-to-Face Bridging Tool (Key: B)
+  weld, // Interactive Draft-Line Seam Weld Tool (Key: W)
   magnetic, // Magnetic Snap & Coupling Tool (Key: J)
-  orbit,    // Camera Orbit / Rotation Tool (Key: O)
-  pan,      // Camera Pan Tool (Key: H)
+  orbit, // Camera Orbit / Rotation Tool (Key: O)
+  pan, // Camera Pan Tool (Key: H)
 }
 
 /// Measurement Unit Format (SS2)
@@ -188,10 +190,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
-  WeldScoreResult evaluateWeldQuality({
-    required List<CadPoint3D> pathPoints,
-    required List<double> timestamps,
-  }) {
+  WeldScoreResult evaluateWeldQuality({required List<CadPoint3D> pathPoints, required List<double> timestamps}) {
     final anomalies = <WeldAnomaly>[];
 
     if (pathPoints.length < 2 || timestamps.length < 2) {
@@ -221,17 +220,9 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         // Excessive speed (> 24.0 mm/s) -> Porosity Risk
         // Too slow (< 2.5 mm/s) -> Burn-through Risk
         if (speed > 24.0) {
-          anomalies.add(WeldAnomaly(
-            position: pathPoints[i],
-            description: 'Excessive speed (Porosity Risk)',
-            severity: 0.85,
-          ));
+          anomalies.add(WeldAnomaly(position: pathPoints[i], description: 'Excessive speed (Porosity Risk)', severity: 0.85));
         } else if (speed < 2.5 && dist > 1.0) {
-          anomalies.add(WeldAnomaly(
-            position: pathPoints[i],
-            description: 'Too slow (Burn-through Risk)',
-            severity: 0.90,
-          ));
+          anomalies.add(WeldAnomaly(position: pathPoints[i], description: 'Too slow (Burn-through Risk)', severity: 0.90));
         }
       }
     }
@@ -253,11 +244,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           final perpZ = v.z - proj * dir.z;
           final dev = math.sqrt(perpX * perpX + perpY * perpY + perpZ * perpZ);
           if (dev > 7.0 && !anomalies.any((a) => a.position.distanceTo(pt) < 12.0)) {
-            anomalies.add(WeldAnomaly(
-              position: pt,
-              description: 'Irregular weave (Lack of fusion)',
-              severity: 0.70,
-            ));
+            anomalies.add(WeldAnomaly(position: pt, description: 'Irregular weave (Lack of fusion)', severity: 0.70));
           }
         }
       }
@@ -271,7 +258,8 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     if (anomalies.isEmpty) {
       feedback = 'EXCELLENT: Highly consistent speed and structural uniform deposition profiles (AWS D1.1 Grade A).';
     } else {
-      feedback = 'CRITICAL: Flagged ${anomalies.length} geometric errors along the path seams (Risk: ${anomalies.map((a) => a.description.split(" ").first).toSet().join(", ")}).';
+      feedback =
+          'CRITICAL: Flagged ${anomalies.length} geometric errors along the path seams (Risk: ${anomalies.map((a) => a.description.split(" ").first).toSet().join(", ")}).';
     }
 
     final result = WeldScoreResult(
@@ -297,7 +285,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   bool showDimensions = true;
   bool isLightBackground = true;
   bool get isLightMode => isLightBackground;
-  bool showGlobalAxes = true;
+  bool showGlobalAxes = false;
 
   void toggleGlobalAxes() {
     showGlobalAxes = !showGlobalAxes;
@@ -329,6 +317,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     _magneticSnapDistancePx = val.clamp(4.0, 30.0);
     notifyListeners();
   }
+
   void setMagneticSnapDistance(double val) {
     magneticSnapDistancePx = val;
   }
@@ -355,9 +344,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   void setMaterialPreset(CadMaterialPresetType preset) {
-    updateGraphicsPreferences((p) => p.copyWith(
-          materialSettings: CadMaterialSettings.preset(preset),
-        ));
+    updateGraphicsPreferences((p) => p.copyWith(materialSettings: CadMaterialSettings.preset(preset)));
   }
 
   void toggleBackgroundMode() {
@@ -410,17 +397,26 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   bool enableAngleSnapping = true;
   double angleSnapDegrees = 15.0; // 15.0 default as in SS2
 
-  bool showViewsToolbar = true;
+  bool showSketchupToolbar = true;
+  bool showMovementToolbar = false;
+  bool showStatusPill = false;
+  bool showBottomQuickBar = false;
+  bool showCanvasControls = false;
+  bool showBottomTimeline = false;
+  bool showLegacySketchHud = false;
+  bool showLegacySketchPalette = false;
+
+  bool showViewsToolbar = false;
   bool isViewsToolbarMinimized = false;
 
-  bool showJointStyleToolbar = true;
+  bool showJointStyleToolbar = false;
   bool isJointToolbarMinimized = false;
 
-  bool showQualityHud = true;
+  bool showQualityHud = false;
   bool isQualityCardMinimized = false;
   bool isAnomalySidebarMinimized = false;
 
-  bool show3dNavigationBar = true;
+  bool show3dNavigationBar = false;
   bool isCleanCanvasMode = false;
 
   void toggleViewsToolbar() {
@@ -602,11 +598,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       setVcbState(label: 'Move', value: 'Ready', hint: 'Pick point to move from (Ctrl to copy)');
     } else if (mode == SketchUpToolMode.rotate) {
       gizmoMode = GizmoMode.rotate;
-      setVcbState(
-        label: 'Rotate',
-        value: 'Ready',
-        hint: 'Click 1 to place center, or use Arrow keys to lock plane',
-      );
+      setVcbState(label: 'Rotate', value: 'Ready', hint: 'Click 1 to place center, or use Arrow keys to lock plane');
     } else if (mode == SketchUpToolMode.select) {
       setVcbState(label: 'Select', value: 'Ready', hint: 'Click or drag window to select');
     } else if (mode == SketchUpToolMode.weld) {
@@ -639,7 +631,8 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   bool isSketchMode = false;
   String? sketchPartId;
   String? sketchFaceId;
-  String activeSketchTool = 'rectangle'; // 'rectangle', 'circle', 'line', 'polyline', 'select_entity', 'circle_hole', 'obround_slot', 'rect_cut', 'bend_line', 'rung_slot'
+  String activeSketchTool =
+      'rectangle'; // 'rectangle', 'circle', 'line', 'polyline', 'select_entity', 'circle_hole', 'obround_slot', 'rect_cut', 'bend_line', 'rung_slot'
   String? selectedSketchFeatureId;
   double sketchToolParamWidth = 50.0; // mm
   double sketchToolParamHeight = 30.0; // mm
@@ -651,6 +644,180 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   /// All saved sketch planes across model surfaces
   final List<CADSketchPlane> savedSketchPlanes = [];
+
+  /// Camera pivot override point (e.g. centering directly on the sketch plane origin)
+  CadPoint3D? cameraPivotOverride;
+
+  int _sketchCounter = 1;
+  String generateNextSketchName() {
+    return 'Sketch ${_sketchCounter++}';
+  }
+
+  /// Plane selection mode (triggered by "Create Sketch" / 'S' or plane tools)
+  bool isPlaneSelectionMode = false;
+
+  /// Identifier of currently hovered plane or part face during plane selection
+  String? hoveredPlaneId;
+
+  /// User-defined construction planes (Offset, Angle, Midplane, 3-Point)
+  final List<CADSketchPlane> constructionPlanes = [];
+
+  /// Visibility toggles for viewport 3D planes & triad
+  bool showDatumPlanes = true;
+  bool showConstructionPlanes = true;
+  bool showOriginTriad = true;
+  double defaultPlaneSizeMm = 450.0;
+
+  /// Cached origin datum planes (XY Top, XZ Front, YZ Right)
+  late final CADSketchPlane datumPlaneXY = AssemblySurfaceSketchEngine.createDatumPlane('XY', size: defaultPlaneSizeMm);
+  late final CADSketchPlane datumPlaneXZ = AssemblySurfaceSketchEngine.createDatumPlane('XZ', size: defaultPlaneSizeMm);
+  late final CADSketchPlane datumPlaneYZ = AssemblySurfaceSketchEngine.createDatumPlane('YZ', size: defaultPlaneSizeMm);
+
+  /// Returns all available planes: Origin Datums + User Construction Planes + Saved Sketches
+  List<CADSketchPlane> get allAvailablePlanes {
+    final planes = <CADSketchPlane>[datumPlaneXY, datumPlaneXZ, datumPlaneYZ, ...constructionPlanes];
+    for (final sp in savedSketchPlanes) {
+      if (!planes.any((p) => p.id == sp.id)) {
+        planes.add(sp);
+      }
+    }
+    if (activeSketchPlane != null && !planes.any((p) => p.id == activeSketchPlane!.id)) {
+      planes.add(activeSketchPlane!);
+    }
+    return planes;
+  }
+
+  // --- Fusion 360 Style Sketch Palette & Display Toggles (Phase 2) ---
+  bool showSketchGrid = true;
+  bool showSketchSnap = true;
+  bool showSketchConstraints = true;
+  bool showSketchDimensions = true;
+  bool showSketchExpressions = true;
+  bool showSketchProfileShading = true;
+  bool isSketchSliceBody = false;
+
+  // --- Geometry Projection Mode ('P' key) ---
+  bool isProjectGeometryMode = false;
+  String? hoveredProjectableEntityId;
+  CadPoint3D? hoveredProjectablePoint;
+  List<CadPoint3D>? hoveredProjectableEdge;
+
+  void toggleSketchGrid() {
+    showSketchGrid = !showSketchGrid;
+    notifyListeners();
+  }
+
+  void toggleSketchSnap() {
+    showSketchSnap = !showSketchSnap;
+    notifyListeners();
+  }
+
+  void toggleSketchConstraints() {
+    showSketchConstraints = !showSketchConstraints;
+    notifyListeners();
+  }
+
+  void toggleSketchDimensions() {
+    showSketchDimensions = !showSketchDimensions;
+    notifyListeners();
+  }
+
+  void toggleSketchExpressions() {
+    showSketchExpressions = !showSketchExpressions;
+    notifyListeners();
+  }
+
+  void toggleSketchProfileShading() {
+    showSketchProfileShading = !showSketchProfileShading;
+    notifyListeners();
+  }
+
+  void toggleSketchConstructionMode() {
+    if (selectedSketchEntity != null) {
+      selectedSketchEntity!.isConstruction = !selectedSketchEntity!.isConstruction;
+      isSketchConstructionMode = selectedSketchEntity!.isConstruction;
+      notifyDocChanged();
+    } else {
+      isSketchConstructionMode = !isSketchConstructionMode;
+    }
+    notifyListeners();
+  }
+
+  void toggleSketchSliceBody() {
+    isSketchSliceBody = !isSketchSliceBody;
+    notifyListeners();
+  }
+
+  void enterProjectGeometryMode() {
+    if (!isSketchMode) return;
+    isProjectGeometryMode = true;
+    hoveredProjectableEntityId = null;
+    notifyListeners();
+  }
+
+  void exitProjectGeometryMode() {
+    isProjectGeometryMode = false;
+    hoveredProjectableEntityId = null;
+    hoveredProjectablePoint = null;
+    hoveredProjectableEdge = null;
+    notifyListeners();
+  }
+
+  void toggleProjectGeometryMode() {
+    if (isProjectGeometryMode) {
+      exitProjectGeometryMode();
+    } else {
+      enterProjectGeometryMode();
+    }
+  }
+
+  void setHoveredProjectable({String? entityId, CadPoint3D? point, List<CadPoint3D>? edge}) {
+    hoveredProjectableEntityId = entityId;
+    hoveredProjectablePoint = point;
+    hoveredProjectableEdge = edge;
+    notifyListeners();
+  }
+
+  /// Projects a 3D line/edge (2 CadPoint3D points in world space) onto the active sketch plane
+  CADLineEntity? project3DEdgeToActivePlane(CadPoint3D p1, CadPoint3D p2, {String? sourceId}) {
+    if (activeSketchPlane == null) return null;
+    final loc1 = activeSketchPlane!.toLocal(vm_math.Vector3(p1.x, p1.y, p1.z));
+    final loc2 = activeSketchPlane!.toLocal(vm_math.Vector3(p2.x, p2.y, p2.z));
+
+    final line = CADLineEntity(id: 'proj_edge_${DateTime.now().millisecondsSinceEpoch}', start: loc1, end: loc2, isProjected: true, sourceEntityId: sourceId);
+    addPrimitiveEntityToActivePlane(line);
+    return line;
+  }
+
+  /// Projects a 3D vertex/point onto the active sketch plane
+  CADCircleEntity? project3DVertexToActivePlane(CadPoint3D p, {String? sourceId}) {
+    if (activeSketchPlane == null) return null;
+    final loc = activeSketchPlane!.toLocal(vm_math.Vector3(p.x, p.y, p.z));
+
+    final circle = CADCircleEntity(
+      id: 'proj_pt_${DateTime.now().millisecondsSinceEpoch}',
+      center: loc,
+      radius: 2.0,
+      isProjected: true,
+      isConstruction: true,
+      sourceEntityId: sourceId,
+    );
+    addPrimitiveEntityToActivePlane(circle);
+    return circle;
+  }
+
+  /// Projects all boundary edges of a 3D polygon face onto the active sketch plane
+  List<CADLineEntity> project3DFaceToActivePlane(CadFoldedPolygon3D polygon, {String? sourceId}) {
+    if (activeSketchPlane == null || polygon.vertices.length < 2) return [];
+    final results = <CADLineEntity>[];
+    for (int i = 0; i < polygon.vertices.length; i++) {
+      final p1 = polygon.vertices[i];
+      final p2 = polygon.vertices[(i + 1) % polygon.vertices.length];
+      final line = project3DEdgeToActivePlane(p1, p2, sourceId: '${sourceId ?? polygon.faceId}_edge_$i');
+      if (line != null) results.add(line);
+    }
+    return results;
+  }
 
   /// Currently selected parametric 2D primitive entity on active plane
   CADPrimitiveEntity? selectedSketchEntity;
@@ -668,27 +835,358 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// Profile loop validation status for active sketch
   ValidationResult? activeSketchValidation;
 
+  /// Interactive multi-step sketch drawing state (Phase 3)
+  Offset? sketchInteractiveStartPoint;
+  Offset? sketchInteractiveMidPoint;
+  final List<Offset> sketchPolylinePoints = [];
+
+  void setSketchInteractiveStartPoint(Offset? pt) {
+    sketchInteractiveStartPoint = pt;
+    notifyListeners();
+  }
+
+  void setInteractiveSketchStart(Offset? pt) => setSketchInteractiveStartPoint(pt);
+
+  void setSketchInteractiveMidPoint(Offset? pt) {
+    sketchInteractiveMidPoint = pt;
+    notifyListeners();
+  }
+
+  void setInteractiveSketchMid(Offset? pt) => setSketchInteractiveMidPoint(pt);
+
+  void addSketchPolylinePoint(Offset pt) {
+    sketchPolylinePoints.add(pt);
+    notifyListeners();
+  }
+
+  void clearSketchInteractiveState() {
+    sketchInteractiveStartPoint = null;
+    sketchInteractiveMidPoint = null;
+    sketchPolylinePoints.clear();
+    notifyListeners();
+  }
+
   @override
   bool isExportingFile = false;
 
   void selectSketchFeature(String? featureId) {
     selectedSketchFeatureId = featureId;
     if (featureId != null && activeSketchPlane != null) {
-      selectedSketchEntity = activeSketchPlane!.primitives
-          .where((p) => p.id == featureId)
-          .firstOrNull;
+      selectedSketchEntity = activeSketchPlane!.primitives.where((p) => p.id == featureId).firstOrNull;
     } else if (featureId == null) {
       selectedSketchEntity = null;
     }
     notifyListeners();
   }
 
+  final Set<String> selectedSketchEntityIds = {};
+  CadConstraint? selectedSketchConstraint;
+  SketchConstraintSolverResult? lastConstraintSolverResult;
+
+  int get sketchDegreesOfFreedom => lastConstraintSolverResult?.totalDegreesOfFreedom ?? 0;
+  bool get isSketchFullyConstrained => (activeSketchPlane?.primitives.isNotEmpty ?? false) && sketchDegreesOfFreedom == 0;
+
+  void toggleSketchEntityMultiSelection(String entityId) {
+    if (selectedSketchEntityIds.contains(entityId)) {
+      selectedSketchEntityIds.remove(entityId);
+    } else {
+      selectedSketchEntityIds.add(entityId);
+    }
+    for (final p in activeSketchPlane?.primitives ?? <CADPrimitiveEntity>[]) {
+      p.isSelected = selectedSketchEntityIds.contains(p.id);
+    }
+    if (selectedSketchEntityIds.isNotEmpty) {
+      selectedSketchEntity = activeSketchPlane?.primitives.where((p) => p.id == selectedSketchEntityIds.last).firstOrNull;
+      selectedSketchFeatureId = selectedSketchEntity?.id;
+    } else {
+      selectedSketchEntity = null;
+      selectedSketchFeatureId = null;
+    }
+    notifyListeners();
+  }
+
+  void solveSketchConstraints() {
+    if (activeSketchPlane == null) return;
+    lastConstraintSolverResult = AssemblySketchConstraintSolver.solve(activeSketchPlane!);
+    notifyListeners();
+  }
+
+  void applySketchConstraint(CadConstraintType type, {List<String>? targetEntityIds}) {
+    if (activeSketchPlane == null) return;
+    final ids =
+        targetEntityIds ??
+        (selectedSketchEntityIds.isNotEmpty ? selectedSketchEntityIds.toList() : (selectedSketchEntity != null ? [selectedSketchEntity!.id] : <String>[]));
+
+    if (ids.isEmpty) return;
+    _recordUndo();
+
+    final constraint = CadConstraint(id: 'c_${type.name}_${DateTime.now().millisecondsSinceEpoch}', type: type, entityIds: ids);
+    activeSketchPlane!.constraints.add(constraint);
+    solveSketchConstraints();
+
+    final dofs = sketchDegreesOfFreedom;
+    setVcbState(
+      label: 'Constraint: ${type.label} (${type.symbol})',
+      value: dofs == 0 ? 'Fully Constrained (0 DOFs) 🔒' : '$dofs DOFs Remaining',
+      hint: dofs == 0 ? 'Profile turns black - locked' : 'Add more constraints or dimensions to fully constrain',
+    );
+    notifyListeners();
+  }
+
+  void removeSketchConstraint(String constraintId) {
+    if (activeSketchPlane == null) return;
+    _recordUndo();
+    activeSketchPlane!.constraints.removeWhere((c) => c.id == constraintId);
+    if (selectedSketchConstraint?.id == constraintId) {
+      selectedSketchConstraint = null;
+    }
+    solveSketchConstraints();
+    notifyListeners();
+  }
+
   void selectSketchPrimitive(CADPrimitiveEntity? entity) {
     selectedSketchEntity = entity;
     selectedSketchFeatureId = entity?.id;
+    selectedSketchEntityIds.clear();
+    if (entity != null) selectedSketchEntityIds.add(entity.id);
     for (final p in activeSketchPlane?.primitives ?? <CADPrimitiveEntity>[]) {
       p.isSelected = (p.id == entity?.id);
     }
+    notifyListeners();
+  }
+
+  // --- 3D Feature Extrusion & Boolean Operations (Phase 5) ---
+  bool isExtrudeMode = false;
+  AssemblyExtrudeParams extrudeParams = const AssemblyExtrudeParams();
+  bool isExtrudeArrowDragging = false;
+  Offset? extrudeDragStartScreen;
+  double extrudeDragStartDistance = 25.0;
+
+  void openExtrudeDialog() {
+    if (activeSketchPlane == null && allAvailablePlanes.isNotEmpty) {
+      activeSketchPlane = allAvailablePlanes.first;
+    }
+    if (activeSketchPlane != null && extrudeParams.profileEntityIds.isEmpty) {
+      final selectedIds = activeSketchPlane!.primitives.where((p) => p.isSelected).map((p) => p.id).toList();
+      if (selectedIds.isNotEmpty) {
+        extrudeParams = extrudeParams.copyWith(profileEntityIds: selectedIds);
+      } else if (activeSketchPlane!.primitives.isNotEmpty) {
+        extrudeParams = extrudeParams.copyWith(profileEntityIds: [activeSketchPlane!.primitives.first.id]);
+      }
+    }
+    isExtrudeMode = true;
+    final dist = extrudeParams.distanceMm;
+    setVcbState(label: 'Extrude Feature (E)', value: '${dist.toStringAsFixed(1)} mm', hint: 'Adjust distance, taper angle, or drag 3D arrow manipulator');
+    notifyListeners();
+  }
+
+  void closeExtrudeDialog() {
+    isExtrudeMode = false;
+    isExtrudeArrowDragging = false;
+    extrudeDragStartScreen = null;
+    setVcbState(label: 'Measurements', value: '', hint: 'Ready');
+    notifyListeners();
+  }
+
+  void toggleExtrudeMode() {
+    if (isExtrudeMode) {
+      closeExtrudeDialog();
+    } else {
+      openExtrudeDialog();
+    }
+  }
+
+  void updateExtrudeParams(AssemblyExtrudeParams newParams) {
+    extrudeParams = newParams;
+    setVcbState(
+      label: 'Extrude (${newParams.operation.label})',
+      value: newParams.direction == AssemblyExtrudeDirection.symmetric
+          ? '±${newParams.distanceMm.abs().toStringAsFixed(1)} mm'
+          : '${newParams.distanceMm.toStringAsFixed(1)} mm',
+      hint: 'Taper: ${newParams.taperAngleDeg.toStringAsFixed(1)}° | Direction: ${newParams.direction.label}',
+    );
+    notifyListeners();
+  }
+
+  void updateExtrudeDistance(double distanceMm) {
+    extrudeParams = extrudeParams.copyWith(distanceMm: distanceMm);
+    setVcbState(
+      label: 'Extrude Distance',
+      value: extrudeParams.direction == AssemblyExtrudeDirection.symmetric
+          ? '±${distanceMm.abs().toStringAsFixed(1)} mm'
+          : '${distanceMm.toStringAsFixed(1)} mm',
+      hint: 'Type distance or drag arrow manipulator',
+    );
+    notifyListeners();
+  }
+
+  void executeExtrudeFeature() {
+    if (activeSketchPlane == null) return;
+    final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(activeSketchPlane!);
+    final validation = CADProfileValidator.validateProfile(segments);
+    if (!validation.isValidClosedLoop || validation.orderedPathVertices.length < 3) {
+      setVcbState(label: 'Extrude Failed', value: 'Unclosed Profile', hint: 'Ensure sketch forms a closed watertight loop before extruding');
+      notifyListeners();
+      return;
+    }
+
+    _recordUndo();
+
+    final targetPart = doc.parts.where((p) => p.id == (activeSketchPlane!.targetPartId ?? sketchPartId)).firstOrNull ?? selectedPart;
+
+    final result = AssemblyExtrudeEngine.executeExtrusion(
+      doc: doc,
+      plane: activeSketchPlane!,
+      profilePoints: validation.orderedPathVertices,
+      params: extrudeParams,
+      targetPart: targetPart,
+    );
+
+    if (result.isSuccess) {
+      sketchFeatureHistory.add(
+        CADHistoryItem(
+          id: 'extrude_${DateTime.now().millisecondsSinceEpoch}',
+          name: '${extrudeParams.operation.label} Extrusion (${extrudeParams.distanceMm.toStringAsFixed(1)}mm)',
+          timestamp: DateTime.now(),
+          referencePlane: activeSketchPlane,
+          featureType: extrudeParams.operation == AssemblyExtrudeOperation.cut ? FeatureType.cut : FeatureType.extrude,
+          modificationDepth: extrudeParams.distanceMm,
+        ),
+      );
+
+      recordTimelineFeature(
+        name: '${extrudeParams.operation.label} (${extrudeParams.distanceMm.toStringAsFixed(1)}mm)',
+        type: extrudeParams.operation == AssemblyExtrudeOperation.cut ? AssemblyTimelineFeatureType.cut : AssemblyTimelineFeatureType.extrude,
+        entityId: result.createdPart?.id ?? targetPart?.id,
+        parameters: {'distance': extrudeParams.distanceMm, 'operation': extrudeParams.operation.name},
+      );
+
+      invalidateMeshCache();
+      if (result.createdPart != null) {
+        syncComponentInstances(result.createdPart!.id);
+      }
+      closeExtrudeDialog();
+      setVcbState(label: 'Feature Created', value: result.message, hint: 'Solid geometry updated in assembly document');
+    } else {
+      setVcbState(label: 'Extrude Error', value: result.message, hint: 'Check profile geometry and try again');
+    }
+
+    notifyListeners();
+  }
+
+  // --- Parametric Design History Timeline & CAD Settings (Phase 6) ---
+  final List<AssemblyTimelineItem> timelineItems = [];
+  int timelineRollbackIndex = 0;
+  AssemblyCadSettings cadSettings = const AssemblyCadSettings();
+  bool isCadSettingsOpen = false;
+
+  void recordTimelineFeature({required String name, required AssemblyTimelineFeatureType type, String? entityId, Map<String, dynamic> parameters = const {}}) {
+    final item = AssemblyTimelineItem(
+      id: 'timeline_${DateTime.now().millisecondsSinceEpoch}_${timelineItems.length}',
+      name: name,
+      type: type,
+      entityId: entityId,
+      parameters: parameters,
+      isSuppressed: false,
+    );
+    timelineItems.add(item);
+    timelineRollbackIndex = timelineItems.length;
+    notifyDocChanged();
+  }
+
+  void setTimelineRollbackIndex(int index) {
+    timelineRollbackIndex = index.clamp(0, timelineItems.length);
+    for (int i = 0; i < timelineItems.length; i++) {
+      timelineItems[i].isSuppressed = (i >= timelineRollbackIndex);
+    }
+    // Update part/plane visibility according to rollback suppression
+    for (int i = 0; i < timelineItems.length; i++) {
+      final item = timelineItems[i];
+      final isSuppressed = item.isSuppressed;
+      if (item.entityId != null) {
+        final part = doc.parts.where((p) => p.id == item.entityId).firstOrNull;
+        if (part != null) {
+          part.isVisible = !isSuppressed;
+        }
+        final plane = constructionPlanes.where((p) => p.id == item.entityId).firstOrNull;
+        if (plane != null) {
+          plane.isVisible = !isSuppressed;
+        }
+      }
+    }
+    setVcbState(
+      label: 'Timeline Rollback',
+      value: '$timelineRollbackIndex / ${timelineItems.length} active',
+      hint: 'Step or drag marker to navigate design history',
+    );
+    notifyListeners();
+  }
+
+  void rollbackToStart() => setTimelineRollbackIndex(0);
+
+  void rollbackStepBack() {
+    if (timelineRollbackIndex > 0) setTimelineRollbackIndex(timelineRollbackIndex - 1);
+  }
+
+  void rollbackStepForward() {
+    if (timelineRollbackIndex < timelineItems.length) setTimelineRollbackIndex(timelineRollbackIndex + 1);
+  }
+
+  void rollbackToEnd() => setTimelineRollbackIndex(timelineItems.length);
+
+  void editTimelineFeature(AssemblyTimelineItem item) {
+    switch (item.type) {
+      case AssemblyTimelineFeatureType.sketch:
+        if (item.entityId != null) {
+          final targetPlane = allAvailablePlanes.where((p) => p.id == item.entityId).firstOrNull;
+          if (targetPlane != null) {
+            selectPlaneForSketch(targetPlane);
+            setVcbState(label: 'Edit Sketch', value: targetPlane.name, hint: 'Parametric sketch activated for editing');
+          }
+        }
+        break;
+      case AssemblyTimelineFeatureType.extrude:
+      case AssemblyTimelineFeatureType.cut:
+        final dist = (item.parameters['distance'] as num?)?.toDouble() ?? 25.0;
+        final opName = item.parameters['operation'] as String?;
+        final op = opName == 'cut' ? AssemblyExtrudeOperation.cut : AssemblyExtrudeOperation.newBody;
+        extrudeParams = extrudeParams.copyWith(distanceMm: dist, operation: op);
+        openExtrudeDialog();
+        break;
+      case AssemblyTimelineFeatureType.constructionPlane:
+        if (item.entityId != null) {
+          final targetPlane = constructionPlanes.where((pl) => pl.id == item.entityId).firstOrNull;
+          if (targetPlane != null) {
+            activeSketchPlane = targetPlane;
+            alignCameraToActivePlaneNormal();
+            setVcbState(label: 'Construction Plane', value: targetPlane.name, hint: 'Plane selected from timeline');
+            notifyListeners();
+          }
+        }
+        break;
+      case AssemblyTimelineFeatureType.originPlane:
+      case AssemblyTimelineFeatureType.weld:
+        break;
+    }
+  }
+
+  void updateCadSettings(AssemblyCadSettings newSettings) {
+    cadSettings = newSettings;
+    notifyListeners();
+  }
+
+  void toggleCadSettingsDialog() {
+    isCadSettingsOpen = !isCadSettingsOpen;
+    notifyListeners();
+  }
+
+  void openCadSettingsDialog() {
+    isCadSettingsOpen = true;
+    notifyListeners();
+  }
+
+  void closeCadSettingsDialog() {
+    isCadSettingsOpen = false;
     notifyListeners();
   }
 
@@ -865,7 +1363,6 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   int _groupCounter = 1;
   int get nextGroupNumber => _groupCounter;
-
 
   void togglePartSelection(String partId) {
     if (_lockedToolSelectionPartId != null) {
@@ -1048,8 +1545,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   bool get canGroupSelectedParts => doc.selectedPartIds.length >= 2;
 
-  bool get canUngroupSelectedParts =>
-      doc.parts.any((p) => doc.selectedPartIds.contains(p.id) && p.groupId != null);
+  bool get canUngroupSelectedParts => doc.parts.any((p) => doc.selectedPartIds.contains(p.id) && p.groupId != null);
 
   void selectWeld(String? weldId) {
     if (doc.selectedWeldId == weldId) return;
@@ -1147,13 +1643,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   /// Welds two parts at a specific 3D mouse click location or designated port.
-  void weldAtPoint(
-    CadPoint3D worldPoint,
-    String partAId,
-    String partBId, {
-    String description = 'MIG Fillet Weld',
-    double weldSizeMm = 6.0,
-  }) {
+  void weldAtPoint(CadPoint3D worldPoint, String partAId, String partBId, {String description = 'MIG Fillet Weld', double weldSizeMm = 6.0}) {
     weldParts(partAId, partBId, weldPoint: worldPoint, description: description, weldSizeMm: weldSizeMm);
   }
 
@@ -1300,6 +1790,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       case AssemblyPartType.baseFootPlate:
       case AssemblyPartType.splicePlate:
       case AssemblyPartType.swingGate:
+      case AssemblyPartType.customExtrusion:
         newPart = AssemblyPart(
           id: _generateId(p.type.name.toLowerCase()),
           name: p.name,
@@ -1316,8 +1807,10 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     doc.parts.add(newPart);
     doc.selectedPartId = newPart.id;
+    doc.selectedPartIds = {newPart.id};
     pendingPlacement = null;
-    notifyListeners();
+    invalidateMeshCache();
+    notifyDocChanged();
     return newPart;
   }
 
@@ -1327,7 +1820,19 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     doc.parts.add(part);
     doc.selectedPartId = part.id;
     doc.selectedPartIds = {part.id};
-    notifyListeners();
+    invalidateMeshCache();
+    notifyDocChanged();
+  }
+
+  /// Adds a new part to the assembly scene positioned at the center of the screen/model.
+  void addPartAtScreenCenter(AssemblyPart part) {
+    if (doc.parts.isNotEmpty) {
+      final pivot = assemblyMesh.center;
+      part.position = CadPoint3D(pivot.x, pivot.y, 0.0);
+    } else {
+      part.position = const CadPoint3D(0.0, 0.0, 0.0);
+    }
+    addPart(part);
   }
 
   // -------------------------------------------------------------
@@ -1433,13 +1938,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
-  void addChannel({
-    double length = 1000.0,
-    double webHeight = 75.0,
-    double flangeWidth = 35.0,
-    double thickness = 3.0,
-    CadPoint3D? position,
-  }) {
+  void addChannel({double length = 1000.0, double webHeight = 75.0, double flangeWidth = 35.0, double thickness = 3.0, CadPoint3D? position}) {
     _recordUndo();
     final newId = _generateId('channel');
     final p = AssemblyPart(
@@ -1458,13 +1957,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
-  void addAngle({
-    double length = 1000.0,
-    double legA = 50.0,
-    double legB = 50.0,
-    double thickness = 4.0,
-    CadPoint3D? position,
-  }) {
+  void addAngle({double length = 1000.0, double legA = 50.0, double legB = 50.0, double thickness = 4.0, CadPoint3D? position}) {
     _recordUndo();
     final newId = _generateId('angle');
     final p = AssemblyPart(
@@ -1483,11 +1976,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
-  void addRod({
-    double length = 1000.0,
-    double diameter = 20.0,
-    CadPoint3D? position,
-  }) {
+  void addRod({double length = 1000.0, double diameter = 20.0, CadPoint3D? position}) {
     _recordUndo();
     final newId = _generateId('rod');
     final p = AssemblyPart(
@@ -1506,12 +1995,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
-  void addFlatBar({
-    double length = 1000.0,
-    double width = 40.0,
-    double thickness = 6.0,
-    CadPoint3D? position,
-  }) {
+  void addFlatBar({double length = 1000.0, double width = 40.0, double thickness = 6.0, CadPoint3D? position}) {
     _recordUndo();
     final newId = _generateId('bar');
     final p = AssemblyPart(
@@ -1530,13 +2014,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
-  void addIBeam({
-    double length = 1000.0,
-    double height = 100.0,
-    double flangeWidth = 60.0,
-    double thickness = 4.5,
-    CadPoint3D? position,
-  }) {
+  void addIBeam({double length = 1000.0, double height = 100.0, double flangeWidth = 60.0, double thickness = 4.5, CadPoint3D? position}) {
     _recordUndo();
     final newId = _generateId('ibeam');
     final p = AssemblyPart(
@@ -1636,12 +2114,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     final defId = part.componentDefinitionId ?? _generateId('comp_def');
     part.componentDefinitionId = defId;
 
-    final clone = part.copyWith(
-      id: newId,
-      name: '${part.name} (Copy)',
-      componentDefinitionId: defId,
-      weldedToPartIds: [],
-    );
+    final clone = part.copyWith(id: newId, name: '${part.name} (Copy)', componentDefinitionId: defId, weldedToPartIds: []);
     doc.parts.add(clone);
     doc.selectedPartId = newId;
     doc.selectedPartIds = {newId};
@@ -1675,28 +2148,15 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     lastMoveDelta = delta;
     lastClonedPartIds = clonedIds ?? [partId];
     final dist = math.sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
-    setVcbState(
-      label: 'Distance',
-      value: '${dist.toStringAsFixed(1)}mm',
-      hint: 'Type *N to multiply, /N to divide, or mm',
-    );
+    setVcbState(label: 'Distance', value: '${dist.toStringAsFixed(1)}mm', hint: 'Type *N to multiply, /N to divide, or mm');
   }
 
-  void recordLastRotate({
-    required String partId,
-    required double deltaDeg,
-    CadPoint3D? centerPoint,
-    GizmoAxis axis = GizmoAxis.z,
-  }) {
+  void recordLastRotate({required String partId, required double deltaDeg, CadPoint3D? centerPoint, GizmoAxis axis = GizmoAxis.z}) {
     lastMovedPartId = partId;
     lastRotateDeltaDeg = deltaDeg;
     lastRotateCenterPoint = centerPoint;
     lastRotateAxis = axis;
-    setVcbState(
-      label: 'Angle',
-      value: '${deltaDeg.toStringAsFixed(1)}°',
-      hint: 'Type *N for radial array, /N to divide, or angle',
-    );
+    setVcbState(label: 'Angle', value: '${deltaDeg.toStringAsFixed(1)}°', hint: 'Type *N for radial array, /N to divide, or angle');
   }
 
   /// Evaluates and applies user input from the Measurements VCB box.
@@ -1709,10 +2169,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       final numStr = input.substring(1).trim();
       final count = int.tryParse(numStr);
       if (count != null && count > 1) {
-        if (activeToolMode == SketchUpToolMode.rotate ||
-            vcbLabel == 'Angle' ||
-            vcbLabel == 'Rotate' ||
-            (lastRotateDeltaDeg != null && lastMoveDelta == null)) {
+        if (activeToolMode == SketchUpToolMode.rotate || vcbLabel == 'Angle' || vcbLabel == 'Rotate' || (lastRotateDeltaDeg != null && lastMoveDelta == null)) {
           createRadialArray(count);
         } else {
           createLinearArray(count);
@@ -1726,10 +2183,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       final numStr = input.substring(1).trim();
       final count = int.tryParse(numStr);
       if (count != null && count > 1) {
-        if (activeToolMode == SketchUpToolMode.rotate ||
-            vcbLabel == 'Angle' ||
-            vcbLabel == 'Rotate' ||
-            (lastRotateDeltaDeg != null && lastMoveDelta == null)) {
+        if (activeToolMode == SketchUpToolMode.rotate || vcbLabel == 'Angle' || vcbLabel == 'Rotate' || (lastRotateDeltaDeg != null && lastMoveDelta == null)) {
           divideRadialArray(count);
         } else {
           divideLinearArray(count);
@@ -1739,13 +2193,18 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     }
 
     // 3. Explicit Single Number (Distance or Angle): e.g. "250", "250mm", "45", "45°"
-    final cleanNum = input.replaceAll('mm', '').replaceAll('cm', '').replaceAll('m', '').replaceAll('in', '').replaceAll('ft', '').replaceAll('°', '').replaceAll('deg', '').trim();
+    final cleanNum = input
+        .replaceAll('mm', '')
+        .replaceAll('cm', '')
+        .replaceAll('m', '')
+        .replaceAll('in', '')
+        .replaceAll('ft', '')
+        .replaceAll('°', '')
+        .replaceAll('deg', '')
+        .trim();
     final singleVal = double.tryParse(cleanNum);
     if (singleVal != null) {
-      if (activeToolMode == SketchUpToolMode.rotate ||
-          vcbLabel == 'Angle' ||
-          input.contains('°') ||
-          input.contains('deg')) {
+      if (activeToolMode == SketchUpToolMode.rotate || vcbLabel == 'Angle' || input.contains('°') || input.contains('deg')) {
         applyExplicitRotation(singleVal);
         return true;
       } else {
@@ -1766,11 +2225,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           selectedPart!.length = l;
           selectedPart!.height = h;
           syncComponentInstances(selectedPart!.id);
-          setVcbState(
-            label: 'Dimensions',
-            value: '${l.toStringAsFixed(0)} × ${h.toStringAsFixed(0)}mm',
-            hint: 'Dimensions updated',
-          );
+          setVcbState(label: 'Dimensions', value: '${l.toStringAsFixed(0)} × ${h.toStringAsFixed(0)}mm', hint: 'Dimensions updated');
           notifyListeners();
           return true;
         }
@@ -1799,38 +2254,18 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     for (int i = 1; i < totalCount; i++) {
       final newId = _generateId(templatePart.type.name);
-      final newPos = CadPoint3D(
-        templatePart.position.x + delta.x * i,
-        templatePart.position.y + delta.y * i,
-        templatePart.position.z + delta.z * i,
-      );
+      final newPos = CadPoint3D(templatePart.position.x + delta.x * i, templatePart.position.y + delta.y * i, templatePart.position.z + delta.z * i);
 
-      final clone = templatePart.copyWith(
-        id: newId,
-        name: '${templatePart.name} #$i',
-        componentDefinitionId: defId,
-        position: newPos,
-        weldedToPartIds: [],
-      );
+      final clone = templatePart.copyWith(id: newId, name: '${templatePart.name} #$i', componentDefinitionId: defId, position: newPos, weldedToPartIds: []);
 
       if (parentRail != null && templatePart.type == AssemblyPartType.rung) {
-        final slotEntity = punchRungSlot(
-          railId: parentRail.id,
-          distanceX: newPos.x,
-        );
+        final slotEntity = punchRungSlot(railId: parentRail.id, distanceX: newPos.x);
         clone.matedSlotEntityId = slotEntity.id;
         slotEntity.matedRungPartId = newId;
 
         final weldId = 'weld_${parentRail.id}_$newId';
         doc.welds.add(
-          AssemblyWeldJoint(
-            id: weldId,
-            partAId: parentRail.id,
-            partBId: newId,
-            weldPoint: newPos,
-            jointDescription: 'Fillet Weld (3mm)',
-            weldSizeMm: 3.0,
-          ),
+          AssemblyWeldJoint(id: weldId, partAId: parentRail.id, partBId: newId, weldPoint: newPos, jointDescription: 'Fillet Weld (3mm)', weldSizeMm: 3.0),
         );
         parentRail.weldedToPartIds.add(newId);
         clone.weldedToPartIds.add(parentRail.id);
@@ -1842,11 +2277,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     doc.selectedPartIds = newSelectedIds.toSet();
     doc.selectedPartId = newSelectedIds.last;
-    setVcbState(
-      label: 'Array',
-      value: '*$totalCount copies created',
-      hint: 'Array complete',
-    );
+    setVcbState(label: 'Array', value: '*$totalCount copies created', hint: 'Array complete');
     notifyListeners();
   }
 
@@ -1860,16 +2291,8 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     final defId = templatePart.componentDefinitionId ?? _generateId('comp_def');
     templatePart.componentDefinitionId = defId;
     final delta = lastMoveDelta!;
-    final startPos = CadPoint3D(
-      templatePart.position.x - delta.x,
-      templatePart.position.y - delta.y,
-      templatePart.position.z - delta.z,
-    );
-    final step = CadPoint3D(
-      delta.x / divideCount,
-      delta.y / divideCount,
-      delta.z / divideCount,
-    );
+    final startPos = CadPoint3D(templatePart.position.x - delta.x, templatePart.position.y - delta.y, templatePart.position.z - delta.z);
+    final step = CadPoint3D(delta.x / divideCount, delta.y / divideCount, delta.z / divideCount);
 
     final newSelectedIds = <String>[templatePart.id];
     AssemblyPart? parentRail;
@@ -1879,38 +2302,18 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     for (int i = 1; i < divideCount; i++) {
       final newId = _generateId(templatePart.type.name);
-      final newPos = CadPoint3D(
-        startPos.x + step.x * i,
-        startPos.y + step.y * i,
-        startPos.z + step.z * i,
-      );
+      final newPos = CadPoint3D(startPos.x + step.x * i, startPos.y + step.y * i, startPos.z + step.z * i);
 
-      final clone = templatePart.copyWith(
-        id: newId,
-        name: '${templatePart.name} div#$i',
-        componentDefinitionId: defId,
-        position: newPos,
-        weldedToPartIds: [],
-      );
+      final clone = templatePart.copyWith(id: newId, name: '${templatePart.name} div#$i', componentDefinitionId: defId, position: newPos, weldedToPartIds: []);
 
       if (parentRail != null && templatePart.type == AssemblyPartType.rung) {
-        final slotEntity = punchRungSlot(
-          railId: parentRail.id,
-          distanceX: newPos.x,
-        );
+        final slotEntity = punchRungSlot(railId: parentRail.id, distanceX: newPos.x);
         clone.matedSlotEntityId = slotEntity.id;
         slotEntity.matedRungPartId = newId;
 
         final weldId = 'weld_${parentRail.id}_$newId';
         doc.welds.add(
-          AssemblyWeldJoint(
-            id: weldId,
-            partAId: parentRail.id,
-            partBId: newId,
-            weldPoint: newPos,
-            jointDescription: 'Fillet Weld (3mm)',
-            weldSizeMm: 3.0,
-          ),
+          AssemblyWeldJoint(id: weldId, partAId: parentRail.id, partBId: newId, weldPoint: newPos, jointDescription: 'Fillet Weld (3mm)', weldSizeMm: 3.0),
         );
         parentRail.weldedToPartIds.add(newId);
         clone.weldedToPartIds.add(parentRail.id);
@@ -1921,46 +2324,26 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     }
 
     doc.selectedPartIds = newSelectedIds.toSet();
-    setVcbState(
-      label: 'Divide',
-      value: '/$divideCount ($divideCount segments)',
-      hint: 'Divided evenly',
-    );
+    setVcbState(label: 'Divide', value: '/$divideCount ($divideCount segments)', hint: 'Divided evenly');
     notifyListeners();
   }
 
   void applyExplicitMoveDistance(double targetDistance) {
     final part = (lastMovedPartId != null ? doc.parts.where((p) => p.id == lastMovedPartId).firstOrNull : null) ?? selectedPart;
     if (part == null || lastMoveDelta == null) return;
-    final currentDist = math.sqrt(
-      lastMoveDelta!.x * lastMoveDelta!.x +
-      lastMoveDelta!.y * lastMoveDelta!.y +
-      lastMoveDelta!.z * lastMoveDelta!.z,
-    );
+    final currentDist = math.sqrt(lastMoveDelta!.x * lastMoveDelta!.x + lastMoveDelta!.y * lastMoveDelta!.y + lastMoveDelta!.z * lastMoveDelta!.z);
     if (currentDist <= 0.001) return;
 
     _recordUndo();
     final scale = targetDistance / currentDist;
-    final originalStart = CadPoint3D(
-      part.position.x - lastMoveDelta!.x,
-      part.position.y - lastMoveDelta!.y,
-      part.position.z - lastMoveDelta!.z,
-    );
+    final originalStart = CadPoint3D(part.position.x - lastMoveDelta!.x, part.position.y - lastMoveDelta!.y, part.position.z - lastMoveDelta!.z);
     part.position = CadPoint3D(
       originalStart.x + lastMoveDelta!.x * scale,
       originalStart.y + lastMoveDelta!.y * scale,
       originalStart.z + lastMoveDelta!.z * scale,
     );
-    lastMoveDelta = CadPoint3D(
-      lastMoveDelta!.x * scale,
-      lastMoveDelta!.y * scale,
-      lastMoveDelta!.z * scale,
-    );
-    setVcbState(
-      label: 'Distance',
-      value: formatLength(targetDistance),
-      hint: 'Distance updated',
-    );
+    lastMoveDelta = CadPoint3D(lastMoveDelta!.x * scale, lastMoveDelta!.y * scale, lastMoveDelta!.z * scale);
+    setVcbState(label: 'Distance', value: formatLength(targetDistance), hint: 'Distance updated');
     notifyListeners();
   }
 
@@ -2005,21 +2388,12 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         part.rotationDeg = CadPoint3D(part.rotationDeg.x, part.rotationDeg.y, targetAngleDeg % 360.0);
       }
     }
-    setVcbState(
-      label: 'Angle',
-      value: '${targetAngleDeg.toStringAsFixed(1)}°',
-      hint: 'Rotation updated',
-    );
+    setVcbState(label: 'Angle', value: '${targetAngleDeg.toStringAsFixed(1)}°', hint: 'Rotation updated');
     notifyListeners();
   }
 
   /// Duplicates a part, assigns/inherits component definition, and rotates the clone.
-  AssemblyPart rotateAndCopyPart(
-    String partId,
-    double angleDeg, {
-    CadPoint3D? centerPoint,
-    GizmoAxis axis = GizmoAxis.z,
-  }) {
+  AssemblyPart rotateAndCopyPart(String partId, double angleDeg, {CadPoint3D? centerPoint, GizmoAxis axis = GizmoAxis.z}) {
     final original = doc.parts.where((p) => p.id == partId).firstOrNull;
     if (original == null) throw ArgumentError('Part not found: $partId');
 
@@ -2041,11 +2415,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         final rz = centerPoint.z + (dy * math.sin(rad) + dz * math.cos(rad));
         newPos = CadPoint3D(original.position.x, ry, rz);
       }
-      newRot = CadPoint3D(
-        (original.rotationDeg.x + angleDeg) % 360.0,
-        original.rotationDeg.y,
-        original.rotationDeg.z,
-      );
+      newRot = CadPoint3D((original.rotationDeg.x + angleDeg) % 360.0, original.rotationDeg.y, original.rotationDeg.z);
     } else if (axis == GizmoAxis.y) {
       if (centerPoint != null) {
         final dz = original.position.z - centerPoint.z;
@@ -2054,11 +2424,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         final rx = centerPoint.x + (dz * math.sin(rad) + dx * math.cos(rad));
         newPos = CadPoint3D(rx, original.position.y, rz);
       }
-      newRot = CadPoint3D(
-        original.rotationDeg.x,
-        (original.rotationDeg.y + angleDeg) % 360.0,
-        original.rotationDeg.z,
-      );
+      newRot = CadPoint3D(original.rotationDeg.x, (original.rotationDeg.y + angleDeg) % 360.0, original.rotationDeg.z);
     } else {
       if (centerPoint != null) {
         final dx = original.position.x - centerPoint.x;
@@ -2067,11 +2433,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         final ry = centerPoint.y + (dx * math.sin(rad) + dy * math.cos(rad));
         newPos = CadPoint3D(rx, ry, original.position.z);
       }
-      newRot = CadPoint3D(
-        original.rotationDeg.x,
-        original.rotationDeg.y,
-        (original.rotationDeg.z + angleDeg) % 360.0,
-      );
+      newRot = CadPoint3D(original.rotationDeg.x, original.rotationDeg.y, (original.rotationDeg.z + angleDeg) % 360.0);
     }
 
     final clone = original.copyWith(
@@ -2092,13 +2454,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   /// Creates a radial circular array of [totalCount] parts spaced by [stepAngleDeg].
-  List<AssemblyPart> radialArrayPart(
-    String partId,
-    int totalCount,
-    double stepAngleDeg, {
-    CadPoint3D? centerPoint,
-    GizmoAxis axis = GizmoAxis.z,
-  }) {
+  List<AssemblyPart> radialArrayPart(String partId, int totalCount, double stepAngleDeg, {CadPoint3D? centerPoint, GizmoAxis axis = GizmoAxis.z}) {
     if (totalCount < 2) return [];
     final template = doc.parts.where((p) => p.id == partId).firstOrNull;
     if (template == null) return [];
@@ -2126,11 +2482,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           final rz = centerPoint.z + (dy * math.sin(rad) + dz * math.cos(rad));
           newPos = CadPoint3D(template.position.x, ry, rz);
         }
-        newRot = CadPoint3D(
-          (template.rotationDeg.x + currentAngleDeg) % 360.0,
-          template.rotationDeg.y,
-          template.rotationDeg.z,
-        );
+        newRot = CadPoint3D((template.rotationDeg.x + currentAngleDeg) % 360.0, template.rotationDeg.y, template.rotationDeg.z);
       } else if (axis == GizmoAxis.y) {
         if (centerPoint != null) {
           final dz = template.position.z - centerPoint.z;
@@ -2139,11 +2491,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           final rx = centerPoint.x + (dz * math.sin(rad) + dx * math.cos(rad));
           newPos = CadPoint3D(rx, template.position.y, rz);
         }
-        newRot = CadPoint3D(
-          template.rotationDeg.x,
-          (template.rotationDeg.y + currentAngleDeg) % 360.0,
-          template.rotationDeg.z,
-        );
+        newRot = CadPoint3D(template.rotationDeg.x, (template.rotationDeg.y + currentAngleDeg) % 360.0, template.rotationDeg.z);
       } else {
         if (centerPoint != null) {
           final dx = template.position.x - centerPoint.x;
@@ -2152,11 +2500,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           final ry = centerPoint.y + (dx * math.sin(rad) + dy * math.cos(rad));
           newPos = CadPoint3D(rx, ry, template.position.z);
         }
-        newRot = CadPoint3D(
-          template.rotationDeg.x,
-          template.rotationDeg.y,
-          (template.rotationDeg.z + currentAngleDeg) % 360.0,
-        );
+        newRot = CadPoint3D(template.rotationDeg.x, template.rotationDeg.y, (template.rotationDeg.z + currentAngleDeg) % 360.0);
       }
 
       final clone = template.copyWith(
@@ -2175,36 +2519,20 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     doc.selectedPartIds = selectedIds;
     doc.selectedPartId = selectedIds.last;
-    setVcbState(
-      label: 'Radial Array',
-      value: '*$totalCount copies (${stepAngleDeg.toStringAsFixed(1)}° pitch)',
-      hint: 'Radial array complete',
-    );
+    setVcbState(label: 'Radial Array', value: '*$totalCount copies (${stepAngleDeg.toStringAsFixed(1)}° pitch)', hint: 'Radial array complete');
     notifyListeners();
     return createdParts;
   }
 
   void createRadialArray(int totalCount) {
     if (lastRotateDeltaDeg == null || lastMovedPartId == null || totalCount < 2) return;
-    radialArrayPart(
-      lastMovedPartId!,
-      totalCount,
-      lastRotateDeltaDeg!,
-      centerPoint: lastRotateCenterPoint,
-      axis: lastRotateAxis,
-    );
+    radialArrayPart(lastMovedPartId!, totalCount, lastRotateDeltaDeg!, centerPoint: lastRotateCenterPoint, axis: lastRotateAxis);
   }
 
   void divideRadialArray(int divideCount) {
     if (lastRotateDeltaDeg == null || lastMovedPartId == null || divideCount < 2) return;
     final stepAngle = lastRotateDeltaDeg! / divideCount;
-    radialArrayPart(
-      lastMovedPartId!,
-      divideCount,
-      stepAngle,
-      centerPoint: lastRotateCenterPoint,
-      axis: lastRotateAxis,
-    );
+    radialArrayPart(lastMovedPartId!, divideCount, stepAngle, centerPoint: lastRotateCenterPoint, axis: lastRotateAxis);
   }
 
   // -------------------------------------------------------------
@@ -2237,12 +2565,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       sib.sketches = source.sketches.map((s) => s.copyWith(id: _generateId(s.featureType))).toList();
       // Deep-copy segments if any
       sib.segments = source.segments
-          .map((seg) => RailSegmentDefinition(
-                id: _generateId('seg'),
-                length: seg.length,
-                bendAngleDeg: seg.bendAngleDeg,
-                hasFlangeVNotch: seg.hasFlangeVNotch,
-              ))
+          .map((seg) => RailSegmentDefinition(id: _generateId('seg'), length: seg.length, bendAngleDeg: seg.bendAngleDeg, hasFlangeVNotch: seg.hasFlangeVNotch))
           .toList();
     }
   }
@@ -2286,21 +2609,13 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     bridgeSourcePartId = partId;
     final part = doc.parts.where((p) => p.id == partId).firstOrNull;
     final name = part?.name ?? partId;
-    setVcbState(
-      label: 'Bridge',
-      value: 'From: $name',
-      hint: 'Click destination stile / part to span',
-    );
+    setVcbState(label: 'Bridge', value: 'From: $name', hint: 'Click destination stile / part to span');
     notifyListeners();
   }
 
   void cancelBridge() {
     bridgeSourcePartId = null;
-    setVcbState(
-      label: 'Measurements',
-      value: '',
-      hint: 'Bridge cancelled',
-    );
+    setVcbState(label: 'Measurements', value: '', hint: 'Bridge cancelled');
     notifyListeners();
   }
 
@@ -2399,11 +2714,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     doc.selectedPartIds = {newRungId};
     bridgeSourcePartId = null;
 
-    setVcbState(
-      label: 'Bridge Span',
-      value: '${clampedSpan.toStringAsFixed(1)}mm',
-      hint: 'Dual fillet welds applied',
-    );
+    setVcbState(label: 'Bridge Span', value: '${clampedSpan.toStringAsFixed(1)}mm', hint: 'Dual fillet welds applied');
     notifyListeners();
     return bridgePart;
   }
@@ -2474,11 +2785,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     if (p.groupId != null) {
       for (final sibling in doc.parts) {
         if (sibling.id != p.id && sibling.groupId == p.groupId) {
-          sibling.position = CadPoint3D(
-            sibling.position.x + delta.x,
-            sibling.position.y + delta.y,
-            sibling.position.z + delta.z,
-          );
+          sibling.position = CadPoint3D(sibling.position.x + delta.x, sibling.position.y + delta.y, sibling.position.z + delta.z);
           movedPartIds.add(sibling.id);
         }
       }
@@ -2490,11 +2797,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       if (linkedId != p.id && !movedPartIds.contains(linkedId)) {
         final linkedPart = doc.parts.where((x) => x.id == linkedId).firstOrNull;
         if (linkedPart != null) {
-          linkedPart.position = CadPoint3D(
-            linkedPart.position.x + delta.x,
-            linkedPart.position.y + delta.y,
-            linkedPart.position.z + delta.z,
-          );
+          linkedPart.position = CadPoint3D(linkedPart.position.x + delta.x, linkedPart.position.y + delta.y, linkedPart.position.z + delta.z);
           movedPartIds.add(linkedId);
         }
       }
@@ -2527,11 +2830,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
             ? CadPoint3D(w.secondWeldPoint!.x + delta.x, w.secondWeldPoint!.y + delta.y, w.secondWeldPoint!.z + delta.z)
             : null;
         final newPaths = w.pathPoints?.map((p) => CadPoint3D(p.x + delta.x, p.y + delta.y, p.z + delta.z)).toList();
-        doc.welds[i] = w.copyWith(
-          weldPoint: newPt,
-          secondWeldPoint: newSec,
-          pathPoints: newPaths,
-        );
+        doc.welds[i] = w.copyWith(weldPoint: newPt, secondWeldPoint: newSec, pathPoints: newPaths);
       }
     }
   }
@@ -2544,6 +2843,9 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   void setActiveSketchTool(String tool) {
+    if (activeSketchTool != tool) {
+      clearSketchInteractiveState();
+    }
     activeSketchTool = tool;
     notifyListeners();
   }
@@ -2678,8 +2980,12 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     _recordUndo();
 
-    final bool isRailRung = (pA.type == AssemblyPartType.straightRail || pA.type == AssemblyPartType.bentRail || pA.type == AssemblyPartType.boxTubeStile) && (pB.type == AssemblyPartType.rung);
-    final bool isRungRail = (pB.type == AssemblyPartType.straightRail || pB.type == AssemblyPartType.bentRail || pB.type == AssemblyPartType.boxTubeStile) && (pA.type == AssemblyPartType.rung);
+    final bool isRailRung =
+        (pA.type == AssemblyPartType.straightRail || pA.type == AssemblyPartType.bentRail || pA.type == AssemblyPartType.boxTubeStile) &&
+        (pB.type == AssemblyPartType.rung);
+    final bool isRungRail =
+        (pB.type == AssemblyPartType.straightRail || pB.type == AssemblyPartType.bentRail || pB.type == AssemblyPartType.boxTubeStile) &&
+        (pA.type == AssemblyPartType.rung);
 
     CadPoint3D pt;
     CadPoint3D axis = weldAxis ?? const CadPoint3D(1.0, 0.0, 0.0);
@@ -2821,12 +3127,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   // -------------------------------------------------------------
   // Magnetic Snap & Coupling System
   // -------------------------------------------------------------
-  AssemblyMagneticSpot? addMagneticSpot(
-    String partId,
-    CadPoint3D localPoint,
-    CadPoint3D normal, {
-    String? name,
-  }) {
+  AssemblyMagneticSpot? addMagneticSpot(String partId, CadPoint3D localPoint, CadPoint3D normal, {String? name}) {
     final part = doc.parts.where((p) => p.id == partId).firstOrNull;
     if (part == null) return null;
     _recordUndo();
@@ -2856,12 +3157,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyDocChanged();
   }
 
-  bool createMagneticJoint({
-    required String partAId,
-    required String spotAId,
-    required String partBId,
-    required String spotBId,
-  }) {
+  bool createMagneticJoint({required String partAId, required String spotAId, required String partBId, required String spotBId}) {
     if (partAId == partBId) return false; // STRICT RULE: same entity coupling forbidden
     final pA = doc.parts.where((p) => p.id == partAId).firstOrNull;
     final pB = doc.parts.where((p) => p.id == partBId).firstOrNull;
@@ -2879,27 +3175,13 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     // 2. Attract Entity B to Entity A:
     // Translate Part B by the delta so spot B aligns with spot A
-    final delta = CadPoint3D(
-      worldSpotA.x - worldSpotB.x,
-      worldSpotA.y - worldSpotB.y,
-      worldSpotA.z - worldSpotB.z,
-    );
+    final delta = CadPoint3D(worldSpotA.x - worldSpotB.x, worldSpotA.y - worldSpotB.y, worldSpotA.z - worldSpotB.z);
 
-    pB.position = CadPoint3D(
-      pB.position.x + delta.x,
-      pB.position.y + delta.y,
-      pB.position.z + delta.z,
-    );
+    pB.position = CadPoint3D(pB.position.x + delta.x, pB.position.y + delta.y, pB.position.z + delta.z);
 
     // 3. Register the magnetic link
     final jointId = _generateId('mag_joint');
-    final joint = AssemblyMagneticJoint(
-      id: jointId,
-      partAId: partAId,
-      spotAId: spotAId,
-      partBId: partBId,
-      spotBId: spotBId,
-    );
+    final joint = AssemblyMagneticJoint(id: jointId, partAId: partAId, spotAId: spotAId, partBId: partBId, spotBId: spotBId);
     doc.magneticJoints.add(joint);
 
     if (!pA.magneticallyLinkedPartIds.contains(pB.id)) {
@@ -2921,8 +3203,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     doc.magneticJoints.removeWhere((j) => j.id == jointId);
 
     final stillLinked = doc.magneticJoints.any(
-      (j) => (j.partAId == joint.partAId && j.partBId == joint.partBId) ||
-             (j.partAId == joint.partBId && j.partBId == joint.partAId),
+      (j) => (j.partAId == joint.partAId && j.partBId == joint.partBId) || (j.partAId == joint.partBId && j.partBId == joint.partAId),
     );
     if (!stillLinked) {
       final pA = doc.parts.where((p) => p.id == joint.partAId).firstOrNull;
@@ -2972,7 +3253,123 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   // WYSIWYG Face Sketch Mode & 'S' Key Focus
   // -------------------------------------------------------------
   void enterSketchMode({String? faceId}) {
+    if (faceId == null && selectedPart == null && activeSketchPlane == null) {
+      enterPlaneSelectionMode();
+      return;
+    }
     focusPartAndEnterSketch(selectedPart?.id, faceId: faceId);
+  }
+
+  void enterPlaneSelectionMode() {
+    isPlaneSelectionMode = true;
+    hoveredPlaneId = null;
+    notifyListeners();
+  }
+
+  void exitPlaneSelectionMode() {
+    isPlaneSelectionMode = false;
+    hoveredPlaneId = null;
+    notifyListeners();
+  }
+
+  void togglePlaneSelectionMode() {
+    if (isPlaneSelectionMode) {
+      exitPlaneSelectionMode();
+    } else {
+      enterPlaneSelectionMode();
+    }
+  }
+
+  void setHoveredPlane(String? planeId) {
+    if (hoveredPlaneId == planeId) return;
+    hoveredPlaneId = planeId;
+    notifyListeners();
+  }
+
+  /// Selects a specific plane for sketch, locks 3D movement and aligns the camera normal.
+  void selectPlaneForSketch(CADSketchPlane plane) {
+    activeSketchPlane = plane;
+    if (!savedSketchPlanes.any((p) => p.id == plane.id)) {
+      savedSketchPlanes.add(plane);
+    }
+    sketchPartId = plane.targetPartId ?? selectedPart?.id;
+    sketchFaceId = plane.targetFaceId ?? plane.id;
+    doc.selectedFaceId = sketchFaceId;
+    isSketchMode = true;
+    isPlaneSelectionMode = false;
+    hoveredPlaneId = null;
+    is3DMovementLocked = true;
+
+    alignCameraToActivePlaneNormal();
+    notifyListeners();
+  }
+
+  /// Adds an Offset Construction Plane parallel to a reference plane.
+  CADSketchPlane addOffsetConstructionPlane({required String parentPlaneId, required double offsetMm, String? name, double size = 140.0}) {
+    final parent = allAvailablePlanes.where((p) => p.id == parentPlaneId).firstOrNull ?? datumPlaneXY;
+    final newPlane = AssemblySurfaceSketchEngine.createOffsetPlane(parentPlane: parent, offsetMm: offsetMm, name: name, size: size);
+    constructionPlanes.add(newPlane);
+    recordTimelineFeature(
+      name: newPlane.name,
+      type: AssemblyTimelineFeatureType.constructionPlane,
+      entityId: newPlane.id,
+      parameters: {'offsetMm': offsetMm, 'parentPlaneId': parentPlaneId},
+    );
+    notifyListeners();
+    return newPlane;
+  }
+
+  /// Adds an Angle Construction Plane rotated around an axis.
+  CADSketchPlane addAngleConstructionPlane({
+    required String referencePlaneId,
+    required vm_math.Vector3 axisOrigin,
+    required vm_math.Vector3 axisDir,
+    required double angleDeg,
+    String? name,
+    double size = 140.0,
+  }) {
+    final parent = allAvailablePlanes.where((p) => p.id == referencePlaneId).firstOrNull ?? datumPlaneXY;
+    final newPlane = AssemblySurfaceSketchEngine.createAnglePlane(
+      referencePlane: parent,
+      axisOrigin: axisOrigin,
+      axisDir: axisDir,
+      angleDeg: angleDeg,
+      name: name,
+      size: size,
+    );
+    constructionPlanes.add(newPlane);
+    recordTimelineFeature(
+      name: newPlane.name,
+      type: AssemblyTimelineFeatureType.constructionPlane,
+      entityId: newPlane.id,
+      parameters: {'angleDeg': angleDeg, 'referencePlaneId': referencePlaneId},
+    );
+    notifyListeners();
+    return newPlane;
+  }
+
+  /// Removes a user construction plane.
+  void removeConstructionPlane(String planeId) {
+    constructionPlanes.removeWhere((p) => p.id == planeId);
+    if (activeSketchPlane?.id == planeId) {
+      exitSketchMode();
+    }
+    notifyListeners();
+  }
+
+  void toggleDatumPlanesVisibility() {
+    showDatumPlanes = !showDatumPlanes;
+    notifyListeners();
+  }
+
+  void toggleConstructionPlanesVisibility() {
+    showConstructionPlanes = !showConstructionPlanes;
+    notifyListeners();
+  }
+
+  void toggleOriginTriadVisibility() {
+    showOriginTriad = !showOriginTriad;
+    notifyListeners();
   }
 
   bool _previousOrthoBeforeSketch = false;
@@ -2986,15 +3383,11 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     final part = doc.parts.where((p) => p.id == partId).firstOrNull ?? selectedPart;
 
     // Check if this surface already has a saved sketch plane
-    CADSketchPlane? plane = savedSketchPlanes
-        .where((p) => p.targetFaceId == polygon.faceId)
-        .firstOrNull;
+    CADSketchPlane? plane = savedSketchPlanes.where((p) => p.targetFaceId == polygon.faceId).firstOrNull;
 
     if (plane == null) {
-      plane = AssemblySurfaceSketchEngine.createPlaneFromFacePolygon(
-        polygon: polygon,
-        partId: part?.id,
-      );
+      plane = AssemblySurfaceSketchEngine.createPlaneFromFacePolygon(polygon: polygon, partId: part?.id);
+      plane.name = generateNextSketchName();
       savedSketchPlanes.add(plane);
     }
 
@@ -3012,9 +3405,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   /// Activates sketch mode on a global datum plane (XY, XZ, YZ).
   void activateSketchOnDatum(String datumType) {
-    CADSketchPlane? plane = savedSketchPlanes
-        .where((p) => p.id == 'datum_${datumType.toUpperCase()}')
-        .firstOrNull;
+    CADSketchPlane? plane = savedSketchPlanes.where((p) => p.id == 'datum_${datumType.toUpperCase()}').firstOrNull;
 
     if (plane == null) {
       plane = AssemblySurfaceSketchEngine.createDatumPlane(datumType);
@@ -3028,13 +3419,15 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     is3DMovementLocked = true;
 
     alignCameraToActivePlaneNormal();
+    solveSketchConstraints();
     notifyListeners();
   }
 
-  /// Aligns camera view directly perpendicular (normal view) facing the active plane.
+  /// Aligns camera view directly perpendicular (normal view) facing the active plane and centers on plane origin.
   void alignCameraToActivePlaneNormal() {
     if (activeSketchPlane == null) return;
     pan = Offset.zero;
+    cameraPivotOverride = CadPoint3D(activeSketchPlane!.origin.x, activeSketchPlane!.origin.y, activeSketchPlane!.origin.z);
     final angles = AssemblySurfaceSketchEngine.computeNormalViewCameraAngles(activeSketchPlane!.normal);
     azimuthDeg = angles.azimuthDeg;
     elevationDeg = angles.elevationDeg;
@@ -3057,12 +3450,31 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     final targetFace = faceId ?? doc.selectedFaceId ?? '${part.id}_web';
     doc.selectedFaceId = targetFace;
 
-    // Search for polygon matching targetFace in assemblyMesh
+    String cleanFaceId = targetFace;
+    if (cleanFaceId.startsWith('plane_')) {
+      cleanFaceId = cleanFaceId.substring('plane_'.length);
+    }
+
+    // Search for polygon matching cleanFaceId in assemblyMesh
     CadFoldedPolygon3D? matchingPoly;
     for (final poly in assemblyMesh.allPolygons) {
-      if (poly.faceId == targetFace || poly.faceId.startsWith(targetFace)) {
+      if (poly.faceId == cleanFaceId || poly.faceId.startsWith(cleanFaceId) || cleanFaceId.startsWith(poly.faceId)) {
         matchingPoly = poly;
         break;
+      }
+    }
+
+    if (matchingPoly == null) {
+      for (final poly in assemblyMesh.allPolygons) {
+        if (poly.faceId.startsWith(part.id)) {
+          if (cleanFaceId.contains('flange') && poly.faceId.contains('flange')) {
+            matchingPoly = poly;
+            break;
+          } else if (cleanFaceId.contains('web') && poly.faceId.contains('web')) {
+            matchingPoly = poly;
+            break;
+          }
+        }
       }
     }
 
@@ -3071,22 +3483,31 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       return;
     }
 
-    // Default to part web plane if no specific polygon matched
-    final origin = vm_math.Vector3(part.position.x + part.length / 2.0, part.position.y, part.position.z + part.height / 2.0);
-    final normal = vm_math.Vector3(0.0, -1.0, 0.0);
+    // Default to part face plane with correct world normal & position
+    CadPoint3D localNorm = const CadPoint3D(0.0, -1.0, 0.0);
+    if (cleanFaceId.contains('top') || cleanFaceId.contains('flange_top')) {
+      localNorm = const CadPoint3D(0.0, 0.0, 1.0);
+    } else if (cleanFaceId.contains('bot') || cleanFaceId.contains('flange_bot')) {
+      localNorm = const CadPoint3D(0.0, 0.0, -1.0);
+    }
+    final worldNorm = part.normalToWorld(localNorm);
+    final normal = vm_math.Vector3(worldNorm.x, worldNorm.y, worldNorm.z);
+    final faceCenter = part.toWorld(CadPoint3D(part.length / 2.0, 0.0, part.height / 2.0));
+    final origin = vm_math.Vector3(faceCenter.x, faceCenter.y, faceCenter.z);
     final up = vm_math.Vector3(0.0, 0.0, 1.0);
     CADSketchPlane? plane = savedSketchPlanes
-        .where((p) => p.targetPartId == part.id && p.targetFaceId == targetFace)
+        .where((p) => p.targetPartId == part.id && (p.targetFaceId == targetFace || p.targetFaceId == cleanFaceId))
         .firstOrNull;
 
     if (plane == null) {
       plane = CADSketchPlane(
-        id: 'plane_${part.id}_$targetFace',
+        id: 'plane_${part.id}_$cleanFaceId',
+        name: generateNextSketchName(),
         origin: origin,
         normal: normal,
         up: up,
         targetPartId: part.id,
-        targetFaceId: targetFace,
+        targetFaceId: cleanFaceId,
       );
       savedSketchPlanes.add(plane);
     }
@@ -3095,7 +3516,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     isSketchMode = true;
     is3DMovementLocked = true;
     sketchPartId = part.id;
-    sketchFaceId = targetFace;
+    sketchFaceId = cleanFaceId;
 
     alignCameraToActivePlaneNormal();
     notifyListeners();
@@ -3103,12 +3524,47 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   /// Finishes sketching, unlocks 3D model movement, and returns to full 3D interactive mode.
   void finishSketch() {
+    if (activeSketchPlane != null) {
+      if (!savedSketchPlanes.any((p) => p.id == activeSketchPlane!.id)) {
+        savedSketchPlanes.add(activeSketchPlane!);
+      }
+      recordTimelineFeature(
+        name: activeSketchPlane!.name.startsWith('Sketch') ? activeSketchPlane!.name : 'Sketch on ${activeSketchPlane!.name}',
+        type: AssemblyTimelineFeatureType.sketch,
+        entityId: activeSketchPlane!.id,
+      );
+    }
     isSketchMode = false;
     is3DMovementLocked = false;
+    isProjectGeometryMode = false;
+    clearSketchInteractiveState();
     selectedSketchEntity = null;
     selectedSketchFeatureId = null;
     isOrthoProjection = _previousOrthoBeforeSketch;
     notifyListeners();
+  }
+
+  /// Re-enters sketch mode to edit a previously saved sketch.
+  void editSketch(CADSketchPlane plane) {
+    activeSketchPlane = plane;
+    isSketchMode = true;
+    is3DMovementLocked = true;
+    sketchPartId = plane.targetPartId ?? selectedPart?.id;
+    sketchFaceId = plane.targetFaceId ?? plane.id;
+    doc.selectedFaceId = sketchFaceId;
+    alignCameraToActivePlaneNormal();
+    notifyListeners();
+  }
+
+  /// Toggles visibility of a specific plane or sketch in the 3D viewport.
+  void togglePlaneVisibility(String planeId) {
+    for (final p in allAvailablePlanes) {
+      if (p.id == planeId) {
+        p.isVisible = !p.isVisible;
+        notifyListeners();
+        return;
+      }
+    }
   }
 
   void exitSketchMode() {
@@ -3135,25 +3591,25 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         featureType: entity is CADRectangleEntity
             ? 'rect_cut'
             : entity is CADCircleEntity
-                ? 'circle_hole'
-                : 'custom_cut',
+            ? 'circle_hole'
+            : 'custom_cut',
         localCenter: entity is CADRectangleEntity
             ? CadPoint2D(entity.startPoint.dx + entity.width / 2.0, entity.startPoint.dy + entity.height / 2.0)
             : entity is CADCircleEntity
-                ? CadPoint2D(entity.center.dx, entity.center.dy)
-                : entity is CADLineEntity
-                    ? CadPoint2D((entity.start.dx + entity.end.dx) / 2.0, (entity.start.dy + entity.end.dy) / 2.0)
-                    : CadPoint2D(0.0, 0.0),
+            ? CadPoint2D(entity.center.dx, entity.center.dy)
+            : entity is CADLineEntity
+            ? CadPoint2D((entity.start.dx + entity.end.dx) / 2.0, (entity.start.dy + entity.end.dy) / 2.0)
+            : CadPoint2D(0.0, 0.0),
         widthMm: entity is CADRectangleEntity
             ? entity.width
             : entity is CADCircleEntity
-                ? entity.radius * 2.0
-                : 10.0,
+            ? entity.radius * 2.0
+            : 10.0,
         heightMm: entity is CADRectangleEntity
             ? entity.height
             : entity is CADCircleEntity
-                ? entity.radius * 2.0
-                : 10.0,
+            ? entity.radius * 2.0
+            : 10.0,
         targetFace: activeSketchPlane!.targetFaceId ?? 'web',
         isPassThrough: entity.isPassThrough,
         isSurfaceImpress: entity.featureType == FeatureType.extrude && !entity.isPassThrough,
@@ -3164,6 +3620,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       part.sketches.add(feat);
       syncComponentInstances(part.id);
     }
+    solveSketchConstraints();
     notifyListeners();
   }
 
@@ -3191,9 +3648,34 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       if (width != null) entity.width = width;
       if (height != null) entity.height = height;
       if (position != null) entity.startPoint = position;
+    } else if (entity is CADCenterRectangleEntity) {
+      if (width != null) entity.width = width;
+      if (height != null) entity.height = height;
+      if (position != null) entity.center = position;
     } else if (entity is CADCircleEntity) {
       if (radius != null) entity.radius = radius;
       if (position != null) entity.center = position;
+    } else if (entity is CADArcEntity) {
+      if (position != null) {
+        final d = position - entity.startPoint;
+        entity.startPoint = position;
+        entity.endPoint = entity.endPoint + d;
+        entity.pointOnArc = entity.pointOnArc + d;
+      }
+      if (radius != null && radius > 0) {
+        final chordVec = entity.endPoint - entity.startPoint;
+        final chordLen = chordVec.distance;
+        if (chordLen > 1e-4) {
+          final clampedR = math.max(radius, chordLen / 2.0);
+          final mid = Offset((entity.startPoint.dx + entity.endPoint.dx) / 2.0, (entity.startPoint.dy + entity.endPoint.dy) / 2.0);
+          final perp = Offset(-chordVec.dy / chordLen, chordVec.dx / chordLen);
+          final currentSide = (entity.pointOnArc.dx - mid.dx) * perp.dx + (entity.pointOnArc.dy - mid.dy) * perp.dy;
+          final sign = currentSide >= 0 ? 1.0 : -1.0;
+          final hDist = math.sqrt(math.max(0.0, clampedR * clampedR - (chordLen / 2.0) * (chordLen / 2.0)));
+          final sagitta = clampedR - hDist;
+          entity.pointOnArc = mid + perp * (sign * (sagitta > 1e-4 ? sagitta : clampedR));
+        }
+      }
     } else if (entity is CADLineEntity) {
       if (position != null) {
         final d = entity.end - entity.start;
@@ -3215,6 +3697,10 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           feat.widthMm = entity.width;
           feat.heightMm = entity.height;
           feat.localCenter = CadPoint2D(entity.startPoint.dx + entity.width / 2.0, entity.startPoint.dy + entity.height / 2.0);
+        } else if (entity is CADCenterRectangleEntity) {
+          feat.widthMm = entity.width;
+          feat.heightMm = entity.height;
+          feat.localCenter = CadPoint2D(entity.center.dx, entity.center.dy);
         } else if (entity is CADCircleEntity) {
           feat.widthMm = entity.radius * 2.0;
           feat.heightMm = entity.radius * 2.0;
@@ -3226,6 +3712,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         syncComponentInstances(part.id);
       }
     }
+    solveSketchConstraints();
     notifyListeners();
   }
 
@@ -3321,11 +3808,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     final segs = AssemblySurfaceSketchEngine.compilePlaneSegments(activeSketchPlane!);
     if (segs.length < 2) return;
     _recordUndo();
-    final newSegs = CADCornerModifier.applyChamfer(
-      segA: segs[0],
-      segB: segs[1],
-      offsetMm: offsetMm,
-    );
+    final newSegs = CADCornerModifier.applyChamfer(segA: segs[0], segB: segs[1], offsetMm: offsetMm);
     activeSketchPlane!.entities.addAll(newSegs);
     notifyListeners();
   }
@@ -3336,11 +3819,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     final segs = AssemblySurfaceSketchEngine.compilePlaneSegments(activeSketchPlane!);
     if (segs.length < 2) return;
     _recordUndo();
-    final newSegs = CADCornerModifier.applyFillet(
-      segA: segs[0],
-      segB: segs[1],
-      radiusMm: radiusMm,
-    );
+    final newSegs = CADCornerModifier.applyFillet(segA: segs[0], segB: segs[1], radiusMm: radiusMm);
     activeSketchPlane!.entities.addAll(newSegs);
     notifyListeners();
   }
@@ -3472,11 +3951,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     if (feat.isRungSlotEntity && feat.matedRungPartId != null) {
       final rung = doc.parts.where((p) => p.id == feat.matedRungPartId).firstOrNull;
       if (rung != null) {
-        rung.position = CadPoint3D(
-          part.position.x + feat.localCenter.x,
-          rung.position.y,
-          part.position.z + feat.localCenter.y - (rung.height / 2.0),
-        );
+        rung.position = CadPoint3D(part.position.x + feat.localCenter.x, rung.position.y, part.position.z + feat.localCenter.y - (rung.height / 2.0));
       }
     }
     syncComponentInstances(part.id);
@@ -3498,11 +3973,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     if (feat.isRungSlotEntity && feat.matedRungPartId != null) {
       final rung = doc.parts.where((p) => p.id == feat.matedRungPartId).firstOrNull;
       if (rung != null) {
-        rung.position = CadPoint3D(
-          part.position.x + feat.localCenter.x,
-          rung.position.y,
-          part.position.z + feat.localCenter.y - (rung.height / 2.0),
-        );
+        rung.position = CadPoint3D(part.position.x + feat.localCenter.x, rung.position.y, part.position.z + feat.localCenter.y - (rung.height / 2.0));
       }
     }
     syncComponentInstances(part.id);
@@ -3841,6 +4312,9 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     doc.welds.clear();
     doc.selectedPartId = null;
     doc.selectedFaceId = null;
+    timelineItems.clear();
+    constructionPlanes.clear();
+    timelineRollbackIndex = 0;
     notifyListeners();
   }
 
@@ -3849,6 +4323,8 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     _recordUndo();
     doc.parts.clear();
     doc.welds.clear();
+    doc.selectedPartId = null;
+    doc.selectedPartIds.clear();
 
     const double ladderLength = 1000.0;
     const double ladderWidth = 600.0;
@@ -3865,7 +4341,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       flangeWidth: flangeW,
       isFlangeOutward: false,
       position: const CadPoint3D(0.0, 0.0, 0.0),
-      color: const Color(0xFF64748B),
+      color: const Color(0xFF94B5CB),
     );
 
     // Right Rail (Flange facing inward toward left rail)
@@ -3878,7 +4354,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       flangeWidth: flangeW,
       isFlangeOutward: true,
       position: CadPoint3D(0.0, ladderWidth, 0.0),
-      color: const Color(0xFF64748B),
+      color: const Color(0xFF94B5CB),
     );
 
     doc.parts.addAll([leftRail, rightRail]);
@@ -3908,7 +4384,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         mateStyle: 'passThrough',
         position: CadPoint3D(rx, -10.0, (railHeight / 2.0) - 10.0), // Pass through protrudes -10mm
         rotationDeg: const CadPoint3D(0.0, 0.0, 90.0), // Transverse along Y
-        color: const Color(0xFF94A3B8),
+        color: const Color(0xFF82A4BA),
         jointType: AssemblyJointType.slotMate,
       );
       slotEntityLeft.matedRungPartId = rungId;
@@ -3965,6 +4441,15 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       );
       rightRail.weldedToPartIds.add(rungId);
       rung.weldedToPartIds.add(rightRail.id);
+    }
+
+    timelineItems.clear();
+    recordTimelineFeature(name: 'Origin Datum (XY)', type: AssemblyTimelineFeatureType.originPlane, entityId: 'datum_XY');
+    recordTimelineFeature(name: 'Left Side Rail', type: AssemblyTimelineFeatureType.extrude, entityId: leftRail.id);
+    recordTimelineFeature(name: 'Right Side Rail', type: AssemblyTimelineFeatureType.extrude, entityId: rightRail.id);
+    for (int i = 0; i < 4; i++) {
+      recordTimelineFeature(name: 'Rung ${i + 1}', type: AssemblyTimelineFeatureType.extrude, entityId: 'rung_${i + 1}');
+      recordTimelineFeature(name: 'Fillet Weld ${i + 1}', type: AssemblyTimelineFeatureType.weld, entityId: 'weld_left_${i + 1}');
     }
 
     doc.selectedPartId = 'rail_left';
@@ -4055,13 +4540,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// Generates a compliant OSHA / EN-ISO Safety Cage Assembly onto the current ladder rails.
   /// Spawns a bottom flared bell entry hoop, standard Ø700mm circular hoops spaced at <= 750mm pitch,
   /// and vertical flat bar straps running along the hoops, creating persistent weld connections.
-  void generateSafetyCageAssembly({
-    double? startHeight,
-    double? totalHeight,
-    double hoopDiameter = 700.0,
-    int strapCount = 7,
-    double hoopSpacing = 750.0,
-  }) {
+  void generateSafetyCageAssembly({double? startHeight, double? totalHeight, double hoopDiameter = 700.0, int strapCount = 7, double hoopSpacing = 750.0}) {
     _recordUndo();
 
     // 1. Identify ladder rails and span
@@ -4078,9 +4557,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     }
 
     final double ladderLen = leftRail?.length ?? 3000.0;
-    final double ladderWidth = (rightRail != null && leftRail != null)
-        ? (rightRail.position.y - leftRail.position.y).abs()
-        : 600.0;
+    final double ladderWidth = (rightRail != null && leftRail != null) ? (rightRail.position.y - leftRail.position.y).abs() : 600.0;
     final double leftRailY = leftRail?.position.y ?? 0.0;
     final double rightRailY = rightRail?.position.y ?? ladderWidth;
 
@@ -4129,24 +4606,28 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
       // Connect welds to rails if rails exist
       if (leftRail != null) {
-        doc.welds.add(AssemblyWeldJoint(
-          id: 'weld_${hoopId}_left',
-          partAId: leftRail.id,
-          partBId: hoopId,
-          weldPoint: CadPoint3D(hx, leftRailY, 50.0),
-          jointDescription: 'Hoop Mounting Fillet Weld (5mm)',
-        ));
+        doc.welds.add(
+          AssemblyWeldJoint(
+            id: 'weld_${hoopId}_left',
+            partAId: leftRail.id,
+            partBId: hoopId,
+            weldPoint: CadPoint3D(hx, leftRailY, 50.0),
+            jointDescription: 'Hoop Mounting Fillet Weld (5mm)',
+          ),
+        );
         leftRail.weldedToPartIds.add(hoopId);
         hoop.weldedToPartIds.add(leftRail.id);
       }
       if (rightRail != null) {
-        doc.welds.add(AssemblyWeldJoint(
-          id: 'weld_${hoopId}_right',
-          partAId: rightRail.id,
-          partBId: hoopId,
-          weldPoint: CadPoint3D(hx, rightRailY, 50.0),
-          jointDescription: 'Hoop Mounting Fillet Weld (5mm)',
-        ));
+        doc.welds.add(
+          AssemblyWeldJoint(
+            id: 'weld_${hoopId}_right',
+            partAId: rightRail.id,
+            partBId: hoopId,
+            weldPoint: CadPoint3D(hx, rightRailY, 50.0),
+            jointDescription: 'Hoop Mounting Fillet Weld (5mm)',
+          ),
+        );
         rightRail.weldedToPartIds.add(hoopId);
         hoop.weldedToPartIds.add(rightRail.id);
       }
@@ -4183,13 +4664,15 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
       // Connect weld to each hoop
       for (final hoop in hoopParts) {
-        doc.welds.add(AssemblyWeldJoint(
-          id: 'weld_${strapId}_${hoop.id}',
-          partAId: hoop.id,
-          partBId: strapId,
-          weldPoint: CadPoint3D(hoop.position.x, sy, sz),
-          jointDescription: 'Strap-to-Hoop Fillet Weld (3mm)',
-        ));
+        doc.welds.add(
+          AssemblyWeldJoint(
+            id: 'weld_${strapId}_${hoop.id}',
+            partAId: hoop.id,
+            partBId: strapId,
+            weldPoint: CadPoint3D(hoop.position.x, sy, sz),
+            jointDescription: 'Strap-to-Hoop Fillet Weld (3mm)',
+          ),
+        );
         hoop.weldedToPartIds.add(strapId);
         strap.weldedToPartIds.add(hoop.id);
       }
@@ -4244,24 +4727,28 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     // Welds / splices to rails
     if (leftRail != null) {
-      doc.welds.add(AssemblyWeldJoint(
-        id: 'weld_splice_left',
-        partAId: leftRail.id,
-        partBId: leftStile.id,
-        weldPoint: CadPoint3D(railLen, leftY, railH / 2.0),
-        jointDescription: 'Stile Splice Fishplate Weld (6mm)',
-      ));
+      doc.welds.add(
+        AssemblyWeldJoint(
+          id: 'weld_splice_left',
+          partAId: leftRail.id,
+          partBId: leftStile.id,
+          weldPoint: CadPoint3D(railLen, leftY, railH / 2.0),
+          jointDescription: 'Stile Splice Fishplate Weld (6mm)',
+        ),
+      );
       leftRail.weldedToPartIds.add(leftStile.id);
       leftStile.weldedToPartIds.add(leftRail.id);
     }
     if (rightRail != null) {
-      doc.welds.add(AssemblyWeldJoint(
-        id: 'weld_splice_right',
-        partAId: rightRail.id,
-        partBId: rightStile.id,
-        weldPoint: CadPoint3D(railLen, rightY, railH / 2.0),
-        jointDescription: 'Stile Splice Fishplate Weld (6mm)',
-      ));
+      doc.welds.add(
+        AssemblyWeldJoint(
+          id: 'weld_splice_right',
+          partAId: rightRail.id,
+          partBId: rightStile.id,
+          weldPoint: CadPoint3D(railLen, rightY, railH / 2.0),
+          jointDescription: 'Stile Splice Fishplate Weld (6mm)',
+        ),
+      );
       rightRail.weldedToPartIds.add(rightStile.id);
       rightStile.weldedToPartIds.add(rightRail.id);
     }
@@ -4322,24 +4809,28 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       doc.parts.addAll([bLeft, bRight]);
 
       if (leftRail != null) {
-        doc.welds.add(AssemblyWeldJoint(
-          id: 'weld_standoff_l_$i',
-          partAId: leftRail.id,
-          partBId: bLeft.id,
-          weldPoint: CadPoint3D(bx, leftY, 0.0),
-          jointDescription: 'Bracket Mounting Fillet Weld (4mm)',
-        ));
+        doc.welds.add(
+          AssemblyWeldJoint(
+            id: 'weld_standoff_l_$i',
+            partAId: leftRail.id,
+            partBId: bLeft.id,
+            weldPoint: CadPoint3D(bx, leftY, 0.0),
+            jointDescription: 'Bracket Mounting Fillet Weld (4mm)',
+          ),
+        );
         leftRail.weldedToPartIds.add(bLeft.id);
         bLeft.weldedToPartIds.add(leftRail.id);
       }
       if (rightRail != null) {
-        doc.welds.add(AssemblyWeldJoint(
-          id: 'weld_standoff_r_$i',
-          partAId: rightRail.id,
-          partBId: bRight.id,
-          weldPoint: CadPoint3D(bx, rightY, 0.0),
-          jointDescription: 'Bracket Mounting Fillet Weld (4mm)',
-        ));
+        doc.welds.add(
+          AssemblyWeldJoint(
+            id: 'weld_standoff_r_$i',
+            partAId: rightRail.id,
+            partBId: bRight.id,
+            weldPoint: CadPoint3D(bx, rightY, 0.0),
+            jointDescription: 'Bracket Mounting Fillet Weld (4mm)',
+          ),
+        );
         rightRail.weldedToPartIds.add(bRight.id);
         bRight.weldedToPartIds.add(rightRail.id);
       }
@@ -4383,24 +4874,28 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     doc.parts.addAll([footLeft, footRight]);
 
     if (leftRail != null) {
-      doc.welds.add(AssemblyWeldJoint(
-        id: 'weld_foot_left',
-        partAId: leftRail.id,
-        partBId: footLeft.id,
-        weldPoint: CadPoint3D(0.0, leftY, 0.0),
-        jointDescription: 'Base Shoe Heavy Fillet Weld (6mm)',
-      ));
+      doc.welds.add(
+        AssemblyWeldJoint(
+          id: 'weld_foot_left',
+          partAId: leftRail.id,
+          partBId: footLeft.id,
+          weldPoint: CadPoint3D(0.0, leftY, 0.0),
+          jointDescription: 'Base Shoe Heavy Fillet Weld (6mm)',
+        ),
+      );
       leftRail.weldedToPartIds.add(footLeft.id);
       footLeft.weldedToPartIds.add(leftRail.id);
     }
     if (rightRail != null) {
-      doc.welds.add(AssemblyWeldJoint(
-        id: 'weld_foot_right',
-        partAId: rightRail.id,
-        partBId: footRight.id,
-        weldPoint: CadPoint3D(0.0, rightY, 0.0),
-        jointDescription: 'Base Shoe Heavy Fillet Weld (6mm)',
-      ));
+      doc.welds.add(
+        AssemblyWeldJoint(
+          id: 'weld_foot_right',
+          partAId: rightRail.id,
+          partBId: footRight.id,
+          weldPoint: CadPoint3D(0.0, rightY, 0.0),
+          jointDescription: 'Base Shoe Heavy Fillet Weld (6mm)',
+        ),
+      );
       rightRail.weldedToPartIds.add(footRight.id);
       footRight.weldedToPartIds.add(rightRail.id);
     }
@@ -4474,16 +4969,8 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         visited.add(p.id);
       }
       final name = grpParts.first.groupName ?? 'Group (${grpParts.length} Parts)';
-      final grpWelds = doc.welds
-          .where((w) => grpParts.any((p) => p.id == w.partAId) && grpParts.any((p) => p.id == w.partBId))
-          .toList();
-      groups.add(AssemblyGroupNode(
-        id: entry.key,
-        name: name,
-        isConnectedAssembly: true,
-        parts: grpParts,
-        welds: grpWelds,
-      ));
+      final grpWelds = doc.welds.where((w) => grpParts.any((p) => p.id == w.partAId) && grpParts.any((p) => p.id == w.partBId)).toList();
+      groups.add(AssemblyGroupNode(id: entry.key, name: name, isConnectedAssembly: true, parts: grpParts, welds: grpWelds));
     }
 
     // 2. Find all connected components for remaining parts
@@ -4544,13 +5031,15 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           (p) => p.type == AssemblyPartType.straightRail || p.type == AssemblyPartType.bentRail,
           orElse: () => groupParts.first,
         );
-        groups.add(AssemblyGroupNode(
-          id: 'group_${leader.id}',
-          name: '${leader.name} Assembly Set (${groupParts.length} Parts)',
-          isConnectedAssembly: true,
-          parts: groupParts,
-          welds: groupWelds,
-        ));
+        groups.add(
+          AssemblyGroupNode(
+            id: 'group_${leader.id}',
+            name: '${leader.name} Assembly Set (${groupParts.length} Parts)',
+            isConnectedAssembly: true,
+            parts: groupParts,
+            welds: groupWelds,
+          ),
+        );
       }
     }
 
@@ -4558,13 +5047,15 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     final multiGroupPartIds = groups.expand((g) => g.parts.map((p) => p.id)).toSet();
     final looseParts = doc.parts.where((p) => !multiGroupPartIds.contains(p.id)).toList();
     if (looseParts.isNotEmpty) {
-      groups.add(AssemblyGroupNode(
-        id: 'loose_components',
-        name: 'Independent Components (${looseParts.length})',
-        isConnectedAssembly: false,
-        parts: looseParts,
-        welds: const [],
-      ));
+      groups.add(
+        AssemblyGroupNode(
+          id: 'loose_components',
+          name: 'Independent Components (${looseParts.length})',
+          isConnectedAssembly: false,
+          parts: looseParts,
+          welds: const [],
+        ),
+      );
     }
 
     return groups;
@@ -4685,9 +5176,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     if (part.componentDefinitionId != null) {
       for (final other in doc.parts) {
         if (other.id != part.id && other.componentDefinitionId == part.componentDefinitionId) {
-          other.sketches.add(
-            feature.copyWith(id: 'void_${DateTime.now().microsecondsSinceEpoch}_${other.id.substring(0, math.min(4, other.id.length))}'),
-          );
+          other.sketches.add(feature.copyWith(id: 'void_${DateTime.now().microsecondsSinceEpoch}_${other.id.substring(0, math.min(4, other.id.length))}'));
         }
       }
     }
@@ -4704,13 +5193,16 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     final items = <ComplianceItemResult>[];
 
     // 1. Rung Pitch Spacing: 250mm <= P <= 300mm (uniform pitch)
-    final rungs = doc.parts.where((p) =>
-      p.type == AssemblyPartType.rung ||
-      p.type == AssemblyPartType.diamondGripRung ||
-      p.type == AssemblyPartType.wideStepTread ||
-      p.name.toLowerCase().contains('rung') ||
-      p.name.toLowerCase().contains('tread')
-    ).toList();
+    final rungs = doc.parts
+        .where(
+          (p) =>
+              p.type == AssemblyPartType.rung ||
+              p.type == AssemblyPartType.diamondGripRung ||
+              p.type == AssemblyPartType.wideStepTread ||
+              p.name.toLowerCase().contains('rung') ||
+              p.name.toLowerCase().contains('tread'),
+        )
+        .toList();
 
     double ladderHeightMm = 0.0;
     for (final p in doc.parts) {
@@ -4746,9 +5238,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       }
       final pitches = <double>[];
       for (int i = 0; i < rungs.length - 1; i++) {
-        final p = rungsAlongX
-            ? (rungs[i + 1].position.x - rungs[i].position.x).abs()
-            : (rungs[i + 1].position.z - rungs[i].position.z).abs();
+        final p = rungsAlongX ? (rungs[i + 1].position.x - rungs[i].position.x).abs() : (rungs[i + 1].position.z - rungs[i].position.z).abs();
         pitches.add(p);
       }
       final double avgPitch = pitches.reduce((a, b) => a + b) / pitches.length;
@@ -4774,7 +5264,8 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           measuredValueMm: avgPitch,
           minAllowedMm: 250.0,
           maxAllowedMm: 300.0,
-          description: 'Rung pitch averages ${avgPitch.toStringAsFixed(1)} mm (range: ${minPitch.toInt()}–${maxPitch.toInt()} mm across ${pitches.length} spans).',
+          description:
+              'Rung pitch averages ${avgPitch.toStringAsFixed(1)} mm (range: ${minPitch.toInt()}–${maxPitch.toInt()} mm across ${pitches.length} spans).',
           recommendation: pitchStatus == ComplianceStatus.pass
               ? 'Meets uniform 250–300 mm rung spacing requirement.'
               : 'Auto-fix rung spacing to a uniform 280 mm pitch along stiles.',
@@ -4813,19 +5304,15 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         minAllowedMm: 400.0,
         maxAllowedMm: 600.0,
         description: 'Internal clear width is ${clearWidthMm.toStringAsFixed(1)} mm between side rails.',
-        recommendation: widthStatus == ComplianceStatus.pass
-            ? 'Exceeds minimum clear width requirement (>= 400 mm).'
-            : 'Widen stiles to 450 mm clear width.',
+        recommendation: widthStatus == ComplianceStatus.pass ? 'Exceeds minimum clear width requirement (>= 400 mm).' : 'Widen stiles to 450 mm clear width.',
         fixActionId: 'fix_clear_width',
       ),
     );
 
     // 3. Wall Standoff Clearance: >= 175mm from back of rungs to wall
-    final brackets = doc.parts.where((p) =>
-      p.type == AssemblyPartType.standoffBracket ||
-      p.name.toLowerCase().contains('standoff') ||
-      p.name.toLowerCase().contains('bracket')
-    ).toList();
+    final brackets = doc.parts
+        .where((p) => p.type == AssemblyPartType.standoffBracket || p.name.toLowerCase().contains('standoff') || p.name.toLowerCase().contains('bracket'))
+        .toList();
 
     if (brackets.isEmpty) {
       items.add(
@@ -4864,16 +5351,11 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     }
 
     // 4. Safety Cage Start Height: Required when H >= 6.0m (starts 2200–2500mm above ground)
-    final cageHoops = doc.parts.where((p) =>
-      p.type == AssemblyPartType.safetyCageHoop ||
-      p.type == AssemblyPartType.safetyCageBellHoop
-    ).toList();
+    final cageHoops = doc.parts.where((p) => p.type == AssemblyPartType.safetyCageHoop || p.type == AssemblyPartType.safetyCageBellHoop).toList();
 
     if (cageHoops.isNotEmpty) {
       final double entryElevation = cageHoops.map((h) => math.max(h.position.x, h.position.z)).reduce(math.min);
-      final ComplianceStatus cageStatus = (entryElevation >= 2100.0 && entryElevation <= 2550.0)
-          ? ComplianceStatus.pass
-          : ComplianceStatus.warning;
+      final ComplianceStatus cageStatus = (entryElevation >= 2100.0 && entryElevation <= 2550.0) ? ComplianceStatus.pass : ComplianceStatus.warning;
 
       items.add(
         ComplianceItemResult(
@@ -4905,19 +5387,14 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           description: requiresCage
               ? 'Ladder height (${(ladderHeightMm / 1000.0).toStringAsFixed(1)} m) exceeds 6.0 m; cage or fall arrest required.'
               : 'Ladder height (${(ladderHeightMm / 1000.0).toStringAsFixed(1)} m) is below 6.0 m; cage is optional.',
-          recommendation: requiresCage
-              ? 'Attach safety cage assembly starting at 2200 mm.'
-              : 'No cage required for short access ladders.',
+          recommendation: requiresCage ? 'Attach safety cage assembly starting at 2200 mm.' : 'No cage required for short access ladders.',
           fixActionId: requiresCage ? 'fix_cage_height' : '',
         ),
       );
     }
 
     // 5. Parapet Walk-Through Extension: Extension >= 1060mm (42 in) above landing
-    final parapets = doc.parts.where((p) =>
-      p.type == AssemblyPartType.walkThroughStile ||
-      p.name.toLowerCase().contains('parapet')
-    ).toList();
+    final parapets = doc.parts.where((p) => p.type == AssemblyPartType.walkThroughStile || p.name.toLowerCase().contains('parapet')).toList();
 
     if (parapets.isNotEmpty) {
       final double extHeight = math.max(parapets.first.height, parapets.first.length);
@@ -4952,30 +5429,27 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           description: needsParapet
               ? 'Elevated ladder has no flared walk-through parapet extension for roof access.'
               : 'Single-stage ladder without elevated landing.',
-          recommendation: needsParapet
-              ? 'Add 1100 mm walk-through parapet top stiles.'
-              : 'Parapet not required.',
+          recommendation: needsParapet ? 'Add 1100 mm walk-through parapet top stiles.' : 'Parapet not required.',
           fixActionId: needsParapet ? 'fix_parapet_extension' : '',
         ),
       );
     }
 
-    return AssemblyComplianceReport(
-      items: items,
-      ladderTotalHeightMm: ladderHeightMm,
-      totalRungCount: rungs.length,
-    );
+    return AssemblyComplianceReport(items: items, ladderTotalHeightMm: ladderHeightMm, totalRungCount: rungs.length);
   }
 
   /// 1-Click Auto-Fix for Rung Pitch (uniform spacing to targetPitch, default 280 mm).
   void autoFixRungSpacing({double targetPitch = 280.0}) {
-    final rungs = doc.parts.where((p) =>
-      p.type == AssemblyPartType.rung ||
-      p.type == AssemblyPartType.diamondGripRung ||
-      p.type == AssemblyPartType.wideStepTread ||
-      p.name.toLowerCase().contains('rung') ||
-      p.name.toLowerCase().contains('tread')
-    ).toList();
+    final rungs = doc.parts
+        .where(
+          (p) =>
+              p.type == AssemblyPartType.rung ||
+              p.type == AssemblyPartType.diamondGripRung ||
+              p.type == AssemblyPartType.wideStepTread ||
+              p.name.toLowerCase().contains('rung') ||
+              p.name.toLowerCase().contains('tread'),
+        )
+        .toList();
     if (rungs.length < 2) return;
     _recordUndo();
 
@@ -4996,9 +5470,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         for (int w = 0; w < doc.welds.length; w++) {
           final j = doc.welds[w];
           if (j.partAId == rung.id || j.partBId == rung.id) {
-            doc.welds[w] = j.copyWith(
-              weldPoint: CadPoint3D(j.weldPoint.x + dx, j.weldPoint.y, j.weldPoint.z),
-            );
+            doc.welds[w] = j.copyWith(weldPoint: CadPoint3D(j.weldPoint.x + dx, j.weldPoint.y, j.weldPoint.z));
           }
         }
       }
@@ -5015,9 +5487,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         for (int w = 0; w < doc.welds.length; w++) {
           final j = doc.welds[w];
           if (j.partAId == rung.id || j.partBId == rung.id) {
-            doc.welds[w] = j.copyWith(
-              weldPoint: CadPoint3D(j.weldPoint.x, j.weldPoint.y, j.weldPoint.z + dz),
-            );
+            doc.welds[w] = j.copyWith(weldPoint: CadPoint3D(j.weldPoint.x, j.weldPoint.y, j.weldPoint.z + dz));
           }
         }
       }
@@ -5028,21 +5498,21 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// 1-Click Auto-Fix for Clear Width (widens rungs and repositions right rail to targetWidth, default 450 mm).
   void autoFixClearWidth({double targetWidth = 450.0}) {
     _recordUndo();
-    final rungs = doc.parts.where((p) =>
-      p.type == AssemblyPartType.rung ||
-      p.type == AssemblyPartType.diamondGripRung ||
-      p.type == AssemblyPartType.wideStepTread ||
-      p.name.toLowerCase().contains('rung') ||
-      p.name.toLowerCase().contains('tread')
-    ).toList();
+    final rungs = doc.parts
+        .where(
+          (p) =>
+              p.type == AssemblyPartType.rung ||
+              p.type == AssemblyPartType.diamondGripRung ||
+              p.type == AssemblyPartType.wideStepTread ||
+              p.name.toLowerCase().contains('rung') ||
+              p.name.toLowerCase().contains('tread'),
+        )
+        .toList();
     for (final rung in rungs) {
       rung.length = targetWidth;
     }
 
-    final rightRails = doc.parts.where((p) =>
-      p.id == 'rail_right' ||
-      p.name.toLowerCase().contains('right')
-    ).toList();
+    final rightRails = doc.parts.where((p) => p.id == 'rail_right' || p.name.toLowerCase().contains('right')).toList();
     for (final rail in rightRails) {
       rail.position = CadPoint3D(rail.position.x, targetWidth, rail.position.z);
     }
@@ -5052,11 +5522,9 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// 1-Click Auto-Fix for Wall Clearance (sets brackets to targetClearance, default 200 mm).
   void autoFixWallClearance({double targetClearance = 200.0}) {
     _recordUndo();
-    final brackets = doc.parts.where((p) =>
-      p.type == AssemblyPartType.standoffBracket ||
-      p.name.toLowerCase().contains('standoff') ||
-      p.name.toLowerCase().contains('bracket')
-    ).toList();
+    final brackets = doc.parts
+        .where((p) => p.type == AssemblyPartType.standoffBracket || p.name.toLowerCase().contains('standoff') || p.name.toLowerCase().contains('bracket'))
+        .toList();
     if (brackets.isEmpty) {
       addWallStandoffBrackets(standoffDepth: targetClearance);
     } else {
@@ -5070,18 +5538,13 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// 1-Click Auto-Fix for Safety Cage (starts cage at targetHeight, default 2200 mm).
   void autoFixCageHeight({double targetHeight = 2200.0}) {
     _recordUndo();
-    final cageParts = doc.parts.where((p) =>
-      p.type == AssemblyPartType.safetyCageHoop ||
-      p.type == AssemblyPartType.safetyCageBellHoop ||
-      p.type == AssemblyPartType.cageStrap
-    ).toList();
+    final cageParts = doc.parts
+        .where((p) => p.type == AssemblyPartType.safetyCageHoop || p.type == AssemblyPartType.safetyCageBellHoop || p.type == AssemblyPartType.cageStrap)
+        .toList();
     if (cageParts.isEmpty) {
       generateSafetyCageAssembly(startHeight: targetHeight);
     } else {
-      final hoops = cageParts.where((p) =>
-        p.type == AssemblyPartType.safetyCageHoop ||
-        p.type == AssemblyPartType.safetyCageBellHoop
-      ).toList();
+      final hoops = cageParts.where((p) => p.type == AssemblyPartType.safetyCageHoop || p.type == AssemblyPartType.safetyCageBellHoop).toList();
       if (hoops.isNotEmpty) {
         final double minX = hoops.map((h) => h.position.x).reduce(math.min);
         final double minZ = hoops.map((h) => h.position.z).reduce(math.min);
@@ -5104,10 +5567,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// 1-Click Auto-Fix for Parapet Extension (attaches or updates parapet to targetExtension, default 1100 mm).
   void autoFixParapetExtension({double targetExtension = 1100.0}) {
     _recordUndo();
-    final parapets = doc.parts.where((p) =>
-      p.type == AssemblyPartType.walkThroughStile ||
-      p.name.toLowerCase().contains('parapet')
-    ).toList();
+    final parapets = doc.parts.where((p) => p.type == AssemblyPartType.walkThroughStile || p.name.toLowerCase().contains('parapet')).toList();
     if (parapets.isEmpty) {
       addWalkThroughParapetStiles(extensionHeight: targetExtension);
     } else {
@@ -5314,11 +5774,5 @@ class AssemblyGroupNode {
   final List<AssemblyPart> parts;
   final List<AssemblyWeldJoint> welds;
 
-  const AssemblyGroupNode({
-    required this.id,
-    required this.name,
-    required this.isConnectedAssembly,
-    required this.parts,
-    this.welds = const [],
-  });
+  const AssemblyGroupNode({required this.id, required this.name, required this.isConnectedAssembly, required this.parts, this.welds = const []});
 }

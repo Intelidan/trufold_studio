@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#333" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+<polygon points="12,3 20,7 20,17 12,21 4,17 4,7" fill="#d0d5dd"/><polygon points="12,3 20,7 12,11 4,7" fill="#fff"/><line x1="12" y1="11" x2="12" y2="21"/><path d="M4,17 L12,21 L20,17" stroke="#1570ef" stroke-width="2"/>
+</svg>

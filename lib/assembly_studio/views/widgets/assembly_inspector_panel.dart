@@ -446,7 +446,12 @@ class _AssemblyInspectorPanelState extends State<AssemblyInspectorPanel> {
                   Expanded(
                     child: Text(
                       title,
-                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: accentColor),
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                        color: theme.isLight ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                      ),
                     ),
                   ),
                 ],
@@ -943,7 +948,7 @@ class _AssemblyInspectorPanelState extends State<AssemblyInspectorPanel> {
             Expanded(
               child: Text(
                 'Rung Slots (${rungSlots.length} pcs)',
-                style: const TextStyle(fontSize: 8.5, color: Color(0xFFCBD5E1)),
+                style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: theme.textPrimary),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -953,8 +958,19 @@ class _AssemblyInspectorPanelState extends State<AssemblyInspectorPanel> {
               borderRadius: BorderRadius.circular(3),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(color: const Color(0xFFFBBF24).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(3)),
-                child: const Text('Auto-Punch (5)', style: TextStyle(fontSize: 8, color: Color(0xFFFBBF24))),
+                decoration: BoxDecoration(
+                  color: theme.isLight ? const Color(0xFFFEF3C7) : const Color(0xFFFBBF24).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: const Color(0xFFD97706), width: 0.6),
+                ),
+                child: Text(
+                  'Auto-Punch (5)',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    color: theme.isLight ? const Color(0xFFB45309) : const Color(0xFFFBBF24),
+                  ),
+                ),
               ),
             ),
           ],
@@ -965,7 +981,7 @@ class _AssemblyInspectorPanelState extends State<AssemblyInspectorPanel> {
             padding: const EdgeInsets.only(bottom: 2.0),
             child: Row(
               children: [
-                const Icon(Icons.crop_portrait_rounded, size: 10, color: Color(0xFFFBBF24)),
+                const Icon(Icons.crop_portrait_rounded, size: 10, color: Color(0xFFD97706)),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
@@ -977,7 +993,11 @@ class _AssemblyInspectorPanelState extends State<AssemblyInspectorPanel> {
                 const SizedBox(width: 4),
                 Text(
                   s.matedRungPartId != null ? 'Mated' : 'Open',
-                  style: TextStyle(fontSize: 7.5, color: s.matedRungPartId != null ? const Color(0xFF34D399) : theme.textMuted),
+                  style: TextStyle(
+                    fontSize: 7.5,
+                    fontWeight: FontWeight.bold,
+                    color: s.matedRungPartId != null ? (theme.isLight ? const Color(0xFF047857) : const Color(0xFF34D399)) : theme.textMuted,
+                  ),
                 ),
               ],
             ),

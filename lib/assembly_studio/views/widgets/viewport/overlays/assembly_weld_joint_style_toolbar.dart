@@ -51,11 +51,11 @@ class AssemblyWeldJointStyleToolbar extends StatelessWidget {
       height: 34,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.6)),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
         boxShadow: const [
-          BoxShadow(color: Color(0x66000000), blurRadius: 10, offset: Offset(0, 3)),
+          BoxShadow(color: Color(0x18000000), blurRadius: 8, offset: Offset(0, 2)),
         ],
       ),
       child: Row(
@@ -63,12 +63,12 @@ class AssemblyWeldJointStyleToolbar extends StatelessWidget {
         children: [
           _buildDragHandle(),
           const SizedBox(width: 4),
-          const Icon(Icons.architecture, size: 13, color: Color(0xFFF59E0B)),
+          const Icon(Icons.architecture, size: 14, color: Color(0xFF0076CE)),
           const SizedBox(width: 6),
           Text(
             activeStyleLabel,
             style: const TextStyle(
-              color: Color(0xFFF59E0B),
+              color: Color(0xFF0076CE),
               fontSize: 10,
               fontWeight: FontWeight.bold,
               letterSpacing: 0.5,
@@ -81,7 +81,7 @@ class AssemblyWeldJointStyleToolbar extends StatelessWidget {
             borderRadius: BorderRadius.circular(3),
             child: const Padding(
               padding: EdgeInsets.all(2),
-              child: Icon(Icons.unfold_more, size: 14, color: Colors.white70),
+              child: Icon(Icons.unfold_more, size: 14, color: Color(0xFF64748B)),
             ),
           ),
           const SizedBox(width: 2),
@@ -90,7 +90,7 @@ class AssemblyWeldJointStyleToolbar extends StatelessWidget {
             borderRadius: BorderRadius.circular(3),
             child: const Padding(
               padding: EdgeInsets.all(2),
-              child: Icon(Icons.close, size: 12, color: Colors.white54),
+              child: Icon(Icons.close, size: 12, color: Color(0xFF94A3B8)),
             ),
           ),
         ],
@@ -102,12 +102,12 @@ class AssemblyWeldJointStyleToolbar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A).withValues(alpha: 0.94),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x66000000),
+            color: Color(0x18000000),
             blurRadius: 12,
             offset: Offset(0, 4),
           ),
@@ -122,12 +122,12 @@ class AssemblyWeldJointStyleToolbar extends StatelessWidget {
             children: [
               _buildDragHandle(),
               const SizedBox(width: 4),
-              const Icon(Icons.architecture, size: 13, color: Color(0xFF38BDF8)),
+              const Icon(Icons.architecture, size: 14, color: Color(0xFF0076CE)),
               const SizedBox(width: 6),
-              Text(
+              const Text(
                 'SELECT JOINT CONFIGURATION',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.9),
+                  color: Color(0xFF0F172A),
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.8,
@@ -141,10 +141,11 @@ class AssemblyWeldJointStyleToolbar extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
+                    color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
-                  child: const Icon(Icons.keyboard_arrow_up, size: 13, color: Colors.white70),
+                  child: const Icon(Icons.keyboard_arrow_up, size: 13, color: Color(0xFF64748B)),
                 ),
               ),
               const SizedBox(width: 4),
@@ -154,10 +155,11 @@ class AssemblyWeldJointStyleToolbar extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
+                    color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
-                  child: const Icon(Icons.close, size: 12, color: Colors.white54),
+                  child: const Icon(Icons.close, size: 12, color: Color(0xFF94A3B8)),
                 ),
               ),
             ],
@@ -173,16 +175,16 @@ class AssemblyWeldJointStyleToolbar extends StatelessWidget {
                 child: ChoiceChip(
                   label: Text(label),
                   selected: isSelected,
-                  selectedColor: const Color(0xFFF59E0B),
-                  backgroundColor: const Color(0xFF1E293B),
+                  selectedColor: const Color(0xFFE0F2FE),
+                  backgroundColor: const Color(0xFFF8FAFC),
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
                   labelStyle: TextStyle(
-                    color: isSelected ? const Color(0xFF0F172A) : Colors.white70,
+                    color: isSelected ? const Color(0xFF0076CE) : const Color(0xFF475569),
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                   ),
                   side: BorderSide(
-                    color: isSelected ? const Color(0xFFF59E0B) : Colors.white12,
+                    color: isSelected ? const Color(0xFF0076CE) : const Color(0xFFE2E8F0),
                     width: 1.0,
                   ),
                   onSelected: (val) {

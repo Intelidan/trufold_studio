@@ -2,6 +2,7 @@
 // Modularized for TruFold MVVM Architecture
 
 import 'package:flutter/material.dart';
+import 'package:trufold_studio/sheet_metal_studio/models/cad_constraint.dart';
 import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmodel.dart';
 
 class AssemblySketchHud extends StatelessWidget {
@@ -82,11 +83,15 @@ class AssemblySketchHud extends StatelessWidget {
             const SizedBox(width: 12),
             _buildSketchToolChip(vm, 'select_entity', 'Select (V)', Icons.near_me_rounded),
             const SizedBox(width: 6),
-            _buildSketchToolChip(vm, 'rectangle', 'Rectangle', Icons.crop_square_rounded),
+            _buildSketchToolChip(vm, 'rectangle', '2-Pt Rect (R)', Icons.crop_square_rounded),
             const SizedBox(width: 6),
-            _buildSketchToolChip(vm, 'circle', 'Circle', Icons.circle_outlined),
+            _buildSketchToolChip(vm, 'center_rect', 'Center Rect', Icons.aspect_ratio_rounded),
             const SizedBox(width: 6),
-            _buildSketchToolChip(vm, 'line', 'Line', Icons.show_chart_rounded),
+            _buildSketchToolChip(vm, 'circle', 'Circle (C)', Icons.circle_outlined),
+            const SizedBox(width: 6),
+            _buildSketchToolChip(vm, 'arc_3point', '3-Pt Arc (A)', Icons.incomplete_circle_rounded),
+            const SizedBox(width: 6),
+            _buildSketchToolChip(vm, 'line', 'Line (L)', Icons.show_chart_rounded),
             const SizedBox(width: 6),
             _buildSketchToolChip(vm, 'polyline', 'Polyline', Icons.polyline_rounded),
             const SizedBox(width: 6),
@@ -94,6 +99,114 @@ class AssemblySketchHud extends StatelessWidget {
             const SizedBox(width: 6),
             _buildSketchToolChip(vm, 'rung_slot', 'Punch Slot', Icons.crop_portrait_rounded),
             const SizedBox(width: 8),
+            // Project 3D Geometry Button (Key: P)
+            Tooltip(
+              message: 'Project 3D Geometry to Plane (Shortcut: P)',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () => vm.toggleProjectGeometryMode(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: vm.isProjectGeometryMode ? const Color(0xFFC084FC) : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: vm.isProjectGeometryMode ? const Color(0xFFA855F7) : const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.architecture_rounded,
+                        size: 14,
+                        color: vm.isProjectGeometryMode ? Colors.white : const Color(0xFF64748B),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Project (P)',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: vm.isProjectGeometryMode ? Colors.white : const Color(0xFF334155),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            // Construction Mode Button (Key: X)
+            Tooltip(
+              message: 'Toggle Construction Mode (Shortcut: X)',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () => vm.toggleSketchConstructionMode(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: vm.isSketchConstructionMode ? const Color(0xFFF59E0B) : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: vm.isSketchConstructionMode ? const Color(0xFFD97706) : const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.border_style_rounded,
+                        size: 14,
+                        color: vm.isSketchConstructionMode ? Colors.white : const Color(0xFF64748B),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Construction (X)',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: vm.isSketchConstructionMode ? Colors.white : const Color(0xFF334155),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Geometric Constraints (Phase 4)
+            _buildConstraintChip(vm, CadConstraintType.horizontal, 'H/V', 'H'),
+            const SizedBox(width: 4),
+            _buildConstraintChip(vm, CadConstraintType.coincident, 'Coincident', '•'),
+            const SizedBox(width: 4),
+            _buildConstraintChip(vm, CadConstraintType.parallel, 'Parallel', '//'),
+            const SizedBox(width: 4),
+            _buildConstraintChip(vm, CadConstraintType.perpendicular, 'Perp', '⊥'),
+            const SizedBox(width: 4),
+            _buildConstraintChip(vm, CadConstraintType.equal, 'Equal', '='),
+            const SizedBox(width: 4),
+            _buildConstraintChip(vm, CadConstraintType.concentric, 'Concentric', '◎'),
+            const SizedBox(width: 4),
+            _buildConstraintChip(vm, CadConstraintType.fixed, 'Fix', '🔒'),
+            const SizedBox(width: 8),
+            // Extrude 3D Feature Button (Shortcut: E)
+            Tooltip(
+              message: 'Extrude 3D Solid / Feature (Shortcut: E)',
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: vm.isExtrudeMode ? const Color(0xFF10B981) : const Color(0xFF6366F1),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                icon: const Icon(Icons.layers_rounded, size: 14),
+                label: const Text('Extrude (E)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                onPressed: () => vm.toggleExtrudeMode(),
+              ),
+            ),
+            const SizedBox(width: 6),
             // Normal View Snap Button (Key: S)
             Tooltip(
               message: 'Focus Normal View (Shortcut: S)',
@@ -218,7 +331,7 @@ class AssemblySketchHud extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(6),
       onTap: () {
-        vm.activeSketchTool = toolId;
+        vm.setActiveSketchTool(toolId);
         vm.notifyDocChanged();
       },
       child: Container(
@@ -242,6 +355,51 @@ class AssemblySketchHud extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConstraintChip(
+    AssemblyStudioViewModel vm,
+    CadConstraintType type,
+    String label,
+    String symbol,
+  ) {
+    return Tooltip(
+      message: 'Apply ${type.label} Constraint (${type.symbol})',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => vm.applySketchConstraint(type),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                symbol,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0284C7),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF334155),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

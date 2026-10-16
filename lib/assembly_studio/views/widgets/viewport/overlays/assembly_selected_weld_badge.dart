@@ -22,11 +22,11 @@ class AssemblySelectedWeldBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
-          border: Border.all(color: const Color(0xFF00E5FF), width: 1.5),
+          color: Colors.white,
+          border: Border.all(color: const Color(0xFF0076CE), width: 1.5),
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [
-            BoxShadow(color: Color(0x44000000), blurRadius: 10, offset: Offset(0, 4)),
+            BoxShadow(color: Color(0x1F000000), blurRadius: 10, offset: Offset(0, 4)),
           ],
         ),
         child: SingleChildScrollView(
@@ -34,19 +34,20 @@ class AssemblySelectedWeldBanner extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.offline_bolt_rounded, color: Color(0xFF00E5FF), size: 18),
+              const Icon(Icons.offline_bolt_rounded, color: Color(0xFF0076CE), size: 18),
               const SizedBox(width: 8),
               Text(
                 'Weld Joint Selected (${weld.jointDescription})',
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12, fontWeight: FontWeight.bold),
               ),
               const SizedBox(width: 14),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEF4444),
+                  backgroundColor: const Color(0xFFDC2626),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   minimumSize: Size.zero,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                 ),
                 onPressed: viewModel.deleteSelectedWeld,
                 icon: const Icon(Icons.link_off_rounded, size: 14),
@@ -60,7 +61,7 @@ class AssemblySelectedWeldBanner extends StatelessWidget {
                 onTap: () => viewModel.selectWeld(null),
                 child: const Padding(
                   padding: EdgeInsets.all(4),
-                  child: Icon(Icons.close_rounded, size: 16, color: Colors.white70),
+                  child: Icon(Icons.close_rounded, size: 16, color: Color(0xFF64748B)),
                 ),
               ),
             ],

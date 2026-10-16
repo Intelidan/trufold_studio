@@ -805,9 +805,9 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
         margin: const EdgeInsets.only(right: 8),
         child: InkWell(
           onTap: () {
-            // Click to add / place directly into the assembly scene
+            // Click to add / place directly into the center of the screen
             final newPart = asset.createPart();
-            vm.addPart(newPart);
+            vm.addPartAtScreenCenter(newPart);
           },
           borderRadius: BorderRadius.circular(8),
           child: Container(
@@ -1506,6 +1506,38 @@ class _MiniatureAssetPainter extends CustomPainter {
         fillPaint.color = frontColor;
         canvas.drawPath(iPath, fillPaint);
         canvas.drawPath(iPath, strokePaint);
+        break;
+
+      case AssemblyPartType.customExtrusion:
+        final top = Path()
+          ..moveTo(w * 0.50, h * 0.20)
+          ..lineTo(w * 0.80, h * 0.35)
+          ..lineTo(w * 0.50, h * 0.50)
+          ..lineTo(w * 0.20, h * 0.35)
+          ..close();
+        fillPaint.color = topColor;
+        canvas.drawPath(top, fillPaint);
+        canvas.drawPath(top, strokePaint);
+
+        final front = Path()
+          ..moveTo(w * 0.20, h * 0.35)
+          ..lineTo(w * 0.50, h * 0.50)
+          ..lineTo(w * 0.50, h * 0.80)
+          ..lineTo(w * 0.20, h * 0.65)
+          ..close();
+        fillPaint.color = frontColor;
+        canvas.drawPath(front, fillPaint);
+        canvas.drawPath(front, strokePaint);
+
+        final side = Path()
+          ..moveTo(w * 0.50, h * 0.50)
+          ..lineTo(w * 0.80, h * 0.35)
+          ..lineTo(w * 0.80, h * 0.65)
+          ..lineTo(w * 0.50, h * 0.80)
+          ..close();
+        fillPaint.color = frontColor.withValues(alpha: 0.85);
+        canvas.drawPath(side, fillPaint);
+        canvas.drawPath(side, strokePaint);
         break;
     }
   }

@@ -62,6 +62,7 @@ class FlutterPaint3dPainter extends CustomPainter {
   final List<CmsPhysicalPort> activePorts;
   final String? focusedPortId;
   final TransformMatrix4? modelTransform;
+  final CadPoint3D? pivotOverride;
 
   FlutterPaint3dPainter({
     required this.mesh,
@@ -82,6 +83,7 @@ class FlutterPaint3dPainter extends CustomPainter {
     this.activePorts = const [],
     this.focusedPortId,
     this.modelTransform,
+    this.pivotOverride,
   });
 
   @override
@@ -100,15 +102,8 @@ class FlutterPaint3dPainter extends CustomPainter {
     final cosEl = math.cos(elRad);
     final sinEl = math.sin(elRad);
 
-    final List<double> m = modelTransform?.m ?? [
-      cosAz, sinAz, 0.0, 0.0,
-      -sinEl * sinAz, sinEl * cosAz, cosEl, 0.0,
-      cosEl * sinAz, -cosEl * cosAz, sinEl, 0.0,
-      0.0, 0.0, 0.0, 1.0,
-    ];
-
-    // Directional virtual light source
-    const lightDir = CadPoint3D(0.577, 0.577, 0.577);
+    final List<double> m =
+        modelTransform?.m ?? [cosAz, sinAz, 0.0, 0.0, -sinEl * sinAz, sinEl * cosAz, cosEl, 0.0, cosEl * sinAz, -cosEl * cosAz, sinEl, 0.0, 0.0, 0.0, 0.0, 1.0];
 
     // Compute automatic scaling
     final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
@@ -117,7 +112,7 @@ class FlutterPaint3dPainter extends CustomPainter {
     final scale = baseScale * zoom;
 
     // Center pivot point
-    final pivot = mesh.center;
+    final pivot = pivotOverride ?? mesh.center;
 
     // Camera perspective distance: 2.5x the model extent gives a natural 3D CAD perspective
     final cameraDist = math.max(fitDim * 2.5, 1000.0);
@@ -149,11 +144,10 @@ class FlutterPaint3dPainter extends CustomPainter {
 
       final isWeld = poly.faceId.startsWith('weld_');
       final isFillet = poly.faceId.startsWith('FILLET_');
-      final isBore = poly.faceId.startsWith('BORE_') || poly.faceId.contains('_slot_') || poly.faceId.contains('_wall_');
+      final isBore = poly.faceId.startsWith('BORE_') || poly.faceId.contains('_slot_') || poly.faceId.contains('_wall_') || poly.faceId.contains('_bore_');
       final isInner = poly.faceId.endsWith('_inner') || poly.faceId.endsWith('_BOT');
       final isRim = poly.faceId.startsWith('RIM_') || poly.faceId.startsWith('FILLET_CAP') || poly.faceId.startsWith('CHAMFER_');
-      final isFaceSelected = (poly.faceId == selectedFaceId) ||
-          (selectedFaceId != null && poly.faceId.startsWith(selectedFaceId!));
+      final isFaceSelected = (poly.faceId == selectedFaceId) || (selectedFaceId != null && poly.faceId.startsWith(selectedFaceId!));
       final isFaceHovered = (poly.faceId == hoveredFaceId);
       final isBendHighlighted =
           (selectedBendId != null && poly.faceId.contains(selectedBendId!)) || (hoveredBendId != null && poly.faceId.contains(hoveredBendId!));
@@ -207,22 +201,30 @@ class FlutterPaint3dPainter extends CustomPainter {
         }
       }
 
-      // Dual-light CAD illumination (Key light + subtle Fill light) + Blinn-Phong specular glints:
-      final dotLight = (n.x * lightDir.x + n.y * lightDir.y + n.z * lightDir.z).abs().clamp(0.0, 1.0);
-      final fillDot = (n.x * (-0.3) + n.y * (-0.5) + n.z * 0.8).abs().clamp(0.0, 1.0);
-      final diffuseFactor = 0.70 + 0.25 * dotLight + 0.10 * fillDot;
+      // Dual-light CAD View-Space "Headlight" illumination (Phase 1 of Walkthrough):
+      // Key light L1 locked top-left of camera (-0.25, 0.35, 0.90)
+      // Fill light L2 locked bottom-right (0.40, -0.30, 0.60)
+      final lenCN = math.sqrt(nx2 * nx2 + ny2 * ny2 + nz2 * nz2);
+      final cnX = lenCN > 1e-6 ? nx2 / lenCN : 0.0;
+      final cnY = lenCN > 1e-6 ? ny2 / lenCN : 0.0;
+      final cnZ = lenCN > 1e-6 ? nz2 / lenCN : 1.0;
 
-      // View direction towards screen: CadPoint3D(0, 0, 1)
-      // Half-vector between lightDir (0.577, 0.577, 0.577) and viewDir (0, 0, 1)
-      const halfDir = CadPoint3D(0.325, 0.325, 0.888);
-      final dotHalf = (n.x * halfDir.x + n.y * halfDir.y + n.z * halfDir.z).abs().clamp(0.0, 1.0);
-      final specular = math.pow(dotHalf, 18.0) * (isWeld ? 0.38 : 0.28);
+      final dotL1 = (cnX * (-0.2506) + cnY * 0.3509 + cnZ * 0.9023).clamp(-1.0, 1.0);
+      final diff1 = math.max(0.0, dotL1);
+
+      final dotL2 = (cnX * 0.5121 + cnY * (-0.3841) + cnZ * 0.7682).clamp(-1.0, 1.0);
+      final diff2 = math.max(0.0, dotL2) * 0.35;
+
+      // Concentrated Specular Shine (exponent 48.0 creates the tight Onshape highlight stripe)
+      final dotH1 = (cnX * (-0.1285) + cnY * 0.1799 + cnZ * 0.9753).clamp(0.0, 1.0);
+      final spec = math.pow(dotH1, 48.0) * (isWeld ? 0.65 : 0.55);
+
+      const ambientFactor = 0.35;
+      final diffuseFactor = diff1 * 0.65 + diff2;
 
       final baseColor = poly.color;
       Color shadedColor;
-      if (isFaceSelected) {
-        shadedColor = const Color(0xFF38BDF8).withValues(alpha: 0.90);
-      } else if (isFaceHovered) {
+      if (isFaceHovered) {
         shadedColor = const Color(0xFFBAE6FD).withValues(alpha: 0.92);
       } else if (isBendHighlighted) {
         shadedColor = const Color(0xFFFDE68A).withValues(alpha: 0.92);
@@ -231,9 +233,9 @@ class FlutterPaint3dPainter extends CustomPainter {
       } else {
         shadedColor = Color.from(
           alpha: 1.0,
-          red: (baseColor.r * diffuseFactor + specular).clamp(0.0, 1.0),
-          green: (baseColor.g * diffuseFactor + specular).clamp(0.0, 1.0),
-          blue: (baseColor.b * diffuseFactor + specular).clamp(0.0, 1.0),
+          red: (baseColor.r * (ambientFactor + diffuseFactor) + spec).clamp(0.0, 1.0),
+          green: (baseColor.g * (ambientFactor + diffuseFactor) + spec).clamp(0.0, 1.0),
+          blue: (baseColor.b * (ambientFactor + diffuseFactor) + spec).clamp(0.0, 1.0),
         );
       }
 
@@ -624,18 +626,26 @@ class FlutterPaint3dPainter extends CustomPainter {
     final facePaint = Paint()..style = PaintingStyle.fill;
     final edgePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..color = const Color(0xFF334155);
+      ..strokeWidth = 1.15
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true
+      ..color = const Color(0xFF000000);
 
     final highlightEdgePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
       ..color = const Color(0xFF0284C7);
 
     final holeRimPaint = Paint()
-      ..color = const Color(0xFF0F172A).withValues(alpha: 0.90)
+      ..color = const Color(0xFF000000)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true
+      ..strokeWidth = 1.15;
 
     final holeHighlightPaint = Paint()
       ..color = const Color(0xFF00E5FF)
@@ -713,13 +723,21 @@ class FlutterPaint3dPainter extends CustomPainter {
           drawColor = Color.from(alpha: 0.35, red: item.color.r, green: item.color.g, blue: item.color.b);
         }
         facePaint.color = drawColor;
+        final seamBleedPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.6
+          ..isAntiAlias = true
+          ..color = drawColor;
+
         if (item.clipBoundary != null) {
           canvas.save();
           canvas.clipPath(item.clipBoundary!);
           canvas.drawPath(item.fillPath, facePaint);
+          canvas.drawPath(item.fillPath, seamBleedPaint);
           canvas.restore();
         } else {
           canvas.drawPath(item.fillPath, facePaint);
+          canvas.drawPath(item.fillPath, seamBleedPaint);
         }
       }
 

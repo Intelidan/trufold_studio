@@ -675,8 +675,16 @@ class _CubeFaceData {
   final String label;
   final List<int> vertexIndices;
   final List<double> normal;
+  final List<double> u3d;
+  final List<double> v3d;
 
-  const _CubeFaceData({required this.label, required this.vertexIndices, required this.normal});
+  const _CubeFaceData({
+    required this.label,
+    required this.vertexIndices,
+    required this.normal,
+    required this.u3d,
+    required this.v3d,
+  });
 }
 
 class _ViewCubePainter extends CustomPainter {
@@ -688,12 +696,12 @@ class _ViewCubePainter extends CustomPainter {
   _ViewCubePainter({required this.azimuthDeg, required this.elevationDeg, required this.mousePos, required this.onHoverFaceChanged});
 
   static const List<_CubeFaceData> _faces = [
-    _CubeFaceData(label: 'Top', vertexIndices: [4, 5, 6, 7], normal: [0, 0, 1]),
-    _CubeFaceData(label: 'Bottom', vertexIndices: [0, 3, 2, 1], normal: [0, 0, -1]),
-    _CubeFaceData(label: 'Front', vertexIndices: [0, 1, 5, 4], normal: [0, -1, 0]),
-    _CubeFaceData(label: 'Back', vertexIndices: [2, 6, 7, 3], normal: [0, 1, 0]),
-    _CubeFaceData(label: 'Right', vertexIndices: [1, 2, 6, 5], normal: [1, 0, 0]),
-    _CubeFaceData(label: 'Left', vertexIndices: [0, 4, 7, 3], normal: [-1, 0, 0]),
+    _CubeFaceData(label: 'Top', vertexIndices: [4, 5, 6, 7], normal: [0, 0, 1], u3d: [1, 0, 0], v3d: [0, 1, 0]),
+    _CubeFaceData(label: 'Bottom', vertexIndices: [0, 3, 2, 1], normal: [0, 0, -1], u3d: [1, 0, 0], v3d: [0, -1, 0]),
+    _CubeFaceData(label: 'Front', vertexIndices: [0, 1, 5, 4], normal: [0, -1, 0], u3d: [1, 0, 0], v3d: [0, 0, 1]),
+    _CubeFaceData(label: 'Back', vertexIndices: [2, 6, 7, 3], normal: [0, 1, 0], u3d: [-1, 0, 0], v3d: [0, 0, 1]),
+    _CubeFaceData(label: 'Right', vertexIndices: [1, 2, 6, 5], normal: [1, 0, 0], u3d: [0, 1, 0], v3d: [0, 0, 1]),
+    _CubeFaceData(label: 'Left', vertexIndices: [0, 4, 7, 3], normal: [-1, 0, 0], u3d: [0, -1, 0], v3d: [0, 0, 1]),
   ];
 
   static const List<List<double>> _cubeVertices = [
@@ -820,20 +828,47 @@ class _ViewCubePainter extends CustomPainter {
         canvas.drawPath(insetPath, plateBorder);
       }
 
-      // TitleCase Label: Top, Front, Right (matching Onshape SS3)
-      final textSpan = TextSpan(
-        text: f.face.label,
-        style: TextStyle(
-          color: isHovered ? const Color(0xFF0284C7) : const Color(0xFF1E293B),
-          fontSize: 9.0,
-          fontWeight: FontWeight.w700,
-          fontStyle: FontStyle.italic,
-          letterSpacing: 0.2,
-        ),
-      );
-      final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
+      // 3D Perspective-Oriented Label (Item 5e: Onshape-style rotating & tilting 3D face text)
+      final (ux, uy, _) = _projectPoint(f.face.u3d[0], f.face.u3d[1], f.face.u3d[2], cosAz, sinAz, cosEl, sinEl);
+      final (vx, vy, _) = _projectPoint(f.face.v3d[0], f.face.v3d[1], f.face.v3d[2], cosAz, sinAz, cosEl, sinEl);
 
-      tp.paint(canvas, Offset(f.center.dx - tp.width / 2.0, f.center.dy - tp.height / 2.0));
+      final uScr = Offset(ux, -uy) * scale;
+      final vScr = Offset(vx, -vy) * scale;
+
+      final uLen = uScr.distance;
+      final vLen = vScr.distance;
+
+      if (uLen > 0.5 && vLen > 0.5) {
+        final uDir = uScr / uLen;
+        final vDir = -vScr / vLen; // Canvas Y goes down, opposite of 3D V which goes up
+
+        final sx = (uLen / scale).clamp(0.25, 1.0);
+        final sy = (vLen / scale).clamp(0.25, 1.0);
+
+        final textSpan = TextSpan(
+          text: f.face.label,
+          style: TextStyle(
+            color: isHovered ? const Color(0xFF0284C7) : const Color(0xFF1E293B),
+            fontSize: 9.0,
+            fontWeight: FontWeight.w700,
+            fontStyle: FontStyle.italic,
+            letterSpacing: 0.2,
+          ),
+        );
+        final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
+
+        final mat = Matrix4.identity();
+        mat.setTranslationRaw(f.center.dx, f.center.dy, 0.0);
+        mat.setEntry(0, 0, uDir.dx * sx);
+        mat.setEntry(1, 0, uDir.dy * sx);
+        mat.setEntry(0, 1, vDir.dx * sy);
+        mat.setEntry(1, 1, vDir.dy * sy);
+
+        canvas.save();
+        canvas.transform(mat.storage);
+        tp.paint(canvas, Offset(-tp.width / 2.0, -tp.height / 2.0));
+        canvas.restore();
+      }
     }
 
     // 3D Coordinate Triad (Red X, Green Y, Blue Z)

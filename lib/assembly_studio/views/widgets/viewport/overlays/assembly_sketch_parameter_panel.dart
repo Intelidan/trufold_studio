@@ -50,10 +50,20 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
       _heightController.text = entity.height.toStringAsFixed(1);
       _posXController.text = entity.startPoint.dx.toStringAsFixed(1);
       _posYController.text = entity.startPoint.dy.toStringAsFixed(1);
+    } else if (entity is CADCenterRectangleEntity) {
+      _widthController.text = entity.width.toStringAsFixed(1);
+      _heightController.text = entity.height.toStringAsFixed(1);
+      _posXController.text = entity.center.dx.toStringAsFixed(1);
+      _posYController.text = entity.center.dy.toStringAsFixed(1);
     } else if (entity is CADCircleEntity) {
       _radiusController.text = entity.radius.toStringAsFixed(1);
       _posXController.text = entity.center.dx.toStringAsFixed(1);
       _posYController.text = entity.center.dy.toStringAsFixed(1);
+    } else if (entity is CADArcEntity) {
+      final geom = entity.computeCircumcircle();
+      _radiusController.text = geom != null ? geom.radius.toStringAsFixed(1) : '0.0';
+      _posXController.text = entity.startPoint.dx.toStringAsFixed(1);
+      _posYController.text = entity.startPoint.dy.toStringAsFixed(1);
     } else if (entity is CADLineEntity) {
       final len = (entity.end - entity.start).distance;
       _widthController.text = len.toStringAsFixed(1);
@@ -85,9 +95,15 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
     if (entity is CADRectangleEntity) {
       typeName = 'RECTANGLE';
       typeIcon = Icons.crop_square_rounded;
+    } else if (entity is CADCenterRectangleEntity) {
+      typeName = 'CENTER RECTANGLE';
+      typeIcon = Icons.aspect_ratio_rounded;
     } else if (entity is CADCircleEntity) {
       typeName = 'CIRCLE';
       typeIcon = Icons.circle_outlined;
+    } else if (entity is CADArcEntity) {
+      typeName = '3-POINT ARC';
+      typeIcon = Icons.incomplete_circle_rounded;
     } else if (entity is CADLineEntity) {
       typeName = 'LINE';
       typeIcon = Icons.show_chart_rounded;
@@ -100,10 +116,10 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
       width: 290,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A).withAlpha(245), // Slate 900
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF0284C7), width: 1.5),
-        boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 18, offset: Offset(0, 6))],
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
+        boxShadow: const [BoxShadow(color: Color(0x1F000000), blurRadius: 14, offset: Offset(0, 4))],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -112,26 +128,26 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
           // Header
           Row(
             children: [
-              Icon(typeIcon, color: const Color(0xFF38BDF8), size: 16),
+              Icon(typeIcon, color: const Color(0xFF0076CE), size: 16),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '$typeName PARAMETERS',
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.5),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 4),
               InkWell(
                 onTap: () => vm.selectSketchPrimitive(null),
-                child: const Icon(Icons.close_rounded, color: Colors.white54, size: 16),
+                child: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 16),
               ),
             ],
           ),
-          const Divider(color: Colors.white12, height: 18),
+          const Divider(color: Color(0xFFE2E8F0), height: 18),
 
           // Dimension inputs
-          if (entity is CADRectangleEntity) ...[
+          if (entity is CADRectangleEntity || entity is CADCenterRectangleEntity) ...[
             _buildInputField('Width (mm)', _widthController, (val) {
               final d = double.tryParse(val);
               if (d != null && d > 0) vm.updateSelectedPrimitiveDimensions(width: d);
@@ -141,7 +157,7 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
               final d = double.tryParse(val);
               if (d != null && d > 0) vm.updateSelectedPrimitiveDimensions(height: d);
             }),
-          ] else if (entity is CADCircleEntity) ...[
+          ] else if (entity is CADCircleEntity || entity is CADArcEntity) ...[
             _buildInputField('Radius (mm)', _radiusController, (val) {
               final d = double.tryParse(val);
               if (d != null && d > 0) vm.updateSelectedPrimitiveDimensions(radius: d);
@@ -159,8 +175,12 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
                   if (x != null) {
                     final curr = entity is CADRectangleEntity
                         ? entity.startPoint
+                        : entity is CADCenterRectangleEntity
+                        ? entity.center
                         : entity is CADCircleEntity
                         ? entity.center
+                        : entity is CADArcEntity
+                        ? entity.startPoint
                         : Offset.zero;
                     vm.updateSelectedPrimitiveDimensions(position: Offset(x, curr.dy));
                   }
@@ -173,8 +193,12 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
                   if (y != null) {
                     final curr = entity is CADRectangleEntity
                         ? entity.startPoint
+                        : entity is CADCenterRectangleEntity
+                        ? entity.center
                         : entity is CADCircleEntity
                         ? entity.center
+                        : entity is CADArcEntity
+                        ? entity.startPoint
                         : Offset.zero;
                     vm.updateSelectedPrimitiveDimensions(position: Offset(curr.dx, y));
                   }
@@ -233,10 +257,11 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
               Expanded(
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF38BDF8),
-                    side: const BorderSide(color: Color(0xFF0284C7)),
+                    foregroundColor: const Color(0xFF0076CE),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    backgroundColor: const Color(0xFFF8FAFC),
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
                   ),
                   icon: const Icon(Icons.rounded_corner_rounded, size: 14),
                   label: const Text('Fillet 5mm', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
@@ -247,10 +272,11 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
               Expanded(
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF38BDF8),
-                    side: const BorderSide(color: Color(0xFF0284C7)),
+                    foregroundColor: const Color(0xFF0076CE),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    backgroundColor: const Color(0xFFF8FAFC),
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
                   ),
                   icon: const Icon(Icons.square_foot_rounded, size: 14),
                   label: const Text('Chamfer 5mm', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
@@ -265,10 +291,10 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               minimumSize: const Size.fromHeight(38),
-              backgroundColor: const Color(0xFF0284C7),
+              backgroundColor: const Color(0xFF0076CE),
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
             ),
             icon: const Icon(Icons.handyman_rounded, size: 15),
             label: Text(
@@ -280,7 +306,7 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
               widget.onRebuildModel?.call();
               ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                 SnackBar(
-                  backgroundColor: const Color(0xFF0284C7),
+                  backgroundColor: const Color(0xFF0076CE),
                   content: Text(entity.isPassThrough ? '3D Pass-Through Hole punched cleanly through model!' : 'Surface feature modification applied!'),
                 ),
               );
@@ -300,11 +326,11 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 14),
+                  Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626), size: 14),
                   SizedBox(width: 4),
                   Text(
                     'Delete Entity',
-                    style: TextStyle(color: Color(0xFFEF4444), fontSize: 10.5, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: Color(0xFFDC2626), fontSize: 10.5, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -319,19 +345,22 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+        Text(
+          label,
+          style: const TextStyle(color: Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 3),
         Container(
           height: 32,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E293B),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFF334155)),
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
           ),
           child: TextField(
             controller: controller,
-            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.bold),
             decoration: const InputDecoration(border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 8)),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             onSubmitted: onChanged,
@@ -344,19 +373,23 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
   Widget _buildFeatureModeButton({required String label, required bool isSelected, required VoidCallback onTap}) {
     return Expanded(
       child: InkWell(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(5),
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 6),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF1E293B),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: isSelected ? const Color(0xFF38BDF8) : const Color(0xFF334155)),
+            color: isSelected ? const Color(0xFFEBF5FF) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: isSelected ? const Color(0xFF0076CE) : const Color(0xFFE2E8F0)),
           ),
           child: Text(
             label,
-            style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 9.5, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+            style: TextStyle(
+              color: isSelected ? const Color(0xFF0076CE) : const Color(0xFF64748B),
+              fontSize: 9.5,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
           ),
         ),
       ),

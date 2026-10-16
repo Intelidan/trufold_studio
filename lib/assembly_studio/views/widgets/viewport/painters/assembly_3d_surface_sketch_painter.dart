@@ -34,27 +34,29 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     }
 
     // 1. Procedural Plane Design Grid Overlay
-    final gridPaint = Paint()
-      ..color = const Color(0x330284C7)
-      ..strokeWidth = 1.0;
+    if (viewModel.showSketchGrid) {
+      final gridPaint = Paint()
+        ..color = const Color(0x330284C7)
+        ..strokeWidth = 1.0;
 
-    const double extent = 200.0;
-    const double step = 20.0;
-    final int lineCount = (extent / step).round();
+      const double extent = 200.0;
+      const double step = 20.0;
+      final int lineCount = (extent / step).round();
 
-    for (int i = -lineCount; i <= lineCount; i++) {
-      final val = i * step;
-      // Parallel to Y
-      final s1 = toScreen(Offset(val, -extent));
-      final e1 = toScreen(Offset(val, extent));
-      if (s1 != Offset.zero && e1 != Offset.zero) {
-        canvas.drawLine(s1, e1, gridPaint);
-      }
-      // Parallel to X
-      final s2 = toScreen(Offset(-extent, val));
-      final e2 = toScreen(Offset(extent, val));
-      if (s2 != Offset.zero && e2 != Offset.zero) {
-        canvas.drawLine(s2, e2, gridPaint);
+      for (int i = -lineCount; i <= lineCount; i++) {
+        final val = i * step;
+        // Parallel to Y
+        final s1 = toScreen(Offset(val, -extent));
+        final e1 = toScreen(Offset(val, extent));
+        if (s1 != Offset.zero && e1 != Offset.zero) {
+          canvas.drawLine(s1, e1, gridPaint);
+        }
+        // Parallel to X
+        final s2 = toScreen(Offset(-extent, val));
+        final e2 = toScreen(Offset(extent, val));
+        if (s2 != Offset.zero && e2 != Offset.zero) {
+          canvas.drawLine(s2, e2, gridPaint);
+        }
       }
     }
 
@@ -83,9 +85,9 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       }
     }
 
-    // 2. Interior Shaded Tessellated Profile (if loop is valid)
+    // 2. Interior Shaded Tessellated Profile (if loop is valid and enabled)
     final validation = viewModel.activeSketchValidation;
-    if (validation != null && validation.isValidClosedLoop && validation.orderedPathVertices.length >= 3) {
+    if (viewModel.showSketchProfileShading && validation != null && validation.isValidClosedLoop && validation.orderedPathVertices.length >= 3) {
       final fillPath = Path();
       bool first = true;
       for (final pt in validation.orderedPathVertices) {
@@ -109,13 +111,24 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     // 3. Render Primitive Entities & Segments
     for (final prim in plane.primitives) {
       final isSel = (prim.id == viewModel.selectedSketchEntity?.id);
+      final isConstrained = prim.isFullyConstrained;
       final strokePaint = Paint()
         ..color = isSel
             ? const Color(0xFFF59E0B) // Amber for selected
+            : prim.isProjected
+            ? const Color(0xFFC084FC) // Purple/Magenta for projected geometry
             : prim.isConstruction
             ? const Color(0xFF38BDF8) // Light blue for construction
-            : const Color(0xFF0284C7) // Blue
-        ..strokeWidth = isSel ? 2.8 : 1.8
+            : isConstrained
+            ? const Color(0xFF0F172A) // Black / Slate 900 for fully constrained geometry
+            : const Color(0xFF0284C7) // Blue for under-constrained geometry
+        ..strokeWidth = isSel ? 2.8 : (prim.isProjected ? 2.2 : (isConstrained ? 2.2 : 1.8))
+        ..style = PaintingStyle.stroke;
+
+      // High-contrast halo underlay for CAD visibility when rotated/behind parts (Bug 3 / SS4)
+      final haloPaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.90)
+        ..strokeWidth = strokePaint.strokeWidth + 2.2
         ..style = PaintingStyle.stroke;
 
       if (prim is CADRectangleEntity) {
@@ -132,6 +145,7 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             ..lineTo(p4.dx, p4.dy)
             ..close();
 
+          canvas.drawPath(rectPath, haloPaint);
           if (prim.isConstruction) {
             _drawDashedPath(canvas, rectPath, strokePaint);
           } else {
@@ -151,34 +165,156 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             _drawDimensionBadge(canvas, rightMid, 'H: ${prim.height.toStringAsFixed(1)} mm');
           }
         }
-      } else if (prim is CADCircleEntity) {
+      } else if (prim is CADCenterRectangleEntity) {
+        final p1 = toScreen(prim.topLeft);
+        final p2 = toScreen(prim.topRight);
+        final p3 = toScreen(prim.bottomRight);
+        final p4 = toScreen(prim.bottomLeft);
         final cScr = toScreen(prim.center);
-        final rEdge = toScreen(Offset(prim.center.dx + prim.radius, prim.center.dy));
-        if (cScr != Offset.zero && rEdge != Offset.zero) {
-          final rPix = (rEdge - cScr).distance;
+
+        if (p1 != Offset.zero && p2 != Offset.zero && p3 != Offset.zero && p4 != Offset.zero) {
+          final rectPath = Path()
+            ..moveTo(p1.dx, p1.dy)
+            ..lineTo(p2.dx, p2.dy)
+            ..lineTo(p3.dx, p3.dy)
+            ..lineTo(p4.dx, p4.dy)
+            ..close();
+
+          canvas.drawPath(rectPath, haloPaint);
           if (prim.isConstruction) {
-            _drawDashedCircle(canvas, cScr, rPix, strokePaint);
+            _drawDashedPath(canvas, rectPath, strokePaint);
           } else {
-            canvas.drawCircle(cScr, rPix, strokePaint);
+            canvas.drawPath(rectPath, strokePaint);
+          }
+
+          if (prim.hasDiagonalConstruction || isSel) {
+            final diagPaint = Paint()
+              ..color = const Color(0xFF38BDF8).withValues(alpha: 0.6)
+              ..strokeWidth = 1.0;
+            _drawDashedLine(canvas, p1, p3, diagPaint);
+            _drawDashedLine(canvas, p4, p2, diagPaint);
           }
 
           if (isSel) {
             _drawHandle(canvas, cScr);
-            _drawHandle(canvas, rEdge);
-            canvas.drawLine(
-              cScr,
-              rEdge,
-              Paint()
-                ..color = const Color(0xFFF59E0B)
-                ..strokeWidth = 1.0,
+            _drawHandle(canvas, p1);
+            _drawHandle(canvas, p2);
+            _drawHandle(canvas, p3);
+            _drawHandle(canvas, p4);
+
+            final topMid = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
+            final rightMid = Offset((p2.dx + p3.dx) / 2, (p2.dy + p3.dy) / 2);
+            _drawDimensionBadge(canvas, topMid, 'W: ${prim.width.toStringAsFixed(1)} mm');
+            _drawDimensionBadge(canvas, rightMid, 'H: ${prim.height.toStringAsFixed(1)} mm');
+          }
+        }
+      } else if (prim is CADArcEntity) {
+        final geom = prim.computeCircumcircle();
+        final sScr = toScreen(prim.startPoint);
+        final eScr = toScreen(prim.endPoint);
+        final mScr = toScreen(prim.pointOnArc);
+
+        if (geom == null) {
+          if (sScr != Offset.zero && eScr != Offset.zero) {
+            canvas.drawLine(sScr, eScr, haloPaint);
+            canvas.drawLine(sScr, eScr, strokePaint);
+          }
+        } else {
+          final cScr = toScreen(geom.center);
+          final arcPath = Path();
+          const int numSegs = 32;
+          for (int i = 0; i <= numSegs; i++) {
+            final t = i / numSegs;
+            final ang = geom.startAngle + t * geom.sweep;
+            final ptLocal = Offset(geom.center.dx + geom.radius * math.cos(ang), geom.center.dy + geom.radius * math.sin(ang));
+            final ptScr = toScreen(ptLocal);
+            if (i == 0) {
+              arcPath.moveTo(ptScr.dx, ptScr.dy);
+            } else {
+              arcPath.lineTo(ptScr.dx, ptScr.dy);
+            }
+          }
+
+          canvas.drawPath(arcPath, haloPaint);
+          if (prim.isConstruction) {
+            _drawDashedPath(canvas, arcPath, strokePaint);
+          } else {
+            canvas.drawPath(arcPath, strokePaint);
+          }
+
+          if (isSel) {
+            _drawHandle(canvas, sScr);
+            _drawHandle(canvas, eScr);
+            _drawHandle(canvas, mScr);
+            _drawHandle(canvas, cScr);
+            _drawDimensionBadge(canvas, mScr, 'R: ${geom.radius.toStringAsFixed(1)} mm');
+          }
+        }
+      } else if (prim is CADCircleEntity) {
+        final cScr = toScreen(prim.center);
+        final rEdge = toScreen(Offset(prim.center.dx + prim.radius, prim.center.dy));
+        if (cScr != Offset.zero) {
+          final circlePath = Path();
+          const int segs = 48;
+          for (int i = 0; i <= segs; i++) {
+            final theta = i * 2.0 * math.pi / segs;
+            final ptLocal = Offset(
+              prim.center.dx + prim.radius * math.cos(theta),
+              prim.center.dy + prim.radius * math.sin(theta),
             );
-            _drawDimensionBadge(canvas, Offset((cScr.dx + rEdge.dx) / 2, (cScr.dy + rEdge.dy) / 2), 'Ø ${(prim.radius * 2).toStringAsFixed(1)} mm');
+            final ptScr = toScreen(ptLocal);
+            if (i == 0) {
+              circlePath.moveTo(ptScr.dx, ptScr.dy);
+            } else {
+              circlePath.lineTo(ptScr.dx, ptScr.dy);
+            }
+          }
+          circlePath.close();
+
+          canvas.drawPath(circlePath, haloPaint);
+          if (prim.isConstruction) {
+            _drawDashedPath(canvas, circlePath, strokePaint);
+          } else {
+            canvas.drawPath(circlePath, strokePaint);
+          }
+
+          // Center crosshair mark
+          final crossPaint = Paint()
+            ..color = strokePaint.color
+            ..strokeWidth = 1.2;
+          canvas.drawLine(cScr - const Offset(4.0, 0), cScr + const Offset(4.0, 0), crossPaint);
+          canvas.drawLine(cScr - const Offset(0, 4.0), cScr + const Offset(0, 4.0), crossPaint);
+
+          if (isSel) {
+            _drawHandle(canvas, cScr);
+            if (rEdge != Offset.zero) {
+              _drawHandle(canvas, rEdge);
+              canvas.drawLine(
+                cScr,
+                rEdge,
+                Paint()
+                  ..color = const Color(0xFFF59E0B)
+                  ..strokeWidth = 1.2,
+              );
+              _drawDimensionBadge(
+                canvas,
+                Offset((cScr.dx + rEdge.dx) / 2, (cScr.dy + rEdge.dy) / 2),
+                'Ø ${(prim.radius * 2).toStringAsFixed(1)} mm',
+              );
+            }
+          } else if (viewModel.showSketchExpressions) {
+            _drawDimensionBadge(
+              canvas,
+              cScr + const Offset(12.0, -12.0),
+              'Ø ${(prim.radius * 2).toStringAsFixed(1)}',
+            );
           }
         }
       } else if (prim is CADLineEntity) {
         final sScr = toScreen(prim.start);
         final eScr = toScreen(prim.end);
         if (sScr != Offset.zero && eScr != Offset.zero) {
+          canvas.drawLine(sScr, eScr, haloPaint);
           if (prim.isConstruction) {
             _drawDashedLine(canvas, sScr, eScr, strokePaint);
           } else {
@@ -207,6 +343,7 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             }
           }
           if (prim.isClosed) polyPath.close();
+          canvas.drawPath(polyPath, haloPaint);
           if (prim.isConstruction) {
             _drawDashedPath(canvas, polyPath, strokePaint);
           } else {
@@ -227,33 +364,269 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       ..strokeWidth = 1.2
       ..style = PaintingStyle.stroke;
 
+    const double inferExtent = 300.0;
     for (final match in viewModel.currentInferenceGuides) {
       if (match.isHorizontal) {
-        final p1 = toScreen(Offset(-extent * 1.5, match.value));
-        final p2 = toScreen(Offset(extent * 1.5, match.value));
+        final p1 = toScreen(Offset(-inferExtent, match.value));
+        final p2 = toScreen(Offset(inferExtent, match.value));
         if (p1 != Offset.zero && p2 != Offset.zero) {
           _drawDashedLine(canvas, p1, p2, inferPaint);
         }
       } else {
-        final p1 = toScreen(Offset(match.value, -extent * 1.5));
-        final p2 = toScreen(Offset(match.value, extent * 1.5));
+        final p1 = toScreen(Offset(match.value, -inferExtent));
+        final p2 = toScreen(Offset(match.value, inferExtent));
         if (p1 != Offset.zero && p2 != Offset.zero) {
           _drawDashedLine(canvas, p1, p2, inferPaint);
         }
       }
     }
 
-    // 5. Glowing Neon-Green Snapping Indicator Dot
+    // 5. Snapping point indicator (Item 5b: pointed mouse, no giant green dot)
     final hoverLocal = viewModel.activePlaneHoverLocal;
-    if (hoverLocal != null) {
-      final snapScr = toScreen(hoverLocal);
-      if (snapScr != Offset.zero) {
-        // Outer glow
-        canvas.drawCircle(snapScr, 7.0, Paint()..color = const Color(0x6600FF66));
-        // Solid center
-        canvas.drawCircle(snapScr, 3.5, Paint()..color = const Color(0xFF00FF66));
+
+
+    // 5b. Live Interactive Sketch Rubber-Band Preview (Phase 3)
+    if (viewModel.sketchInteractiveStartPoint != null && hoverLocal != null) {
+      final pStart = viewModel.sketchInteractiveStartPoint!;
+      final sScr = toScreen(pStart);
+      final hScr = toScreen(hoverLocal);
+      final previewPaint = Paint()
+        ..color = const Color(0xFF38BDF8)
+        ..strokeWidth = 1.6
+        ..style = PaintingStyle.stroke;
+
+      if (sScr != Offset.zero && hScr != Offset.zero) {
+        final tool = viewModel.activeSketchTool;
+
+        if (tool == 'rectangle' || tool == 'rect') {
+          final x = math.min(pStart.dx, hoverLocal.dx);
+          final y = math.min(pStart.dy, hoverLocal.dy);
+          final w = (hoverLocal.dx - pStart.dx).abs();
+          final h = (hoverLocal.dy - pStart.dy).abs();
+          final p1 = toScreen(Offset(x, y));
+          final p2 = toScreen(Offset(x + w, y));
+          final p3 = toScreen(Offset(x + w, y + h));
+          final p4 = toScreen(Offset(x, y + h));
+
+          if (p1 != Offset.zero && p2 != Offset.zero && p3 != Offset.zero && p4 != Offset.zero) {
+            final rPath = Path()..moveTo(p1.dx, p1.dy)..lineTo(p2.dx, p2.dy)..lineTo(p3.dx, p3.dy)..lineTo(p4.dx, p4.dy)..close();
+            _drawDashedPath(canvas, rPath, previewPaint);
+            _drawDimensionBadge(canvas, Offset((p1.dx + p3.dx) / 2, (p1.dy + p3.dy) / 2), '${w.toStringAsFixed(1)} x ${h.toStringAsFixed(1)} mm');
+          }
+        } else if (tool == 'center_rect') {
+          final w = 2.0 * (hoverLocal.dx - pStart.dx).abs();
+          final h = 2.0 * (hoverLocal.dy - pStart.dy).abs();
+          final x = pStart.dx - w / 2.0;
+          final y = pStart.dy - h / 2.0;
+          final p1 = toScreen(Offset(x, y));
+          final p2 = toScreen(Offset(x + w, y));
+          final p3 = toScreen(Offset(x + w, y + h));
+          final p4 = toScreen(Offset(x, y + h));
+
+          if (p1 != Offset.zero && p2 != Offset.zero && p3 != Offset.zero && p4 != Offset.zero) {
+            final rPath = Path()..moveTo(p1.dx, p1.dy)..lineTo(p2.dx, p2.dy)..lineTo(p3.dx, p3.dy)..lineTo(p4.dx, p4.dy)..close();
+            _drawDashedPath(canvas, rPath, previewPaint);
+            _drawDashedLine(canvas, p1, p3, Paint()..color = const Color(0xFF38BDF8).withValues(alpha: 0.5)..strokeWidth = 1.0);
+            _drawDashedLine(canvas, p4, p2, Paint()..color = const Color(0xFF38BDF8).withValues(alpha: 0.5)..strokeWidth = 1.0);
+            _drawHandle(canvas, sScr);
+            _drawDimensionBadge(canvas, sScr, '${w.toStringAsFixed(1)} x ${h.toStringAsFixed(1)} mm');
+          }
+        } else if (tool == 'circle' || tool == 'hole') {
+          final rLocal = (hoverLocal - pStart).distance;
+          final circlePath = Path();
+          const int segs = 36;
+          for (int i = 0; i <= segs; i++) {
+            final theta = i * 2.0 * math.pi / segs;
+            final ptLocal = Offset(
+              pStart.dx + rLocal * math.cos(theta),
+              pStart.dy + rLocal * math.sin(theta),
+            );
+            final ptScr = toScreen(ptLocal);
+            if (i == 0) {
+              circlePath.moveTo(ptScr.dx, ptScr.dy);
+            } else {
+              circlePath.lineTo(ptScr.dx, ptScr.dy);
+            }
+          }
+          circlePath.close();
+          _drawDashedPath(canvas, circlePath, previewPaint);
+          canvas.drawLine(sScr, hScr, Paint()..color = const Color(0xFFF59E0B)..strokeWidth = 1.0);
+          _drawHandle(canvas, sScr);
+          _drawDimensionBadge(canvas, Offset((sScr.dx + hScr.dx) / 2, (sScr.dy + hScr.dy) / 2), 'Ø ${(rLocal * 2).toStringAsFixed(1)} mm');
+        } else if (tool == 'arc_3point') {
+          if (viewModel.sketchInteractiveMidPoint == null) {
+            _drawDashedLine(canvas, sScr, hScr, previewPaint);
+            _drawHandle(canvas, sScr);
+            _drawDimensionBadge(canvas, hScr, 'End Point (Click)');
+          } else {
+            final pEnd = viewModel.sketchInteractiveMidPoint!;
+            final arcTemp = CADArcEntity(id: 'temp_arc', startPoint: pStart, endPoint: pEnd, pointOnArc: hoverLocal);
+            final geom = arcTemp.computeCircumcircle();
+            if (geom != null) {
+              final arcPath = Path();
+              const int numSegs = 24;
+              for (int i = 0; i <= numSegs; i++) {
+                final t = i / numSegs;
+                final ang = geom.startAngle + t * geom.sweep;
+                final pt = toScreen(Offset(geom.center.dx + geom.radius * math.cos(ang), geom.center.dy + geom.radius * math.sin(ang)));
+                if (i == 0) {
+                  arcPath.moveTo(pt.dx, pt.dy);
+                } else {
+                  arcPath.lineTo(pt.dx, pt.dy);
+                }
+              }
+              _drawDashedPath(canvas, arcPath, previewPaint);
+              _drawDimensionBadge(canvas, hScr, 'R: ${geom.radius.toStringAsFixed(1)} mm');
+            } else {
+              _drawDashedLine(canvas, sScr, hScr, previewPaint);
+            }
+          }
+        } else if (tool == 'line') {
+          _drawDashedLine(canvas, sScr, hScr, previewPaint);
+          _drawHandle(canvas, sScr);
+          final len = (hoverLocal - pStart).distance;
+          _drawDimensionBadge(canvas, Offset((sScr.dx + hScr.dx) / 2, (sScr.dy + hScr.dy) / 2), 'L: ${len.toStringAsFixed(1)} mm');
+        }
       }
     }
+
+    if (viewModel.sketchPolylinePoints.isNotEmpty && hoverLocal != null) {
+      final pts = viewModel.sketchPolylinePoints;
+      final polyPaint = Paint()..color = const Color(0xFF0284C7)..strokeWidth = 1.8..style = PaintingStyle.stroke;
+      for (int i = 0; i < pts.length - 1; i++) {
+        final p1 = toScreen(pts[i]);
+        final p2 = toScreen(pts[i + 1]);
+        if (p1 != Offset.zero && p2 != Offset.zero) canvas.drawLine(p1, p2, polyPaint);
+      }
+      final lastScr = toScreen(pts.last);
+      final hScr = toScreen(hoverLocal);
+      if (lastScr != Offset.zero && hScr != Offset.zero) {
+        _drawDashedLine(canvas, lastScr, hScr, Paint()..color = const Color(0xFF38BDF8)..strokeWidth = 1.5);
+      }
+    }
+
+    // 6. Project Geometry Mode 3D Entity Hover Visualizer (Phase 2)
+    if (viewModel.isProjectGeometryMode) {
+      if (viewModel.hoveredProjectableEdge != null && viewModel.hoveredProjectableEdge!.length >= 2) {
+        final p1 = projectPoint(viewModel.hoveredProjectableEdge![0]);
+        final p2 = projectPoint(viewModel.hoveredProjectableEdge![1]);
+        if (p1 != Offset.zero && p2 != Offset.zero) {
+          final glowPaint = Paint()
+            ..color = const Color(0xFFC084FC).withValues(alpha: 0.35)
+            ..strokeWidth = 6.0
+            ..strokeCap = StrokeCap.round;
+          final edgePaint = Paint()
+            ..color = const Color(0xFFC084FC)
+            ..strokeWidth = 2.5
+            ..strokeCap = StrokeCap.round;
+          canvas.drawLine(p1, p2, glowPaint);
+          canvas.drawLine(p1, p2, edgePaint);
+
+          final mid = Offset((p1.dx + p2.dx) / 2.0, (p1.dy + p2.dy) / 2.0);
+          _drawProjectBadge(canvas, mid, 'PROJECT EDGE (P)');
+        }
+      } else if (viewModel.hoveredProjectablePoint != null) {
+        final ptScr = projectPoint(viewModel.hoveredProjectablePoint!);
+        if (ptScr != Offset.zero) {
+          canvas.drawCircle(ptScr, 8.0, Paint()..color = const Color(0xFFC084FC).withValues(alpha: 0.35));
+          canvas.drawCircle(ptScr, 4.0, Paint()..color = const Color(0xFFC084FC));
+          _drawProjectBadge(canvas, ptScr, 'PROJECT VERTEX (P)');
+        }
+      }
+    }
+
+    // 6. Geometric Constraint Glyphs & Badges (Phase 4 - Autodesk Fusion 360)
+    if (viewModel.showSketchConstraints && plane.constraints.isNotEmpty) {
+      for (final constraint in plane.constraints) {
+        if (!constraint.isActive) continue;
+        final isConstraintSelected = (viewModel.selectedSketchConstraint?.id == constraint.id) ||
+            constraint.entityIds.any((id) => viewModel.selectedSketchEntityIds.contains(id));
+
+        Offset? badgePos;
+        if (constraint.entityIds.isNotEmpty) {
+          final firstEnt = plane.primitives.where((p) => p.id == constraint.entityIds[0]).firstOrNull;
+          if (firstEnt != null) {
+            badgePos = toScreen(_getEntityBadgeAnchor(firstEnt));
+          }
+        }
+
+        if (badgePos != null && badgePos != Offset.zero) {
+          _drawConstraintBadge(canvas, badgePos, constraint.symbol, isHighlighted: isConstraintSelected);
+        }
+      }
+    }
+  }
+
+  void _drawProjectBadge(Canvas canvas, Offset pos, String text) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final badgeRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: pos + const Offset(0, -16), width: tp.width + 12, height: tp.height + 6),
+      const Radius.circular(4),
+    );
+
+    canvas.drawRRect(badgeRect, Paint()..color = const Color(0xFF581C87).withValues(alpha: 0.94));
+    canvas.drawRRect(
+      badgeRect,
+      Paint()
+        ..color = const Color(0xFFC084FC)
+        ..strokeWidth = 1.0
+        ..style = PaintingStyle.stroke,
+    );
+    tp.paint(canvas, pos + Offset(-tp.width / 2, -16 - tp.height / 2));
+  }
+
+  Offset _getEntityBadgeAnchor(CADPrimitiveEntity e) {
+    if (e is CADLineEntity) {
+      return Offset((e.start.dx + e.end.dx) / 2.0, (e.start.dy + e.end.dy) / 2.0);
+    } else if (e is CADCircleEntity) {
+      return Offset(e.center.dx, e.center.dy - e.radius);
+    } else if (e is CADArcEntity) {
+      return e.pointOnArc;
+    } else if (e is CADRectangleEntity) {
+      return Offset(e.startPoint.dx + e.width / 2.0, e.startPoint.dy);
+    } else if (e is CADCenterRectangleEntity) {
+      return Offset(e.center.dx, e.center.dy - e.height / 2.0);
+    }
+    return Offset.zero;
+  }
+
+  void _drawConstraintBadge(Canvas canvas, Offset pos, String symbol, {bool isHighlighted = false}) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: symbol,
+        style: TextStyle(
+          color: isHighlighted ? const Color(0xFFB45309) : const Color(0xFF0369A1),
+          fontSize: 10.0,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final badgeRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: pos + const Offset(0, -10), width: math.max(16.0, tp.width + 6), height: math.max(16.0, tp.height + 4)),
+      const Radius.circular(3),
+    );
+
+    canvas.drawRRect(
+      badgeRect,
+      Paint()..color = isHighlighted ? const Color(0xFFFEF3C7) : Colors.white,
+    );
+    canvas.drawRRect(
+      badgeRect,
+      Paint()
+        ..color = isHighlighted ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8)
+        ..strokeWidth = 1.0
+        ..style = PaintingStyle.stroke,
+    );
+    tp.paint(canvas, pos + Offset(-tp.width / 2, -10 - tp.height / 2));
   }
 
   void _drawHandle(Canvas canvas, Offset pt) {
@@ -307,15 +680,6 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     }
   }
 
-  void _drawDashedCircle(Canvas canvas, Offset center, double radius, Paint paint) {
-    const int dashCount = 36;
-    final double stepAngle = (2 * math.pi) / dashCount;
-    for (int i = 0; i < dashCount; i += 2) {
-      final double a1 = i * stepAngle;
-      final double a2 = (i + 1) * stepAngle;
-      canvas.drawArc(Rect.fromCircle(center: center, radius: radius), a1, a2 - a1, false, paint);
-    }
-  }
 
   void _drawDashedPath(Canvas canvas, Path path, Paint paint) {
     final metrics = path.computeMetrics();

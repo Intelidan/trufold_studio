@@ -23,11 +23,11 @@ class AssemblySelectionToolbar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
-          border: Border.all(color: const Color(0xFF38BDF8), width: 1.5),
+          color: Colors.white,
+          border: Border.all(color: const Color(0xFF0076CE), width: 1.5),
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [
-            BoxShadow(color: Color(0x44000000), blurRadius: 10, offset: Offset(0, 4)),
+            BoxShadow(color: Color(0x1F000000), blurRadius: 12, offset: Offset(0, 4)),
           ],
         ),
         child: SingleChildScrollView(
@@ -35,19 +35,20 @@ class AssemblySelectionToolbar extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle_rounded, color: Color(0xFF38BDF8), size: 18),
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF0076CE), size: 18),
               const SizedBox(width: 8),
               Text(
                 '${vm.selectedPartIds.length} Parts Selected',
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12, fontWeight: FontWeight.bold),
               ),
               const SizedBox(width: 14),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0284C7),
+                  backgroundColor: const Color(0xFF0076CE),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   minimumSize: Size.zero,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                 ),
                 onPressed: () {
                   vm.setToolMode(SketchUpToolMode.weld);
@@ -67,10 +68,11 @@ class AssemblySelectionToolbar extends StatelessWidget {
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0369A1),
+                    backgroundColor: const Color(0xFF0284C7),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     minimumSize: Size.zero,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                   ),
                   onPressed: onPromptGroupNameAndGroup,
                   icon: const Icon(Icons.workspaces_outlined, size: 14),
@@ -81,10 +83,11 @@ class AssemblySelectionToolbar extends StatelessWidget {
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFF43F5E),
-                    side: const BorderSide(color: Color(0xFFF43F5E), width: 1),
+                    foregroundColor: const Color(0xFFDC2626),
+                    side: const BorderSide(color: Color(0xFFDC2626), width: 1),
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     minimumSize: Size.zero,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                   ),
                   onPressed: vm.ungroupSelectedParts,
                   icon: const Icon(Icons.group_off_outlined, size: 14),
@@ -96,7 +99,7 @@ class AssemblySelectionToolbar extends StatelessWidget {
                 onTap: vm.clearSelection,
                 child: const Padding(
                   padding: EdgeInsets.all(4),
-                  child: Icon(Icons.close_rounded, size: 16, color: Colors.white70),
+                  child: Icon(Icons.close_rounded, size: 16, color: Color(0xFF64748B)),
                 ),
               ),
             ],

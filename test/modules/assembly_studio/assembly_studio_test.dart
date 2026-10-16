@@ -1978,6 +1978,13 @@ void main() {
     });
 
     testWidgets('Whole App Light / Dark Theme: Dynamically switches all panels, menus, and interface widgets', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
       final vm = AssemblyStudioViewModel();
       expect(vm.isLightMode, isTrue);
 
@@ -1989,7 +1996,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Initially Light Mode
-      expect(find.text('SCENE OUTLINER'), findsOneWidget);
+      expect(find.textContaining('Features'), findsOneWidget);
       expect(find.text('PROPERTY GRID'), findsOneWidget);
       expect(find.textContaining('Theme: LIGHT'), findsOneWidget);
 

@@ -82,7 +82,7 @@ class AssemblySketchupToolbar extends StatelessWidget {
             iconPainter: const _PencilIconPainter(),
             onTap: () {
               if (!isSketch) {
-                viewModel.focusPartAndEnterSketch(viewModel.selectedPart?.id);
+                viewModel.enterSketchMode();
               }
               viewModel.setActiveSketchTool('line');
             },
@@ -95,7 +95,7 @@ class AssemblySketchupToolbar extends StatelessWidget {
             iconPainter: const _RectangleIconPainter(),
             onTap: () {
               if (!isSketch) {
-                viewModel.focusPartAndEnterSketch(viewModel.selectedPart?.id);
+                viewModel.enterSketchMode();
               }
               viewModel.setActiveSketchTool('rect');
             },
@@ -108,7 +108,7 @@ class AssemblySketchupToolbar extends StatelessWidget {
             iconPainter: const _CircleIconPainter(),
             onTap: () {
               if (!isSketch) {
-                viewModel.focusPartAndEnterSketch(viewModel.selectedPart?.id);
+                viewModel.enterSketchMode();
               }
               viewModel.setActiveSketchTool('hole');
             },
@@ -121,7 +121,7 @@ class AssemblySketchupToolbar extends StatelessWidget {
             iconPainter: const _ArcIconPainter(),
             onTap: () {
               if (!isSketch) {
-                viewModel.focusPartAndEnterSketch(viewModel.selectedPart?.id);
+                viewModel.enterSketchMode();
               }
               viewModel.setActiveSketchTool('arc');
             },

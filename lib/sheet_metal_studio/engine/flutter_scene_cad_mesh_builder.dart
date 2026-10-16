@@ -92,8 +92,6 @@ class FlutterSceneCadMeshBuilder {
           (isWeld && poly.color.a < 0.99);
       final currentBuilder = isTranslucent ? translucentBuilder : opaqueBuilder;
 
-      final isSelected = (poly.faceId == selectedFaceId) ||
-          (selectedFaceId != null && poly.faceId.startsWith(selectedFaceId));
       final isHovered = (poly.faceId == hoveredFaceId);
 
       // Resolve color for this face
@@ -106,8 +104,6 @@ class FlutterSceneCadMeshBuilder {
           poly.color.b,
           poly.color.a,
         );
-      } else if (isSelected) {
-        faceColor = vm.Vector4(0.22, 0.74, 0.97, 1.0); // Sky blue #38BDF8
       } else if (isHovered) {
         faceColor = vm.Vector4(0.73, 0.90, 0.99, 1.0); // Cyan hover #BAE6FD
       } else if (baseColorOverride != null) {
@@ -122,22 +118,22 @@ class FlutterSceneCadMeshBuilder {
         faceColor = vm.Vector4(pc.r, pc.g, pc.b, 1.0);
       } else if (!preferences.useOnshapeCadColor) {
         final mc = preferences.materialSettings.baseColor;
-        if (poly.faceId.startsWith('BORE_') || poly.faceId.startsWith('RIM_')) {
+        if (poly.faceId.startsWith('BORE_') || poly.faceId.contains('_bore_') || poly.faceId.startsWith('RIM_')) {
           faceColor = vm.Vector4(mc.r * 0.75, mc.g * 0.75, mc.b * 0.75, 1.0);
         } else if (poly.faceId.endsWith('_BOT')) {
           faceColor = vm.Vector4(mc.r * 0.88, mc.g * 0.88, mc.b * 0.88, 1.0);
         } else {
           faceColor = vm.Vector4(mc.r, mc.g, mc.b, 1.0);
         }
-      } else if (poly.faceId.startsWith('BORE_') || poly.faceId.startsWith('RIM_')) {
-        // Deep bore wall / sheet thickness rim steel #28445C
-        faceColor = vm.Vector4(0.157, 0.267, 0.361, 1.0);
+      } else if (poly.faceId.startsWith('BORE_') || poly.faceId.contains('_bore_') || poly.faceId.startsWith('RIM_')) {
+        // Deep bore wall / sheet thickness rim steel
+        faceColor = vm.Vector4(0.42, 0.55, 0.65, 1.0);
       } else if (poly.faceId.endsWith('_BOT')) {
-        // Back / bottom surface slightly darker tone #375F82
-        faceColor = vm.Vector4(0.216, 0.373, 0.510, 1.0);
+        // Back / bottom surface slightly darker tone
+        faceColor = vm.Vector4(0.50, 0.63, 0.72, 1.0);
       } else {
-        // Authentic Onshape Slate Steel-Blue #477AA6
-        faceColor = vm.Vector4(0.278, 0.478, 0.651, 1.0);
+        // Authentic Onshape Radiant Steel-Blue (SS4)
+        faceColor = vm.Vector4(0.58, 0.70, 0.79, 1.0);
       }
 
       currentBuilder.color(faceColor);
@@ -164,6 +160,7 @@ class FlutterSceneCadMeshBuilder {
           poly.faceId.endsWith('_inner') ||
           poly.faceId.contains('_slot_') ||
           poly.faceId.contains('_wall_') ||
+          poly.faceId.contains('_bore_') ||
           poly.faceId.startsWith('BORE_') ||
           poly.faceId.startsWith('RIM_') ||
           poly.faceId.startsWith('CHAMFER_') ||
@@ -294,12 +291,12 @@ class FlutterSceneCadMeshBuilder {
       } else if (customMaterial != null) {
         material = customMaterial..doubleSided = true;
       } else {
-        // Shaded mode: apply active materialSettings (PGI, HDG, Plastic, Metals)
+        // Shaded mode: Onshape CAD satin steel sheen (Walkthrough Solution C)
         final matSettings = preferences.materialSettings;
         material = PhysicallyBasedMaterial()
           ..doubleSided = true
-          ..metallicFactor = matSettings.isPlastic ? 0.0 : 0.85
-          ..roughnessFactor = (1.0 - (preferences.shininess / 100.0) * 0.95).clamp(0.08, 0.95)
+          ..metallicFactor = matSettings.isPlastic ? 0.0 : 0.05
+          ..roughnessFactor = 0.25
           ..baseColorFactor = vm.Vector4(1.0, 1.0, 1.0, 1.0);
       }
 
@@ -328,11 +325,11 @@ class FlutterSceneCadMeshBuilder {
       final lineData = LineSegmentData(
         positions: Float32List.fromList(edgePositions),
       );
-      final computedLineWidth = (preferences.lineWidth * 2.0).clamp(0.5, 4.0);
-      final lineGeometry = LineSegmentsGeometry(lineData, width: computedLineWidth, normalOffset: 0.05);
+      final computedLineWidth = (preferences.lineWidth * 1.25).clamp(0.75, 2.0);
+      final lineGeometry = LineSegmentsGeometry(lineData, width: computedLineWidth, normalOffset: 0.08);
       final boundaryColor = preferences.highlightBoundaryEdges
           ? preferences.boundaryEdgeColor
-          : const Color(0xFF0F172A); // Slate 900
+          : const Color(0xFF000000); // Solid Pitch Black (SS3 & SS4)
       final lineMat = UnlitMaterial()
         ..doubleSided = true
         ..baseColorFactor = vm.Vector4(
