@@ -90,32 +90,38 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             : const Color(0x2864748B) // Authentic Onshape SS4 soft neutral-cool profile shading
         ..style = PaintingStyle.fill;
 
+      final combinedRegionPath = Path()..fillType = PathFillType.evenOdd;
+      bool hasAnyLoop = false;
       for (final loop in loopsToFill) {
         if (loop.length < 3) continue;
-        final fillPath = Path();
+        final subPath = Path();
         bool first = true;
         for (final pt in loop) {
           final scr = toScreen(pt);
           if (scr == Offset.zero) continue;
           if (first) {
-            fillPath.moveTo(scr.dx, scr.dy);
+            subPath.moveTo(scr.dx, scr.dy);
             first = false;
           } else {
-            fillPath.lineTo(scr.dx, scr.dy);
+            subPath.lineTo(scr.dx, scr.dy);
           }
         }
         if (!first) {
-          fillPath.close();
-          canvas.drawPath(fillPath, fillPaint);
-          if (isExtrudeHighlight) {
-            canvas.drawPath(
-              fillPath,
-              Paint()
-                ..color = const Color(0xFFF59E0B)
-                ..style = PaintingStyle.stroke
-                ..strokeWidth = 2.4,
-            );
-          }
+          subPath.close();
+          combinedRegionPath.addPath(subPath, Offset.zero);
+          hasAnyLoop = true;
+        }
+      }
+      if (hasAnyLoop) {
+        canvas.drawPath(combinedRegionPath, fillPaint);
+        if (isExtrudeHighlight) {
+          canvas.drawPath(
+            combinedRegionPath,
+            Paint()
+              ..color = const Color(0xFFF59E0B)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2.2,
+          );
         }
       }
     }
@@ -1018,22 +1024,36 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     canvas.drawLine(pA + n * 3.0, dimA + n * 6.0, linePaint);
     canvas.drawLine(pB + n * 3.0, dimB + n * 6.0, linePaint);
 
-    // 2. Measure text width so the dimension line breaks cleanly around the number (Onshape SS4!)
+    // 2. Measure text width so the dimension line breaks cleanly around the number (Onshape image_41a6fb.png!)
     final tp = _layoutDimensionText(label, isDriving: isDriving, hitInfo: hitInfo);
-    final halfGap = (tp.width * 0.5) + 6.0;
-    if (len > halfGap * 2.4) {
+    final halfGap = (tp.width * 0.5) + 5.5;
+    double textAngle = math.atan2(dir.dy, dir.dx);
+    if (textAngle > math.pi / 2.0) textAngle -= math.pi;
+    if (textAngle <= -math.pi / 2.0) textAngle += math.pi;
+
+    if (len > halfGap * 2.35) {
       canvas.drawLine(dimA, mid - dir * halfGap, linePaint);
       canvas.drawLine(mid + dir * halfGap, dimB, linePaint);
+      // Standard inward-pointing arrowheads at both ends
+      _drawCadArrowhead(canvas, dimA, dir, dimColor);
+      _drawCadArrowhead(canvas, dimB, -dir, dimColor);
     } else {
-      canvas.drawLine(dimA, dimB, linePaint);
+      // Narrow dimension (like '10' in image_41a6fb.png): outside extension tails + inward-pointing arrowheads!
+      canvas.drawLine(dimA - dir * 13.0, dimA, linePaint);
+      canvas.drawLine(dimB, dimB + dir * 13.0, linePaint);
+      _drawCadArrowhead(canvas, dimA, -dir, dimColor);
+      _drawCadArrowhead(canvas, dimB, dir, dimColor);
     }
 
-    // 3. Sharp filled CAD arrowheads at both ends
-    _drawCadArrowhead(canvas, dimA, dir, dimColor);
-    _drawCadArrowhead(canvas, dimB, -dir, dimColor);
-
-    // 4. Clickable Dimension Value Tag centered in the line break
-    _drawClickableDimensionTag(canvas, mid, tp, isDriving: isDriving, hitInfo: hitInfo);
+    // 4. Clickable Dimension Value Tag centered and rotated parallel to the dimension line
+    _drawClickableDimensionTag(
+      canvas,
+      mid,
+      tp,
+      isDriving: isDriving,
+      hitInfo: hitInfo,
+      rotationRad: textAngle,
+    );
   }
 
   /// Draws an Onshape SS4 Diameter (`Ø17`, `Ø33`) or Radius (`R3`, `R10`) leader dimension.
@@ -1177,6 +1197,7 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     TextPainter tp, {
     required bool isDriving,
     SketchDimensionTagHit? hitInfo,
+    double rotationRad = 0.0,
   }) {
     if (center == Offset.zero) return;
     final isBeingEdited = hitInfo != null && viewModel.activeEditingDimensionTagKey == hitInfo.tagKey;
@@ -1189,8 +1210,18 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       height: tp.height + 6.0,
     );
 
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    if (rotationRad.abs() > 1e-3) {
+      canvas.rotate(rotationRad);
+    }
+    final localRect = Rect.fromCenter(
+      center: Offset.zero,
+      width: tp.width + 8.0,
+      height: tp.height + 4.0,
+    );
     if (isBeingEdited || isConstraintSelected) {
-      final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(3.5));
+      final rrect = RRect.fromRectAndRadius(localRect, const Radius.circular(3.5));
       canvas.drawRRect(
         rrect,
         Paint()..color = isConstraintSelected ? const Color(0xFFFEF3C7) : const Color(0xFFE0F2FE),
@@ -1200,17 +1231,11 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
         Paint()
           ..color = isConstraintSelected ? const Color(0xFFF59E0B) : const Color(0xFF0284C7)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.4,
-      );
-    } else {
-      // Soft translucent backdrop mask so dimension lines behind the number never clutter the text
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect.deflate(1.5), const Radius.circular(2.5)),
-        Paint()..color = const Color(0xB8F8FAFC),
+          ..strokeWidth = 1.3,
       );
     }
-
-    tp.paint(canvas, Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0));
+    tp.paint(canvas, Offset(-tp.width / 2.0, -tp.height / 2.0));
+    canvas.restore();
 
     if (hitInfo != null) {
       viewModel.sketchDimensionHitRects.add(SketchDimensionTagHit(

@@ -1,3 +1,4 @@
+import '../../../../../sketch_draft_files/cad_parameter_engine/cad_models.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../../sheet_metal_studio/engine/constraints/expression_parser_engine.dart';
@@ -388,37 +389,87 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
           border: Border.all(color: const Color(0xFFCBD5E1)),
           boxShadow: const [BoxShadow(color: Color(0x18000000), blurRadius: 8, offset: Offset(0, 2))],
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildCompactActionChip(
-              icon: Icons.power_input_rounded,
-              label: entity.isConstruction ? 'Solid (Q)' : 'Construction (Q)',
-              isActive: entity.isConstruction,
-              onTap: vm.toggleSketchConstructionMode,
-            ),
-            const SizedBox(width: 4),
-            _buildCompactActionChip(
-              icon: Icons.straighten_rounded,
-              label: 'Dimension (D)',
-              isActive: vm.activeSketchTool == 'dimension',
-              onTap: () {
-                final hitMatch = vm.sketchDimensionHitRects
-                    .where((h) => h.primaryEntityId == entity.id)
-                    .firstOrNull;
-                if (hitMatch != null) {
-                  vm.openInlineSketchDimensionEditor(hitMatch);
-                } else {
-                  vm.setActiveSketchTool('dimension');
-                }
-              },
-            ),
-            const SizedBox(width: 4),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildCompactActionChip(
+                icon: Icons.power_input_rounded,
+                label: entity.isConstruction ? 'Solid (Q)' : 'Construction (Q)',
+                isActive: entity.isConstruction,
+                onTap: vm.toggleSketchConstructionMode,
+              ),
+              const SizedBox(width: 4),
+              _buildCompactActionChip(
+                icon: Icons.straighten_rounded,
+                label: 'Dimension (D)',
+                isActive: vm.activeSketchTool == 'dimension',
+                onTap: () {
+                  final hitMatch = vm.sketchDimensionHitRects
+                      .where((h) => h.primaryEntityId == entity.id)
+                      .firstOrNull;
+                  if (hitMatch != null) {
+                    vm.openInlineSketchDimensionEditor(hitMatch);
+                  } else {
+                    vm.setActiveSketchTool('dimension');
+                  }
+                },
+              ),
+              if (vm.activeSketchPlane != null &&
+                  (entity is CADRegularPolygonEntity ||
+                      !vm.activeSketchPlane!.isLoopBonded)) ...[
+                const SizedBox(width: 4),
+                _buildCompactActionChip(
+                  icon: Icons.link_off_rounded,
+                  label: 'Break Loop',
+                  isActive: !vm.activeSketchPlane!.isLoopBonded,
+                  onTap: () {
+                    vm.breakSelectedPolygonOrLoop();
+                    widget.onRebuildModel?.call();
+                  },
+                ),
+                const SizedBox(width: 4),
+                _buildCompactActionChip(
+                  icon: Icons.link_rounded,
+                  label: 'Rejoin Loop',
+                  isActive: vm.activeSketchPlane!.isLoopBonded,
+                  onTap: () {
+                    vm.rejoinPolygonSegmentsOnActivePlane();
+                    widget.onRebuildModel?.call();
+                  },
+                ),
+              ],
+              const SizedBox(width: 4),
+            if (entity is CADLineEntity) ...[
+              _buildCompactActionChip(
+                icon: Icons.call_split_rounded,
+                label: entity.featureType == FeatureType.bend ? 'Bend (${entity.depthMm.round()}°)' : 'Bend Line',
+                isActive: entity.featureType == FeatureType.bend,
+                onTap: () {
+                  vm.toggleSelectedLineAsBendFeature();
+                  widget.onRebuildModel?.call();
+                },
+              ),
+              const SizedBox(width: 4),
+            ],
             _buildCompactActionChip(
               icon: Icons.layers_rounded,
               label: 'Extrude (E)',
               isActive: vm.isExtrudeMode,
               onTap: vm.toggleExtrudeMode,
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+              tooltip: 'Delete Sketch Entity (Del)',
+              icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Color(0xFFDC2626)),
+              onPressed: () {
+                vm.deleteSelectedSketchEntity();
+                widget.onRebuildModel?.call();
+              },
             ),
             // Show removable chips for any constraints attached to this entity!
             for (final c in entityConstraints) ...[
@@ -453,23 +504,12 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
                 ),
               ),
             ],
-            const SizedBox(width: 4),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-              tooltip: 'Delete Sketch Entity (Del)',
-              icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Color(0xFFDC2626)),
-              onPressed: () {
-                vm.deleteSelectedSketchEntity();
-                widget.onRebuildModel?.call();
-              },
-            ),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildCompactActionChip({
     required IconData icon,

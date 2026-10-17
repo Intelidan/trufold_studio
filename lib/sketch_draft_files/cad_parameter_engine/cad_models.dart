@@ -12,7 +12,65 @@ export 'package:trufold_studio/sheet_metal_studio/models/cad_constraint.dart';
 
 enum SketchEntityType { line, rectangle, circle, polyline }
 
-enum FeatureType { extrude, cut }
+enum FeatureType { extrude, cut, bend }
+
+/// Stores a parametric link between a 2D CADSketchPlane and a 3D feature/body derived from it.
+class CADDependentFeatureLink {
+  final String id;
+  String operation; // 'newBody', 'join', 'cut', 'intersect', 'surfaceCut', 'bend'
+  String? targetPartId;
+  final List<String> createdPartIds;
+  String? targetFaceId;
+  double distanceMm;
+  double distanceSide2Mm;
+  double taperAngleDeg;
+  String direction; // 'oneSide', 'symmetric', 'twoSide'
+  bool isPassThrough;
+  double bendAngleDeg;
+  double bendRadiusMm;
+
+  CADDependentFeatureLink({
+    required this.id,
+    String? operation,
+    String? operationType,
+    this.targetPartId,
+    String? createdPartId,
+    List<String>? createdPartIds,
+    this.targetFaceId,
+    this.distanceMm = 25.0,
+    double? distanceSide2Mm,
+    double? secondDistanceMm,
+    double? taperAngleDeg,
+    double? draftAngleDeg,
+    String? direction,
+    String? directionName,
+    this.isPassThrough = false,
+    this.bendAngleDeg = 0.0,
+    this.bendRadiusMm = 0.0,
+  })  : operation = operation ?? operationType ?? 'newBody',
+        createdPartIds = createdPartIds ?? (createdPartId != null ? [createdPartId] : []),
+        distanceSide2Mm = secondDistanceMm ?? distanceSide2Mm ?? 0.0,
+        taperAngleDeg = draftAngleDeg ?? taperAngleDeg ?? 0.0,
+        direction = directionName ?? direction ?? 'oneSide';
+
+  String get operationType => operation;
+  set operationType(String val) => operation = val;
+
+  String? get createdPartId => createdPartIds.isNotEmpty ? createdPartIds.first : null;
+  set createdPartId(String? id) {
+    createdPartIds.clear();
+    if (id != null) createdPartIds.add(id);
+  }
+
+  double get secondDistanceMm => distanceSide2Mm;
+  set secondDistanceMm(double v) => distanceSide2Mm = v;
+
+  double get draftAngleDeg => taperAngleDeg;
+  set draftAngleDeg(double v) => taperAngleDeg = v;
+
+  String get directionName => direction;
+  set directionName(String v) => direction = v;
+}
 
 enum WeldJointStyle { buttJoint, lapJoint, tJoint }
 
@@ -39,6 +97,12 @@ class CADSketchPlane {
   final List<CADLineSegment> entities = [];
   final List<CADPrimitiveEntity> primitives = [];
   final List<CadConstraint> constraints = [];
+  /// Parametric 3D features (New Body, Join, Cut, Pass-Through, Bend) driven by this sketch plane.
+  final List<CADDependentFeatureLink> dependentFeatures = [];
+  /// Whether closed polygon/rectangle segments on this plane are topologically bonded at corners.
+  bool isLoopBonded = true;
+  /// Entity IDs explicitly broken/unbonded via the Break Polygon tool.
+  final Set<String> unbondedEntityIds = {};
   String? targetPartId;
   String? targetFaceId;
   CADPlaneType planeType;
@@ -74,6 +138,27 @@ class CADSketchPlane {
   Offset toLocal(vm.Vector3 world) {
     final d = world - origin;
     return Offset(d.dot(xAxis), d.dot(yAxis));
+  }
+
+  /// Dynamically auto-sizes this sketch plane's boundary to enclose all sketch entities & dimensions.
+  void recalculateAutoSize() {
+    if (primitives.isEmpty) return;
+    double pMinX = -40.0, pMaxX = 40.0, pMinY = -40.0, pMaxY = 40.0;
+    for (final prim in primitives) {
+      for (final seg in prim.toLineSegments(curveResolution: 16)) {
+        pMinX = math.min(pMinX, math.min(seg.start.dx, seg.end.dx));
+        pMaxX = math.max(pMaxX, math.max(seg.start.dx, seg.end.dx));
+        pMinY = math.min(pMinY, math.min(seg.start.dy, seg.end.dy));
+        pMaxY = math.max(pMaxY, math.max(seg.start.dy, seg.end.dy));
+      }
+    }
+    const double marginMm = 48.0;
+    final double spanX = (pMaxX - pMinX) + marginMm * 2;
+    final double spanY = (pMaxY - pMinY) + marginMm * 2;
+    final double neededSize = math.max(spanX, spanY);
+    if (neededSize > size) {
+      size = neededSize;
+    }
   }
 
   /// Computes the 4 corners of this plane's visual quad boundary in 3D world space.

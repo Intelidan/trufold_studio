@@ -212,6 +212,8 @@ class _AssemblyOnshapeToolbarState extends State<AssemblyOnshapeToolbar> {
   // ---------------------------------------------------------------------------
   List<Widget> _buildSketchToolbar(BuildContext context, AssemblyStudioViewModel vm, bool isWide) {
     final groups = onshapeSketchGroups;
+    final gSelect = _findGroup(groups, 'sketch_select');
+    final selectItem = _findItem(gSelect, 'select_sketch_entity');
     final gLines = _findGroup(groups, 'lines');
     final gRect = _findGroup(groups, 'rectangles');
     final gCircle = _findGroup(groups, 'circles_and_ellipses');
@@ -229,6 +231,10 @@ class _AssemblyOnshapeToolbarState extends State<AssemblyOnshapeToolbar> {
     final revolveItem = _findItem(g3dBase, 'revolve');
 
     final widgets = <Widget>[
+      // Dedicated 'Select / Deactivate Tool' button (Esc / V)
+      OnshapeToolButton(item: selectItem, viewModel: vm),
+      const OnshapeToolbarDivider(),
+
       // Extrude & Revolve buttons
       OnshapeToolButton(item: extrudeItem, viewModel: vm),
       OnshapeToolButton(item: revolveItem, viewModel: vm),

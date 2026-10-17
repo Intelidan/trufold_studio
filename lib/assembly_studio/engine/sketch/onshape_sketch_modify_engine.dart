@@ -361,4 +361,225 @@ class OnshapeSketchModifyEngine {
 
   static double _distancePointToSegment(Offset p, Offset a, Offset b) =>
       (p - _projectPointOnSegment(p, a, b)).distance;
+
+  /// 8. BREAK POLYGON / CLOSED LOOP (Requirement #3):
+  /// Converts any composite polygon/rectangle into individual CADLineEntity segments and unlocks vertex bonding
+  /// on the selected segment(s) (or entire plane) so the user can freely move or separate segments!
+  static int breakPolygonOrLoop(CADSketchPlane plane, {CADPrimitiveEntity? selectedEntity}) {
+    int brokenCount = 0;
+    if (selectedEntity is CADRectangleEntity ||
+        selectedEntity is CADCenterRectangleEntity ||
+        selectedEntity is CADAlignedRectangleEntity ||
+        selectedEntity is CADRegularPolygonEntity ||
+        selectedEntity is CADPolylineEntity) {
+      plane.primitives.remove(selectedEntity);
+      int idx = 0;
+      for (final seg in selectedEntity!.toLineSegments()) {
+        final lineId = '${selectedEntity.id}_seg_${idx++}';
+        plane.primitives.add(CADLineEntity(
+          id: lineId,
+          start: seg.start,
+          end: seg.end,
+          isConstruction: seg.isConstruction,
+        ));
+        plane.unbondedEntityIds.add(lineId);
+        brokenCount++;
+      }
+      plane.isLoopBonded = false;
+      return brokenCount;
+    }
+
+    decomposeCompositePrimitives(plane);
+    if (selectedEntity != null) {
+      plane.unbondedEntityIds.add(selectedEntity.id);
+      plane.constraints.removeWhere(
+        (c) => c.type == CadConstraintType.coincident && c.entityIds.contains(selectedEntity.id),
+      );
+      plane.isLoopBonded = false;
+      return 1;
+    }
+
+    plane.isLoopBonded = false;
+    for (final p in plane.primitives.whereType<CADLineEntity>()) {
+      plane.unbondedEntityIds.add(p.id);
+      brokenCount++;
+    }
+    plane.constraints.removeWhere((c) => c.type == CadConstraintType.coincident);
+    return brokenCount;
+  }
+
+  /// 9. REJOIN POLYGON / CLOSED LOOP (Requirement #3):
+  /// Snaps nearby open line endpoints together within [snapTolerance] mm, closes any remaining open gap,
+  /// and restores topological vertex bonding (`plane.isLoopBonded = true`) so the polygon acts as one bonded unit!
+  static bool rejoinPolygonSegments(CADSketchPlane plane, {double snapTolerance = 18.0}) {
+    decomposeCompositePrimitives(plane);
+    final lines = plane.primitives.whereType<CADLineEntity>().where((l) => !l.isConstruction).toList();
+    if (lines.length < 2) return false;
+
+    bool snappedAny = false;
+    for (int i = 0; i < lines.length; i++) {
+      for (int j = i + 1; j < lines.length; j++) {
+        final l1 = lines[i];
+        final l2 = lines[j];
+
+        if ((l1.end - l2.start).distance <= snapTolerance) {
+          final mid = (l1.end + l2.start) * 0.5;
+          l1.end = mid;
+          l2.start = mid;
+          snappedAny = true;
+        } else if ((l1.end - l2.end).distance <= snapTolerance) {
+          final mid = (l1.end + l2.end) * 0.5;
+          l1.end = mid;
+          l2.end = mid;
+          snappedAny = true;
+        } else if ((l1.start - l2.start).distance <= snapTolerance) {
+          final mid = (l1.start + l2.start) * 0.5;
+          l1.start = mid;
+          l2.start = mid;
+          snappedAny = true;
+        } else if ((l1.start - l2.end).distance <= snapTolerance) {
+          final mid = (l1.start + l2.end) * 0.5;
+          l1.start = mid;
+          l2.end = mid;
+          snappedAny = true;
+        }
+      }
+    }
+
+    const double connTol = 0.5;
+    final dangling = <(CADLineEntity, bool)>[];
+    for (final l in lines) {
+      bool startConnected = false;
+      bool endConnected = false;
+      for (final other in lines) {
+        if (other.id == l.id) continue;
+        if ((other.start - l.start).distance <= connTol || (other.end - l.start).distance <= connTol) {
+          startConnected = true;
+        }
+        if ((other.start - l.end).distance <= connTol || (other.end - l.end).distance <= connTol) {
+          endConnected = true;
+        }
+      }
+      if (!startConnected) dangling.add((l, true));
+      if (!endConnected) dangling.add((l, false));
+    }
+
+    if (dangling.length == 2) {
+      final d0 = dangling[0];
+      final d1 = dangling[1];
+      final p0 = d0.$2 ? d0.$1.start : d0.$1.end;
+      final p1 = d1.$2 ? d1.$1.start : d1.$1.end;
+      final mid = (p0 + p1) * 0.5;
+      if (d0.$2) {
+        d0.$1.start = mid;
+      } else {
+        d0.$1.end = mid;
+      }
+      if (d1.$2) {
+        d1.$1.start = mid;
+      } else {
+        d1.$1.end = mid;
+      }
+      snappedAny = true;
+    }
+
+    plane.isLoopBonded = true;
+    plane.unbondedEntityIds.clear();
+    return snappedAny || lines.length >= 3;
+  }
+
+  /// 10. TOPOLOGICALLY BONDED VERTEX / SEGMENT DRAG (Requirement #3):
+  /// Moves a line endpoint or entire line segment while propagating the exact vertex displacement
+  /// to all connected line/polyline endpoints so closed polygons & rectangles never break apart!
+  static void dragSegmentOrVertexPreservingBond({
+    required CADSketchPlane plane,
+    required CADPrimitiveEntity entity,
+    required String role,
+    required Offset currLocal,
+    required Offset delta,
+    double connectionTolerance = 0.6,
+  }) {
+    final bool isBonded = plane.isLoopBonded && !plane.unbondedEntityIds.contains(entity.id);
+
+    void propagateVertexMove(Offset oldVertex, Offset newVertex, {String? excludeEntityId}) {
+      if (!isBonded) return;
+      for (final other in plane.primitives) {
+        if (other.id == excludeEntityId || plane.unbondedEntityIds.contains(other.id)) continue;
+        if (other is CADLineEntity) {
+          if ((other.start - oldVertex).distance <= connectionTolerance) {
+            other.start = newVertex;
+          }
+          if ((other.end - oldVertex).distance <= connectionTolerance) {
+            other.end = newVertex;
+          }
+        } else if (other is CADPolylineEntity) {
+          for (int i = 0; i < other.points.length; i++) {
+            if ((other.points[i] - oldVertex).distance <= connectionTolerance) {
+              other.points[i] = newVertex;
+            }
+          }
+        }
+      }
+    }
+
+    if (entity is CADLineEntity) {
+      if (role == 'start') {
+        final oldStart = entity.start;
+        entity.start = currLocal;
+        propagateVertexMove(oldStart, currLocal, excludeEntityId: entity.id);
+      } else if (role == 'end') {
+        final oldEnd = entity.end;
+        entity.end = currLocal;
+        propagateVertexMove(oldEnd, currLocal, excludeEntityId: entity.id);
+      } else {
+        final oldStart = entity.start;
+        final oldEnd = entity.end;
+        final newStart = oldStart + delta;
+        final newEnd = oldEnd + delta;
+        entity.start = newStart;
+        entity.end = newEnd;
+        propagateVertexMove(oldStart, newStart, excludeEntityId: entity.id);
+        propagateVertexMove(oldEnd, newEnd, excludeEntityId: entity.id);
+      }
+    }
+  }
+
+  /// Resizes [line] to [targetLength] while propagating the endpoint shifts to all connected segments
+  /// on [plane] so closed polygons extend/shorten connected sides without breaking their corner bonds!
+  static void resizeLinePreservingPolygonBond(
+    CADSketchPlane plane,
+    CADLineEntity line,
+    double targetLength, {
+    double connectionTolerance = 0.6,
+  }) {
+    final d = line.end - line.start;
+    final currLen = d.distance;
+    if (currLen < 1e-4) return;
+    final unit = d / currLen;
+    final oldStart = line.start;
+    final oldEnd = line.end;
+
+    final mid = (oldStart + oldEnd) * 0.5;
+    final newStart = mid - unit * (targetLength / 2.0);
+    final newEnd = mid + unit * (targetLength / 2.0);
+    line.start = newStart;
+    line.end = newEnd;
+
+    if (!plane.isLoopBonded || plane.unbondedEntityIds.contains(line.id)) return;
+
+    for (final other in plane.primitives) {
+      if (other.id == line.id || plane.unbondedEntityIds.contains(other.id)) continue;
+      if (other is CADLineEntity) {
+        if ((other.start - oldStart).distance <= connectionTolerance) other.start = newStart;
+        if ((other.end - oldStart).distance <= connectionTolerance) other.end = newStart;
+        if ((other.start - oldEnd).distance <= connectionTolerance) other.start = newEnd;
+        if ((other.end - oldEnd).distance <= connectionTolerance) other.end = newEnd;
+      } else if (other is CADPolylineEntity) {
+        for (int i = 0; i < other.points.length; i++) {
+          if ((other.points[i] - oldStart).distance <= connectionTolerance) other.points[i] = newStart;
+          if ((other.points[i] - oldEnd).distance <= connectionTolerance) other.points[i] = newEnd;
+        }
+      }
+    }
+  }
 }

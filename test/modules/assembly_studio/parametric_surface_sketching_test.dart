@@ -957,17 +957,17 @@ void main() {
       expect(solid.centroid.y, closeTo(15.0, 1e-3));
       expect(solid.centroid.z, closeTo(12.5, 1e-3));
 
-      // 2 top triangles + 2 bottom triangles + 8 side wall triangles = 12
-      expect(solid.polygons.length, equals(12));
+      // Top cap (1) + bottom cap (1) + 4 side wall quads = 6
+      expect(solid.polygons.length, equals(6));
 
       // Top cap face normal should align with plane normal +Z
-      final topFaces = solid.polygons.where((p) => p.faceId.startsWith('extrude_top_cap')).toList();
-      expect(topFaces.length, equals(2));
+      final topFaces = solid.polygons.where((p) => p.faceId.contains('top_cap')).toList();
+      expect(topFaces.length, equals(1));
       expect(topFaces.first.normal.z, closeTo(1.0, 1e-4));
 
       // Bottom cap face normal should align with -Z
-      final botFaces = solid.polygons.where((p) => p.faceId.startsWith('extrude_bot_cap')).toList();
-      expect(botFaces.length, equals(2));
+      final botFaces = solid.polygons.where((p) => p.faceId.contains('bot_cap')).toList();
+      expect(botFaces.length, equals(1));
       expect(botFaces.first.normal.z, closeTo(-1.0, 1e-4));
     });
 
@@ -1010,7 +1010,7 @@ void main() {
       );
 
       expect(taperedSolid.boundWidth, greaterThan(40.0));
-      expect(taperedSolid.polygons.length, equals(12));
+      expect(taperedSolid.polygons.length, equals(6));
 
       // Degenerate loop (< 3 points)
       final emptySolid = AssemblyExtrudeEngine.generateExtrudedSolid(
@@ -1041,7 +1041,7 @@ void main() {
       expect(newBodyResult.createdPart, isNotNull);
       expect(newBodyResult.createdPart!.type, equals(AssemblyPartType.customExtrusion));
       expect(newBodyResult.createdPart!.customPolygons, isNotNull);
-      expect(newBodyResult.createdPart!.customPolygons!.length, equals(12));
+      expect(newBodyResult.createdPart!.customPolygons!.length, equals(6));
       expect(vm.doc.parts.contains(newBodyResult.createdPart!), isTrue);
 
       // 2. Join
@@ -1056,7 +1056,8 @@ void main() {
       );
 
       expect(joinResult.isSuccess, isTrue);
-      expect(targetPart.customPolygons!.length, equals(initialPolyCount + 12));
+      expect(targetPart.joinedExtrusionsByPlane[plane.id], isNotNull);
+      expect(targetPart.joinedExtrusionsByPlane[plane.id]!.length, equals(6));
 
       // 3. Cut
       final cutResult = AssemblyExtrudeEngine.executeExtrusion(

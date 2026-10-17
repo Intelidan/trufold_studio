@@ -73,6 +73,7 @@ void main() {
     });
 
     testWidgets('Views Toolbar renders drag handle & centers screen on button click', (tester) async {
+      viewModel.showViewsToolbar = true;
       await tester.binding.setSurfaceSize(const Size(1200, 800));
 
       await tester.pumpWidget(

@@ -596,6 +596,25 @@ final List<OnshapeToolGroup> onshape3dModelingGroups = [
 // ===========================================================================
 final List<OnshapeToolGroup> onshapeSketchGroups = [
   OnshapeToolGroup(
+    id: 'sketch_select',
+    title: 'Select',
+    defaultPrimaryId: 'select_sketch_entity',
+    items: [
+      OnshapeToolItem(
+        id: 'select_sketch_entity',
+        label: 'Select / Deactivate Tool',
+        assetPath: 'assets/icons/onshape/02_sketch_toolbar/07_point_text_project/01_point.svg',
+        shortcut: 'Esc / V',
+        isImplemented: true,
+        isActive: (vm) =>
+            vm.isSketchMode &&
+            (vm.activeSketchTool == 'select_entity' || vm.activeSketchTool == 'select') &&
+            vm.activeConstraintTool == null,
+        onExecute: (vm, ctx) => vm.deactivateSketchToolToSelect(),
+      ),
+    ],
+  ),
+  OnshapeToolGroup(
     id: 'lines',
     title: 'Lines',
     defaultPrimaryId: 'line',
@@ -896,6 +915,22 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         isImplemented: true,
         isActive: (vm) => vm.activeSketchTool == 'sketch_slot' || vm.activeSketchTool == 'rung_slot',
         onExecute: (vm, ctx) => vm.setActiveSketchTool('sketch_slot'),
+      ),
+      OnshapeToolItem(
+        id: 'break_polygon',
+        label: 'Break Polygon Loop',
+        assetPath: 'assets/icons/onshape/02_sketch_toolbar/08_sketch_modify/05_split.svg',
+        isImplemented: true,
+        isActive: (vm) => vm.activeSketchPlane != null && !vm.activeSketchPlane!.isLoopBonded,
+        onExecute: (vm, ctx) => vm.breakSelectedPolygonOrLoop(),
+      ),
+      OnshapeToolItem(
+        id: 'rejoin_polygon',
+        label: 'Rejoin Polygon Loop',
+        assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/01_coincident.svg',
+        isImplemented: true,
+        isActive: (vm) => vm.activeSketchPlane != null && vm.activeSketchPlane!.isLoopBonded,
+        onExecute: (vm, ctx) => vm.rejoinPolygonSegmentsOnActivePlane(),
       ),
     ],
   ),

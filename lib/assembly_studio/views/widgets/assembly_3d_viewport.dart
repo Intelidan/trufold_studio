@@ -180,7 +180,6 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   Offset? _selectionBoxStart;
   Offset? _selectionBoxCurrent;
 
-  // Selection tracking
 
   // VCB Measurements HUD Controller
   final TextEditingController _vcbController = TextEditingController();
@@ -1073,12 +1072,27 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                     vm.finishSketch();
                     return KeyEventResult.handled;
                   }
+                } else if (event.logicalKey == LogicalKeyboardKey.keyV && vm.isSketchMode && !isCtrl && !isAlt) {
+                  vm.deactivateSketchToolToSelect();
+                  setState(() {});
+                  return KeyEventResult.handled;
                 } else if (event.logicalKey == LogicalKeyboardKey.escape) {
                   _isVcbUserTyping = false;
                   bool cancelledActiveAction = false;
                   if (vm.isExtrudeMode) {
                     vm.closeExtrudeDialog();
                     cancelledActiveAction = true;
+                  }
+                  // Requirement #1: In Sketch Mode, pressing Escape first deactivates any active drawing or constraint tool
+                  // back to 'select_entity' (Select Mode) before exiting Sketch Mode on a subsequent Escape!
+                  if (vm.isSketchMode &&
+                      (vm.activeSketchTool != 'select_entity' ||
+                          vm.activeConstraintTool != null ||
+                          vm.sketchInteractiveStartPoint != null ||
+                          vm.sketchPolylinePoints.isNotEmpty)) {
+                    vm.deactivateSketchToolToSelect();
+                    setState(() {});
+                    return KeyEventResult.handled;
                   }
                   if (vm.activeConstraintTool != null) {
                     vm.activeConstraintTool = null;
@@ -2383,22 +2397,30 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   prim.radius = (currLocal - prim.center).distance.clamp(1.0, 5000.0);
                                 }
                               } else if (prim is CADLineEntity) {
-                                if (_draggingSketchPartRole == 'start') {
-                                  prim.start = currLocal;
-                                } else if (_draggingSketchPartRole == 'end') {
-                                  prim.end = currLocal;
-                                } else {
-                                  prim.start += delta;
-                                  prim.end += delta;
-                                }
+                                // Requirement #3: Keep connected polygon/loop segments topologically bonded!
+                                OnshapeSketchModifyEngine.dragSegmentOrVertexPreservingBond(
+                                  plane: plane,
+                                  entity: prim,
+                                  role: _draggingSketchPartRole,
+                                  delta: delta,
+                                  currLocal: currLocal,
+                                );
                               } else if (prim is CADRectangleEntity) {
                                 prim.startPoint += delta;
                               } else if (prim is CADCenterRectangleEntity) {
                                 prim.center += delta;
+                              } else if (prim is CADRegularPolygonEntity) {
+                                prim.center += delta;
+                              } else if (prim is CADSlotEntity) {
+                                prim.startCenter += delta;
+                                prim.endCenter += delta;
                               }
                               vm.solveSketchConstraints();
                               vm.activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(plane);
+                              // Core Parametric Associativity: Live-regenerate attached 3D bodies (New Body, Join, Cut, Bend) as sketch geometry changes!
+                              vm.regenerateActiveSketchDependents();
                               vm.notifyDocChanged();
+                              _rebuildGpuCadModel(force: true);
                               setState(() {});
                             }
                           }
@@ -2674,7 +2696,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                     builder: (context, _) {
                                       final bool useGpu = _isGpuAvailable && _scene != null && _isSceneReady;
                                       return useGpu
-                                          ? RepaintBoundary(child: SceneView(_scene!))
+                                          ? RepaintBoundary(
+                                              child: SceneView(_scene!),
+                                            )
                                           : const RepaintBoundary(child: SizedBox.shrink());
                                     },
                                   ),
@@ -5490,14 +5514,15 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
       );
 
       final surfaceHit = _findFrontmostRaycastHit(localPos, size, mesh);
-      if (snappedPt != null) {
+      if (hitPart != null) {
+        // Direct click on entity body: pivot at entity position for in-place rotation
+        centerPt = hitPart.position;
+      } else if (snappedPt != null) {
         // 1. User clicked a corner, midpoint, or hole center snap point: pivot exactly there!
         centerPt = snappedPt;
       } else if (surfaceHit != null) {
         // 2. User clicked directly on a 3D face: pivot at the exact clicked 3D surface point!
         centerPt = surfaceHit.hitPoint;
-      } else if (hitPart != null) {
-        centerPt = hitPart.position;
       } else {
         // 3. Work Plane Intersection in Empty Area
         centerPt = _rotateHoverWorldPos ?? _intersectPlane(localPos, size, mesh, activeAxis, targetPart?.position ?? const CadPoint3D(0, 0, 0));

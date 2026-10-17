@@ -226,6 +226,102 @@ class _AssemblyOnshapeSketchDialogState extends State<AssemblyOnshapeSketchDialo
 
                   const SizedBox(height: 10),
 
+                  // Select / Deactivate Tool + Polygon Bond Status Bar (Requirements #1 & #3)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: vm.deactivateSketchToolToSelect,
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4.5),
+                              decoration: BoxDecoration(
+                                color: (vm.activeSketchTool == 'select_entity' && vm.activeConstraintTool == null)
+                                    ? const Color(0xFFE0F2FE)
+                                    : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: (vm.activeSketchTool == 'select_entity' && vm.activeConstraintTool == null)
+                                      ? const Color(0xFF0284C7)
+                                      : const Color(0xFFCBD5E1),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.near_me_rounded,
+                                    size: 11,
+                                    color: (vm.activeSketchTool == 'select_entity' && vm.activeConstraintTool == null)
+                                        ? const Color(0xFF0284C7)
+                                        : const Color(0xFF475569),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      (vm.activeSketchTool == 'select_entity' && vm.activeConstraintTool == null)
+                                          ? 'Select Mode (Esc)'
+                                          : 'End Tool (${vm.activeConstraintTool?.label ?? vm.activeSketchTool})',
+                                      style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: (plane?.isLoopBonded ?? true)
+                              ? 'Break Polygon Loop into Independent Segments'
+                              : 'Rejoin & Bond Polygon Loop',
+                          child: InkWell(
+                            onTap: () {
+                              if (plane?.isLoopBonded ?? true) {
+                                vm.breakSelectedPolygonOrLoop();
+                              } else {
+                                vm.rejoinPolygonSegmentsOnActivePlane();
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4.5),
+                              decoration: BoxDecoration(
+                                color: (plane?.isLoopBonded ?? true) ? const Color(0xFFE0F2FE) : const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: (plane?.isLoopBonded ?? true) ? const Color(0xFF0284C7) : const Color(0xFFF59E0B),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    (plane?.isLoopBonded ?? true) ? Icons.link_rounded : Icons.link_off_rounded,
+                                    size: 11,
+                                    color: (plane?.isLoopBonded ?? true) ? const Color(0xFF0284C7) : const Color(0xFFB45309),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    (plane?.isLoopBonded ?? true) ? 'Bonded' : 'Rejoin',
+                                    style: TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: (plane?.isLoopBonded ?? true) ? const Color(0xFF0284C7) : const Color(0xFFB45309),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                   // Checkboxes: Disable imprinting, Show constraints, Show expressions, Show errors
                   _buildCheckboxRow(
                     label: 'Disable imprinting',

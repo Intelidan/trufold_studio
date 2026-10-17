@@ -41,7 +41,7 @@ void main() {
       expect(createdDim.pointA?.x, equals(cut.p1.x));
       expect(createdDim.pointB?.x, equals(cut.p2.x));
       expect(createdDim.measuredValue, closeTo(100.0, 0.01));
-      expect(vm.toolMode, equals(StudioToolMode.select));
+      expect(vm.toolMode, equals(StudioToolMode.addDimension));
     });
 
     test('2. commitInteractiveDimension adds dimension and drives geometry', () {

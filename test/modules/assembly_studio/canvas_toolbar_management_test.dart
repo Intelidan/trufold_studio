@@ -13,6 +13,7 @@ void main() {
     testWidgets('1. Joint Style Toolbar supports minimize, expand, close, and drag', (tester) async {
       final vm = AssemblyStudioViewModel();
       vm.activeToolMode = SketchUpToolMode.weld;
+      vm.showJointStyleToolbar = true;
 
       Offset dragOffset = const Offset(60, 98);
 
@@ -73,6 +74,7 @@ void main() {
 
     testWidgets('2. Views Toolbar supports minimize, expand, and close', (tester) async {
       final vm = AssemblyStudioViewModel();
+      vm.showViewsToolbar = true;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -115,6 +117,7 @@ void main() {
 
     testWidgets('3. Quality HUD supports minimizing bottom card and defect sidebar independently', (tester) async {
       final vm = AssemblyStudioViewModel();
+      vm.showQualityHud = true;
       vm.latestWeldEvaluation = const WeldScoreResult(
         speedConsistency: 85.0,
         profileUniformity: 90.0,
@@ -164,6 +167,8 @@ void main() {
     testWidgets('4. Clean Canvas Mode hides floating toolbars and provides 1-tap restore', (tester) async {
       final vm = AssemblyStudioViewModel();
       vm.activeToolMode = SketchUpToolMode.weld;
+      vm.showJointStyleToolbar = true;
+      vm.showViewsToolbar = true;
 
       await tester.pumpWidget(
         MaterialApp(

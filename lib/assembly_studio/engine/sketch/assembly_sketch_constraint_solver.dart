@@ -523,9 +523,15 @@ class AssemblySketchConstraintSolver {
         }
         final dir2 = Offset(math.cos(targetA2), math.sin(targetA2));
         if (pivotIsStart) {
-          ent2.end = pivot + dir2 * len2;
+          final oldEnd = ent2.end;
+          final newEnd = pivot + dir2 * len2;
+          ent2.end = newEnd;
+          _propagateBondedVertexShift(entityMap, ent2.id, oldEnd, newEnd);
         } else {
-          ent2.start = pivot - dir2 * len2;
+          final oldStart = ent2.start;
+          final newStart = pivot - dir2 * len2;
+          ent2.start = newStart;
+          _propagateBondedVertexShift(entityMap, ent2.id, oldStart, newStart);
         }
         return true;
       }
@@ -568,8 +574,12 @@ class AssemblySketchConstraintSolver {
         final signedDist = (mid2.dx - ent.start.dx) * unitN.dx + (mid2.dy - ent.start.dy) * unitN.dy;
         final sign = signedDist >= 0 ? 1.0 : -1.0;
         final shift = unitN * (sign * val - signedDist);
-        ent2.start = ent2.start + shift;
-        ent2.end = ent2.end + shift;
+        final oldS = ent2.start;
+        final oldE = ent2.end;
+        ent2.start = oldS + shift;
+        ent2.end = oldE + shift;
+        _propagateBondedVertexShift(entityMap, ent2.id, oldS, ent2.start);
+        _propagateBondedVertexShift(entityMap, ent2.id, oldE, ent2.end);
         return true;
       } else {
         final p1 = _getEntityCenterOrAnchor(ent);
@@ -622,9 +632,15 @@ class AssemblySketchConstraintSolver {
         final currLen = d.distance;
         if (currLen > 1e-4) {
           final unit = d / currLen;
-          final mid = (ent.start + ent.end) * 0.5;
-          ent.start = mid - unit * (val / 2.0);
-          ent.end = mid + unit * (val / 2.0);
+          final oldStart = ent.start;
+          final oldEnd = ent.end;
+          final mid = (oldStart + oldEnd) * 0.5;
+          final newStart = mid - unit * (val / 2.0);
+          final newEnd = mid + unit * (val / 2.0);
+          ent.start = newStart;
+          ent.end = newEnd;
+          _propagateBondedVertexShift(entityMap, ent.id, oldStart, newStart);
+          _propagateBondedVertexShift(entityMap, ent.id, oldEnd, newEnd);
           return true;
         }
       } else if (ent is CADRectangleEntity) {
@@ -697,6 +713,30 @@ class AssemblySketchConstraintSolver {
         break;
       default:
         break;
+    }
+  }
+
+
+  /// Propagates vertex movement of a line endpoint to any connected line/polyline endpoints
+  /// so closed polygons remain watertight when a side's length or angle dimension is edited!
+  static void _propagateBondedVertexShift(
+    Map<String, CADPrimitiveEntity> entityMap,
+    String sourceId,
+    Offset oldPt,
+    Offset newPt,
+  ) {
+    const double tol = 0.6;
+    if ((oldPt - newPt).distance < 1e-5) return;
+    for (final other in entityMap.values) {
+      if (other.id == sourceId) continue;
+      if (other is CADLineEntity) {
+        if ((other.start - oldPt).distance <= tol) other.start = newPt;
+        if ((other.end - oldPt).distance <= tol) other.end = newPt;
+      } else if (other is CADPolylineEntity) {
+        for (int i = 0; i < other.points.length; i++) {
+          if ((other.points[i] - oldPt).distance <= tol) other.points[i] = newPt;
+        }
+      }
     }
   }
 

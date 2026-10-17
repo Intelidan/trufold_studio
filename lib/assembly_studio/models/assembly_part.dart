@@ -88,6 +88,9 @@ class AssemblySketchFeature {
   bool isSurfaceImpress; // When true, embosses/impresses on surface without void punching
   double cutDepthMm; // Depth for blind cut
   List<Offset>? customPolygonPoints; // Vertex offsets relative to localCenter for arbitrary loops
+  List<CadPoint3D>? customLocalHole3D;
+  CadPoint3D? cutNormalLocal;
+  bool isConstruction;
   String? planeId; // Bound sketch plane ID
 
   AssemblySketchFeature({
@@ -107,6 +110,9 @@ class AssemblySketchFeature {
     this.isSurfaceImpress = false,
     this.cutDepthMm = 5.0,
     this.customPolygonPoints,
+    this.customLocalHole3D,
+    this.cutNormalLocal,
+    this.isConstruction = false,
     this.planeId,
   });
 
@@ -127,6 +133,9 @@ class AssemblySketchFeature {
     bool? isSurfaceImpress,
     double? cutDepthMm,
     List<Offset>? customPolygonPoints,
+    List<CadPoint3D>? customLocalHole3D,
+    CadPoint3D? cutNormalLocal,
+    bool? isConstruction,
     String? planeId,
   }) {
     return AssemblySketchFeature(
@@ -146,6 +155,9 @@ class AssemblySketchFeature {
       isSurfaceImpress: isSurfaceImpress ?? this.isSurfaceImpress,
       cutDepthMm: cutDepthMm ?? this.cutDepthMm,
       customPolygonPoints: customPolygonPoints ?? (this.customPolygonPoints != null ? List.from(this.customPolygonPoints!) : null),
+      customLocalHole3D: customLocalHole3D ?? (this.customLocalHole3D != null ? List.from(this.customLocalHole3D!) : null),
+      cutNormalLocal: cutNormalLocal ?? this.cutNormalLocal,
+      isConstruction: isConstruction ?? this.isConstruction,
       planeId: planeId ?? this.planeId,
     );
   }
@@ -475,6 +487,8 @@ class AssemblyPart {
   String? groupName; // Virtual group name (e.g. 'Rung Group 1', 'Main Frame')
   String? componentDefinitionId; // Shared definition ID for instanced components (SketchUp Component paradigm)
   List<CadFoldedPolygon3D>? customPolygons; // Custom 3D extruded/modeled polygons
+  String? sourceSketchPlaneId; // Sketch plane that created this extruded body
+  Map<String, List<CadFoldedPolygon3D>> joinedExtrusionsByPlane; // Plane ID -> joined extruded polygons
 
   bool get isComponentInstance => componentDefinitionId != null;
 
@@ -506,7 +520,10 @@ class AssemblyPart {
     this.groupName,
     this.componentDefinitionId,
     this.customPolygons,
-  }) : segments = segments ?? [],
+    this.sourceSketchPlaneId,
+    Map<String, List<CadFoldedPolygon3D>>? joinedExtrusionsByPlane,
+  }) : joinedExtrusionsByPlane = joinedExtrusionsByPlane ?? {},
+       segments = segments ?? [],
        sketches = sketches ?? [],
        weldedToPartIds = weldedToPartIds ?? [],
        magneticSpots = magneticSpots ?? [],
@@ -542,6 +559,8 @@ class AssemblyPart {
     String? componentDefinitionId,
     bool clearComponent = false,
     List<CadFoldedPolygon3D>? customPolygons,
+    String? sourceSketchPlaneId,
+    Map<String, List<CadFoldedPolygon3D>>? joinedExtrusionsByPlane,
   }) {
     return AssemblyPart(
       id: id ?? this.id,
@@ -571,6 +590,8 @@ class AssemblyPart {
       groupName: clearGroup ? null : (groupName ?? this.groupName),
       componentDefinitionId: clearComponent ? null : (componentDefinitionId ?? this.componentDefinitionId),
       customPolygons: customPolygons ?? (this.customPolygons != null ? List.from(this.customPolygons!) : null),
+      sourceSketchPlaneId: sourceSketchPlaneId ?? this.sourceSketchPlaneId,
+      joinedExtrusionsByPlane: joinedExtrusionsByPlane ?? Map.from(this.joinedExtrusionsByPlane),
     );
   }
 
@@ -654,7 +675,22 @@ class AssemblyPart {
   /// Generates the raw constituent 3D polygons for this part in Local coordinates.
   void _buildLocalPolygons(List<CadFoldedPolygon3D> polys, List<CadFoldedPolygon3D> thickPolys) {
     if (customPolygons != null && customPolygons!.isNotEmpty) {
-      polys.addAll(customPolygons!);
+      final clonedBase = customPolygons!
+          .map((p) => CadFoldedPolygon3D(
+                faceId: p.faceId,
+                vertices: List.from(p.vertices),
+                normal: p.normal,
+                color: p.color,
+                holes: p.holes.map((h) => List<CadPoint3D>.from(h)).toList(),
+                boundaryLines: p.boundaryLines.map((b) => List<CadPoint3D>.from(b)).toList(),
+                drawWireframe: p.drawWireframe,
+              ))
+          .toList();
+      _applySketchesToCustomPolygons(clonedBase, thickPolys);
+      polys.addAll(clonedBase);
+      for (final joinedList in joinedExtrusionsByPlane.values) {
+        polys.addAll(joinedList);
+      }
       return;
     }
     switch (type) {
@@ -717,6 +753,11 @@ class AssemblyPart {
         break;
       case AssemblyPartType.customExtrusion:
         break;
+    }
+
+    // Append any non-destructive parametric Join extrusions attached to this part:
+    for (final joinedList in joinedExtrusionsByPlane.values) {
+      polys.addAll(joinedList);
     }
   }
 
@@ -1207,6 +1248,48 @@ class AssemblyPart {
   }
 
   void _buildStraightRailPolygons(List<CadFoldedPolygon3D> polys, List<CadFoldedPolygon3D> thickPolys) {
+    final activeBends = sketches
+        .where((s) => s.featureType == 'bend_line' && s.angleDeg.abs() > 0.1)
+        .toList()
+      ..sort((a, b) => a.localCenter.x.compareTo(b.localCenter.x));
+    if (segments.isEmpty && activeBends.isNotEmpty) {
+      final synthSegs = <RailSegmentDefinition>[];
+      double prevX = 0.0;
+      double prevBendDeg = 0.0;
+      int segIdx = 0;
+      for (final b in activeBends) {
+        final bx = b.localCenter.x.clamp(20.0, length - 20.0);
+        final segLen = bx - prevX;
+        if (segLen >= 15.0) {
+          synthSegs.add(RailSegmentDefinition(
+            id: 'bend_seg_${segIdx++}',
+            length: segLen,
+            bendAngleDeg: prevBendDeg,
+          ));
+          prevX = bx;
+          prevBendDeg = b.angleDeg;
+        }
+      }
+      final remLen = length - prevX;
+      if (remLen >= 10.0) {
+        synthSegs.add(RailSegmentDefinition(
+          id: 'bend_seg_${segIdx++}',
+          length: remLen,
+          bendAngleDeg: prevBendDeg,
+        ));
+      }
+      if (synthSegs.length >= 2) {
+        final savedSegs = List<RailSegmentDefinition>.from(segments);
+        segments
+          ..clear()
+          ..addAll(synthSegs);
+        _buildBentRailPolygons(polys, thickPolys);
+        segments
+          ..clear()
+          ..addAll(savedSegs);
+        return;
+      }
+    }
     // C-channel rail along X axis from X = 0 to X = length, web height H, flange F (default 20mm)
     final H = height;
     final F = flangeWidth;
@@ -2377,6 +2460,81 @@ class AssemblyPart {
       }
     }
     return flgHoles;
+  }
+
+
+  /// Applies parametric sketch cuts, pass-through holes, and blind pockets onto arbitrary extruded New Body parts (`customPolygons`).
+  void _applySketchesToCustomPolygons(
+    List<CadFoldedPolygon3D> basePolys,
+    List<CadFoldedPolygon3D> thickPolys,
+  ) {
+    for (final sk in sketches) {
+      if (sk.isConstruction || sk.featureType == 'bend_line') continue;
+      List<CadPoint3D>? loop3d = sk.customLocalHole3D;
+      if (loop3d == null || loop3d.length < 3) continue;
+
+      CadFoldedPolygon3D? entryPoly = basePolys.where((p) => p.faceId == sk.targetFace).firstOrNull;
+      entryPoly ??= basePolys.where((p) => p.faceId.endsWith('_top') || p.faceId.endsWith('_cap_top')).firstOrNull;
+      if (entryPoly == null && basePolys.isNotEmpty) {
+        entryPoly = basePolys.first;
+      }
+      if (entryPoly == null || entryPoly.vertices.length < 3) continue;
+
+      final n = entryPoly.normal;
+      final lenN = math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+      if (lenN < 1e-6) continue;
+      final unitN = CadPoint3D(n.x / lenN, n.y / lenN, n.z / lenN);
+      final inwardN = CadPoint3D(-unitN.x, -unitN.y, -unitN.z);
+
+      final p0 = entryPoly.vertices.first;
+      final projectedEntryHole = loop3d.map((pt) {
+        final d = (pt.x - p0.x) * unitN.x + (pt.y - p0.y) * unitN.y + (pt.z - p0.z) * unitN.z;
+        return CadPoint3D(pt.x - unitN.x * d, pt.y - unitN.y * d, pt.z - unitN.z * d);
+      }).toList();
+      entryPoly.holes.add(projectedEntryHole);
+
+      CadFoldedPolygon3D? exitPoly;
+      double bodyDepth = sk.cutDepthMm > 0 ? sk.cutDepthMm : thickness;
+      for (final cand in basePolys) {
+        if (cand == entryPoly || cand.vertices.length < 3) continue;
+        final cn = cand.normal;
+        final cLen = math.sqrt(cn.x * cn.x + cn.y * cn.y + cn.z * cn.z);
+        if (cLen < 1e-6) continue;
+        final dot = (cn.x / cLen) * unitN.x + (cn.y / cLen) * unitN.y + (cn.z / cLen) * unitN.z;
+        if (dot < -0.92) {
+          final cp0 = cand.vertices.first;
+          final dist = ((p0.x - cp0.x) * unitN.x + (p0.y - cp0.y) * unitN.y + (p0.z - cp0.z) * unitN.z).abs();
+          if (dist > 0.1) {
+            exitPoly = cand;
+            bodyDepth = dist;
+            break;
+          }
+        }
+      }
+
+      final isThru = sk.isPassThrough || sk.cutDepthMm >= bodyDepth - 0.05;
+      final effectiveDepth = isThru ? bodyDepth : math.min(sk.cutDepthMm, bodyDepth);
+
+      if (isThru && exitPoly != null) {
+        final exitHole = projectedEntryHole
+            .map((pt) => CadPoint3D(
+                  pt.x + inwardN.x * bodyDepth,
+                  pt.y + inwardN.y * bodyDepth,
+                  pt.z + inwardN.z * bodyDepth,
+                ))
+            .toList();
+        exitPoly.holes.add(exitHole);
+      }
+
+      _addHoleBoreWalls(
+        thickPolys,
+        [projectedEntryHole],
+        inwardN,
+        bodyDepth,
+        holeDepths: [effectiveDepth],
+        isBlindList: [!isThru],
+      );
+    }
   }
 
   void _addHoleBoreWalls(

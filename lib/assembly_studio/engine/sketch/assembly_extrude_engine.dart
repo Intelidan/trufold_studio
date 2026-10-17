@@ -1,5 +1,5 @@
 // Assembly Extrude Engine & 3D Feature Solid Generator
-// TruFold Assembly Studio - Phase 5 Feature Extrusion & Boolean Engine
+// TruFold Assembly Studio - Phase 5 Feature Extrusion & Parametric Associativity Engine
 // Strictly follows MVVM Architecture
 
 import 'dart:math' as math;
@@ -7,10 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math.dart' as vm_math;
 
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
-import 'package:trufold_studio/sketch_draft_files/cad_parameter_engine/cad_models.dart';
-import 'package:trufold_studio/sketch_draft_files/math_and_processing/cad_tessellator.dart';
 import 'package:trufold_studio/assembly_studio/models/assembly_document.dart';
 import 'package:trufold_studio/assembly_studio/models/assembly_part.dart';
+import 'package:trufold_studio/assembly_studio/engine/sketch/assembly_surface_sketch_engine.dart';
 
 /// Boolean operation type for 3D extrusion features.
 enum AssemblyExtrudeOperation {
@@ -152,14 +151,84 @@ class AssemblyExtrudeResult {
   });
 }
 
-/// Mathematical core engine for 3D extrusion, solid face construction, and boolean operations.
+/// Mathematical core engine for 3D extrusion, solid face construction, boolean operations,
+/// and live parametric sketch-to-body regeneration.
 class AssemblyExtrudeEngine {
-  /// Generates watertight 3D solid mesh polygons by extruding 2D [profilePoints] from [plane].
+  /// Separates multiple closed loops on a sketch plane into outer boundary loops and nested interior hole loops
+  /// (e.g., Ø12 inner hole inside Ø33 outer circle in image_41a6fb.png!).
+  static ({List<List<Offset>> outerLoops, Map<int, List<List<Offset>>> holesByOuterIndex}) classifyOuterAndHoleLoops(
+    List<List<Offset>> rawLoops,
+  ) {
+    final cleaned = <List<Offset>>[];
+    for (final loop in rawLoops) {
+      if (loop.length < 3) continue;
+      final copy = List<Offset>.from(loop);
+      if (copy.length > 3 && (copy.first - copy.last).distance <= 1e-3) {
+        copy.removeLast();
+      }
+      if (copy.length >= 3) cleaned.add(copy);
+    }
+    if (cleaned.length <= 1) {
+      return (outerLoops: cleaned, holesByOuterIndex: const {});
+    }
+
+    cleaned.sort((a, b) => _polygonAreaAbs(b).compareTo(_polygonAreaAbs(a)));
+
+    final outerLoops = <List<Offset>>[];
+    final holesByOuter = <int, List<List<Offset>>>{};
+
+    for (final candidate in cleaned) {
+      int? parentIdx;
+      for (int i = 0; i < outerLoops.length; i++) {
+        if (_isPointInPolygon(candidate.first, outerLoops[i])) {
+          parentIdx = i;
+          break;
+        }
+      }
+      if (parentIdx != null) {
+        holesByOuter.putIfAbsent(parentIdx, () => []).add(candidate);
+      } else {
+        outerLoops.add(candidate);
+      }
+    }
+
+    return (outerLoops: outerLoops, holesByOuterIndex: holesByOuter);
+  }
+
+  static double _polygonAreaAbs(List<Offset> poly) {
+    double area = 0.0;
+    for (int i = 0; i < poly.length; i++) {
+      final p1 = poly[i];
+      final p2 = poly[(i + 1) % poly.length];
+      area += (p1.dx * p2.dy - p2.dx * p1.dy);
+    }
+    return area.abs() * 0.5;
+  }
+
+  static bool _isPointInPolygon(Offset pt, List<Offset> polygon) {
+    bool inside = false;
+    int j = polygon.length - 1;
+    for (int i = 0; i < polygon.length; j = i++) {
+      if (((polygon[i].dy > pt.dy) != (polygon[j].dy > pt.dy)) &&
+          (pt.dx <
+              (polygon[j].dx - polygon[i].dx) *
+                      (pt.dy - polygon[i].dy) /
+                      ((polygon[j].dy - polygon[i].dy) == 0 ? 1e-9 : (polygon[j].dy - polygon[i].dy)) +
+                  polygon[i].dx)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  /// Generates watertight 3D solid mesh polygons by extruding 2D [profilePoints] (and optional [interiorHoleLoops]) from [plane].
   static ExtrudedSolidMesh generateExtrudedSolid({
     required CADSketchPlane plane,
     required List<Offset> profilePoints,
+    List<List<Offset>> interiorHoleLoops = const [],
     required AssemblyExtrudeParams params,
-    Color color = const Color(0xFF64748B),
+    Color color = const Color(0xFF6C9DC6),
+    String facePrefix = 'extrude',
   }) {
     if (profilePoints.length < 3) {
       return const ExtrudedSolidMesh(
@@ -172,7 +241,6 @@ class AssemblyExtrudeEngine {
       );
     }
 
-    // Clean vertices: remove duplicate closing vertex if present
     final loop = List<Offset>.from(profilePoints);
     if ((loop.first - loop.last).distance < 0.001) {
       loop.removeLast();
@@ -208,6 +276,12 @@ class AssemblyExtrudeEngine {
         break;
     }
 
+    if (d0 > d1) {
+      final tmp = d0;
+      d0 = d1;
+      d1 = tmp;
+    }
+
     // 2. Compute 2D centroid and area via Shoelace formula
     double area2d = 0.0;
     double cx2d = 0.0;
@@ -221,9 +295,16 @@ class AssemblyExtrudeEngine {
       cy2d += (loop[i].dy + loop[j].dy) * cross;
     }
     area2d = area2d / 2.0;
+    if (area2d < 0) {
+      final rev = loop.reversed.toList();
+      loop
+        ..clear()
+        ..addAll(rev);
+      area2d = -area2d;
+    }
     if (area2d.abs() > 1e-5) {
-      cx2d = cx2d / (6.0 * area2d);
-      cy2d = cy2d / (6.0 * area2d);
+      cx2d = cx2d.abs() / (6.0 * area2d.abs());
+      cy2d = cy2d.abs() / (6.0 * area2d.abs());
     } else {
       cx2d = loop.map((p) => p.dx).reduce((a, b) => a + b) / n;
       cy2d = loop.map((p) => p.dy).reduce((a, b) => a + b) / n;
@@ -259,49 +340,55 @@ class AssemblyExtrudeEngine {
     final bot3d = bot2d.map((p) => to3D(p, d0)).toList();
     final top3d = top2d.map((p) => to3D(p, d1)).toList();
 
+    final List<List<CadPoint3D>> botHoles3d = [];
+    final List<List<CadPoint3D>> topHoles3d = [];
+    for (final hLoop in interiorHoleLoops) {
+      final cleanH = List<Offset>.from(hLoop);
+      if (cleanH.length > 3 && (cleanH.first - cleanH.last).distance < 1e-3) {
+        cleanH.removeLast();
+      }
+      if (cleanH.length >= 3) {
+        botHoles3d.add(cleanH.map((p) => to3D(p, d0)).toList());
+        topHoles3d.add(cleanH.map((p) => to3D(p, d1)).toList());
+      }
+    }
+
     final polygons = <CadFoldedPolygon3D>[];
-
-    // 5. Build Top Cap (Ear-clipping triangulation)
-    var topIndices = CADTessellator.tessellatePolygon(top2d);
-    if (topIndices.isEmpty) {
-      topIndices = CADTessellator.tessellatePolygon(top2d.reversed.toList());
-    }
     final topNorm = CadPoint3D(normal.x, normal.y, normal.z);
-    for (int t = 0; t + 2 < topIndices.length; t += 3) {
-      final i0 = topIndices[t];
-      final i1 = topIndices[t + 1];
-      final i2 = topIndices[t + 2];
-      polygons.add(
-        CadFoldedPolygon3D(
-          faceId: 'extrude_top_cap_$t',
-          vertices: [top3d[i0], top3d[i1], top3d[i2]],
-          normal: topNorm,
-          color: color,
-        ),
-      );
-    }
-
-    // 6. Build Bottom Cap (Reversed winding, normal pointing -normal)
-    var botIndices = CADTessellator.tessellatePolygon(bot2d.reversed.toList());
-    if (botIndices.isEmpty) {
-      botIndices = CADTessellator.tessellatePolygon(bot2d);
-    }
     final botNorm = CadPoint3D(-normal.x, -normal.y, -normal.z);
-    for (int t = 0; t + 2 < botIndices.length; t += 3) {
-      final i0 = botIndices[t];
-      final i1 = botIndices[t + 1];
-      final i2 = botIndices[t + 2];
-      polygons.add(
-        CadFoldedPolygon3D(
-          faceId: 'extrude_bot_cap_$t',
-          vertices: [bot3d[i0], bot3d[i1], bot3d[i2]],
-          normal: botNorm,
-          color: color,
-        ),
-      );
-    }
 
-    // 7. Build Side Wall Quads (2 Triangles per edge)
+    // 5. Single Coplanar Top & Bottom Cap Polygons with interior holes (eliminates diagonal triangulation cracks!)
+    polygons.add(
+      CadFoldedPolygon3D(
+        faceId: '${facePrefix}_top_cap',
+        vertices: top3d,
+        normal: topNorm,
+        color: color,
+        holes: topHoles3d,
+        boundaryLines: [
+          [...top3d, top3d.first],
+        ],
+        drawWireframe: true,
+      ),
+    );
+
+    final bot3dReversed = bot3d.reversed.toList();
+    polygons.add(
+      CadFoldedPolygon3D(
+        faceId: '${facePrefix}_bot_cap',
+        vertices: bot3dReversed,
+        normal: botNorm,
+        color: color,
+        holes: botHoles3d,
+        boundaryLines: [
+          [...bot3dReversed, bot3dReversed.first],
+        ],
+        drawWireframe: true,
+      ),
+    );
+
+    // 6. Side Wall 4-Vertex Quads (avoids diagonal triangle seam lines on rectangular/polygonal extrusions!)
+    final bool isSmoothCurve = n >= 24;
     for (int i = 0; i < n; i++) {
       final j = (i + 1) % n;
       final pBot1 = bot3d[i];
@@ -309,31 +396,47 @@ class AssemblyExtrudeEngine {
       final pTop2 = top3d[j];
       final pTop1 = top3d[i];
 
-      // Side normal calculation
       final vEdge = vm_math.Vector3(pBot2.x - pBot1.x, pBot2.y - pBot1.y, pBot2.z - pBot1.z);
       final vUp = vm_math.Vector3(pTop1.x - pBot1.x, pTop1.y - pBot1.y, pTop1.z - pBot1.z);
       final sideNormalVec = vEdge.cross(vUp).normalized();
       final sideNorm = CadPoint3D(sideNormalVec.x, sideNormalVec.y, sideNormalVec.z);
 
-      // Triangle 1: pBot1 -> pBot2 -> pTop2
       polygons.add(
         CadFoldedPolygon3D(
-          faceId: 'extrude_wall_${i}_a',
-          vertices: [pBot1, pBot2, pTop2],
+          faceId: isSmoothCurve ? 'BORE_${facePrefix}_wall_$i' : '${facePrefix}_wall_$i',
+          vertices: [pBot1, pBot2, pTop2, pTop1],
           normal: sideNorm,
           color: color,
+          drawWireframe: !isSmoothCurve,
         ),
       );
+    }
 
-      // Triangle 2: pBot1 -> pTop2 -> pTop1
-      polygons.add(
-        CadFoldedPolygon3D(
-          faceId: 'extrude_wall_${i}_b',
-          vertices: [pBot1, pTop2, pTop1],
-          normal: sideNorm,
-          color: color,
-        ),
-      );
+    // 7. Interior Hole Bore Walls (e.g., Ø12 hole inside Ø33 boss in image_41a6fb.png)
+    for (int hIdx = 0; hIdx < botHoles3d.length; hIdx++) {
+      final hBot = botHoles3d[hIdx];
+      final hTop = topHoles3d[hIdx];
+      final hn = hBot.length;
+      for (int i = 0; i < hn; i++) {
+        final nextI = (i + 1) % hn;
+        final pB1 = hBot[i];
+        final pB2 = hBot[nextI];
+        final pT2 = hTop[nextI];
+        final pT1 = hTop[i];
+
+        final vEdge = vm_math.Vector3(pB2.x - pB1.x, pB2.y - pB1.y, pB2.z - pB1.z);
+        final vUp = vm_math.Vector3(pT1.x - pB1.x, pT1.y - pB1.y, pT1.z - pB1.z);
+        final inwardNormVec = vUp.cross(vEdge).normalized();
+        polygons.add(
+          CadFoldedPolygon3D(
+            faceId: 'BORE_${facePrefix}_hole_${hIdx}_$i',
+            vertices: [pB1, pT1, pT2, pB2],
+            normal: CadPoint3D(inwardNormVec.x, inwardNormVec.y, inwardNormVec.z),
+            color: color,
+            drawWireframe: false,
+          ),
+        );
+      }
     }
 
     // 8. Compute Bounding Box, Centroid, and Volume
@@ -374,20 +477,25 @@ class AssemblyExtrudeEngine {
     );
   }
 
-  /// Executes extrusion and commits boolean solid operation (New Body, Join, Cut, Intersect) into the document.
+  /// Executes extrusion and commits boolean solid operation (New Body, Join, Cut, Intersect) into the document,
+  /// registering a persistent `CADDependentFeatureLink` on `plane.dependentFeatures` so any subsequent edit to `plane`
+  /// automatically updates the affected old and new 3D bodies!
   static AssemblyExtrudeResult executeExtrusion({
     required AssemblyDocument doc,
     required CADSketchPlane plane,
     required List<Offset> profilePoints,
+    List<List<Offset>> interiorHoleLoops = const [],
     required AssemblyExtrudeParams params,
     AssemblyPart? targetPart,
-    Color partColor = const Color(0xFF64748B),
+    Color partColor = const Color(0xFF6C9DC6),
   }) {
     final solidMesh = generateExtrudedSolid(
       plane: plane,
       profilePoints: profilePoints,
+      interiorHoleLoops: interiorHoleLoops,
       params: params,
       color: partColor,
+      facePrefix: 'extrude_${plane.id}',
     );
 
     if (solidMesh.isEmpty) {
@@ -397,22 +505,62 @@ class AssemblyExtrudeEngine {
       );
     }
 
+    final String linkId = 'dep_${plane.id}_${params.operation.name}_${targetPart?.id ?? "new"}';
+
     switch (params.operation) {
       case AssemblyExtrudeOperation.newBody:
+        // If this sketch plane already created a New Body previously, update that existing body in place!
+        final existingLink = plane.dependentFeatures.where((d) => d.operationType == 'newBody').firstOrNull;
+        final existingBody = existingLink != null
+            ? doc.parts.where((p) => p.id == (existingLink.createdPartId ?? existingLink.targetPartId)).firstOrNull
+            : null;
+
+        if (existingBody != null) {
+          existingBody.customPolygons = _transformWorldPolysToPartLocal(solidMesh.polygons, existingBody);
+          existingBody.length = solidMesh.boundWidth > 0 ? solidMesh.boundWidth : 50.0;
+          existingBody.height = solidMesh.boundLength > 0 ? solidMesh.boundLength : 50.0;
+          existingBody.thickness = params.distanceMm.abs();
+          existingBody.invalidateMeshCache();
+          doc.selectedPartId = existingBody.id;
+          return AssemblyExtrudeResult(
+            isSuccess: true,
+            message: 'Updated Extruded Body "${existingBody.name}" (${params.distanceMm.toStringAsFixed(1)} mm)',
+            mesh: solidMesh,
+            createdPart: existingBody,
+          );
+        }
+
         final nextNum = doc.parts.where((p) => p.type == AssemblyPartType.customExtrusion).length + 1;
+        final newId = 'extruded_body_${DateTime.now().millisecondsSinceEpoch}';
         final newPart = AssemblyPart(
-          id: 'extruded_body_${DateTime.now().millisecondsSinceEpoch}',
+          id: newId,
           name: 'Extruded Body $nextNum',
           type: AssemblyPartType.customExtrusion,
           position: const CadPoint3D(0.0, 0.0, 0.0),
           rotationDeg: const CadPoint3D(0.0, 0.0, 0.0),
           length: solidMesh.boundWidth > 0 ? solidMesh.boundWidth : 50.0,
           height: solidMesh.boundLength > 0 ? solidMesh.boundLength : 50.0,
+          thickness: params.distanceMm.abs(),
           color: partColor,
           customPolygons: solidMesh.polygons,
+          sourceSketchPlaneId: plane.id,
         );
         doc.parts.add(newPart);
         doc.selectedPartId = newPart.id;
+
+        plane.dependentFeatures.removeWhere((d) => d.id == linkId || d.operationType == 'newBody');
+        plane.dependentFeatures.add(CADDependentFeatureLink(
+          id: linkId,
+          operationType: 'newBody',
+          targetPartId: newPart.id,
+          createdPartId: newPart.id,
+          targetFaceId: plane.targetFaceId,
+          distanceMm: params.distanceMm,
+          secondDistanceMm: params.distanceSide2Mm,
+          draftAngleDeg: params.taperAngleDeg,
+          directionName: params.direction.name,
+        ));
+
         return AssemblyExtrudeResult(
           isSuccess: true,
           message: 'Created New Body "${newPart.name}" (${params.distanceMm.toStringAsFixed(1)} mm)',
@@ -428,8 +576,22 @@ class AssemblyExtrudeEngine {
             message: 'Join failed: No target part exists to join with.',
           );
         }
-        target.customPolygons ??= target.build3DMesh().polygons;
-        target.customPolygons!.addAll(solidMesh.polygons);
+        final localJoinPolys = _transformWorldPolysToPartLocal(solidMesh.polygons, target);
+        target.joinedExtrusionsByPlane[plane.id] = localJoinPolys;
+        target.invalidateMeshCache();
+
+        plane.dependentFeatures.removeWhere((d) => d.id == linkId);
+        plane.dependentFeatures.add(CADDependentFeatureLink(
+          id: linkId,
+          operationType: 'join',
+          targetPartId: target.id,
+          targetFaceId: plane.targetFaceId,
+          distanceMm: params.distanceMm,
+          secondDistanceMm: params.distanceSide2Mm,
+          draftAngleDeg: params.taperAngleDeg,
+          directionName: params.direction.name,
+        ));
+
         return AssemblyExtrudeResult(
           isSuccess: true,
           message: 'Joined extrusion into "${target.name}"',
@@ -445,67 +607,29 @@ class AssemblyExtrudeEngine {
             message: 'Cut failed: No target part exists to subtract from.',
           );
         }
-        // Strip duplicate closing vertex so Earcut triangulator never receives duplicate points
-        final cleanLoop = <Offset>[];
-        for (final pt in profilePoints) {
-          if (cleanLoop.isEmpty || (pt - cleanLoop.last).distance > 1e-3) {
-            cleanLoop.add(pt);
-          }
-        }
-        if (cleanLoop.length > 2 && (cleanLoop.first - cleanLoop.last).distance <= 1e-3) {
-          cleanLoop.removeLast();
-        }
-        if (cleanLoop.length < 3) {
-          return const AssemblyExtrudeResult(
-            isSuccess: false,
-            message: 'Cut failed: Profile needs at least 3 distinct vertices.',
-          );
-        }
 
-        // Convert every profile vertex from 2D Sketch Plane space -> 3D World -> Target Part Local 2D Face space!
-        final rawFaceId = (plane.targetFaceId ?? 'web').replaceFirst('plane_', '');
-        final isFlangeFace = rawFaceId.contains('flange_top') || rawFaceId.contains('flange_bot') || rawFaceId.contains('bar_top');
-
-        final local2DPts = <Offset>[];
-        double sumLX = 0.0, sumLY = 0.0;
-        double minLX = double.infinity, maxLX = -double.infinity;
-        double minLY = double.infinity, maxLY = -double.infinity;
-
-        for (final p in cleanLoop) {
-          final wVec = plane.toWorld(p);
-          final loc3D = target.worldToLocal(CadPoint3D(wVec.x, wVec.y, wVec.z));
-          final lx = loc3D.x;
-          final ly = isFlangeFace ? loc3D.y.abs() : loc3D.z;
-          local2DPts.add(Offset(lx, ly));
-          sumLX += lx;
-          sumLY += ly;
-          if (lx < minLX) minLX = lx;
-          if (lx > maxLX) maxLX = lx;
-          if (ly < minLY) minLY = ly;
-          if (ly > maxLY) maxLY = ly;
-        }
-
-        final avgLX = sumLX / local2DPts.length;
-        final avgLY = sumLY / local2DPts.length;
-        final partLocalCenter = CadPoint2D(avgLX, avgLY);
         final cutDepth = params.distanceMm.abs();
-        final isThrough = cutDepth >= target.thickness;
-
-        final cutFeature = AssemblySketchFeature(
-          id: 'cut_${DateTime.now().millisecondsSinceEpoch}_${target.sketches.length}',
-          featureType: 'extruded_cut',
-          localCenter: partLocalCenter,
-          widthMm: (maxLX - minLX) > 0.1 ? (maxLX - minLX) : 20.0,
-          heightMm: (maxLY - minLY) > 0.1 ? (maxLY - minLY) : 20.0,
-          targetFace: rawFaceId,
-          isPassThrough: isThrough,
-          isSurfaceImpress: false,
-          cutDepthMm: cutDepth,
-          customPolygonPoints: local2DPts.map((pt) => Offset(pt.dx - avgLX, pt.dy - avgLY)).toList(),
-          planeId: plane.id,
+        final cutFeature = _applyOrUpdateCutLoopOnPart(
+          target: target,
+          plane: plane,
+          profilePoints: profilePoints,
+          cutDepth: cutDepth,
+          featureId: 'cut_${plane.id}_${DateTime.now().microsecondsSinceEpoch}',
         );
-        target.sketches.add(cutFeature);
-        target.invalidateMeshCache(); // CRITICAL FIX (Issue #4): Invalidate part mesh cache so the cut hole renders immediately!
+
+        plane.dependentFeatures.removeWhere((d) => d.id == linkId || (d.operationType == 'cut' && d.targetPartId == target.id));
+        plane.dependentFeatures.add(CADDependentFeatureLink(
+          id: linkId,
+          operationType: 'cut',
+          targetPartId: target.id,
+          targetFaceId: plane.targetFaceId,
+          distanceMm: cutDepth,
+          secondDistanceMm: params.distanceSide2Mm,
+          draftAngleDeg: params.taperAngleDeg,
+          directionName: params.direction.name,
+          isPassThrough: cutDepth >= target.thickness - 0.05,
+        ));
+
         return AssemblyExtrudeResult(
           isSuccess: true,
           message: 'Cut feature punched into "${target.name}" (${cutDepth.toStringAsFixed(1)} mm depth)',
@@ -522,7 +646,18 @@ class AssemblyExtrudeEngine {
             message: 'Intersect failed: No target part exists.',
           );
         }
-        target.customPolygons = solidMesh.polygons;
+        target.customPolygons = _transformWorldPolysToPartLocal(solidMesh.polygons, target);
+        target.invalidateMeshCache();
+
+        plane.dependentFeatures.removeWhere((d) => d.id == linkId);
+        plane.dependentFeatures.add(CADDependentFeatureLink(
+          id: linkId,
+          operationType: 'intersect',
+          targetPartId: target.id,
+          targetFaceId: plane.targetFaceId,
+          distanceMm: params.distanceMm,
+        ));
+
         return AssemblyExtrudeResult(
           isSuccess: true,
           message: 'Retained intersection volume on "${target.name}"',
@@ -530,5 +665,287 @@ class AssemblyExtrudeEngine {
           createdPart: target,
         );
     }
+  }
+
+  /// Core Parametric Associativity Engine:
+  /// Whenever a sketch (`plane`) is re-edited—whether by typing a new dimension, dragging a vertex/line/circle,
+  /// adding/removing a shape, or moving a bend line—this method automatically recalculates and updates:
+  /// 1. Every `New Body` extruded from `plane` (plus any secondary cuts sketched on that `New Body`!)
+  /// 2. Every `Join` boss attached to an existing body from `plane`
+  /// 3. Every `Cut` / `Pass-Through` hole or pocket punched into an old or new body from `plane`
+  /// 4. Every `Bend` line sketched on `plane`
+  static void regenerateSketchDrivenFeatures({
+    required AssemblyDocument doc,
+    required CADSketchPlane plane,
+    List<CADSketchPlane> allPlanes = const [],
+  }) {
+    final validation = AssemblySurfaceSketchEngine.validatePlaneLoop(plane);
+    final rawLoops = validation.allClosedLoops.isNotEmpty
+        ? validation.allClosedLoops
+        : (validation.orderedPathVertices.length >= 3 ? [validation.orderedPathVertices] : <List<Offset>>[]);
+    final classified = classifyOuterAndHoleLoops(rawLoops);
+
+    // 1. Update any Bend Lines on the host part driven by construction/bend lines on this sketch plane
+    final hostPartId = plane.targetPartId;
+    if (hostPartId != null) {
+      final hostPart = doc.parts.where((p) => p.id == hostPartId).firstOrNull;
+      if (hostPart != null) {
+        bool bendUpdated = false;
+        for (final prim in plane.primitives) {
+          if (prim is CADLineEntity && prim.featureType == FeatureType.bend) {
+            final midPlane = (prim.start + prim.end) * 0.5;
+            final wPt = plane.toWorld(midPlane);
+            final local3D = hostPart.worldToLocal(CadPoint3D(wPt.x, wPt.y, wPt.z));
+            final bendFeatId = 'bend_${prim.id}';
+            final existingIdx = hostPart.sketches.indexWhere(
+              (s) => s.id == bendFeatId || (s.planeId == plane.id && s.featureType == 'bend_line'),
+            );
+            final existingAngle = existingIdx != -1
+                ? hostPart.sketches[existingIdx].angleDeg
+                : (prim.depthMm != 5.0 ? prim.depthMm : 45.0);
+            final updatedBend = AssemblySketchFeature(
+              id: existingIdx != -1 ? hostPart.sketches[existingIdx].id : bendFeatId,
+              featureType: 'bend_line',
+              localCenter: CadPoint2D(local3D.x, local3D.z),
+              widthMm: (prim.end - prim.start).distance,
+              heightMm: hostPart.height,
+              angleDeg: existingAngle,
+              targetFace: plane.targetFaceId ?? 'web',
+              isConstruction: true,
+              planeId: plane.id,
+            );
+            if (existingIdx != -1) {
+              hostPart.sketches[existingIdx] = updatedBend;
+            } else {
+              hostPart.sketches.add(updatedBend);
+            }
+            bendUpdated = true;
+          }
+        }
+        if (bendUpdated) {
+          hostPart.invalidateMeshCache();
+        }
+      }
+    }
+
+    // 2. Ensure any legacy cut features with `planeId == plane.id` have a registered CADDependentFeatureLink
+    for (final part in doc.parts) {
+      final existingCutsFromPlane =
+          part.sketches.where((s) => s.planeId == plane.id && s.featureType != 'bend_line').toList();
+      if (existingCutsFromPlane.isNotEmpty &&
+          !plane.dependentFeatures.any((d) => d.operationType == 'cut' && d.targetPartId == part.id)) {
+        final firstCut = existingCutsFromPlane.first;
+        plane.dependentFeatures.add(CADDependentFeatureLink(
+          id: 'dep_${plane.id}_cut_${part.id}',
+          operationType: 'cut',
+          targetPartId: part.id,
+          targetFaceId: firstCut.targetFace,
+          distanceMm: firstCut.cutDepthMm,
+          isPassThrough: firstCut.isPassThrough,
+        ));
+      }
+      if (part.sourceSketchPlaneId == plane.id &&
+          !plane.dependentFeatures.any((d) => d.operationType == 'newBody' && d.createdPartId == part.id)) {
+        plane.dependentFeatures.add(CADDependentFeatureLink(
+          id: 'dep_${plane.id}_newBody_${part.id}',
+          operationType: 'newBody',
+          targetPartId: part.id,
+          createdPartId: part.id,
+          distanceMm: part.thickness,
+        ));
+      }
+    }
+
+    if (plane.dependentFeatures.isEmpty) return;
+
+    for (final dep in List<CADDependentFeatureLink>.from(plane.dependentFeatures)) {
+      final dir = AssemblyExtrudeDirection.values.firstWhere(
+        (d) => d.name == dep.directionName,
+        orElse: () => AssemblyExtrudeDirection.oneSide,
+      );
+
+      if (dep.operationType == 'newBody') {
+        final targetId = dep.createdPartId ?? dep.targetPartId;
+        final part = doc.parts.where((p) => p.id == targetId).firstOrNull;
+        if (part == null || classified.outerLoops.isEmpty) continue;
+
+        final params = AssemblyExtrudeParams(
+          operation: AssemblyExtrudeOperation.newBody,
+          direction: dir,
+          distanceMm: dep.distanceMm,
+          distanceSide2Mm: dep.secondDistanceMm,
+          taperAngleDeg: dep.draftAngleDeg,
+        );
+
+        final allNewPolys = <CadFoldedPolygon3D>[];
+        double maxW = 0.0, maxL = 0.0;
+        for (int i = 0; i < classified.outerLoops.length; i++) {
+          final holes = classified.holesByOuterIndex[i] ?? const [];
+          final mesh = generateExtrudedSolid(
+            plane: plane,
+            profilePoints: classified.outerLoops[i],
+            interiorHoleLoops: holes,
+            params: params,
+            color: part.color,
+            facePrefix: i == 0 ? part.id : '${part.id}_b$i',
+          );
+          allNewPolys.addAll(mesh.polygons);
+          if (mesh.boundWidth > maxW) maxW = mesh.boundWidth;
+          if (mesh.boundLength > maxL) maxL = mesh.boundLength;
+        }
+
+        if (allNewPolys.isNotEmpty) {
+          part.customPolygons = _transformWorldPolysToPartLocal(allNewPolys, part);
+          part.length = maxW > 0 ? maxW : part.length;
+          part.height = maxL > 0 ? maxL : part.height;
+          part.thickness = dep.distanceMm.abs();
+          part.invalidateMeshCache();
+        }
+      } else if (dep.operationType == 'join') {
+        final part = doc.parts.where((p) => p.id == dep.targetPartId).firstOrNull;
+        if (part == null) continue;
+        if (classified.outerLoops.isEmpty) {
+          part.joinedExtrusionsByPlane.remove(plane.id);
+          part.invalidateMeshCache();
+          continue;
+        }
+        final params = AssemblyExtrudeParams(
+          operation: AssemblyExtrudeOperation.join,
+          direction: dir,
+          distanceMm: dep.distanceMm,
+          distanceSide2Mm: dep.secondDistanceMm,
+          taperAngleDeg: dep.draftAngleDeg,
+        );
+        final worldJoinPolys = <CadFoldedPolygon3D>[];
+        for (int i = 0; i < classified.outerLoops.length; i++) {
+          final holes = classified.holesByOuterIndex[i] ?? const [];
+          final mesh = generateExtrudedSolid(
+            plane: plane,
+            profilePoints: classified.outerLoops[i],
+            interiorHoleLoops: holes,
+            params: params,
+            color: part.color,
+            facePrefix: '${part.id}_join_${plane.id}_$i',
+          );
+          worldJoinPolys.addAll(mesh.polygons);
+        }
+        part.joinedExtrusionsByPlane[plane.id] = _transformWorldPolysToPartLocal(worldJoinPolys, part);
+        part.invalidateMeshCache();
+      } else if (dep.operationType == 'cut') {
+        final part = doc.parts.where((p) => p.id == dep.targetPartId).firstOrNull;
+        if (part == null) continue;
+
+        part.sketches.removeWhere((s) => s.planeId == plane.id && s.featureType != 'bend_line');
+        for (int i = 0; i < rawLoops.length; i++) {
+          _applyOrUpdateCutLoopOnPart(
+            target: part,
+            plane: plane,
+            profilePoints: rawLoops[i],
+            cutDepth: dep.distanceMm.abs(),
+            featureId: 'extrude_cut_${plane.id}_$i',
+            forcePassThrough: dep.isPassThrough,
+          );
+        }
+        part.invalidateMeshCache();
+      }
+    }
+  }
+
+  static AssemblySketchFeature? _applyOrUpdateCutLoopOnPart({
+    required AssemblyPart target,
+    required CADSketchPlane plane,
+    required List<Offset> profilePoints,
+    required double cutDepth,
+    required String featureId,
+    bool? forcePassThrough,
+  }) {
+    final cleanLoop = List<Offset>.from(profilePoints);
+    if (cleanLoop.length > 2 && (cleanLoop.first - cleanLoop.last).distance < 1e-3) {
+      cleanLoop.removeLast();
+    }
+    if (cleanLoop.length < 3) return null;
+
+    final rawTargetFace = plane.targetFaceId ?? 'web';
+    final isFlangeFace = rawTargetFace.contains('flange_top') ||
+        rawTargetFace.contains('flange_bot') ||
+        rawTargetFace.contains('flange_bottom') ||
+        rawTargetFace.contains('bar_top');
+
+    Offset toPartFace2D(Offset planePt) {
+      final w = plane.toWorld(planePt);
+      final local3D = target.worldToLocal(CadPoint3D(w.x, w.y, w.z));
+      if (isFlangeFace) {
+        return Offset(local3D.x, local3D.y.abs());
+      }
+      return Offset(local3D.x, local3D.z);
+    }
+
+    final localLoop2D = cleanLoop.map(toPartFace2D).toList();
+    final localLoop3D = cleanLoop.map((p) {
+      final w = plane.toWorld(p);
+      return target.worldToLocal(CadPoint3D(w.x, w.y, w.z));
+    }).toList();
+
+    double minX = double.infinity, maxX = -double.infinity;
+    double minY = double.infinity, maxY = -double.infinity;
+    double sumX = 0.0, sumY = 0.0;
+    for (final p in localLoop2D) {
+      if (p.dx < minX) minX = p.dx;
+      if (p.dx > maxX) maxX = p.dx;
+      if (p.dy < minY) minY = p.dy;
+      if (p.dy > maxY) maxY = p.dy;
+      sumX += p.dx;
+      sumY += p.dy;
+    }
+    final cx = sumX / localLoop2D.length;
+    final cy = sumY / localLoop2D.length;
+    final isThru = forcePassThrough ?? (cutDepth >= target.thickness - 0.05);
+
+    final cutFeature = AssemblySketchFeature(
+      id: featureId,
+      featureType: 'extruded_cut',
+      localCenter: CadPoint2D(cx, cy),
+      widthMm: (maxX - minX).clamp(1.0, 5000.0),
+      heightMm: (maxY - minY).clamp(1.0, 5000.0),
+      cutDepthMm: cutDepth,
+      targetFace: rawTargetFace,
+      isPassThrough: isThru,
+      customPolygonPoints: localLoop2D.map((p) => Offset(p.dx - cx, p.dy - cy)).toList(),
+      customLocalHole3D: localLoop3D,
+      planeId: plane.id,
+    );
+
+    target.sketches.removeWhere((s) => s.id == featureId);
+    target.sketches.add(cutFeature);
+    target.invalidateMeshCache();
+    return cutFeature;
+  }
+
+  static List<CadFoldedPolygon3D> _transformWorldPolysToPartLocal(
+    List<CadFoldedPolygon3D> worldPolys,
+    AssemblyPart target,
+  ) {
+    final originLocal = target.worldToLocal(const CadPoint3D(0, 0, 0));
+    return worldPolys.map((poly) {
+      final localVerts = poly.vertices.map((v) => target.worldToLocal(v)).toList();
+      final localHoles = poly.holes.map((h) => h.map((v) => target.worldToLocal(v)).toList()).toList();
+      final localBounds = poly.boundaryLines.map((b) => b.map((v) => target.worldToLocal(v)).toList()).toList();
+      final nTip = target.worldToLocal(poly.normal);
+      final nx = nTip.x - originLocal.x;
+      final ny = nTip.y - originLocal.y;
+      final nz = nTip.z - originLocal.z;
+      final nLen = math.sqrt(nx * nx + ny * ny + nz * nz);
+      final localNorm = nLen > 1e-6 ? CadPoint3D(nx / nLen, ny / nLen, nz / nLen) : poly.normal;
+
+      return CadFoldedPolygon3D(
+        faceId: poly.faceId,
+        vertices: localVerts,
+        normal: localNorm,
+        color: poly.color,
+        holes: localHoles,
+        boundaryLines: localBounds,
+        drawWireframe: poly.drawWireframe,
+      );
+    }).toList();
   }
 }

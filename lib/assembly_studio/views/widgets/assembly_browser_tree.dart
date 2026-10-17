@@ -441,9 +441,23 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (plane.dependentFeatures.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(right: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0x220284C7),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: const Color(0xFF0284C7), width: 0.6),
+                ),
+                child: Text(
+                  '${plane.dependentFeatures.length} 3D',
+                  style: const TextStyle(fontSize: 7.5, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+                ),
+              ),
             if (segments.isNotEmpty)
               Container(
-                margin: const EdgeInsets.only(right: 6),
+                margin: const EdgeInsets.only(right: 4),
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: isClosed ? const Color(0x2210B981) : const Color(0x22F59E0B),
@@ -455,6 +469,20 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
                   style: TextStyle(fontSize: 7.5, fontWeight: FontWeight.bold, color: isClosed ? const Color(0xFF10B981) : const Color(0xFFF59E0B)),
                 ),
               ),
+            Tooltip(
+              message: 'Re-edit Sketch & Update Attached 3D Bodies',
+              child: GestureDetector(
+                onTap: () => vm.editExistingSketchPlane(plane.id),
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 5),
+                  child: Icon(
+                    Icons.edit_note_rounded,
+                    size: 14,
+                    color: isSelected ? AssemblyStudioTheme.onshapeBlue : const Color(0xFF0284C7),
+                  ),
+                ),
+              ),
+            ),
             GestureDetector(
               onTap: () => vm.togglePlaneVisibility(plane.id),
               child: SvgPicture.asset(
@@ -496,6 +524,17 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (part.sourceSketchPlaneId != null)
+              Tooltip(
+                message: 'Edit Driving Sketch for ${part.name}',
+                child: GestureDetector(
+                  onTap: () => vm.editExistingSketchPlane(part.sourceSketchPlaneId!),
+                  child: const Padding(
+                    padding: EdgeInsets.only(right: 5),
+                    child: Icon(Icons.draw_rounded, size: 12, color: Color(0xFF0284C7)),
+                  ),
+                ),
+              ),
             GestureDetector(
               onTap: () => vm.togglePartVisibility(part.id),
               child: SvgPicture.asset(

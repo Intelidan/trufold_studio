@@ -126,6 +126,7 @@ void main() {
     });
 
     testWidgets('Requirement 4 (SS3): AssemblySketchupViewsToolbar renders 7 house icons & updates view', (tester) async {
+      viewModel.showViewsToolbar = true;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(

@@ -725,6 +725,12 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     return planes;
   }
 
+  bool get showAllDatumPlanes => showDatumPlanes;
+  List<CADSketchPlane> get datumPlanes => [datumPlaneXY, datumPlaneXZ, datumPlaneYZ];
+  List<CADSketchPlane> get customPlanes => constructionPlanes;
+  CADSketchPlane? get selectedPlane => activeSketchPlane;
+  CADSketchPlane? get hoveredPlane => allAvailablePlanes.where((p) => p.id == hoveredPlaneId).firstOrNull;
+
   // --- Fusion 360 Style Sketch Palette & Display Toggles (Phase 2) ---
   bool showSketchGrid = false; // Onshape SS4 default: clean transparent sketch plane without grid clutter
   bool showSketchSnap = true;
@@ -1160,21 +1166,48 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         : [validation.orderedPathVertices];
 
     AssemblyExtrudeResult? lastResult;
-    for (final loop in loopsToExtrude) {
-      if (loop.length < 3) continue;
-      final res = AssemblyExtrudeEngine.executeExtrusion(
-        doc: doc,
-        plane: activeSketchPlane!,
-        profilePoints: loop,
-        params: extrudeParams,
-        targetPart: targetPart,
-      );
-      if (res.isSuccess) {
-        lastResult = res;
-      } else {
-        lastResult ??= res;
+    if (extrudeParams.operation == AssemblyExtrudeOperation.newBody ||
+        extrudeParams.operation == AssemblyExtrudeOperation.join) {
+      final classified = AssemblyExtrudeEngine.classifyOuterAndHoleLoops(loopsToExtrude);
+      for (int i = 0; i < classified.outerLoops.length; i++) {
+        final outer = classified.outerLoops[i];
+        final holes = classified.holesByOuterIndex[i] ?? const [];
+        final res = AssemblyExtrudeEngine.executeExtrusion(
+          doc: doc,
+          plane: activeSketchPlane!,
+          profilePoints: outer,
+          interiorHoleLoops: holes,
+          params: extrudeParams,
+          targetPart: targetPart,
+        );
+        if (res.isSuccess) {
+          lastResult = res;
+        } else {
+          lastResult ??= res;
+        }
+      }
+    } else {
+      for (final loop in loopsToExtrude) {
+        if (loop.length < 3) continue;
+        final res = AssemblyExtrudeEngine.executeExtrusion(
+          doc: doc,
+          plane: activeSketchPlane!,
+          profilePoints: loop,
+          params: extrudeParams,
+          targetPart: targetPart,
+        );
+        if (res.isSuccess) {
+          lastResult = res;
+        } else {
+          lastResult ??= res;
+        }
       }
     }
+    AssemblyExtrudeEngine.regenerateSketchDrivenFeatures(
+      doc: doc,
+      plane: activeSketchPlane!,
+      allPlanes: savedSketchPlanes,
+    );
 
     final result = lastResult ?? const AssemblyExtrudeResult(isSuccess: false, message: 'No valid closed loop found.');
 
@@ -2984,11 +3017,25 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
+  /// Sets the active 2D sketch tool.
+  /// Requirement #1: Clicking an already-active tool deactivates it and returns to 'select_entity' (Select mode)!
   void setActiveSketchTool(String tool) {
-    if (activeSketchTool != tool) {
-      clearSketchInteractiveState();
+    if (activeSketchTool == tool && tool != 'select_entity' && activeConstraintTool == null) {
+      activeSketchTool = 'select_entity';
+    } else {
+      activeSketchTool = tool;
     }
-    activeSketchTool = tool;
+    activeConstraintTool = null;
+    clearSketchInteractiveState();
+    notifyListeners();
+  }
+
+  /// Deactivates any active sketch drawing or constraint tool and activates the 'Select' ('select_entity') tool.
+  void deactivateSketchToolToSelect() {
+    activeSketchTool = 'select_entity';
+    activeConstraintTool = null;
+    dimensionFirstEntityId = null;
+    clearSketchInteractiveState();
     notifyListeners();
   }
 
@@ -3699,8 +3746,98 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   /// Finishes sketching, unlocks 3D model movement, and returns to full 3D interactive mode.
+  /// Regenerates all 3D bodies (New Bodies, Joined Bosses, Extruded Cuts, Pass-Through Holes, and Bends)
+  /// attached to [plane] (or [activeSketchPlane] if omitted) whenever sketch geometry or dimensions change!
+  void regenerateActiveSketchDependents([CADSketchPlane? plane]) {
+    final targetPlane = plane ?? activeSketchPlane;
+    if (targetPlane == null) return;
+    targetPlane.recalculateAutoSize();
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(targetPlane);
+    AssemblyExtrudeEngine.regenerateSketchDrivenFeatures(
+      doc: doc,
+      plane: targetPlane,
+      allPlanes: savedSketchPlanes,
+    );
+    invalidateMeshCache();
+  }
+
+  /// Opens an existing `CADSketchPlane` in Sketch Mode so the user can re-edit its dimensions/entities
+  /// and watch the attached old and new 3D bodies update live!
+  void editExistingSketchPlane(String planeId) {
+    final plane = savedSketchPlanes.where((p) => p.id == planeId).firstOrNull;
+    if (plane == null) return;
+    activeSketchPlane = plane;
+    sketchPartId = plane.targetPartId;
+    if (plane.targetPartId != null) {
+      doc.selectedPartId = plane.targetPartId;
+    }
+    if (plane.targetFaceId != null) {
+      doc.selectedFaceId = plane.targetFaceId;
+    }
+    isSketchMode = true;
+    activeSketchTool = 'select_entity';
+    activeConstraintTool = null;
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(plane);
+    alignCameraToActivePlaneNormal();
+    notifyListeners();
+  }
+
+  /// Requirement #3: Breaks a closed polygon/rectangle into independent, unbonded line segments.
+  void breakSelectedPolygonOrLoop() {
+    if (activeSketchPlane == null) return;
+    _recordUndo();
+    final count = OnshapeSketchModifyEngine.breakPolygonOrLoop(
+      activeSketchPlane!,
+      selectedEntity: selectedSketchEntity,
+    );
+    selectedSketchEntity = null;
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
+    setVcbState(
+      label: '🔓 Polygon Broken',
+      value: '$count Segments',
+      hint: 'Polygon bond unlocked — drag any segment freely, or click Rejoin Loop to snap & bond again.',
+    );
+    regenerateActiveSketchDependents();
+    notifyListeners();
+  }
+
+  /// Requirement #3: Rejoins open/broken line segments into a closed, topologically bonded polygon loop.
+  void rejoinPolygonSegmentsOnActivePlane() {
+    if (activeSketchPlane == null) return;
+    _recordUndo();
+    final ok = OnshapeSketchModifyEngine.rejoinPolygonSegments(activeSketchPlane!);
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
+    setVcbState(
+      label: ok ? '🔗 Polygon Rejoined' : '⚠️ Rejoin Incomplete',
+      value: activeSketchValidation?.reportFeedback ?? '',
+      hint: ok ? 'All connected polygon sides are now bonded together.' : 'Need at least 2 line segments to rejoin.',
+    );
+    regenerateActiveSketchDependents();
+    notifyListeners();
+  }
+
+  /// Creates or toggles a Parametric Bend Line on the active sketch plane so editing its position/angle bends the 3D body.
+  void toggleSelectedLineAsBendFeature({double bendAngleDeg = 45.0}) {
+    if (activeSketchPlane == null || selectedSketchEntity is! CADLineEntity) return;
+    _recordUndo();
+    final line = selectedSketchEntity as CADLineEntity;
+    if (line.featureType == FeatureType.bend) {
+      line.featureType = FeatureType.cut;
+      line.isConstruction = false;
+      final hostPart = doc.parts.where((p) => p.id == activeSketchPlane!.targetPartId).firstOrNull;
+      hostPart?.sketches.removeWhere((s) => s.id == 'bend_${line.id}');
+    } else {
+      line.featureType = FeatureType.bend;
+      line.isConstruction = true;
+      line.depthMm = bendAngleDeg;
+    }
+    regenerateActiveSketchDependents();
+    notifyListeners();
+  }
+
   void finishSketch() {
     if (activeSketchPlane != null) {
+      regenerateActiveSketchDependents(activeSketchPlane!);
       if (!savedSketchPlanes.any((p) => p.id == activeSketchPlane!.id)) {
         savedSketchPlanes.add(activeSketchPlane!);
       }
@@ -4110,12 +4247,11 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       if (prim is CADCircleEntity) {
         prim.radius = (hit.constraintType == CadConstraintType.diameter ? newValue / 2.0 : newValue).clamp(0.5, 10000.0);
       } else if (prim is CADLineEntity && hit.constraintType == CadConstraintType.distance) {
-        final d = prim.end - prim.start;
-        final currLen = d.distance;
-        final unit = currLen > 1e-4 ? d / currLen : const Offset(1.0, 0.0);
-        final mid = (prim.start + prim.end) * 0.5;
-        prim.start = mid - unit * (newValue / 2.0);
-        prim.end = mid + unit * (newValue / 2.0);
+        OnshapeSketchModifyEngine.resizeLinePreservingPolygonBond(
+          activeSketchPlane!,
+          prim,
+          newValue,
+        );
       } else if (prim is CADRectangleEntity && hit.constraintType == CadConstraintType.distance) {
         if (hit.subKey == 'h') {
           prim.height = newValue.clamp(0.5, 10000.0);
@@ -4147,8 +4283,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     activeEditingDimensionHit = null;
     dimensionFirstEntityId = null;
     solveSketchConstraints();
-    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
-    invalidateMeshCache();
+    regenerateActiveSketchDependents();
     notifyListeners();
   }
 
