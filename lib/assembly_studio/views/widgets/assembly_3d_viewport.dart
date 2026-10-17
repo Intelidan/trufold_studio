@@ -526,22 +526,22 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _elevationDeg = (_elevationDeg + dEl).clamp(-89.0, 89.0);
     widget.viewModel.azimuthDeg = _azimuthDeg;
     widget.viewModel.elevationDeg = _elevationDeg;
+    _updateGpuCamera(); // CRITICAL: Update GPU camera node FIRST so worldToScreen is never 1 frame stale!
     _cameraRepaintNotifier.value++;
-    _updateGpuCamera();
   }
 
   void _panCamera(Offset delta) {
     _pan += delta;
     widget.viewModel.pan = _pan;
+    _updateGpuCamera(); // Update GPU camera node FIRST!
     _cameraRepaintNotifier.value++;
-    _updateGpuCamera();
   }
 
   void _zoomCamera(double factor) {
     _zoom = (_zoom * factor).clamp(0.02, 120.0);
     widget.viewModel.zoom = _zoom;
+    _updateGpuCamera(); // Update GPU camera node FIRST!
     _cameraRepaintNotifier.value++;
-    _updateGpuCamera();
   }
 
   void _zoomToFit() {
@@ -558,9 +558,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     widget.viewModel.elevationDeg = _elevationDeg;
     widget.viewModel.pan = _pan;
     widget.viewModel.zoom = _zoom;
+    _updateGpuCamera(); // Update GPU camera node FIRST!
     _cameraRepaintNotifier.value++;
     setState(() {});
-    _updateGpuCamera();
   }
 
   void _setCameraFromAngles(double az, double el) {
@@ -568,8 +568,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _elevationDeg = el.clamp(-89.0, 89.0);
     widget.viewModel.azimuthDeg = _azimuthDeg;
     widget.viewModel.elevationDeg = _elevationDeg;
+    _updateGpuCamera(); // Update GPU camera node FIRST!
     _cameraRepaintNotifier.value++;
-    _updateGpuCamera();
   }
 
   void _smoothAnimateCameraTo(CadPoint3D targetPos, {double targetZoom = 4.5}) {
@@ -2451,23 +2451,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                       final bool useGpu = _isGpuAvailable && _scene != null && _isSceneReady;
                                       return useGpu
                                           ? RepaintBoundary(
-                                              child: Stack(
-                                                fit: StackFit.expand,
-                                                children: [
-                                                  SceneView(_scene!),
-                                                  if (vm.graphicsPreferences.screenSpaceEdgeAntiAliasing &&
-                                                      vm.onshapeRenderMode != OnshapeRenderMode.shadedWithoutEdges)
-                                                    CustomPaint(
-                                                      size: Size.infinite,
-                                                      painter: AssemblyGpuEdgeAntiAliasPainter(
-                                                        mesh: mesh,
-                                                        projectPoint: (pt) => _projectPoint(pt, size, mesh),
-                                                        lineWidth: vm.graphicsPreferences.lineWidth,
-                                                        silhouetteBoost: vm.graphicsPreferences.silhouetteEdgeBoost,
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
+                                              child: SceneView(_scene!),
                                             )
                                           : const RepaintBoundary(child: SizedBox.shrink());
                                     },

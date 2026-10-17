@@ -1302,11 +1302,13 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                   child: InkWell(
                     onTap: () {
                       widget.onChanged(prefs.copyWith(
-                        lineWidth: 1.8,
+                        useOnshapeCadColor: true,
+                        lineWidth: 1.65,
                         silhouetteEdgeBoost: true,
-                        ambientOcclusion: 85.0,
-                        shininess: 20.0,
-                        screenSpaceEdgeAntiAliasing: true,
+                        ambientOcclusion: 80.0,
+                        cavityStrength: 80.0,
+                        shininess: 55.0,
+                        screenSpaceEdgeAntiAliasing: false,
                         lightingPreset: CadLightingPreset.engineeringCrisp,
                       ));
                     },
@@ -1314,14 +1316,21 @@ class _StudioGraphicsPreferencesPanelState extends State<StudioGraphicsPreferenc
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
                       decoration: BoxDecoration(
-                        color: prefs.lightingPreset == CadLightingPreset.engineeringCrisp ? const Color(0xFFE0F2FE) : const Color(0xFFF1F5F9),
+                        color: prefs.lightingPreset == CadLightingPreset.engineeringCrisp
+                            ? const Color(0xFFE0F2FE)
+                            : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
-                          color: prefs.lightingPreset == CadLightingPreset.engineeringCrisp ? const Color(0xFF0284C7) : const Color(0xFFCBD5E1),
+                          color: prefs.lightingPreset == CadLightingPreset.engineeringCrisp
+                              ? const Color(0xFF0284C7)
+                              : const Color(0xFFCBD5E1),
                         ),
                       ),
                       alignment: Alignment.center,
-                      child: const Text('Blueprint', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
+                      child: const Text(
+                        'Toon / Cel',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                      ),
                     ),
                   ),
                 ),

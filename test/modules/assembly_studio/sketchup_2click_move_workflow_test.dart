@@ -27,11 +27,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 1000,
-              height: 800,
-              child: Assembly3DViewport(viewModel: vm),
-            ),
+            body: SizedBox(width: 1000, height: 800, child: Assembly3DViewport(viewModel: vm)),
           ),
         ),
       );
@@ -44,9 +40,7 @@ void main() {
       expect(vm.selectedPart?.id, equals('rung_2'));
 
       // Verify that AssemblySelectedPartBoundingBoxPainter is present in the tree
-      final bboxFinder = find.byWidgetPredicate(
-        (w) => w is CustomPaint && w.painter is AssemblySelectedPartBoundingBoxPainter,
-      );
+      final bboxFinder = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is AssemblySelectedPartBoundingBoxPainter);
       expect(bboxFinder, findsOneWidget, reason: 'Translucent bounding box overlay must be painted around selected entity');
 
       // Verify 27 Snap Points generated for rung_2 (8 corners, 12 edge midpoints, 6 face centers, 1 centroid)
