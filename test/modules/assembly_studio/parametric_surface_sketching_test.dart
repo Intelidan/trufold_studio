@@ -327,7 +327,7 @@ void main() {
   group('Phase 2: Fusion 360 Sketch Palette & 3D-to-2D Geometry Projection Subroutines', () {
     test('Sketch Palette toggles update state and notify listeners', () {
       final vm = AssemblyStudioViewModel();
-      expect(vm.showSketchGrid, isTrue);
+      expect(vm.showSketchGrid, isFalse);
       expect(vm.showSketchSnap, isTrue);
       expect(vm.showSketchConstraints, isTrue);
       expect(vm.showSketchDimensions, isTrue);
@@ -336,7 +336,7 @@ void main() {
       expect(vm.isSketchConstructionMode, isFalse);
 
       vm.toggleSketchGrid();
-      expect(vm.showSketchGrid, isFalse);
+      expect(vm.showSketchGrid, isTrue);
 
       vm.toggleSketchSnap();
       expect(vm.showSketchSnap, isFalse);

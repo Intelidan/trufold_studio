@@ -445,33 +445,70 @@ class AssemblyExtrudeEngine {
             message: 'Cut failed: No target part exists to subtract from.',
           );
         }
-        // Create custom sketch void cut feature on target
-        final cx = profilePoints.map((p) => p.dx).reduce((a, b) => a + b) / profilePoints.length;
-        final cy = profilePoints.map((p) => p.dy).reduce((a, b) => a + b) / profilePoints.length;
-        final worldVec = plane.toWorld(Offset(cx, cy));
-        final local3D = target.worldToLocal(CadPoint3D(worldVec.x, worldVec.y, worldVec.z));
-        final faceId = plane.targetFaceId ?? 'web';
-        final partLocalCenter = (faceId.contains('flange_top') || faceId.contains('flange_bot') || faceId.contains('bar_top'))
-            ? CadPoint2D(local3D.x, local3D.y.abs())
-            : CadPoint2D(local3D.x, local3D.z);
+        // Strip duplicate closing vertex so Earcut triangulator never receives duplicate points
+        final cleanLoop = <Offset>[];
+        for (final pt in profilePoints) {
+          if (cleanLoop.isEmpty || (pt - cleanLoop.last).distance > 1e-3) {
+            cleanLoop.add(pt);
+          }
+        }
+        if (cleanLoop.length > 2 && (cleanLoop.first - cleanLoop.last).distance <= 1e-3) {
+          cleanLoop.removeLast();
+        }
+        if (cleanLoop.length < 3) {
+          return const AssemblyExtrudeResult(
+            isSuccess: false,
+            message: 'Cut failed: Profile needs at least 3 distinct vertices.',
+          );
+        }
+
+        // Convert every profile vertex from 2D Sketch Plane space -> 3D World -> Target Part Local 2D Face space!
+        final rawFaceId = (plane.targetFaceId ?? 'web').replaceFirst('plane_', '');
+        final isFlangeFace = rawFaceId.contains('flange_top') || rawFaceId.contains('flange_bot') || rawFaceId.contains('bar_top');
+
+        final local2DPts = <Offset>[];
+        double sumLX = 0.0, sumLY = 0.0;
+        double minLX = double.infinity, maxLX = -double.infinity;
+        double minLY = double.infinity, maxLY = -double.infinity;
+
+        for (final p in cleanLoop) {
+          final wVec = plane.toWorld(p);
+          final loc3D = target.worldToLocal(CadPoint3D(wVec.x, wVec.y, wVec.z));
+          final lx = loc3D.x;
+          final ly = isFlangeFace ? loc3D.y.abs() : loc3D.z;
+          local2DPts.add(Offset(lx, ly));
+          sumLX += lx;
+          sumLY += ly;
+          if (lx < minLX) minLX = lx;
+          if (lx > maxLX) maxLX = lx;
+          if (ly < minLY) minLY = ly;
+          if (ly > maxLY) maxLY = ly;
+        }
+
+        final avgLX = sumLX / local2DPts.length;
+        final avgLY = sumLY / local2DPts.length;
+        final partLocalCenter = CadPoint2D(avgLX, avgLY);
+        final cutDepth = params.distanceMm.abs();
+        final isThrough = cutDepth >= target.thickness;
 
         final cutFeature = AssemblySketchFeature(
-          id: 'cut_${DateTime.now().millisecondsSinceEpoch}',
+          id: 'cut_${DateTime.now().millisecondsSinceEpoch}_${target.sketches.length}',
           featureType: 'extruded_cut',
           localCenter: partLocalCenter,
-          widthMm: solidMesh.boundWidth > 0 ? solidMesh.boundWidth : 20.0,
-          heightMm: solidMesh.boundLength > 0 ? solidMesh.boundLength : 20.0,
-          targetFace: plane.targetFaceId ?? 'web',
-          isPassThrough: false,
+          widthMm: (maxLX - minLX) > 0.1 ? (maxLX - minLX) : 20.0,
+          heightMm: (maxLY - minLY) > 0.1 ? (maxLY - minLY) : 20.0,
+          targetFace: rawFaceId,
+          isPassThrough: isThrough,
           isSurfaceImpress: false,
-          cutDepthMm: params.distanceMm.abs(),
-          customPolygonPoints: profilePoints.map((p) => Offset(p.dx - cx, p.dy - cy)).toList(),
+          cutDepthMm: cutDepth,
+          customPolygonPoints: local2DPts.map((pt) => Offset(pt.dx - avgLX, pt.dy - avgLY)).toList(),
           planeId: plane.id,
         );
         target.sketches.add(cutFeature);
+        target.invalidateMeshCache(); // CRITICAL FIX (Issue #4): Invalidate part mesh cache so the cut hole renders immediately!
         return AssemblyExtrudeResult(
           isSuccess: true,
-          message: 'Cut feature punched into "${target.name}" (${params.distanceMm.toStringAsFixed(1)} mm depth)',
+          message: 'Cut feature punched into "${target.name}" (${cutDepth.toStringAsFixed(1)} mm depth)',
           mesh: solidMesh,
           createdPart: target,
           cutFeature: cutFeature,

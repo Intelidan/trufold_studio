@@ -664,6 +664,21 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// Hit-test rectangles for all dimension tags rendered in the current frame
   final List<SketchDimensionTagHit> sketchDimensionHitRects = [];
 
+  /// Hit-test rectangles for all geometric constraint badges rendered in the current frame (Issue #6)
+  final List<SketchConstraintBadgeHit> sketchConstraintHitRects = [];
+
+  /// Currently hovered 2D sketch primitive entity ID for Onshape yellow/orange hover highlight (Issue #7 / SS4)
+  String? hoveredSketchEntityId;
+
+  /// Currently hovered geometric constraint badge ID for hover highlight (Issue #6 & #7)
+  String? hoveredSketchConstraintId;
+
+  /// Active Onshape Constraint Tool when user clicks a constraint in the toolbar before selecting entities (Issue #7)
+  CadConstraintType? activeConstraintTool;
+
+  /// First clicked entity when applying a 2-entity constraint in activeConstraintTool mode
+  String? constraintFirstEntityId;
+
   /// Currently open inline floating dimension popover target (image_31d0a3.png)
   SketchDimensionTagHit? activeEditingDimensionHit;
   String? get activeEditingDimensionTagKey => activeEditingDimensionHit?.tagKey;
@@ -711,7 +726,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   // --- Fusion 360 Style Sketch Palette & Display Toggles (Phase 2) ---
-  bool showSketchGrid = true;
+  bool showSketchGrid = false; // Onshape SS4 default: clean transparent sketch plane without grid clutter
   bool showSketchSnap = true;
   bool showSketchConstraints = true;
   bool showSketchDimensions = true;
@@ -942,26 +957,89 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
+  static bool constraintRequiresTwoEntities(CadConstraintType type) {
+    switch (type) {
+      case CadConstraintType.horizontal:
+      case CadConstraintType.vertical:
+      case CadConstraintType.fixed:
+        return false;
+      default:
+        return true;
+    }
+  }
+
   void applySketchConstraint(CadConstraintType type, {List<String>? targetEntityIds}) {
     if (activeSketchPlane == null) return;
-    final ids =
-        targetEntityIds ??
-        (selectedSketchEntityIds.isNotEmpty ? selectedSketchEntityIds.toList() : (selectedSketchEntity != null ? [selectedSketchEntity!.id] : <String>[]));
+    final ids = targetEntityIds ??
+        (selectedSketchEntityIds.isNotEmpty
+            ? selectedSketchEntityIds.toList()
+            : (selectedSketchEntity != null ? [selectedSketchEntity!.id] : <String>[]));
 
-    if (ids.isEmpty) return;
+    final needsTwo = constraintRequiresTwoEntities(type);
+
+    // Onshape Interactive Constraint Mode (Issue #7):
+    // If the user clicks a constraint tool in the toolbar before selecting enough entities,
+    // arm `activeConstraintTool` so hovering highlights entities in yellow and clicking applies the constraint!
+    if (targetEntityIds == null && (ids.isEmpty || (needsTwo && ids.length < 2))) {
+      if (activeConstraintTool == type) {
+        activeConstraintTool = null;
+        constraintFirstEntityId = null;
+        setVcbState(label: 'Sketch', value: 'Constraint mode off', hint: 'Select a tool or entity');
+      } else {
+        activeConstraintTool = type;
+        activeSketchTool = 'select_entity';
+        constraintFirstEntityId = ids.isNotEmpty ? ids.first : null;
+        setVcbState(
+          label: 'Constraint: ${type.label} (${type.symbol})',
+          value: constraintFirstEntityId != null ? 'Select 2nd entity' : (needsTwo ? 'Select 1st entity' : 'Click entity to constrain'),
+          hint: 'Hover highlights entities in yellow • Click to apply ${type.label} • Esc to exit',
+        );
+      }
+      notifyListeners();
+      return;
+    }
+
     _recordUndo();
 
-    final constraint = CadConstraint(id: 'c_${type.name}_${DateTime.now().millisecondsSinceEpoch}', type: type, entityIds: ids);
+    final constraint = CadConstraint(
+      id: 'c_${type.name}_${DateTime.now().millisecondsSinceEpoch}',
+      type: type,
+      entityIds: ids,
+    );
     activeSketchPlane!.constraints.add(constraint);
+    constraintFirstEntityId = null;
     solveSketchConstraints();
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
 
     final dofs = sketchDegreesOfFreedom;
     setVcbState(
       label: 'Constraint: ${type.label} (${type.symbol})',
       value: dofs == 0 ? 'Fully Constrained (0 DOFs) 🔒' : '$dofs DOFs Remaining',
-      hint: dofs == 0 ? 'Profile turns black - locked' : 'Add more constraints or dimensions to fully constrain',
+      hint: dofs == 0 ? 'Profile turns black - locked' : 'Click another entity to apply ${type.label}, or press Esc',
     );
     notifyListeners();
+  }
+
+  void selectSketchConstraint(CadConstraint? constraint) {
+    selectedSketchConstraint = constraint;
+    if (constraint != null) {
+      selectedSketchEntity = null;
+      selectedSketchEntityIds.clear();
+      for (final p in activeSketchPlane?.primitives ?? <CADPrimitiveEntity>[]) {
+        p.isSelected = false;
+      }
+      setVcbState(
+        label: 'Constraint Selected',
+        value: '${constraint.type.label} (${constraint.symbol})',
+        hint: 'Press Delete / Backspace or click 🗑 to remove constraint',
+      );
+    }
+    notifyListeners();
+  }
+
+  void deleteSelectedSketchConstraint() {
+    if (selectedSketchConstraint == null) return;
+    removeSketchConstraint(selectedSketchConstraint!.id);
   }
 
   void removeSketchConstraint(String constraintId) {
@@ -971,13 +1049,25 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     if (selectedSketchConstraint?.id == constraintId) {
       selectedSketchConstraint = null;
     }
+    if (activeEditingDimensionHit?.existingConstraintId == constraintId) {
+      activeEditingDimensionHit = null;
+    }
     solveSketchConstraints();
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
+    setVcbState(
+      label: 'Constraint Removed',
+      value: '$sketchDegreesOfFreedom DOFs Remaining',
+      hint: 'Entity is now free to move or resize',
+    );
     notifyListeners();
   }
 
   void selectSketchPrimitive(CADPrimitiveEntity? entity) {
     selectedSketchEntity = entity;
     selectedSketchFeatureId = entity?.id;
+    if (entity != null) {
+      selectedSketchConstraint = null;
+    }
     selectedSketchEntityIds.clear();
     if (entity != null) selectedSketchEntityIds.add(entity.id);
     for (final p in activeSketchPlane?.primitives ?? <CADPrimitiveEntity>[]) {
@@ -1065,13 +1155,28 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     final targetPart = doc.parts.where((p) => p.id == (activeSketchPlane!.targetPartId ?? sketchPartId)).firstOrNull ?? selectedPart;
 
-    final result = AssemblyExtrudeEngine.executeExtrusion(
-      doc: doc,
-      plane: activeSketchPlane!,
-      profilePoints: validation.orderedPathVertices,
-      params: extrudeParams,
-      targetPart: targetPart,
-    );
+    final loopsToExtrude = validation.allClosedLoops.isNotEmpty
+        ? validation.allClosedLoops
+        : [validation.orderedPathVertices];
+
+    AssemblyExtrudeResult? lastResult;
+    for (final loop in loopsToExtrude) {
+      if (loop.length < 3) continue;
+      final res = AssemblyExtrudeEngine.executeExtrusion(
+        doc: doc,
+        plane: activeSketchPlane!,
+        profilePoints: loop,
+        params: extrudeParams,
+        targetPart: targetPart,
+      );
+      if (res.isSuccess) {
+        lastResult = res;
+      } else {
+        lastResult ??= res;
+      }
+    }
+
+    final result = lastResult ?? const AssemblyExtrudeResult(isSuccess: false, message: 'No valid closed loop found.');
 
     if (result.isSuccess) {
       sketchFeatureHistory.add(
@@ -1092,11 +1197,17 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         parameters: {'distance': extrudeParams.distanceMm, 'operation': extrudeParams.operation.name},
       );
 
+      targetPart?.invalidateMeshCache();
+      result.createdPart?.invalidateMeshCache();
       invalidateMeshCache();
       if (result.createdPart != null) {
         syncComponentInstances(result.createdPart!.id);
       }
       closeExtrudeDialog();
+      // Exit Sketch Mode after committing Extrude/Cut so the 3D cut hole is immediately visible without the 2D sketch overlay covering it!
+      if (isSketchMode) {
+        finishSketch();
+      }
       setVcbState(label: 'Feature Created', value: result.message, hint: 'Solid geometry updated in assembly document');
     } else {
       setVcbState(label: 'Extrude Error', value: result.message, hint: 'Check profile geometry and try again');
@@ -3602,6 +3713,12 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     isSketchMode = false;
     is3DMovementLocked = false;
     isProjectGeometryMode = false;
+    activeConstraintTool = null;
+    constraintFirstEntityId = null;
+    hoveredSketchEntityId = null;
+    hoveredSketchConstraintId = null;
+    selectedSketchConstraint = null;
+    activeEditingDimensionHit = null;
     clearSketchInteractiveState();
     selectedSketchEntity = null;
     selectedSketchFeatureId = null;
@@ -3987,10 +4104,51 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       }
     }
 
+    // Directly apply dimension change to the primitive immediately (even if single-entity or unconstrained)
+    final prim = activeSketchPlane!.primitives.where((p) => p.id == hit.primaryEntityId).firstOrNull;
+    if (prim != null && hit.secondaryEntityId == null) {
+      if (prim is CADCircleEntity) {
+        prim.radius = (hit.constraintType == CadConstraintType.diameter ? newValue / 2.0 : newValue).clamp(0.5, 10000.0);
+      } else if (prim is CADLineEntity && hit.constraintType == CadConstraintType.distance) {
+        final d = prim.end - prim.start;
+        final currLen = d.distance;
+        final unit = currLen > 1e-4 ? d / currLen : const Offset(1.0, 0.0);
+        final mid = (prim.start + prim.end) * 0.5;
+        prim.start = mid - unit * (newValue / 2.0);
+        prim.end = mid + unit * (newValue / 2.0);
+      } else if (prim is CADRectangleEntity && hit.constraintType == CadConstraintType.distance) {
+        if (hit.subKey == 'h') {
+          prim.height = newValue.clamp(0.5, 10000.0);
+        } else {
+          prim.width = newValue.clamp(0.5, 10000.0);
+        }
+      } else if (prim is CADCenterRectangleEntity && hit.constraintType == CadConstraintType.distance) {
+        if (hit.subKey == 'h') {
+          prim.height = newValue.clamp(0.5, 10000.0);
+        } else {
+          prim.width = newValue.clamp(0.5, 10000.0);
+        }
+      } else if (prim is CADRegularPolygonEntity) {
+        prim.radius = (hit.constraintType == CadConstraintType.diameter ? newValue / 2.0 : newValue).clamp(0.5, 10000.0);
+      } else if (prim is CADSlotEntity) {
+        if (hit.constraintType == CadConstraintType.diameter) {
+          prim.diameter = newValue.clamp(1.0, 10000.0);
+        } else {
+          final d = prim.endCenter - prim.startCenter;
+          final len = d.distance;
+          final unit = len > 1e-4 ? d / len : const Offset(1.0, 0.0);
+          final mid = (prim.startCenter + prim.endCenter) * 0.5;
+          prim.startCenter = mid - unit * (newValue / 2.0);
+          prim.endCenter = mid + unit * (newValue / 2.0);
+        }
+      }
+    }
+
     activeEditingDimensionHit = null;
     dimensionFirstEntityId = null;
     solveSketchConstraints();
     activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
+    invalidateMeshCache();
     notifyListeners();
   }
 
@@ -4065,33 +4223,80 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   /// Updates hovered and snapped position on the active sketch plane, evaluating
-  /// real-time grid snap and inferencing alignment guides.
+  /// real-time grid snap and Onshape-style single-point inferencing alignment guides (Issue #2 Fix).
   void updateSketchPlaneHover(Offset rawLocalPos) {
     if (activeSketchPlane == null) return;
     final gridSolver = CADGridSolver(gridSpacing: 5.0);
     final snapped = gridSolver.snapToGrid(rawLocalPos);
 
-    final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(activeSketchPlane!);
-    final guides = <CADInferenceMatch>[];
-    final Set<Offset> uniqueV = {};
-    for (final s in segments) {
-      if (!s.isDeleted) {
-        uniqueV.add(s.start);
-        uniqueV.add(s.end);
+    // CRITICAL FIX (Issue #2 - SS1 Yellow Dotted Lines):
+    // Previously, `compilePlaneSegments()` tessellated every circle into 64 segments and checked
+    // all 64 perimeter vertices within 6.0mm—spawning dozens of parallel yellow dashed lines across
+    // the entire circle band!
+    // In Onshape, inference guides ONLY snap to true geometric key points (Origin, Circle/Arc Centers,
+    // Line Endpoints/Midpoints, and Rectangle Corners/Centers) and emit at most ONE Horizontal and ONE Vertical guide!
+    final keyPoints = <Offset>[Offset.zero];
+    for (final prim in activeSketchPlane!.primitives) {
+      if (prim is CADCircleEntity) {
+        keyPoints.add(prim.center);
+      } else if (prim is CADLineEntity) {
+        keyPoints.add(prim.start);
+        keyPoints.add(prim.end);
+        keyPoints.add((prim.start + prim.end) * 0.5);
+      } else if (prim is CADRectangleEntity) {
+        keyPoints.add(prim.startPoint);
+        keyPoints.add(Offset(prim.startPoint.dx + prim.width, prim.startPoint.dy));
+        keyPoints.add(Offset(prim.startPoint.dx + prim.width, prim.startPoint.dy + prim.height));
+        keyPoints.add(Offset(prim.startPoint.dx, prim.startPoint.dy + prim.height));
+        keyPoints.add(Offset(prim.startPoint.dx + prim.width * 0.5, prim.startPoint.dy + prim.height * 0.5));
+      } else if (prim is CADCenterRectangleEntity) {
+        keyPoints.add(prim.center);
+        keyPoints.add(prim.topLeft);
+        keyPoints.add(prim.topRight);
+        keyPoints.add(prim.bottomRight);
+        keyPoints.add(prim.bottomLeft);
+      } else if (prim is CADArcEntity) {
+        keyPoints.add(prim.startPoint);
+        keyPoints.add(prim.endPoint);
+        final g = prim.computeCircumcircle();
+        if (g != null) keyPoints.add(g.center);
+      } else if (prim is CADCenterPointArcEntity) {
+        keyPoints.add(prim.center);
+        keyPoints.add(prim.startPoint);
+        keyPoints.add(prim.endPoint);
+      } else if (prim is CADPointEntity) {
+        keyPoints.add(prim.position);
       }
     }
+
+    const double snapTol = 2.5; // Tight 2.5 mm tolerance
     double finalX = snapped.dx;
     double finalY = snapped.dy;
-    for (final v in uniqueV) {
-      if ((rawLocalPos.dy - v.dy).abs() < 6.0) {
-        guides.add(CADInferenceMatch(value: v.dy, isHorizontal: true, refVertex: v));
+
+    CADInferenceMatch? bestH;
+    double bestHDist = snapTol;
+    CADInferenceMatch? bestV;
+    double bestVDist = snapTol;
+
+    for (final v in keyPoints) {
+      final dy = (rawLocalPos.dy - v.dy).abs();
+      if (dy < bestHDist) {
+        bestHDist = dy;
+        bestH = CADInferenceMatch(value: v.dy, isHorizontal: true, refVertex: v);
         finalY = v.dy;
       }
-      if ((rawLocalPos.dx - v.dx).abs() < 6.0) {
-        guides.add(CADInferenceMatch(value: v.dx, isHorizontal: false, refVertex: v));
+      final dx = (rawLocalPos.dx - v.dx).abs();
+      if (dx < bestVDist) {
+        bestVDist = dx;
+        bestV = CADInferenceMatch(value: v.dx, isHorizontal: false, refVertex: v);
         finalX = v.dx;
       }
     }
+
+    final guides = <CADInferenceMatch>[
+      ?bestH,
+      ?bestV,
+    ];
 
     activePlaneHoverLocal = Offset(finalX, finalY);
     activePlaneHoverWorld = activeSketchPlane!.toWorld(activePlaneHoverLocal!);
@@ -5994,6 +6199,9 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   void invalidateMeshCache() {
+    for (final part in doc.parts) {
+      part.invalidateMeshCache();
+    }
     _cachedAssemblyMesh = null;
     documentVersion++;
   }

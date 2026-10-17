@@ -83,16 +83,17 @@ class _AssemblyExtrudeDialogState extends State<AssemblyExtrudeDialog> {
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(5),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 1. Onshape Header Bar with Title, Green Checkmark (Enter) and Red Cross (Esc)
           Container(
             padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
             decoration: const BoxDecoration(
               color: Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(5)),
               border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.0)),
             ),
             child: Row(
@@ -198,48 +199,48 @@ class _AssemblyExtrudeDialogState extends State<AssemblyExtrudeDialog> {
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                     decoration: BoxDecoration(
                       color: hasValidProfile ? const Color(0xFFEFF6FF) : const Color(0xFFFEF2F2),
-                      border: Border(
-                        left: BorderSide(
-                          color: hasValidProfile ? AssemblyStudioTheme.onshapeBlue : const Color(0xFFEF4444),
-                          width: 3.5,
-                        ),
-                        top: const BorderSide(color: Color(0xFFCBD5E1)),
-                        right: const BorderSide(color: Color(0xFFCBD5E1)),
-                        bottom: const BorderSide(color: Color(0xFFCBD5E1)),
+                    border: Border(
+                      left: BorderSide(
+                        color: hasValidProfile ? AssemblyStudioTheme.onshapeBlue : const Color(0xFFEF4444),
+                        width: 3.5,
                       ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Faces and sketch regions to extrude',
-                          style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
-                        ),
-                        const SizedBox(height: 3),
-                        Row(
-                          children: [
-                            Icon(
-                              hasValidProfile ? Icons.crop_square_rounded : Icons.warning_amber_rounded,
-                              color: hasValidProfile ? const Color(0xFFF59E0B) : const Color(0xFFDC2626),
-                              size: 14,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                hasValidProfile ? 'Face of ${plane?.name ?? "Sketch 1"}' : 'Select a closed sketch region',
-                                style: TextStyle(
-                                  color: hasValidProfile ? const Color(0xFF0F172A) : const Color(0xFF991B1B),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                      top: const BorderSide(color: Color(0xFFCBD5E1)),
+                      right: const BorderSide(color: Color(0xFFCBD5E1)),
+                      bottom: const BorderSide(color: Color(0xFFCBD5E1)),
                     ),
                   ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Faces and sketch regions to extrude',
+                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            hasValidProfile ? Icons.crop_square_rounded : Icons.warning_amber_rounded,
+                            color: hasValidProfile ? const Color(0xFFF59E0B) : const Color(0xFFDC2626),
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              hasValidProfile ? 'Face of ${plane?.name ?? "Sketch 1"}' : 'Select a closed sketch region',
+                              style: TextStyle(
+                                color: hasValidProfile ? const Color(0xFF0F172A) : const Color(0xFF991B1B),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
+              ),
                 const SizedBox(height: 10),
 
                 // Boolean Operation Selector (New, Add, Remove, Intersect)
@@ -615,6 +616,7 @@ class _AssemblyExtrudeDialogState extends State<AssemblyExtrudeDialog> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

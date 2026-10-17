@@ -180,10 +180,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   Offset? _selectionBoxStart;
   Offset? _selectionBoxCurrent;
 
-  // Multi-Click Selection Hierarchy (1-click face, 2-click edit, 3-click whole body)
-  DateTime? _lastClickTime;
-  int _clickCount = 0;
-  String? _lastClickedPartId;
+  // Selection tracking
 
   // VCB Measurements HUD Controller
   final TextEditingController _vcbController = TextEditingController();
@@ -713,6 +710,21 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
             focusNode: _viewportFocusNode,
             autofocus: true,
             onKeyEvent: (node, event) {
+              // CRITICAL FIX (Issue #3): When the inline dimension editor popover is open (or any TextField has focus),
+              // let the TextField receive all digits (0-9, ., -), Backspace, and Enter directly!
+              final primaryFocus = FocusManager.instance.primaryFocus;
+              final isTextInputFocused = _vcbFocusNode.hasFocus ||
+                  vm.activeEditingDimensionHit != null ||
+                  (primaryFocus != null && primaryFocus != _viewportFocusNode && primaryFocus.context?.widget is EditableText);
+
+              if (isTextInputFocused) {
+                if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape && vm.activeEditingDimensionHit != null) {
+                  vm.closeInlineSketchDimensionEditor();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              }
+
               if (event is KeyDownEvent) {
                 bool isCtrl = false;
                 bool isShift = false;
@@ -1000,13 +1012,26 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                     return KeyEventResult.handled;
                   }
                 } else if (event.logicalKey == LogicalKeyboardKey.delete || event.logicalKey == LogicalKeyboardKey.backspace) {
-                  if (_vcbFocusNode.hasFocus) {
+                  if (_vcbFocusNode.hasFocus || vm.activeEditingDimensionHit != null) {
                     return KeyEventResult.ignored;
                   }
                   if (event.logicalKey == LogicalKeyboardKey.backspace && _vcbController.text.isNotEmpty) {
                     _vcbController.text = _vcbController.text.substring(0, _vcbController.text.length - 1);
                     vm.vcbValue = _vcbController.text;
                     vm.notifyDocChanged();
+                    return KeyEventResult.handled;
+                  }
+                  // CRITICAL FIX (Issue #6): Delete selected geometric or dimensional constraint in Sketch Mode!
+                  if (vm.isSketchMode && vm.selectedSketchConstraint != null) {
+                    vm.deleteSelectedSketchConstraint();
+                    setState(() {});
+                    return KeyEventResult.handled;
+                  }
+                  // Delete selected sketch entity in Sketch Mode
+                  if (vm.isSketchMode && vm.selectedSketchEntity != null) {
+                    vm.deleteSelectedSketchEntity();
+                    setState(() {});
+                    _rebuildGpuCadModel();
                     return KeyEventResult.handled;
                   }
                   if (vm.selectedWeldId != null) {
@@ -1053,6 +1078,16 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                   bool cancelledActiveAction = false;
                   if (vm.isExtrudeMode) {
                     vm.closeExtrudeDialog();
+                    cancelledActiveAction = true;
+                  }
+                  if (vm.activeConstraintTool != null) {
+                    vm.activeConstraintTool = null;
+                    vm.constraintFirstEntityId = null;
+                    vm.notifyDocChanged();
+                    cancelledActiveAction = true;
+                  }
+                  if (vm.selectedSketchConstraint != null) {
+                    vm.selectSketchConstraint(null);
                     cancelledActiveAction = true;
                   }
                   if (vm.sketchInteractiveStartPoint != null || vm.sketchPolylinePoints.isNotEmpty) {
@@ -1226,7 +1261,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                         }
                       },
                       onPointerDown: (event) {
-                        _viewportFocusNode.requestFocus();
+                        if (vm.activeEditingDimensionHit == null) {
+                          _viewportFocusNode.requestFocus();
+                        }
                         final selectedPart = vm.selectedPart;
 
                         // 1a. Immediate Middle Mouse Button Pan / Orbit Activation (Requirement 1 & 2)
@@ -1325,7 +1362,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
 
                         // 1c. Direct Sketch Entity Interaction & Parametric Drawing
                         if (vm.isSketchMode && (event.buttons & kPrimaryMouseButton) != 0) {
-                          // 0. Check if the user clicked directly on an Onshape Dimension Tag (image_31d0a3.png)!
+                          // 0A. Check if the user clicked directly on an Onshape Dimension Tag (image_31d0a3.png)!
                           for (final dimHit in vm.sketchDimensionHitRects.reversed) {
                             if (dimHit.screenRect.contains(event.localPosition)) {
                               vm.openInlineSketchDimensionEditor(dimHit);
@@ -1335,6 +1372,17 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                           }
                           if (vm.activeEditingDimensionHit != null) {
                             vm.closeInlineSketchDimensionEditor();
+                          }
+                          // 0B. Check if the user clicked on a Geometric Constraint Badge (H, V, ⊥, //, ◎, =) to select/delete it (Issue #6)!
+                          for (final cHit in vm.sketchConstraintHitRects.reversed) {
+                            if (cHit.screenRect.contains(event.localPosition)) {
+                              final cObj = vm.activeSketchPlane?.constraints.where((c) => c.id == cHit.constraintId).firstOrNull;
+                              if (cObj != null) {
+                                vm.selectSketchConstraint(cObj);
+                                setState(() {});
+                                return;
+                              }
+                            }
                           }
                           if (vm.isProjectGeometryMode) {
                             _handleProjectGeometryClick(event.localPosition, size, mesh, vm);
@@ -1996,6 +2044,30 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                 }
 
                                 if (hitPrimitive != null) {
+                                  // Interactive Onshape Constraint Mode (Issue #7):
+                                  // Clicking highlighted entities applies the active constraint directly!
+                                  if (vm.activeConstraintTool != null) {
+                                    final cType = vm.activeConstraintTool!;
+                                    final needsTwo = AssemblyStudioViewModel.constraintRequiresTwoEntities(cType);
+                                    if (!needsTwo) {
+                                      vm.applySketchConstraint(cType, targetEntityIds: [hitPrimitive.id]);
+                                    } else if (vm.constraintFirstEntityId == null) {
+                                      vm.constraintFirstEntityId = hitPrimitive.id;
+                                      vm.selectSketchPrimitive(hitPrimitive);
+                                      vm.setVcbState(
+                                        label: 'Constraint: ${cType.label} (${cType.symbol})',
+                                        value: '1st entity selected — Click 2nd entity',
+                                        hint: 'Hover highlights target in yellow • Click 2nd entity to apply ${cType.label}',
+                                      );
+                                    } else if (vm.constraintFirstEntityId != hitPrimitive.id) {
+                                      final firstId = vm.constraintFirstEntityId!;
+                                      vm.constraintFirstEntityId = null;
+                                      vm.applySketchConstraint(cType, targetEntityIds: [firstId, hitPrimitive.id]);
+                                    }
+                                    setState(() {});
+                                    return;
+                                  }
+
                                   if (HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isControlPressed) {
                                     vm.toggleSketchEntityMultiSelection(hitPrimitive.id);
                                   } else {
@@ -2192,19 +2264,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                               }
 
                               if (vm.activeToolMode == SketchUpToolMode.select) {
-                                final now = DateTime.now();
-                                if (_lastClickTime != null && _lastClickedPartId == hitPart.id && now.difference(_lastClickTime!).inMilliseconds < 450) {
-                                  _clickCount++;
-                                } else {
-                                  _clickCount = 1;
-                                  _lastClickedPartId = hitPart.id;
-                                }
-                                _lastClickTime = now;
-
-                                if (_clickCount == 2) {
-                                  vm.focusPartAndEnterSketch(hitPart.id, faceId: hitPoly.faceId);
-                                  return;
-                                }
+                                // Fix #1: Removed camera reset / jump on double click
 
                                 if (isCtrl) {
                                   vm.togglePartSelection(hitPart.id);
@@ -2601,7 +2661,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                             children: [
                               GestureDetector(
                                 behavior: HitTestBehavior.opaque,
-                                onDoubleTap: _zoomToFit,
+                                // Fix #1: Removed onDoubleTap: _zoomToFit so double-clicking never resets the camera!
                                 onTapUp: (details) {
                                   if (vm.isSketchMode || vm.pendingPlacement != null) {
                                     _handleTapUp(details.localPosition, size, mesh);
@@ -2614,9 +2674,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                     builder: (context, _) {
                                       final bool useGpu = _isGpuAvailable && _scene != null && _isSceneReady;
                                       return useGpu
-                                          ? RepaintBoundary(
-                                              child: SceneView(_scene!),
-                                            )
+                                          ? RepaintBoundary(child: SceneView(_scene!))
                                           : const RepaintBoundary(child: SizedBox.shrink());
                                     },
                                   ),
@@ -3482,11 +3540,11 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                   // =================================================================
                   // 6b. ONSHAPE INLINE FLOATING DIMENSION POPOVER & COMPACT ACTION BAR
                   // =================================================================
-                  if (vm.isSketchMode && (vm.activeEditingDimensionHit != null || vm.selectedSketchEntity != null))
+                  if (vm.isSketchMode && (vm.activeEditingDimensionHit != null || vm.selectedSketchConstraint != null || vm.selectedSketchEntity != null))
                     Positioned(
                       left: vm.activeEditingDimensionHit != null
-                          ? (vm.activeEditingDimensionHit!.screenRect.center.dx - 75.0).clamp(16.0, size.width - 240.0)
-                          : (size.width / 2.0 - 160.0),
+                          ? (vm.activeEditingDimensionHit!.screenRect.center.dx - 75.0).clamp(16.0, size.width - 260.0)
+                          : (size.width / 2.0 - 170.0),
                       top: vm.activeEditingDimensionHit != null
                           ? (vm.activeEditingDimensionHit!.screenRect.top - 42.0).clamp(56.0, size.height - 100.0)
                           : (size.height - 68.0),
@@ -4021,8 +4079,62 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   void _updateSketchHover(Offset screenPos, Size size, FoldedMeshResult mesh, AssemblyStudioViewModel vm) {
     final plane = vm.activeSketchPlane;
     if (plane == null) return;
+
+    // 1. Hit-test geometric constraint badges under cursor for hover highlight (Issue #6 & #7)
+    String? hoveredConstraintId;
+    for (final cHit in vm.sketchConstraintHitRects.reversed) {
+      if (cHit.screenRect.contains(screenPos)) {
+        hoveredConstraintId = cHit.constraintId;
+        break;
+      }
+    }
+    vm.hoveredSketchConstraintId = hoveredConstraintId;
+
     final localPos = _unprojectScreenToPlane(screenPos, plane, size, mesh);
     if (localPos == null) return;
+
+    // 2. Hit-test 2D sketch primitives under cursor for Onshape yellow/orange hover highlight (Issue #7 / SS4)!
+    String? hoveredEntId;
+    if (hoveredConstraintId == null) {
+      for (final p in plane.primitives.reversed) {
+        if (p is CADCircleEntity) {
+          final dist = (localPos - p.center).distance;
+          if ((dist - p.radius).abs() <= 6.0 || dist <= 6.0) {
+            hoveredEntId = p.id;
+            break;
+          }
+        } else if (p is CADLineEntity) {
+          if (_distanceToSegment(localPos, p.start, p.end) <= 6.0) {
+            hoveredEntId = p.id;
+            break;
+          }
+        } else if (p is CADArcEntity) {
+          final geom = p.computeCircumcircle();
+          if (geom != null && ((localPos - geom.center).distance - geom.radius).abs() <= 6.0) {
+            hoveredEntId = p.id;
+            break;
+          } else if (_distanceToSegment(localPos, p.startPoint, p.endPoint) <= 6.0) {
+            hoveredEntId = p.id;
+            break;
+          }
+        } else if (p is CADPointEntity) {
+          if ((localPos - p.position).distance <= 6.0) {
+            hoveredEntId = p.id;
+            break;
+          }
+        } else {
+          for (final seg in p.toLineSegments()) {
+            if (_distanceToSegment(localPos, seg.start, seg.end) <= 6.0) {
+              hoveredEntId = p.id;
+              break;
+            }
+          }
+          if (hoveredEntId != null) break;
+        }
+      }
+    }
+    vm.hoveredSketchEntityId = hoveredEntId;
+
     vm.updateSketchPlaneHover(localPos);
     _updateInteractiveSketchVcb(vm, vm.activePlaneHoverLocal ?? localPos);
   }

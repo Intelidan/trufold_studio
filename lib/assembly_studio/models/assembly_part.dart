@@ -1235,7 +1235,9 @@ class AssemblyPart {
     // Sketches & holes on web
     webHoles.addAll(_buildWebHoles(depthsOut: webDepths, isBlindOut: webBlind));
     _addBendLinePolygons(polys, H);
-    _addHoleBoreWalls(thickPolys, webHoles, const CadPoint3D(0.0, -1.0, 0.0), T, holeDepths: webDepths, isBlindList: webBlind);
+    // CRITICAL FIX (Issue #5 & #4): Bore walls must extrude from Y = 0 to Y = T * fDir!
+    // Passing CadPoint3D(0.0, -fDir, 0.0) ensures bore walls always bridge outer web (0) to inner web (T * fDir).
+    _addHoleBoreWalls(thickPolys, webHoles, CadPoint3D(0.0, -fDir, 0.0), T, holeDepths: webDepths, isBlindList: webBlind);
 
     polys.add(
       CadFoldedPolygon3D(
@@ -1274,8 +1276,14 @@ class AssemblyPart {
       ),
     );
 
-    // Inner Web face (real thickness T, Item 4)
-    final innerWebHoles = _buildWebHoles(throughOnly: true).map((loop) => loop.map((pt) => CadPoint3D(pt.x, T * fDir, pt.z)).toList()).toList();
+    // Inner Web face (real thickness T, Item 4 & Issue #5):
+    // Include ALL non-blind webHoles (both the 2x2 built-in splice mounting holes AND user through-cuts)
+    // so the demo model's 4 splice holes punch cleanly through the back wall (SS3)!
+    final innerWebHoles = <List<CadPoint3D>>[
+      for (int i = 0; i < webHoles.length; i++)
+        if (i >= webBlind.length || !webBlind[i])
+          webHoles[i].map((pt) => CadPoint3D(pt.x, T * fDir, pt.z)).toList(),
+    ];
     thickPolys.add(
       CadFoldedPolygon3D(
         faceId: '${id}_inner_web',
@@ -2290,12 +2298,14 @@ class AssemblyPart {
     for (final sk in sketches) {
       if (sk.isSurfaceImpress) continue; // Surface impress draws on surface without cutting
       if (throughOnly && !sk.isPassThrough && sk.cutDepthMm < thickness) continue;
-      final isWebLike = sk.targetFace == 'web' ||
-          sk.targetFace.endsWith('_web') ||
+      final isFlangeFace = sk.targetFace.contains('flange_top') || sk.targetFace.contains('flange_bot') || sk.targetFace.contains('flange_bottom');
+      final isWebLike = !isFlangeFace && (sk.targetFace == 'web' ||
+          sk.targetFace.contains('web') ||
           sk.targetFace.endsWith('_front') ||
           sk.targetFace.endsWith('_leg_v') ||
           sk.targetFace.endsWith('_bar_top') ||
-          sk.targetFace.isEmpty;
+          sk.targetFace.startsWith(id) ||
+          sk.targetFace.isEmpty);
       if (isWebLike) {
         final boreDepth = sk.isPassThrough ? thickness : math.min(sk.cutDepthMm, thickness);
         final isBlind = !sk.isPassThrough && sk.cutDepthMm < thickness;
@@ -2344,7 +2354,7 @@ class AssemblyPart {
 
         if (sk.customPolygonPoints != null && sk.customPolygonPoints!.length >= 3) {
           final pts = sk.customPolygonPoints!
-              .map((p) => CadPoint3D(sk.localCenter.x + p.dx, (cy + p.dy) * fDir, zCoord))
+              .map((p) => CadPoint3D(sk.localCenter.x + p.dx, (sk.localCenter.y + p.dy) * fDir, zCoord))
               .toList();
           flgHoles.add(pts);
           depthsOut?.add(boreDepth);

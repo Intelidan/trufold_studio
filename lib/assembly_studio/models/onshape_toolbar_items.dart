@@ -973,6 +973,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/01_coincident.svg',
         shortcut: 'I',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.coincident,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.coincident),
       ),
       OnshapeToolItem(
@@ -981,6 +982,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/02_concentric.svg',
         shortcut: 'Shift+O',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.concentric,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.concentric),
       ),
       OnshapeToolItem(
@@ -989,6 +991,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/03_parallel.svg',
         shortcut: 'B',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.parallel,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.parallel),
       ),
       OnshapeToolItem(
@@ -997,6 +1000,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/04_tangent.svg',
         shortcut: 'T',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.tangent,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.tangent),
       ),
       OnshapeToolItem(
@@ -1005,6 +1009,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/05_horizontal.svg',
         shortcut: 'H',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.horizontal,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.horizontal),
       ),
       OnshapeToolItem(
@@ -1013,6 +1018,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/06_vertical.svg',
         shortcut: 'V',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.vertical,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.vertical),
       ),
       OnshapeToolItem(
@@ -1021,6 +1027,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/07_perpendicular.svg',
         shortcut: 'Shift+L',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.perpendicular,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.perpendicular),
       ),
       OnshapeToolItem(
@@ -1029,6 +1036,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/08_equal.svg',
         shortcut: 'E',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.equal,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.equal),
       ),
       OnshapeToolItem(
@@ -1037,6 +1045,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/09_midpoint.svg',
         shortcut: 'Shift+M',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.midpoint,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.midpoint),
       ),
       OnshapeToolItem(
@@ -1045,6 +1054,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/10_normal.svg',
         shortcut: 'Shift+K',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.normal,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.normal),
       ),
       OnshapeToolItem(
@@ -1053,6 +1063,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/11_pierce.svg',
         shortcut: 'Shift+G',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.pierce,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.pierce),
       ),
       OnshapeToolItem(
@@ -1061,6 +1072,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/12_symmetric.svg',
         shortcut: 'Shift+Q',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.symmetric,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.symmetric),
       ),
       OnshapeToolItem(
@@ -1069,6 +1081,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/13_fix.svg',
         shortcut: 'Shift+J',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.fixed,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.fixed),
       ),
       OnshapeToolItem(
@@ -1077,6 +1090,7 @@ final List<OnshapeToolGroup> onshapeSketchGroups = [
         assetPath: 'assets/icons/onshape/02_sketch_toolbar/10_constraints/14_curvature.svg',
         shortcut: 'Shift+U',
         isImplemented: true,
+        isActive: (vm) => vm.activeConstraintTool == CadConstraintType.curvature,
         onExecute: (vm, ctx) => vm.applySketchConstraint(CadConstraintType.curvature),
       ),
     ],

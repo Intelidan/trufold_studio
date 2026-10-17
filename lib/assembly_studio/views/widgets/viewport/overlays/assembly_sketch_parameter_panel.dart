@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../../../sheet_metal_studio/engine/constraints/expression_parser_engine.dart';
 import '../../../../viewmodels/assembly_studio_viewmodel.dart';
 
-/// Onshape Inline Floating Dimension Popover (matches image_31d0a3.png) +
-/// Compact Contextual Sketch Quick-Action Pill (replaces the clunky CIRCLE PARAMETERS modal).
+/// Onshape Inline Floating Dimension Popover + Constraint Delete Inspector +
+/// Compact Contextual Sketch Quick-Action Pill.
 class AssemblySketchParameterPanel extends StatefulWidget {
   final AssemblyStudioViewModel viewModel;
   final VoidCallback? onRebuildModel;
@@ -48,10 +47,17 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
       final formatted = (hit.currentValue - hit.currentValue.roundToDouble()).abs() < 0.05
           ? hit.currentValue.round().toString()
           : hit.currentValue.toStringAsFixed(1);
-      _valueController.text = '$formatted ${hit.unitSuffix}';
+      // Store pure number in the text field so typing numbers works without fighting unit text!
+      _valueController.text = formatted;
       _valueController.selection = TextSelection(baseOffset: 0, extentOffset: formatted.length);
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _focusNode.requestFocus();
+        if (mounted) {
+          _focusNode.requestFocus();
+          _valueController.selection = TextSelection(
+            baseOffset: 0,
+            extentOffset: _valueController.text.length,
+          );
+        }
       });
     } else if (hit == null) {
       _lastTagKey = null;
@@ -107,7 +113,7 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
     final vm = widget.viewModel;
     final hit = vm.activeEditingDimensionHit;
 
-    // 1. ONSHAPE INLINE FLOATING DIMENSION POPOVER (image_31d0a3.png)
+    // 1. ONSHAPE INLINE FLOATING DIMENSION POPOVER
     if (hit != null) {
       return Material(
         color: Colors.transparent,
@@ -128,9 +134,9 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Dimension Value Input Box (e.g. "60 mm")
+                  // Dimension Value Input Box (e.g. "36.1" with "mm" unit suffix)
                   Container(
-                    width: 104,
+                    width: 112,
                     height: 28,
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     decoration: BoxDecoration(
@@ -138,33 +144,40 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
                       borderRadius: BorderRadius.circular(3),
                       border: Border.all(color: const Color(0xFF0284C7), width: 1.6),
                     ),
-                    child: KeyboardListener(
-                      focusNode: FocusNode(),
-                      onKeyEvent: (event) {
-                        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
-                          vm.closeInlineSketchDimensionEditor();
-                        }
-                      },
-                      child: TextField(
-                        controller: _valueController,
-                        focusNode: _focusNode,
-                        autofocus: true,
-                        style: const TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _valueController,
+                            focusNode: _focusNode,
+                            autofocus: true,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            style: const TextStyle(
+                              color: Color(0xFF0F172A),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(vertical: 5),
+                            ),
+                            onSubmitted: (_) => _commitDimension(),
+                          ),
                         ),
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(vertical: 5),
+                        Text(
+                          hit.unitSuffix,
+                          style: const TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                        onSubmitted: (_) => _commitDimension(),
-                      ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 4),
-                  // Onshape '±' Tolerance Button (image_31d0a3.png)
+                  // Onshape '±' Tolerance Button
                   Tooltip(
                     message: 'Toggle ± Tolerance',
                     child: InkWell(
@@ -196,7 +209,7 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
                       onTap: _commitDimension,
                       borderRadius: BorderRadius.circular(3),
                       child: Container(
-                        width: 24,
+                        width: 26,
                         height: 28,
                         decoration: BoxDecoration(
                           color: const Color(0xFF10B981),
@@ -206,6 +219,31 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
                       ),
                     ),
                   ),
+                  if (hit.existingConstraintId != null) ...[
+                    const SizedBox(width: 3),
+                    // Delete Dimensional Constraint Button
+                    Tooltip(
+                      message: 'Delete dimension constraint (Del)',
+                      child: InkWell(
+                        onTap: () {
+                          vm.removeSketchConstraint(hit.existingConstraintId!);
+                          vm.closeInlineSketchDimensionEditor();
+                          widget.onRebuildModel?.call();
+                        },
+                        borderRadius: BorderRadius.circular(3),
+                        child: Container(
+                          width: 26,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(color: const Color(0xFFFECACA)),
+                          ),
+                          child: const Icon(Icons.delete_outline_rounded, size: 14, color: Color(0xFFDC2626)),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 3),
                   // Cancel (Esc)
                   Tooltip(
@@ -266,9 +304,79 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
       );
     }
 
-    // 2. COMPACT CONTEXTUAL SKETCH ACTION BAR (When an entity is selected, no bulky modal!)
+    // 2. SELECTED CONSTRAINT PILL (When user clicks a geometric constraint badge like H, V, ⊥, //, ◎)
+    final selectedConstraint = vm.selectedSketchConstraint;
+    if (selectedConstraint != null && vm.selectedSketchEntity == null) {
+      return Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.98),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFF59E0B), width: 1.4),
+            boxShadow: const [BoxShadow(color: Color(0x1F000000), blurRadius: 8, offset: Offset(0, 2))],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFFF59E0B)),
+                ),
+                child: Text(
+                  selectedConstraint.symbol,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF92400E)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${selectedConstraint.label} Constraint',
+                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () {
+                  vm.removeSketchConstraint(selectedConstraint.id);
+                  widget.onRebuildModel?.call();
+                },
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFFFECACA)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.delete_outline_rounded, size: 14, color: Color(0xFFDC2626)),
+                      SizedBox(width: 4),
+                      Text(
+                        'Delete (Del)',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Color(0xFFDC2626)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 3. COMPACT CONTEXTUAL SKETCH ACTION BAR (When an entity is selected, including its removable constraint chips!)
     final entity = vm.selectedSketchEntity;
     if (entity == null) return const SizedBox.shrink();
+
+    final entityConstraints = (vm.activeSketchPlane?.constraints ?? [])
+        .where((c) => c.isActive && c.entityIds.any((id) => id.split(':').first == entity.id))
+        .toList();
 
     return Material(
       color: Colors.transparent,
@@ -312,9 +420,42 @@ class _AssemblySketchParameterPanelState extends State<AssemblySketchParameterPa
               isActive: vm.isExtrudeMode,
               onTap: vm.toggleExtrudeMode,
             ),
+            // Show removable chips for any constraints attached to this entity!
+            for (final c in entityConstraints) ...[
+              const SizedBox(width: 4),
+              Tooltip(
+                message: 'Click to delete ${c.label} constraint',
+                child: InkWell(
+                  onTap: () {
+                    vm.removeSketchConstraint(c.id);
+                    widget.onRebuildModel?.call();
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFF59E0B)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          c.symbol,
+                          style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF92400E)),
+                        ),
+                        const SizedBox(width: 3),
+                        const Icon(Icons.close, size: 11, color: Color(0xFF92400E)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(width: 4),
             IconButton(
-               visualDensity: VisualDensity.compact,
+              visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
               tooltip: 'Delete Sketch Entity (Del)',

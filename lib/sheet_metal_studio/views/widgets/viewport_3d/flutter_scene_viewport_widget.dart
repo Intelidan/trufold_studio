@@ -1695,7 +1695,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                     behavior: HitTestBehavior.opaque,
                     onTapUp: widget.isInteractionLocked ? null : (details) => _handlePrimaryTapUp(details, size, mesh),
                     onSecondaryTapUp: widget.isInteractionLocked ? null : (details) => _handleSecondaryTapUp(details, size, mesh),
-                    onDoubleTap: _zoomToFit,
+                    // Fix #1: Removed onDoubleTap: _zoomToFit so double-clicking never resets the camera!
                     child: _scene != null ? SceneView(_scene!) : const SizedBox.shrink(),
                   ),
                 ),

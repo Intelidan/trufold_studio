@@ -157,6 +157,17 @@ class SketchDimensionTagHit {
   });
 }
 
+/// Describes a clickable Onshape geometric constraint badge rendered on the 2D/3D sketch canvas.
+class SketchConstraintBadgeHit {
+  final String constraintId;
+  final Rect screenRect;
+
+  const SketchConstraintBadgeHit({
+    required this.constraintId,
+    required this.screenRect,
+  });
+}
+
 class CadConstraint {
   final String id;
   final CadConstraintType type;
