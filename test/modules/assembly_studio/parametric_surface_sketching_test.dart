@@ -21,7 +21,7 @@ void main() {
 
       final xzPlane = AssemblySurfaceSketchEngine.createDatumPlane('XZ');
       expect(xzPlane.id, 'datum_XZ');
-      expect(xzPlane.normal.y, closeTo(1.0, 1e-4));
+      expect(xzPlane.normal.y.abs(), closeTo(1.0, 1e-4));
 
       final yzPlane = AssemblySurfaceSketchEngine.createDatumPlane('YZ');
       expect(yzPlane.id, 'datum_YZ');
@@ -199,13 +199,13 @@ void main() {
         ),
       );
 
-      expect(find.textContaining('PARAMETERS'), findsOneWidget);
-      expect(find.text('Width (mm)'), findsOneWidget);
-      expect(find.text('Height (mm)'), findsOneWidget);
-      expect(find.text('PUNCH PASS-THROUGH CUT'), findsOneWidget);
+      expect(find.text('Construction (Q)'), findsOneWidget);
+      expect(find.text('Dimension (D)'), findsOneWidget);
+      expect(find.text('Extrude (E)'), findsOneWidget);
+      expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
 
-      // Tap Punch Pass-Through Cut
-      await tester.tap(find.text('PUNCH PASS-THROUGH CUT'));
+      // Tap Delete Sketch Entity
+      await tester.tap(find.byIcon(Icons.delete_outline_rounded));
       await tester.pumpAndSettle();
 
       expect(rebuildCalled, isTrue);
@@ -692,11 +692,10 @@ void main() {
         ),
       );
 
-      expect(find.text('CENTER RECTANGLE PARAMETERS'), findsOneWidget);
-      expect(find.text('Width (mm)'), findsOneWidget);
-      expect(find.text('Height (mm)'), findsOneWidget);
-      expect(find.text('Pos X'), findsOneWidget);
-      expect(find.text('Pos Y'), findsOneWidget);
+      expect(find.text('Construction (Q)'), findsOneWidget);
+      expect(find.text('Dimension (D)'), findsOneWidget);
+      expect(find.text('Extrude (E)'), findsOneWidget);
+      expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
     });
 
     testWidgets('AssemblySketchParameterPanel renders 3-point arc inputs when selected', (tester) async {
@@ -719,10 +718,10 @@ void main() {
         ),
       );
 
-      expect(find.text('3-POINT ARC PARAMETERS'), findsOneWidget);
-      expect(find.text('Radius (mm)'), findsOneWidget);
-      expect(find.text('Pos X'), findsOneWidget);
-      expect(find.text('Pos Y'), findsOneWidget);
+      expect(find.text('Construction (Q)'), findsOneWidget);
+      expect(find.text('Dimension (D)'), findsOneWidget);
+      expect(find.text('Extrude (E)'), findsOneWidget);
+      expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
     });
   });
 

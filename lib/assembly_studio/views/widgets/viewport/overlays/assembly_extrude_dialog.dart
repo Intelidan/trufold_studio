@@ -192,50 +192,52 @@ class _AssemblyExtrudeDialogState extends State<AssemblyExtrudeDialog> {
                 const SizedBox(height: 10),
 
                 // 1b. Onshape "Faces and sketch regions to extrude" Active Selection Box (image_31d127.png)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: hasValidProfile ? const Color(0xFFEFF6FF) : const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border(
-                      left: BorderSide(
-                        color: hasValidProfile ? AssemblyStudioTheme.onshapeBlue : const Color(0xFFEF4444),
-                        width: 3.5,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: hasValidProfile ? const Color(0xFFEFF6FF) : const Color(0xFFFEF2F2),
+                      border: Border(
+                        left: BorderSide(
+                          color: hasValidProfile ? AssemblyStudioTheme.onshapeBlue : const Color(0xFFEF4444),
+                          width: 3.5,
+                        ),
+                        top: const BorderSide(color: Color(0xFFCBD5E1)),
+                        right: const BorderSide(color: Color(0xFFCBD5E1)),
+                        bottom: const BorderSide(color: Color(0xFFCBD5E1)),
                       ),
-                      top: const BorderSide(color: Color(0xFFCBD5E1)),
-                      right: const BorderSide(color: Color(0xFFCBD5E1)),
-                      bottom: const BorderSide(color: Color(0xFFCBD5E1)),
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Faces and sketch regions to extrude',
-                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
-                      ),
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          Icon(
-                            hasValidProfile ? Icons.crop_square_rounded : Icons.warning_amber_rounded,
-                            color: hasValidProfile ? const Color(0xFFF59E0B) : const Color(0xFFDC2626),
-                            size: 14,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              hasValidProfile ? 'Face of ${plane?.name ?? "Sketch 1"}' : 'Select a closed sketch region',
-                              style: TextStyle(
-                                color: hasValidProfile ? const Color(0xFF0F172A) : const Color(0xFF991B1B),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Faces and sketch regions to extrude',
+                          style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Icon(
+                              hasValidProfile ? Icons.crop_square_rounded : Icons.warning_amber_rounded,
+                              color: hasValidProfile ? const Color(0xFFF59E0B) : const Color(0xFFDC2626),
+                              size: 14,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                hasValidProfile ? 'Face of ${plane?.name ?? "Sketch 1"}' : 'Select a closed sketch region',
+                                style: TextStyle(
+                                  color: hasValidProfile ? const Color(0xFF0F172A) : const Color(0xFF991B1B),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -527,26 +529,7 @@ class _AssemblyExtrudeDialogState extends State<AssemblyExtrudeDialog> {
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
-                        ),
-                        ),
-                        const SizedBox(width: 6),
-                        Tooltip(
-                          message: 'Opposite direction (Flip ⇄)',
-                          child: InkWell(
-                            onTap: () => vm.updateExtrudeDistance(-params.distanceMm),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: const Color(0xFFCBD5E1)),
-                              ),
-                              child: const Icon(Icons.swap_horiz_rounded, size: 14, color: Color(0xFF334155)),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                     SizedBox(
                       width: 70,

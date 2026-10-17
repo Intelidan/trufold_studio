@@ -506,8 +506,12 @@ class AssemblySketchConstraintSolver {
         final a1 = math.atan2(d1.dy, d1.dx);
         final a2 = math.atan2(d2.dy, d2.dx);
         double diff = a2 - a1;
-        while (diff <= -math.pi) diff += 2.0 * math.pi;
-        while (diff > math.pi) diff -= 2.0 * math.pi;
+        while (diff <= -math.pi) {
+          diff += 2.0 * math.pi;
+        }
+        while (diff > math.pi) {
+          diff -= 2.0 * math.pi;
+        }
         final sign = diff >= 0 ? 1.0 : -1.0;
         final targetA2 = a1 + sign * (val * math.pi / 180.0);
 

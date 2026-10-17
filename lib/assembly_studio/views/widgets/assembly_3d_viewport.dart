@@ -2615,23 +2615,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                       final bool useGpu = _isGpuAvailable && _scene != null && _isSceneReady;
                                       return useGpu
                                           ? RepaintBoundary(
-                                              child: Stack(
-                                                fit: StackFit.expand,
-                                                children: [
-                                                  SceneView(_scene!),
-                                                  if (vm.graphicsPreferences.screenSpaceEdgeAntiAliasing &&
-                                                      vm.onshapeRenderMode != OnshapeRenderMode.shadedWithoutEdges)
-                                                    CustomPaint(
-                                                      size: Size.infinite,
-                                                      painter: AssemblyGpuEdgeAntiAliasPainter(
-                                                        mesh: mesh,
-                                                        projectPoint: (pt) => _projectPoint(pt, size, mesh),
-                                                        lineWidth: vm.graphicsPreferences.lineWidth,
-                                                        silhouetteBoost: vm.graphicsPreferences.silhouetteEdgeBoost,
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
+                                              child: SceneView(_scene!),
                                             )
                                           : const RepaintBoundary(child: SizedBox.shrink());
                                     },

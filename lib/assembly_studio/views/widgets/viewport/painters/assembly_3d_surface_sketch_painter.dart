@@ -1020,8 +1020,12 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     final a1 = math.atan2(v1.dy, v1.dx);
     final a2 = math.atan2(v2.dy, v2.dx);
     double sweep = a2 - a1;
-    while (sweep <= -math.pi) sweep += 2.0 * math.pi;
-    while (sweep > math.pi) sweep -= 2.0 * math.pi;
+    while (sweep <= -math.pi) {
+      sweep += 2.0 * math.pi;
+    }
+    while (sweep > math.pi) {
+      sweep -= 2.0 * math.pi;
+    }
 
     const double arcR = 38.0;
     final arcRect = Rect.fromCircle(center: vertex, radius: arcR);
