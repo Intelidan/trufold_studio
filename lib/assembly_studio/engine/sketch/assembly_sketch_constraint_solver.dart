@@ -210,6 +210,7 @@ class AssemblySketchConstraintSolver {
       case CadConstraintType.distance:
       case CadConstraintType.radius:
       case CadConstraintType.diameter:
+      case CadConstraintType.angle:
         return _solveDimensional(c, entityMap);
       case CadConstraintType.symmetric:
         return _solveSymmetric(c, entityMap);
@@ -485,20 +486,130 @@ class AssemblySketchConstraintSolver {
     final val = c.parameterValue;
     if (val == null || val <= 0) return false;
     if (c.entityIds.isEmpty) return false;
-    final ent = entityMap[c.entityIds[0]];
+
+    final rawId0 = c.entityIds[0];
+    final baseId0 = rawId0.split(':').first;
+    final subKey0 = rawId0.contains(':') ? rawId0.split(':').last : '';
+    final ent = entityMap[baseId0];
     if (ent == null) return false;
 
+    // 1. ANGULAR DIMENSION BETWEEN 2 LINES (e.g. 27° in image_31d02d.png)
+    if (c.type == CadConstraintType.angle && c.entityIds.length >= 2) {
+      final ent2 = entityMap[c.entityIds[1].split(':').first];
+      if (ent is CADLineEntity && ent2 is CADLineEntity) {
+        final d1 = ent.end - ent.start;
+        final d2 = ent2.end - ent2.start;
+        final len1 = d1.distance;
+        final len2 = d2.distance;
+        if (len1 < 1e-4 || len2 < 1e-4) return false;
+
+        final a1 = math.atan2(d1.dy, d1.dx);
+        final a2 = math.atan2(d2.dy, d2.dx);
+        double diff = a2 - a1;
+        while (diff <= -math.pi) diff += 2.0 * math.pi;
+        while (diff > math.pi) diff -= 2.0 * math.pi;
+        final sign = diff >= 0 ? 1.0 : -1.0;
+        final targetA2 = a1 + sign * (val * math.pi / 180.0);
+
+        Offset pivot = ent2.start;
+        bool pivotIsStart = true;
+        if ((ent2.end - ent.start).distance < 1.0 || (ent2.end - ent.end).distance < 1.0) {
+          pivot = ent2.end;
+          pivotIsStart = false;
+        }
+        final dir2 = Offset(math.cos(targetA2), math.sin(targetA2));
+        if (pivotIsStart) {
+          ent2.end = pivot + dir2 * len2;
+        } else {
+          ent2.start = pivot - dir2 * len2;
+        }
+        return true;
+      }
+      return false;
+    }
+
+    // 2. TWO-ENTITY LINEAR DISTANCE (Point/Circle-to-Line, Line-to-Line, Center-to-Center)
+    if (c.type == CadConstraintType.distance && c.entityIds.length >= 2) {
+      final ent2 = entityMap[c.entityIds[1].split(':').first];
+      if (ent2 == null) return false;
+
+      if (ent is CADLineEntity && ent2 is! CADLineEntity) {
+        final lVec = ent.end - ent.start;
+        final lLen = lVec.distance;
+        if (lLen < 1e-4) return false;
+        final unitN = Offset(-lVec.dy / lLen, lVec.dx / lLen);
+        final p2 = _getEntityCenterOrAnchor(ent2);
+        final signedDist = (p2.dx - ent.start.dx) * unitN.dx + (p2.dy - ent.start.dy) * unitN.dy;
+        final sign = signedDist >= 0 ? 1.0 : -1.0;
+        final delta = unitN * (sign * val - signedDist);
+        _shiftEntityTo(ent2, p2 + delta);
+        return true;
+      } else if (ent2 is CADLineEntity && ent is! CADLineEntity) {
+        final lVec = ent2.end - ent2.start;
+        final lLen = lVec.distance;
+        if (lLen < 1e-4) return false;
+        final unitN = Offset(-lVec.dy / lLen, lVec.dx / lLen);
+        final p1 = _getEntityCenterOrAnchor(ent);
+        final signedDist = (p1.dx - ent2.start.dx) * unitN.dx + (p1.dy - ent2.start.dy) * unitN.dy;
+        final sign = signedDist >= 0 ? 1.0 : -1.0;
+        final delta = unitN * (sign * val - signedDist);
+        _shiftEntityTo(ent, p1 + delta);
+        return true;
+      } else if (ent is CADLineEntity && ent2 is CADLineEntity) {
+        final lVec = ent.end - ent.start;
+        final lLen = lVec.distance;
+        if (lLen < 1e-4) return false;
+        final unitN = Offset(-lVec.dy / lLen, lVec.dx / lLen);
+        final mid2 = (ent2.start + ent2.end) * 0.5;
+        final signedDist = (mid2.dx - ent.start.dx) * unitN.dx + (mid2.dy - ent.start.dy) * unitN.dy;
+        final sign = signedDist >= 0 ? 1.0 : -1.0;
+        final shift = unitN * (sign * val - signedDist);
+        ent2.start = ent2.start + shift;
+        ent2.end = ent2.end + shift;
+        return true;
+      } else {
+        final p1 = _getEntityCenterOrAnchor(ent);
+        final p2 = _getEntityCenterOrAnchor(ent2);
+        final d = p2 - p1;
+        final len = d.distance;
+        final dir = len > 1e-4 ? d / len : const Offset(1.0, 0.0);
+        _shiftEntityTo(ent2, p1 + dir * val);
+        return true;
+      }
+    }
+
+    // 3. SINGLE-ENTITY DIMENSIONS (Radius, Diameter, Length, Width/Height)
     if (c.type == CadConstraintType.radius) {
       if (ent is CADCircleEntity) {
         ent.radius = val;
         return true;
+      } else if (ent is CADCenterPointArcEntity) {
+        ent.radius = val;
+        return true;
+      } else if (ent is CADRegularPolygonEntity) {
+        ent.radius = val;
+        return true;
       } else if (ent is CADArcEntity) {
-        // Parametrically adjust arc point
+        final chordVec = ent.endPoint - ent.startPoint;
+        final chordLen = chordVec.distance;
+        if (chordLen > 1e-4) {
+          final clampedR = math.max(val, chordLen / 2.0);
+          final mid = (ent.startPoint + ent.endPoint) * 0.5;
+          final perp = Offset(-chordVec.dy / chordLen, chordVec.dx / chordLen);
+          final currentSide = (ent.pointOnArc.dx - mid.dx) * perp.dx + (ent.pointOnArc.dy - mid.dy) * perp.dy;
+          final sign = currentSide >= 0 ? 1.0 : -1.0;
+          final hDist = math.sqrt(math.max(0.0, clampedR * clampedR - (chordLen / 2.0) * (chordLen / 2.0)));
+          final sagitta = clampedR - hDist;
+          ent.pointOnArc = mid + perp * (sign * (sagitta > 1e-4 ? sagitta : clampedR));
+        }
         return true;
       }
     } else if (c.type == CadConstraintType.diameter) {
       if (ent is CADCircleEntity) {
         ent.radius = val / 2.0;
+        return true;
+      } else if (ent is CADSlotEntity) {
+        ent.diameter = val;
         return true;
       }
     } else if (c.type == CadConstraintType.distance) {
@@ -506,12 +617,34 @@ class AssemblySketchConstraintSolver {
         final d = ent.end - ent.start;
         final currLen = d.distance;
         if (currLen > 1e-4) {
-          final mid = Offset((ent.start.dx + ent.end.dx) / 2.0, (ent.start.dy + ent.end.dy) / 2.0);
           final unit = d / currLen;
+          final mid = (ent.start + ent.end) * 0.5;
           ent.start = mid - unit * (val / 2.0);
           ent.end = mid + unit * (val / 2.0);
           return true;
         }
+      } else if (ent is CADRectangleEntity) {
+        if (subKey0 == 'h') {
+          ent.height = val;
+        } else {
+          ent.width = val;
+        }
+        return true;
+      } else if (ent is CADCenterRectangleEntity) {
+        if (subKey0 == 'h') {
+          ent.height = val;
+        } else {
+          ent.width = val;
+        }
+        return true;
+      } else if (ent is CADSlotEntity) {
+        final d = ent.endCenter - ent.startCenter;
+        final len = d.distance;
+        final unit = len > 1e-4 ? d / len : const Offset(1.0, 0.0);
+        final mid = (ent.startCenter + ent.endCenter) * 0.5;
+        ent.startCenter = mid - unit * (val / 2.0);
+        ent.endCenter = mid + unit * (val / 2.0);
+        return true;
       }
     }
     return false;

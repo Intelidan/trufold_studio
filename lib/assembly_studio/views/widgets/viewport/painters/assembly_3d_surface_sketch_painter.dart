@@ -6,13 +6,9 @@ import '../../../../../sheet_metal_studio/models/cad_primitives.dart';
 import '../../../../../sketch_draft_files/cad_parameter_engine/cad_models.dart';
 import '../../../../viewmodels/assembly_studio_viewmodel.dart';
 
-/// Renders real-time 3D parametric sketch geometry directly glued to surface planes:
-/// 1. Procedural 2D design grid aligned to the active 3D plane's local coordinate frame.
-/// 2. Glowing neon-green snapping indicator dot.
-/// 3. Glowing yellow dashed inferencing alignment tracks.
-/// 4. 2D CAD entities (Rectangles, Circles, Lines, Polylines) with construction dashing.
-/// 5. Validated closed-loop tessellated fill shading.
-/// 6. Floating 3D parametric dimension labels with interactive text blocks.
+/// Renders real-time 3D parametric sketch geometry and Onshape CAD Engineering Dimensions
+/// (witness/extension lines, filled arrowheads, radial/diametric leaders, angular arcs,
+/// and clickable inline dimension tags matching image_31d02d.png and image_31d0a3.png).
 class Assembly3DSurfaceSketchPainter extends CustomPainter {
   final AssemblyStudioViewModel viewModel;
   final Offset Function(CadPoint3D) projectPoint;
@@ -23,6 +19,8 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final plane = viewModel.activeSketchPlane;
     if (plane == null) return;
+
+    viewModel.sketchDimensionHitRects.clear();
 
     final xAx = plane.xAxis;
     final yAx = plane.yAxis;
@@ -36,8 +34,8 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     // 1. Procedural Plane Design Grid Overlay
     if (viewModel.showSketchGrid) {
       final gridPaint = Paint()
-        ..color = const Color(0x330284C7)
-        ..strokeWidth = 1.0;
+        ..color = const Color(0x260284C7)
+        ..strokeWidth = 0.8;
 
       const double extent = 200.0;
       const double step = 20.0;
@@ -45,13 +43,11 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
 
       for (int i = -lineCount; i <= lineCount; i++) {
         final val = i * step;
-        // Parallel to Y
         final s1 = toScreen(Offset(val, -extent));
         final e1 = toScreen(Offset(val, extent));
         if (s1 != Offset.zero && e1 != Offset.zero) {
           canvas.drawLine(s1, e1, gridPaint);
         }
-        // Parallel to X
         final s2 = toScreen(Offset(-extent, val));
         final e2 = toScreen(Offset(extent, val));
         if (s2 != Offset.zero && e2 != Offset.zero) {
@@ -60,39 +56,37 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       }
     }
 
-    // Origin Axes (Red for X, Green for Y)
+    // Sketch Origin Crosshair & Axes (Onshape dark crosshair + subtle R/G axes)
     final scrOrigin = toScreen(Offset.zero);
-    final scrXAxis = toScreen(const Offset(35.0, 0.0));
-    final scrYAxis = toScreen(const Offset(0.0, 35.0));
+    final scrXAxis = toScreen(const Offset(30.0, 0.0));
+    final scrYAxis = toScreen(const Offset(0.0, 30.0));
     if (scrOrigin != Offset.zero) {
       if (scrXAxis != Offset.zero) {
-        canvas.drawLine(
-          scrOrigin,
-          scrXAxis,
-          Paint()
-            ..color = const Color(0xFFEF4444)
-            ..strokeWidth = 2.5,
-        );
+        canvas.drawLine(scrOrigin, scrXAxis, Paint()..color = const Color(0x99EF4444)..strokeWidth = 1.6);
       }
       if (scrYAxis != Offset.zero) {
-        canvas.drawLine(
-          scrOrigin,
-          scrYAxis,
-          Paint()
-            ..color = const Color(0xFF10B981)
-            ..strokeWidth = 2.5,
-        );
+        canvas.drawLine(scrOrigin, scrYAxis, Paint()..color = const Color(0x9910B981)..strokeWidth = 1.6);
       }
+      canvas.drawCircle(
+        scrOrigin,
+        4.0,
+        Paint()
+          ..color = const Color(0xFF334155)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4,
+      );
     }
 
-    // 2. Interior Shaded Tessellated Profiles (shade ALL valid closed loops on the plane!)
+    // 2. Interior Shaded Closed Profiles (Onshape translucent steel-blue region fill + orange highlight when Extrude is active)
     final validation = viewModel.activeSketchValidation;
     if (viewModel.showSketchProfileShading && validation != null && validation.isValidClosedLoop) {
       final loopsToFill = validation.allClosedLoops.isNotEmpty
           ? validation.allClosedLoops
           : (validation.orderedPathVertices.length >= 3 ? [validation.orderedPathVertices] : <List<Offset>>[]);
+
+      final isExtrudeHighlight = viewModel.isExtrudeMode;
       final fillPaint = Paint()
-        ..color = const Color(0x380284C7)
+        ..color = isExtrudeHighlight ? const Color(0x45F59E0B) : const Color(0x320284C7)
         ..style = PaintingStyle.fill;
 
       for (final loop in loopsToFill) {
@@ -112,43 +106,70 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
         if (!first) {
           fillPath.close();
           canvas.drawPath(fillPath, fillPaint);
+          if (isExtrudeHighlight) {
+            canvas.drawPath(
+              fillPath,
+              Paint()
+                ..color = const Color(0xFFF59E0B)
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 2.4,
+            );
+          }
         }
       }
     }
 
-    // 3. Render Primitive Entities & Segments
+    // Track which entities already have an explicit driving dimensional constraint
+    final entitiesWithDrivingDim = <String>{};
+    for (final c in plane.constraints) {
+      if (c.isActive && c.isDimensional) {
+        for (final eid in c.entityIds) {
+          entitiesWithDrivingDim.add(eid);
+        }
+      }
+    }
+
+    // 3. Render Primitive Entities & Onshape CAD Dimensions
     for (final prim in plane.primitives) {
-      final isSel = (prim.id == viewModel.selectedSketchEntity?.id);
+      final isSel = (prim.id == viewModel.selectedSketchEntity?.id) ||
+          viewModel.selectedSketchEntityIds.contains(prim.id);
       final isConstrained = prim.isFullyConstrained;
       final isOverConstrained = viewModel.lastConstraintSolverResult?.conflictingConstraints
               .any((c) => c.entityIds.contains(prim.id)) ??
           false;
+
       final strokePaint = Paint()
         ..color = isOverConstrained
-            ? const Color(0xFFEF4444) // Onshape Red for over-constrained / conflicting geometry!
+            ? const Color(0xFFEF4444) // Onshape Red for conflicting geometry
             : isSel
-            ? const Color(0xFFF59E0B) // Amber for selected
-            : prim.isProjected
-            ? const Color(0xFFC084FC) // Purple/Magenta for projected geometry
-            : prim.isConstruction
-            ? const Color(0xFF38BDF8) // Light blue for construction
-            : isConstrained
-            ? const Color(0xFF0F172A) // Black / Slate 900 for fully constrained geometry
-            : const Color(0xFF0284C7) // Blue for under-constrained geometry
-        ..strokeWidth = isSel ? 2.8 : (prim.isProjected ? 2.2 : (isConstrained ? 2.2 : 1.8))
-        ..style = PaintingStyle.stroke;
+                ? const Color(0xFFF59E0B) // Onshape Amber/Orange for selected geometry
+                : prim.isProjected
+                    ? const Color(0xFFC084FC) // Purple for projected 3D geometry
+                    : prim.isConstruction
+                        ? const Color(0xFF475569) // Slate dashed for construction geometry
+                        : isConstrained
+                            ? const Color(0xFF0F172A) // Onshape Black for fully defined geometry
+                            : const Color(0xFF0284C7) // Onshape Blue for under-defined geometry
+        ..strokeWidth = isSel ? 2.6 : (prim.isConstruction ? 1.4 : 2.0)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
 
-      // High-contrast halo underlay for CAD visibility when rotated/behind parts (Bug 3 / SS4)
       final haloPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.90)
-        ..strokeWidth = strokePaint.strokeWidth + 2.2
+        ..color = Colors.white.withValues(alpha: 0.85)
+        ..strokeWidth = strokePaint.strokeWidth + 2.0
         ..style = PaintingStyle.stroke;
 
       if (prim is CADRectangleEntity) {
-        final p1 = toScreen(prim.startPoint);
-        final p2 = toScreen(Offset(prim.startPoint.dx + prim.width, prim.startPoint.dy));
-        final p3 = toScreen(Offset(prim.startPoint.dx + prim.width, prim.startPoint.dy + prim.height));
-        final p4 = toScreen(Offset(prim.startPoint.dx, prim.startPoint.dy + prim.height));
+        final p1Local = prim.startPoint;
+        final p2Local = Offset(prim.startPoint.dx + prim.width, prim.startPoint.dy);
+        final p3Local = Offset(prim.startPoint.dx + prim.width, prim.startPoint.dy + prim.height);
+        final p4Local = Offset(prim.startPoint.dx, prim.startPoint.dy + prim.height);
+
+        final p1 = toScreen(p1Local);
+        final p2 = toScreen(p2Local);
+        final p3 = toScreen(p3Local);
+        final p4 = toScreen(p4Local);
 
         if (p1 != Offset.zero && p2 != Offset.zero && p3 != Offset.zero && p4 != Offset.zero) {
           final rectPath = Path()
@@ -160,22 +181,49 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
 
           canvas.drawPath(rectPath, haloPaint);
           if (prim.isConstruction) {
-            _drawDashedPath(canvas, rectPath, strokePaint);
+            _drawCenterlineDashedPath(canvas, rectPath, strokePaint);
           } else {
             canvas.drawPath(rectPath, strokePaint);
           }
 
-          if (isSel) {
-            _drawHandle(canvas, p1);
-            _drawHandle(canvas, p2);
-            _drawHandle(canvas, p3);
-            _drawHandle(canvas, p4);
+          _drawVertexDot(canvas, p1, strokePaint.color, isSel: isSel);
+          _drawVertexDot(canvas, p2, strokePaint.color, isSel: isSel);
+          _drawVertexDot(canvas, p3, strokePaint.color, isSel: isSel);
+          _drawVertexDot(canvas, p4, strokePaint.color, isSel: isSel);
 
-            // Floating dimension labels
-            final topMid = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
-            final rightMid = Offset((p2.dx + p3.dx) / 2, (p2.dy + p3.dy) / 2);
-            _drawDimensionBadge(canvas, topMid, 'W: ${prim.width.toStringAsFixed(1)} mm');
-            _drawDimensionBadge(canvas, rightMid, 'H: ${prim.height.toStringAsFixed(1)} mm');
+          if ((isSel || viewModel.showSketchExpressions) && !entitiesWithDrivingDim.contains(prim.id)) {
+            _drawLinearCadDimension(
+              canvas: canvas,
+              pA: p1,
+              pB: p2,
+              offsetPx: -26.0,
+              label: _formatDimValue(prim.width),
+              isDriving: false,
+              hitInfo: SketchDimensionTagHit(
+                tagKey: '${prim.id}:w',
+                screenRect: Rect.zero,
+                primaryEntityId: prim.id,
+                constraintType: CadConstraintType.distance,
+                currentValue: prim.width,
+                subKey: 'w',
+              ),
+            );
+            _drawLinearCadDimension(
+              canvas: canvas,
+              pA: p2,
+              pB: p3,
+              offsetPx: 28.0,
+              label: _formatDimValue(prim.height),
+              isDriving: false,
+              hitInfo: SketchDimensionTagHit(
+                tagKey: '${prim.id}:h',
+                screenRect: Rect.zero,
+                primaryEntityId: prim.id,
+                constraintType: CadConstraintType.distance,
+                currentValue: prim.height,
+                subKey: 'h',
+              ),
+            );
           }
         }
       } else if (prim is CADCenterRectangleEntity) {
@@ -195,30 +243,58 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
 
           canvas.drawPath(rectPath, haloPaint);
           if (prim.isConstruction) {
-            _drawDashedPath(canvas, rectPath, strokePaint);
+            _drawCenterlineDashedPath(canvas, rectPath, strokePaint);
           } else {
             canvas.drawPath(rectPath, strokePaint);
           }
 
           if (prim.hasDiagonalConstruction || isSel) {
             final diagPaint = Paint()
-              ..color = const Color(0xFF38BDF8).withValues(alpha: 0.6)
-              ..strokeWidth = 1.0;
+              ..color = const Color(0xFF64748B).withValues(alpha: 0.65)
+              ..strokeWidth = 1.1;
             _drawDashedLine(canvas, p1, p3, diagPaint);
             _drawDashedLine(canvas, p4, p2, diagPaint);
           }
 
-          if (isSel) {
-            _drawHandle(canvas, cScr);
-            _drawHandle(canvas, p1);
-            _drawHandle(canvas, p2);
-            _drawHandle(canvas, p3);
-            _drawHandle(canvas, p4);
+          _drawVertexDot(canvas, cScr, strokePaint.color, isSel: isSel);
+          _drawVertexDot(canvas, p1, strokePaint.color, isSel: isSel);
+          _drawVertexDot(canvas, p2, strokePaint.color, isSel: isSel);
+          _drawVertexDot(canvas, p3, strokePaint.color, isSel: isSel);
+          _drawVertexDot(canvas, p4, strokePaint.color, isSel: isSel);
 
-            final topMid = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
-            final rightMid = Offset((p2.dx + p3.dx) / 2, (p2.dy + p3.dy) / 2);
-            _drawDimensionBadge(canvas, topMid, 'W: ${prim.width.toStringAsFixed(1)} mm');
-            _drawDimensionBadge(canvas, rightMid, 'H: ${prim.height.toStringAsFixed(1)} mm');
+          if ((isSel || viewModel.showSketchExpressions) && !entitiesWithDrivingDim.contains(prim.id)) {
+            _drawLinearCadDimension(
+              canvas: canvas,
+              pA: p1,
+              pB: p2,
+              offsetPx: -26.0,
+              label: _formatDimValue(prim.width),
+              isDriving: false,
+              hitInfo: SketchDimensionTagHit(
+                tagKey: '${prim.id}:w',
+                screenRect: Rect.zero,
+                primaryEntityId: prim.id,
+                constraintType: CadConstraintType.distance,
+                currentValue: prim.width,
+                subKey: 'w',
+              ),
+            );
+            _drawLinearCadDimension(
+              canvas: canvas,
+              pA: p2,
+              pB: p3,
+              offsetPx: 28.0,
+              label: _formatDimValue(prim.height),
+              isDriving: false,
+              hitInfo: SketchDimensionTagHit(
+                tagKey: '${prim.id}:h',
+                screenRect: Rect.zero,
+                primaryEntityId: prim.id,
+                constraintType: CadConstraintType.distance,
+                currentValue: prim.height,
+                subKey: 'h',
+              ),
+            );
           }
         }
       } else if (prim is CADArcEntity) {
@@ -235,7 +311,7 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
         } else {
           final cScr = toScreen(geom.center);
           final arcPath = Path();
-          const int numSegs = 32;
+          const int numSegs = 36;
           for (int i = 0; i <= numSegs; i++) {
             final t = i / numSegs;
             final ang = geom.startAngle + t * geom.sweep;
@@ -250,25 +326,45 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
 
           canvas.drawPath(arcPath, haloPaint);
           if (prim.isConstruction) {
-            _drawDashedPath(canvas, arcPath, strokePaint);
+            _drawCenterlineDashedPath(canvas, arcPath, strokePaint);
           } else {
             canvas.drawPath(arcPath, strokePaint);
           }
 
-          if (isSel) {
-            _drawHandle(canvas, sScr);
-            _drawHandle(canvas, eScr);
-            _drawHandle(canvas, mScr);
-            _drawHandle(canvas, cScr);
-            _drawDimensionBadge(canvas, mScr, 'R: ${geom.radius.toStringAsFixed(1)} mm');
+          _drawVertexDot(canvas, sScr, strokePaint.color, isSel: isSel);
+          _drawVertexDot(canvas, eScr, strokePaint.color, isSel: isSel);
+          _drawVertexDot(canvas, cScr, strokePaint.color, isSel: isSel);
+
+          if ((isSel || viewModel.showSketchExpressions) && !entitiesWithDrivingDim.contains(prim.id)) {
+            _drawRadialOrDiameterLeaderDimension(
+              canvas: canvas,
+              centerScr: cScr,
+              rimScr: mScr,
+              label: 'R${_formatDimValue(geom.radius)}',
+              isDriving: false,
+              hitInfo: SketchDimensionTagHit(
+                tagKey: prim.id,
+                screenRect: Rect.zero,
+                primaryEntityId: prim.id,
+                constraintType: CadConstraintType.radius,
+                currentValue: geom.radius,
+              ),
+            );
           }
         }
       } else if (prim is CADCircleEntity) {
         final cScr = toScreen(prim.center);
-        final rEdge = toScreen(Offset(prim.center.dx + prim.radius, prim.center.dy));
+        // 35° leader point on the circle rim (matches Onshape Ø17 / Ø33 in image_31d02d.png!)
+        const double leaderAngle = -math.pi / 4.0;
+        final rimLocal = Offset(
+          prim.center.dx + prim.radius * math.cos(leaderAngle),
+          prim.center.dy + prim.radius * math.sin(leaderAngle),
+        );
+        final rEdge = toScreen(rimLocal);
+
         if (cScr != Offset.zero) {
           final circlePath = Path();
-          const int segs = 48;
+          const int segs = 56;
           for (int i = 0; i <= segs; i++) {
             final theta = i * 2.0 * math.pi / segs;
             final ptLocal = Offset(
@@ -286,40 +382,29 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
 
           canvas.drawPath(circlePath, haloPaint);
           if (prim.isConstruction) {
-            _drawDashedPath(canvas, circlePath, strokePaint);
+            _drawCenterlineDashedPath(canvas, circlePath, strokePaint);
           } else {
             canvas.drawPath(circlePath, strokePaint);
           }
 
-          // Center crosshair mark
-          final crossPaint = Paint()
-            ..color = strokePaint.color
-            ..strokeWidth = 1.2;
-          canvas.drawLine(cScr - const Offset(4.0, 0), cScr + const Offset(4.0, 0), crossPaint);
-          canvas.drawLine(cScr - const Offset(0, 4.0), cScr + const Offset(0, 4.0), crossPaint);
+          _drawVertexDot(canvas, cScr, strokePaint.color, isSel: isSel);
 
-          if (isSel) {
-            _drawHandle(canvas, cScr);
-            if (rEdge != Offset.zero) {
-              _drawHandle(canvas, rEdge);
-              canvas.drawLine(
-                cScr,
-                rEdge,
-                Paint()
-                  ..color = const Color(0xFFF59E0B)
-                  ..strokeWidth = 1.2,
-              );
-              _drawDimensionBadge(
-                canvas,
-                Offset((cScr.dx + rEdge.dx) / 2, (cScr.dy + rEdge.dy) / 2),
-                'Ø ${(prim.radius * 2).toStringAsFixed(1)} mm',
-              );
-            }
-          } else if (viewModel.showSketchExpressions) {
-            _drawDimensionBadge(
-              canvas,
-              cScr + const Offset(12.0, -12.0),
-              'Ø ${(prim.radius * 2).toStringAsFixed(1)}',
+          if ((isSel || viewModel.showSketchExpressions) &&
+              !entitiesWithDrivingDim.contains(prim.id) &&
+              rEdge != Offset.zero) {
+            _drawRadialOrDiameterLeaderDimension(
+              canvas: canvas,
+              centerScr: cScr,
+              rimScr: rEdge,
+              label: 'Ø${_formatDimValue(prim.radius * 2.0)}',
+              isDriving: false,
+              hitInfo: SketchDimensionTagHit(
+                tagKey: prim.id,
+                screenRect: Rect.zero,
+                primaryEntityId: prim.id,
+                constraintType: CadConstraintType.diameter,
+                currentValue: prim.radius * 2.0,
+              ),
             );
           }
         }
@@ -329,16 +414,32 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
         if (sScr != Offset.zero && eScr != Offset.zero) {
           canvas.drawLine(sScr, eScr, haloPaint);
           if (prim.isConstruction) {
-            _drawDashedLine(canvas, sScr, eScr, strokePaint);
+            _drawCenterlineDashedLine(canvas, sScr, eScr, strokePaint);
           } else {
             canvas.drawLine(sScr, eScr, strokePaint);
           }
-          if (isSel) {
-            _drawHandle(canvas, sScr);
-            _drawHandle(canvas, eScr);
-            final mid = Offset((sScr.dx + eScr.dx) / 2, (sScr.dy + eScr.dy) / 2);
+          _drawVertexDot(canvas, sScr, strokePaint.color, isSel: isSel);
+          _drawVertexDot(canvas, eScr, strokePaint.color, isSel: isSel);
+
+          if ((isSel || viewModel.showSketchExpressions) &&
+              !prim.isConstruction &&
+              !entitiesWithDrivingDim.contains(prim.id)) {
             final len = (prim.end - prim.start).distance;
-            _drawDimensionBadge(canvas, mid, 'L: ${len.toStringAsFixed(1)} mm');
+            _drawLinearCadDimension(
+              canvas: canvas,
+              pA: sScr,
+              pB: eScr,
+              offsetPx: -26.0,
+              label: _formatDimValue(len),
+              isDriving: false,
+              hitInfo: SketchDimensionTagHit(
+                tagKey: prim.id,
+                screenRect: Rect.zero,
+                primaryEntityId: prim.id,
+                constraintType: CadConstraintType.distance,
+                currentValue: len,
+              ),
+            );
           }
         }
       } else if (prim is CADPolylineEntity) {
@@ -358,28 +459,20 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           if (prim.isClosed) polyPath.close();
           canvas.drawPath(polyPath, haloPaint);
           if (prim.isConstruction) {
-            _drawDashedPath(canvas, polyPath, strokePaint);
+            _drawCenterlineDashedPath(canvas, polyPath, strokePaint);
           } else {
             canvas.drawPath(polyPath, strokePaint);
           }
-          if (isSel) {
-            for (final pt in prim.points) {
-              _drawHandle(canvas, toScreen(pt));
-            }
+          for (final pt in prim.points) {
+            _drawVertexDot(canvas, toScreen(pt), strokePaint.color, isSel: isSel);
           }
         }
       } else if (prim is CADPointEntity) {
         final ptScr = toScreen(prim.position);
         if (ptScr != Offset.zero) {
-          canvas.drawCircle(ptScr, 3.5, Paint()..color = strokePaint.color);
-          canvas.drawLine(ptScr - const Offset(5, 0), ptScr + const Offset(5, 0), Paint()..color = strokePaint.color..strokeWidth = 1.2);
-          canvas.drawLine(ptScr - const Offset(0, 5), ptScr + const Offset(0, 5), Paint()..color = strokePaint.color..strokeWidth = 1.2);
-          if (isSel) {
-            _drawHandle(canvas, ptScr);
-          }
+          _drawVertexDot(canvas, ptScr, strokePaint.color, isSel: isSel);
         }
       } else {
-        // Universal renderer for AlignedRect, Ellipse, CenterPointArc, Conic, RegularPolygon, Spline/Bezier, Slot, and Text
         final segs = prim.toLineSegments();
         if (segs.isNotEmpty) {
           final path = Path();
@@ -393,12 +486,11 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           }
           canvas.drawPath(path, haloPaint);
           if (prim.isConstruction) {
-            _drawDashedPath(canvas, path, strokePaint);
+            _drawCenterlineDashedPath(canvas, path, strokePaint);
           } else {
             canvas.drawPath(path, strokePaint);
           }
         }
-        // Draw construction inscribed/circumscribed circle for RegularPolygon
         if (prim is CADRegularPolygonEntity) {
           final cPath = Path();
           for (int i = 0; i <= 36; i++) {
@@ -410,16 +502,50 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
               cPath.lineTo(pt.dx, pt.dy);
             }
           }
-          _drawDashedPath(canvas, cPath, Paint()..color = const Color(0xFF38BDF8)..strokeWidth = 1.0..style = PaintingStyle.stroke);
-          _drawDimensionBadge(canvas, toScreen(prim.center), '${prim.sides}x');
+          _drawCenterlineDashedPath(
+            canvas,
+            cPath,
+            Paint()
+              ..color = const Color(0xFF64748B)
+              ..strokeWidth = 1.1
+              ..style = PaintingStyle.stroke,
+          );
+          _drawVertexDot(canvas, toScreen(prim.center), strokePaint.color, isSel: isSel);
         }
       }
     }
 
-    // 4. Glowing Yellow Dashed Inferencing Alignment Lines
+    // 4. Render All Explicit Driving Dimensional Constraints (image_31d02d.png & image_31d0a3.png)
+    for (final c in plane.constraints) {
+      if (!c.isActive || !c.isDimensional) continue;
+      _drawDrivingDimensionConstraint(canvas, plane, c, toScreen);
+    }
+
+    // 5. Render Geometric Constraint Glyphs (H, V, ⊥, //, ◎, ⌒, =, ⇋)
+    if (viewModel.showSketchConstraints && plane.constraints.isNotEmpty) {
+      for (final constraint in plane.constraints) {
+        if (!constraint.isActive || constraint.isDimensional) continue;
+        final isConstraintSelected = (viewModel.selectedSketchConstraint?.id == constraint.id) ||
+            constraint.entityIds.any((id) => viewModel.selectedSketchEntityIds.contains(id));
+
+        Offset? badgePos;
+        if (constraint.entityIds.isNotEmpty) {
+          final firstEnt = plane.primitives.where((p) => p.id == constraint.entityIds[0]).firstOrNull;
+          if (firstEnt != null) {
+            badgePos = toScreen(_getEntityBadgeAnchor(firstEnt));
+          }
+        }
+
+        if (badgePos != null && badgePos != Offset.zero) {
+          _drawConstraintBadge(canvas, badgePos, constraint.symbol, isHighlighted: isConstraintSelected);
+        }
+      }
+    }
+
+    // 6. Glowing Yellow Dashed Inferencing Alignment Lines + Live H/V Inference Badge
     final inferPaint = Paint()
-      ..color = const Color(0xFFFFD600)
-      ..strokeWidth = 1.2
+      ..color = const Color(0xFFF59E0B)
+      ..strokeWidth = 1.1
       ..style = PaintingStyle.stroke;
 
     const double inferExtent = 300.0;
@@ -439,18 +565,15 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       }
     }
 
-    // 5. Snapping point indicator (Item 5b: pointed mouse, no giant green dot)
+    // 7. Live Interactive Sketch Rubber-Band Preview
     final hoverLocal = viewModel.activePlaneHoverLocal;
-
-
-    // 5b. Live Interactive Sketch Rubber-Band Preview (Phase 3)
     if (viewModel.sketchInteractiveStartPoint != null && hoverLocal != null) {
       final pStart = viewModel.sketchInteractiveStartPoint!;
       final sScr = toScreen(pStart);
       final hScr = toScreen(hoverLocal);
       final previewPaint = Paint()
-        ..color = const Color(0xFF38BDF8)
-        ..strokeWidth = 1.6
+        ..color = const Color(0xFF0284C7)
+        ..strokeWidth = 1.8
         ..style = PaintingStyle.stroke;
 
       if (sScr != Offset.zero && hScr != Offset.zero) {
@@ -467,9 +590,15 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           final p4 = toScreen(Offset(x, y + h));
 
           if (p1 != Offset.zero && p2 != Offset.zero && p3 != Offset.zero && p4 != Offset.zero) {
-            final rPath = Path()..moveTo(p1.dx, p1.dy)..lineTo(p2.dx, p2.dy)..lineTo(p3.dx, p3.dy)..lineTo(p4.dx, p4.dy)..close();
+            final rPath = Path()
+              ..moveTo(p1.dx, p1.dy)
+              ..lineTo(p2.dx, p2.dy)
+              ..lineTo(p3.dx, p3.dy)
+              ..lineTo(p4.dx, p4.dy)
+              ..close();
             _drawDashedPath(canvas, rPath, previewPaint);
-            _drawDimensionBadge(canvas, Offset((p1.dx + p3.dx) / 2, (p1.dy + p3.dy) / 2), '${w.toStringAsFixed(1)} x ${h.toStringAsFixed(1)} mm');
+            _drawLinearCadDimension(canvas: canvas, pA: p1, pB: p2, offsetPx: -24.0, label: _formatDimValue(w), isDriving: false);
+            _drawLinearCadDimension(canvas: canvas, pA: p2, pB: p3, offsetPx: 24.0, label: _formatDimValue(h), isDriving: false);
           }
         } else if (tool == 'center_rect') {
           final w = 2.0 * (hoverLocal.dx - pStart.dx).abs();
@@ -482,17 +611,20 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           final p4 = toScreen(Offset(x, y + h));
 
           if (p1 != Offset.zero && p2 != Offset.zero && p3 != Offset.zero && p4 != Offset.zero) {
-            final rPath = Path()..moveTo(p1.dx, p1.dy)..lineTo(p2.dx, p2.dy)..lineTo(p3.dx, p3.dy)..lineTo(p4.dx, p4.dy)..close();
+            final rPath = Path()
+              ..moveTo(p1.dx, p1.dy)
+              ..lineTo(p2.dx, p2.dy)
+              ..lineTo(p3.dx, p3.dy)
+              ..lineTo(p4.dx, p4.dy)
+              ..close();
             _drawDashedPath(canvas, rPath, previewPaint);
-            _drawDashedLine(canvas, p1, p3, Paint()..color = const Color(0xFF38BDF8).withValues(alpha: 0.5)..strokeWidth = 1.0);
-            _drawDashedLine(canvas, p4, p2, Paint()..color = const Color(0xFF38BDF8).withValues(alpha: 0.5)..strokeWidth = 1.0);
-            _drawHandle(canvas, sScr);
-            _drawDimensionBadge(canvas, sScr, '${w.toStringAsFixed(1)} x ${h.toStringAsFixed(1)} mm');
+            _drawLinearCadDimension(canvas: canvas, pA: p1, pB: p2, offsetPx: -24.0, label: _formatDimValue(w), isDriving: false);
+            _drawLinearCadDimension(canvas: canvas, pA: p2, pB: p3, offsetPx: 24.0, label: _formatDimValue(h), isDriving: false);
           }
         } else if (tool == 'circle' || tool == 'hole') {
           final rLocal = (hoverLocal - pStart).distance;
           final circlePath = Path();
-          const int segs = 36;
+          const int segs = 48;
           for (int i = 0; i <= segs; i++) {
             final theta = i * 2.0 * math.pi / segs;
             final ptLocal = Offset(
@@ -508,136 +640,550 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           }
           circlePath.close();
           _drawDashedPath(canvas, circlePath, previewPaint);
-          canvas.drawLine(sScr, hScr, Paint()..color = const Color(0xFFF59E0B)..strokeWidth = 1.0);
-          _drawHandle(canvas, sScr);
-          _drawDimensionBadge(canvas, Offset((sScr.dx + hScr.dx) / 2, (sScr.dy + hScr.dy) / 2), 'Ø ${(rLocal * 2).toStringAsFixed(1)} mm');
-        } else if (tool == 'arc_3point') {
-          if (viewModel.sketchInteractiveMidPoint == null) {
-            _drawDashedLine(canvas, sScr, hScr, previewPaint);
-            _drawHandle(canvas, sScr);
-            _drawDimensionBadge(canvas, hScr, 'End Point (Click)');
-          } else {
-            final pEnd = viewModel.sketchInteractiveMidPoint!;
-            final arcTemp = CADArcEntity(id: 'temp_arc', startPoint: pStart, endPoint: pEnd, pointOnArc: hoverLocal);
-            final geom = arcTemp.computeCircumcircle();
-            if (geom != null) {
-              final arcPath = Path();
-              const int numSegs = 24;
-              for (int i = 0; i <= numSegs; i++) {
-                final t = i / numSegs;
-                final ang = geom.startAngle + t * geom.sweep;
-                final pt = toScreen(Offset(geom.center.dx + geom.radius * math.cos(ang), geom.center.dy + geom.radius * math.sin(ang)));
-                if (i == 0) {
-                  arcPath.moveTo(pt.dx, pt.dy);
-                } else {
-                  arcPath.lineTo(pt.dx, pt.dy);
-                }
-              }
-              _drawDashedPath(canvas, arcPath, previewPaint);
-              _drawDimensionBadge(canvas, hScr, 'R: ${geom.radius.toStringAsFixed(1)} mm');
-            } else {
-              _drawDashedLine(canvas, sScr, hScr, previewPaint);
+          _drawRadialOrDiameterLeaderDimension(
+            canvas: canvas,
+            centerScr: sScr,
+            rimScr: hScr,
+            label: 'Ø${_formatDimValue(rLocal * 2.0)}',
+            isDriving: false,
+          );
+        } else if (tool == 'line' || tool == 'midpoint_line') {
+          _drawDashedLine(canvas, sScr, hScr, previewPaint);
+          _drawVertexDot(canvas, sScr, const Color(0xFF0284C7), isSel: true);
+          final len = (hoverLocal - pStart).distance;
+          _drawLinearCadDimension(canvas: canvas, pA: sScr, pB: hScr, offsetPx: -24.0, label: _formatDimValue(len), isDriving: false);
+
+          // Show live Onshape H / V automatic constraint inference badge while drawing a line!
+          final dx = (hoverLocal.dx - pStart.dx).abs();
+          final dy = (hoverLocal.dy - pStart.dy).abs();
+          if (len > 3.0) {
+            if (dy < dx * 0.06) {
+              _drawConstraintBadge(canvas, Offset((sScr.dx + hScr.dx) / 2, (sScr.dy + hScr.dy) / 2 + 18), 'H', isHighlighted: true);
+            } else if (dx < dy * 0.06) {
+              _drawConstraintBadge(canvas, Offset((sScr.dx + hScr.dx) / 2 + 18, (sScr.dy + hScr.dy) / 2), 'V', isHighlighted: true);
             }
           }
-        } else if (tool == 'line') {
-          _drawDashedLine(canvas, sScr, hScr, previewPaint);
-          _drawHandle(canvas, sScr);
-          final len = (hoverLocal - pStart).distance;
-          _drawDimensionBadge(canvas, Offset((sScr.dx + hScr.dx) / 2, (sScr.dy + hScr.dy) / 2), 'L: ${len.toStringAsFixed(1)} mm');
-        }
-      }
-    }
-
-    if (viewModel.sketchPolylinePoints.isNotEmpty && hoverLocal != null) {
-      final pts = viewModel.sketchPolylinePoints;
-      final polyPaint = Paint()..color = const Color(0xFF0284C7)..strokeWidth = 1.8..style = PaintingStyle.stroke;
-      for (int i = 0; i < pts.length - 1; i++) {
-        final p1 = toScreen(pts[i]);
-        final p2 = toScreen(pts[i + 1]);
-        if (p1 != Offset.zero && p2 != Offset.zero) canvas.drawLine(p1, p2, polyPaint);
-      }
-      final lastScr = toScreen(pts.last);
-      final hScr = toScreen(hoverLocal);
-      if (lastScr != Offset.zero && hScr != Offset.zero) {
-        _drawDashedLine(canvas, lastScr, hScr, Paint()..color = const Color(0xFF38BDF8)..strokeWidth = 1.5);
-      }
-    }
-
-    // 6. Project Geometry Mode 3D Entity Hover Visualizer (Phase 2)
-    if (viewModel.isProjectGeometryMode) {
-      if (viewModel.hoveredProjectableEdge != null && viewModel.hoveredProjectableEdge!.length >= 2) {
-        final p1 = projectPoint(viewModel.hoveredProjectableEdge![0]);
-        final p2 = projectPoint(viewModel.hoveredProjectableEdge![1]);
-        if (p1 != Offset.zero && p2 != Offset.zero) {
-          final glowPaint = Paint()
-            ..color = const Color(0xFFC084FC).withValues(alpha: 0.35)
-            ..strokeWidth = 6.0
-            ..strokeCap = StrokeCap.round;
-          final edgePaint = Paint()
-            ..color = const Color(0xFFC084FC)
-            ..strokeWidth = 2.5
-            ..strokeCap = StrokeCap.round;
-          canvas.drawLine(p1, p2, glowPaint);
-          canvas.drawLine(p1, p2, edgePaint);
-
-          final mid = Offset((p1.dx + p2.dx) / 2.0, (p1.dy + p2.dy) / 2.0);
-          _drawProjectBadge(canvas, mid, 'PROJECT EDGE (P)');
-        }
-      } else if (viewModel.hoveredProjectablePoint != null) {
-        final ptScr = projectPoint(viewModel.hoveredProjectablePoint!);
-        if (ptScr != Offset.zero) {
-          canvas.drawCircle(ptScr, 8.0, Paint()..color = const Color(0xFFC084FC).withValues(alpha: 0.35));
-          canvas.drawCircle(ptScr, 4.0, Paint()..color = const Color(0xFFC084FC));
-          _drawProjectBadge(canvas, ptScr, 'PROJECT VERTEX (P)');
-        }
-      }
-    }
-
-    // 6. Geometric Constraint Glyphs & Badges (Phase 4 - Autodesk Fusion 360)
-    if (viewModel.showSketchConstraints && plane.constraints.isNotEmpty) {
-      for (final constraint in plane.constraints) {
-        if (!constraint.isActive) continue;
-        final isConstraintSelected = (viewModel.selectedSketchConstraint?.id == constraint.id) ||
-            constraint.entityIds.any((id) => viewModel.selectedSketchEntityIds.contains(id));
-
-        Offset? badgePos;
-        if (constraint.entityIds.isNotEmpty) {
-          final firstEnt = plane.primitives.where((p) => p.id == constraint.entityIds[0]).firstOrNull;
-          if (firstEnt != null) {
-            badgePos = toScreen(_getEntityBadgeAnchor(firstEnt));
-          }
-        }
-
-        if (badgePos != null && badgePos != Offset.zero) {
-          _drawConstraintBadge(canvas, badgePos, constraint.symbol, isHighlighted: isConstraintSelected);
         }
       }
     }
   }
 
-  void _drawProjectBadge(Canvas canvas, Offset pos, String text) {
+  /// Renders an explicit driving `CadConstraint` dimension (`distance`, `diameter`, `radius`, `angle`)
+  /// using authentic Onshape CAD extension lines, arrowheads, leader lines, or angular arcs.
+  void _drawDrivingDimensionConstraint(
+    Canvas canvas,
+    CADSketchPlane plane,
+    CadConstraint c,
+    Offset Function(Offset) toScreen,
+  ) {
+    if (c.entityIds.isEmpty) return;
+    final val = c.parameterValue ?? 0.0;
+    final rawId0 = c.entityIds[0];
+    final baseId0 = rawId0.split(':').first;
+    final subKey0 = rawId0.contains(':') ? rawId0.split(':').last : null;
+    final e1 = plane.primitives.where((p) => p.id == baseId0).firstOrNull;
+    if (e1 == null) return;
+
+    final String formattedVal = _formatConstraintText(c, val);
+
+    // 1. TWO-ENTITY DIMENSIONS (Angle 27° or Distance 60 / 65 / 10)
+    if (c.entityIds.length >= 2) {
+      final baseId1 = c.entityIds[1].split(':').first;
+      final e2 = plane.primitives.where((p) => p.id == baseId1).firstOrNull;
+      if (e2 == null) return;
+
+      if (c.type == CadConstraintType.angle && e1 is CADLineEntity && e2 is CADLineEntity) {
+        _drawAngularCadDimension(
+          canvas: canvas,
+          l1: e1,
+          l2: e2,
+          toScreen: toScreen,
+          label: '$formattedVal°',
+          hitInfo: SketchDimensionTagHit(
+            tagKey: c.id,
+            screenRect: Rect.zero,
+            primaryEntityId: e1.id,
+            secondaryEntityId: e2.id,
+            constraintType: CadConstraintType.angle,
+            existingConstraintId: c.id,
+            currentValue: val,
+            unitSuffix: 'deg',
+          ),
+        );
+        return;
+      }
+
+      // Linear distance between two entities
+      Offset pA;
+      Offset pB;
+      if (e1 is CADLineEntity && e2 is! CADLineEntity) {
+        final anchor2 = _getEntityCenter(e2);
+        pA = toScreen(_projectPointToInfiniteLine(anchor2, e1.start, e1.end));
+        pB = toScreen(anchor2);
+      } else if (e2 is CADLineEntity && e1 is! CADLineEntity) {
+        final anchor1 = _getEntityCenter(e1);
+        pA = toScreen(anchor1);
+        pB = toScreen(_projectPointToInfiniteLine(anchor1, e2.start, e2.end));
+      } else if (e1 is CADLineEntity && e2 is CADLineEntity) {
+        final mid1 = (e1.start + e1.end) * 0.5;
+        pA = toScreen(mid1);
+        pB = toScreen(_projectPointToInfiniteLine(mid1, e2.start, e2.end));
+      } else {
+        pA = toScreen(_getEntityCenter(e1));
+        pB = toScreen(_getEntityCenter(e2));
+      }
+
+      if (pA != Offset.zero && pB != Offset.zero) {
+        _drawLinearCadDimension(
+          canvas: canvas,
+          pA: pA,
+          pB: pB,
+          offsetPx: c.labelOffset * 1.4,
+          label: formattedVal,
+          isDriving: true,
+          hitInfo: SketchDimensionTagHit(
+            tagKey: c.id,
+            screenRect: Rect.zero,
+            primaryEntityId: e1.id,
+            secondaryEntityId: e2.id,
+            constraintType: CadConstraintType.distance,
+            existingConstraintId: c.id,
+            currentValue: val,
+          ),
+        );
+      }
+      return;
+    }
+
+    // 2. SINGLE-ENTITY DRIVING DIMENSIONS
+    if (c.type == CadConstraintType.diameter && e1 is CADCircleEntity) {
+      final cScr = toScreen(e1.center);
+      const double leaderAng = -math.pi / 4.0;
+      final rScr = toScreen(Offset(
+        e1.center.dx + e1.radius * math.cos(leaderAng),
+        e1.center.dy + e1.radius * math.sin(leaderAng),
+      ));
+      if (cScr != Offset.zero && rScr != Offset.zero) {
+        _drawRadialOrDiameterLeaderDimension(
+          canvas: canvas,
+          centerScr: cScr,
+          rimScr: rScr,
+          label: 'Ø$formattedVal',
+          isDriving: true,
+          hitInfo: SketchDimensionTagHit(
+            tagKey: c.id,
+            screenRect: Rect.zero,
+            primaryEntityId: e1.id,
+            constraintType: CadConstraintType.diameter,
+            existingConstraintId: c.id,
+            currentValue: val,
+          ),
+        );
+      }
+    } else if (c.type == CadConstraintType.radius) {
+      Offset cScr = Offset.zero;
+      Offset rScr = Offset.zero;
+      if (e1 is CADCircleEntity) {
+        cScr = toScreen(e1.center);
+        rScr = toScreen(Offset(e1.center.dx + e1.radius * 0.707, e1.center.dy - e1.radius * 0.707));
+      } else if (e1 is CADArcEntity) {
+        final g = e1.computeCircumcircle();
+        if (g != null) {
+          cScr = toScreen(g.center);
+          rScr = toScreen(e1.pointOnArc);
+        }
+      } else if (e1 is CADCenterPointArcEntity) {
+        cScr = toScreen(e1.center);
+        rScr = toScreen(e1.startPoint);
+      }
+      if (cScr != Offset.zero && rScr != Offset.zero) {
+        _drawRadialOrDiameterLeaderDimension(
+          canvas: canvas,
+          centerScr: cScr,
+          rimScr: rScr,
+          label: 'R$formattedVal',
+          isDriving: true,
+          hitInfo: SketchDimensionTagHit(
+            tagKey: c.id,
+            screenRect: Rect.zero,
+            primaryEntityId: e1.id,
+            constraintType: CadConstraintType.radius,
+            existingConstraintId: c.id,
+            currentValue: val,
+          ),
+        );
+      }
+    } else if (c.type == CadConstraintType.distance) {
+      if (e1 is CADLineEntity) {
+        final pA = toScreen(e1.start);
+        final pB = toScreen(e1.end);
+        if (pA != Offset.zero && pB != Offset.zero) {
+          _drawLinearCadDimension(
+            canvas: canvas,
+            pA: pA,
+            pB: pB,
+            offsetPx: -c.labelOffset.abs() * 1.5,
+            label: formattedVal,
+            isDriving: true,
+            hitInfo: SketchDimensionTagHit(
+              tagKey: c.id,
+              screenRect: Rect.zero,
+              primaryEntityId: e1.id,
+              constraintType: CadConstraintType.distance,
+              existingConstraintId: c.id,
+              currentValue: val,
+            ),
+          );
+        }
+      } else if (e1 is CADRectangleEntity) {
+        final p1 = toScreen(e1.startPoint);
+        final p2 = toScreen(Offset(e1.startPoint.dx + e1.width, e1.startPoint.dy));
+        final p3 = toScreen(Offset(e1.startPoint.dx + e1.width, e1.startPoint.dy + e1.height));
+        if (subKey0 == 'h') {
+          _drawLinearCadDimension(
+            canvas: canvas,
+            pA: p2,
+            pB: p3,
+            offsetPx: 28.0,
+            label: formattedVal,
+            isDriving: true,
+            hitInfo: SketchDimensionTagHit(
+              tagKey: c.id,
+              screenRect: Rect.zero,
+              primaryEntityId: e1.id,
+              constraintType: CadConstraintType.distance,
+              existingConstraintId: c.id,
+              currentValue: val,
+              subKey: 'h',
+            ),
+          );
+        } else {
+          _drawLinearCadDimension(
+            canvas: canvas,
+            pA: p1,
+            pB: p2,
+            offsetPx: -26.0,
+            label: formattedVal,
+            isDriving: true,
+            hitInfo: SketchDimensionTagHit(
+              tagKey: c.id,
+              screenRect: Rect.zero,
+              primaryEntityId: e1.id,
+              constraintType: CadConstraintType.distance,
+              existingConstraintId: c.id,
+              currentValue: val,
+              subKey: 'w',
+            ),
+          );
+        }
+      } else if (e1 is CADCenterRectangleEntity) {
+        final p1 = toScreen(e1.topLeft);
+        final p2 = toScreen(e1.topRight);
+        final p3 = toScreen(e1.bottomRight);
+        if (subKey0 == 'h') {
+          _drawLinearCadDimension(
+            canvas: canvas,
+            pA: p2,
+            pB: p3,
+            offsetPx: 28.0,
+            label: formattedVal,
+            isDriving: true,
+            hitInfo: SketchDimensionTagHit(
+              tagKey: c.id,
+              screenRect: Rect.zero,
+              primaryEntityId: e1.id,
+              constraintType: CadConstraintType.distance,
+              existingConstraintId: c.id,
+              currentValue: val,
+              subKey: 'h',
+            ),
+          );
+        } else {
+          _drawLinearCadDimension(
+            canvas: canvas,
+            pA: p1,
+            pB: p2,
+            offsetPx: -26.0,
+            label: formattedVal,
+            isDriving: true,
+            hitInfo: SketchDimensionTagHit(
+              tagKey: c.id,
+              screenRect: Rect.zero,
+              primaryEntityId: e1.id,
+              constraintType: CadConstraintType.distance,
+              existingConstraintId: c.id,
+              currentValue: val,
+              subKey: 'w',
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  /// Draws an authentic Onshape Linear Dimension with witness/extension lines,
+  /// filled CAD arrowheads, and a clickable central dimension tag (matching image_31d02d.png).
+  void _drawLinearCadDimension({
+    required Canvas canvas,
+    required Offset pA,
+    required Offset pB,
+    required double offsetPx,
+    required String label,
+    required bool isDriving,
+    SketchDimensionTagHit? hitInfo,
+  }) {
+    final seg = pB - pA;
+    final len = seg.distance;
+    if (len < 6.0) return;
+
+    final dir = seg / len;
+    final sign = offsetPx >= 0 ? 1.0 : -1.0;
+    final n = Offset(-dir.dy, dir.dx) * sign;
+    final absOff = offsetPx.abs().clamp(16.0, 120.0);
+
+    final dimA = pA + n * absOff;
+    final dimB = pB + n * absOff;
+
+    final dimColor = isDriving ? const Color(0xFF0F172A) : const Color(0xFF334155);
+    final linePaint = Paint()
+      ..color = dimColor
+      ..strokeWidth = 1.15
+      ..style = PaintingStyle.stroke;
+
+    // 1. Extension / witness lines (3px gap from entity vertex, 5px overshoot past dimension line)
+    canvas.drawLine(pA + n * 3.0, dimA + n * 5.0, linePaint);
+    canvas.drawLine(pB + n * 3.0, dimB + n * 5.0, linePaint);
+
+    // 2. Dimension line + filled arrowheads at both ends
+    canvas.drawLine(dimA, dimB, linePaint);
+    _drawCadArrowhead(canvas, dimA, dir, dimColor);
+    _drawCadArrowhead(canvas, dimB, -dir, dimColor);
+
+    // 3. Clickable Dimension Value Tag centered on the dimension line
+    final mid = (dimA + dimB) * 0.5;
+    _drawClickableDimensionTag(canvas, mid, label, isDriving: isDriving, hitInfo: hitInfo);
+  }
+
+  /// Draws an Onshape Diameter (`Ø17`, `Ø33`) or Radius (`R3`, `R10`) leader dimension
+  /// with an arrowhead on the perimeter and a horizontal shoulder leading to the tag.
+  void _drawRadialOrDiameterLeaderDimension({
+    required Canvas canvas,
+    required Offset centerScr,
+    required Offset rimScr,
+    required String label,
+    required bool isDriving,
+    SketchDimensionTagHit? hitInfo,
+  }) {
+    final radial = rimScr - centerScr;
+    final rLen = radial.distance;
+    final unit = rLen > 1.0 ? radial / rLen : const Offset(0.707, -0.707);
+
+    final elbow = rimScr + unit * 22.0;
+    final shoulderDir = unit.dx >= 0 ? const Offset(14.0, 0.0) : const Offset(-14.0, 0.0);
+    final tagAnchor = elbow + shoulderDir;
+
+    final dimColor = isDriving ? const Color(0xFF0F172A) : const Color(0xFF334155);
+    final linePaint = Paint()
+      ..color = dimColor
+      ..strokeWidth = 1.15
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawLine(rimScr, elbow, linePaint);
+    canvas.drawLine(elbow, tagAnchor, linePaint);
+    // Arrowhead pointing inward toward rimScr
+    _drawCadArrowhead(canvas, rimScr, unit, dimColor);
+
+    final tagCenter = tagAnchor + Offset(unit.dx >= 0 ? 22.0 : -22.0, 0.0);
+    _drawClickableDimensionTag(canvas, tagCenter, label, isDriving: isDriving, hitInfo: hitInfo);
+  }
+
+  /// Draws an Onshape Angular Dimension (`27°` in image_31d02d.png) with a curved arc and arrowheads.
+  void _drawAngularCadDimension({
+    required Canvas canvas,
+    required CADLineEntity l1,
+    required CADLineEntity l2,
+    required Offset Function(Offset) toScreen,
+    required String label,
+    SketchDimensionTagHit? hitInfo,
+  }) {
+    final s1 = toScreen(l1.start);
+    final e1 = toScreen(l1.end);
+    final s2 = toScreen(l2.start);
+    final e2 = toScreen(l2.end);
+    if (s1 == Offset.zero || e1 == Offset.zero || s2 == Offset.zero || e2 == Offset.zero) return;
+
+    final vertex = _lineLineIntersectionScreen(s1, e1, s2, e2) ?? s1;
+    final v1 = (e1 - vertex).distance > (s1 - vertex).distance ? (e1 - vertex) : (s1 - vertex);
+    final v2 = (e2 - vertex).distance > (s2 - vertex).distance ? (e2 - vertex) : (s2 - vertex);
+    if (v1.distance < 4.0 || v2.distance < 4.0) return;
+
+    final a1 = math.atan2(v1.dy, v1.dx);
+    final a2 = math.atan2(v2.dy, v2.dx);
+    double sweep = a2 - a1;
+    while (sweep <= -math.pi) sweep += 2.0 * math.pi;
+    while (sweep > math.pi) sweep -= 2.0 * math.pi;
+
+    const double arcR = 38.0;
+    final arcRect = Rect.fromCircle(center: vertex, radius: arcR);
+    final dimColor = const Color(0xFF0F172A);
+    final linePaint = Paint()
+      ..color = dimColor
+      ..strokeWidth = 1.15
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawArc(arcRect, a1, sweep, false, linePaint);
+
+    final pArcStart = vertex + Offset(math.cos(a1), math.sin(a1)) * arcR;
+    final pArcEnd = vertex + Offset(math.cos(a1 + sweep), math.sin(a1 + sweep)) * arcR;
+    final tStart = Offset(-math.sin(a1), math.cos(a1)) * (sweep >= 0 ? 1.0 : -1.0);
+    final tEnd = Offset(-math.sin(a1 + sweep), math.cos(a1 + sweep)) * (sweep >= 0 ? -1.0 : 1.0);
+    _drawCadArrowhead(canvas, pArcStart, tStart, dimColor);
+    _drawCadArrowhead(canvas, pArcEnd, tEnd, dimColor);
+
+    final midAngle = a1 + sweep * 0.5;
+    final tagCenter = vertex + Offset(math.cos(midAngle), math.sin(midAngle)) * arcR;
+    _drawClickableDimensionTag(canvas, tagCenter, label, isDriving: true, hitInfo: hitInfo);
+  }
+
+  void _drawCadArrowhead(Canvas canvas, Offset tip, Offset inwardDir, Color color) {
+    final len = inwardDir.distance;
+    if (len < 1e-4) return;
+    final u = inwardDir / len;
+    final n = Offset(-u.dy, u.dx);
+    const double arrowLen = 7.5;
+    const double arrowHalfW = 2.6;
+
+    final path = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(tip.dx + u.dx * arrowLen + n.dx * arrowHalfW, tip.dy + u.dy * arrowLen + n.dy * arrowHalfW)
+      ..lineTo(tip.dx + u.dx * arrowLen - n.dx * arrowHalfW, tip.dy + u.dy * arrowLen - n.dy * arrowHalfW)
+      ..close();
+
+    canvas.drawPath(path, Paint()..color = color..style = PaintingStyle.fill);
+  }
+
+  void _drawClickableDimensionTag(
+    Canvas canvas,
+    Offset center,
+    String text, {
+    required bool isDriving,
+    SketchDimensionTagHit? hitInfo,
+  }) {
+    if (center == Offset.zero) return;
+    final isBeingEdited = hitInfo != null &&
+        viewModel.activeEditingDimensionTagKey == hitInfo.tagKey;
+
     final tp = TextPainter(
       text: TextSpan(
         text: text,
-        style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+        style: TextStyle(
+          color: isDriving ? const Color(0xFF0F172A) : const Color(0xFF475569),
+          fontSize: 11.5,
+          fontWeight: isDriving ? FontWeight.w700 : FontWeight.w600,
+        ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
-    final badgeRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: pos + const Offset(0, -16), width: tp.width + 12, height: tp.height + 6),
-      const Radius.circular(4),
+    final rect = Rect.fromCenter(
+      center: center,
+      width: tp.width + 12.0,
+      height: tp.height + 6.0,
+    );
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(3.5));
+
+    // White background pill breaks the dimension line cleanly around the text (image_31d02d.png)
+    canvas.drawRRect(
+      rrect,
+      Paint()..color = isBeingEdited ? const Color(0xFFE0F2FE) : const Color(0xF5FFFFFF),
+    );
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = isBeingEdited
+            ? const Color(0xFF0284C7)
+            : isDriving
+                ? const Color(0xFF94A3B8)
+                : const Color(0xFFCBD5E1)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = isBeingEdited ? 1.5 : 0.9,
     );
 
-    canvas.drawRRect(badgeRect, Paint()..color = const Color(0xFF581C87).withValues(alpha: 0.94));
-    canvas.drawRRect(
-      badgeRect,
+    tp.paint(canvas, Offset(center.dx - tp.width / 2.0, center.dy - tp.height / 2.0));
+
+    if (hitInfo != null) {
+      viewModel.sketchDimensionHitRects.add(SketchDimensionTagHit(
+        tagKey: hitInfo.tagKey,
+        screenRect: rect.inflate(5.0),
+        primaryEntityId: hitInfo.primaryEntityId,
+        secondaryEntityId: hitInfo.secondaryEntityId,
+        constraintType: hitInfo.constraintType,
+        existingConstraintId: hitInfo.existingConstraintId,
+        currentValue: hitInfo.currentValue,
+        unitSuffix: hitInfo.unitSuffix,
+        subKey: hitInfo.subKey,
+      ));
+    }
+  }
+
+  void _drawVertexDot(Canvas canvas, Offset pt, Color color, {required bool isSel}) {
+    if (pt == Offset.zero) return;
+    canvas.drawCircle(pt, isSel ? 4.2 : 3.2, Paint()..color = Colors.white);
+    canvas.drawCircle(
+      pt,
+      isSel ? 4.2 : 3.2,
       Paint()
-        ..color = const Color(0xFFC084FC)
-        ..strokeWidth = 1.0
-        ..style = PaintingStyle.stroke,
+        ..color = isSel ? const Color(0xFFF59E0B) : color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6,
     );
-    tp.paint(canvas, pos + Offset(-tp.width / 2, -16 - tp.height / 2));
+  }
+
+  String _formatDimValue(double v) {
+    return (v - v.roundToDouble()).abs() < 0.05
+        ? v.round().toString()
+        : v.toStringAsFixed(1);
+  }
+
+  String _formatConstraintText(CadConstraint c, double val) {
+    final base = _formatDimValue(val);
+    final tol = (c.tolerancePlus != null && c.tolerancePlus! > 0)
+        ? ' ±${_formatDimValue(c.tolerancePlus!)}'
+        : '';
+    if (viewModel.showSketchExpressions && c.expression != null && c.expression!.isNotEmpty) {
+      return '${c.expression} = $base$tol';
+    }
+    return '$base$tol';
+  }
+
+  Offset _getEntityCenter(CADPrimitiveEntity e) {
+    if (e is CADCircleEntity) return e.center;
+    if (e is CADPointEntity) return e.position;
+    if (e is CADCenterRectangleEntity) return e.center;
+    if (e is CADRectangleEntity) {
+      return Offset(e.startPoint.dx + e.width * 0.5, e.startPoint.dy + e.height * 0.5);
+    }
+    if (e is CADLineEntity) return (e.start + e.end) * 0.5;
+    if (e is CADArcEntity) return e.computeCircumcircle()?.center ?? e.pointOnArc;
+    return Offset.zero;
+  }
+
+  static Offset _projectPointToInfiniteLine(Offset p, Offset a, Offset b) {
+    final ab = b - a;
+    final lenSq = ab.dx * ab.dx + ab.dy * ab.dy;
+    if (lenSq < 1e-6) return a;
+    final t = ((p.dx - a.dx) * ab.dx + (p.dy - a.dy) * ab.dy) / lenSq;
+    return a + ab * t;
+  }
+
+  static Offset? _lineLineIntersectionScreen(Offset p1, Offset p2, Offset p3, Offset p4) {
+    final d = (p1.dx - p2.dx) * (p3.dy - p4.dy) - (p1.dy - p2.dy) * (p3.dx - p4.dx);
+    if (d.abs() < 1e-5) return null;
+    final pre = p1.dx * p2.dy - p1.dy * p2.dx;
+    final post = p3.dx * p4.dy - p3.dy * p4.dx;
+    final x = (pre * (p3.dx - p4.dx) - (p1.dx - p2.dx) * post) / d;
+    final y = (pre * (p3.dy - p4.dy) - (p1.dy - p2.dy) * post) / d;
+    return Offset(x, y);
   }
 
   Offset _getEntityBadgeAnchor(CADPrimitiveEntity e) {
@@ -660,7 +1206,7 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       text: TextSpan(
         text: symbol,
         style: TextStyle(
-          color: isHighlighted ? const Color(0xFFB45309) : const Color(0xFF0369A1),
+          color: isHighlighted ? const Color(0xFFB45309) : const Color(0xFF0F172A),
           fontSize: 10.0,
           fontWeight: FontWeight.bold,
         ),
@@ -673,56 +1219,15 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       const Radius.circular(3),
     );
 
-    canvas.drawRRect(
-      badgeRect,
-      Paint()..color = isHighlighted ? const Color(0xFFFEF3C7) : Colors.white,
-    );
+    canvas.drawRRect(badgeRect, Paint()..color = isHighlighted ? const Color(0xFFFEF3C7) : const Color(0xFFE2E8F0));
     canvas.drawRRect(
       badgeRect,
       Paint()
-        ..color = isHighlighted ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8)
+        ..color = isHighlighted ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8)
         ..strokeWidth = 1.0
         ..style = PaintingStyle.stroke,
     );
     tp.paint(canvas, pos + Offset(-tp.width / 2, -10 - tp.height / 2));
-  }
-
-  void _drawHandle(Canvas canvas, Offset pt) {
-    if (pt == Offset.zero) return;
-    canvas.drawRect(Rect.fromCenter(center: pt, width: 7.0, height: 7.0), Paint()..color = Colors.white);
-    canvas.drawRect(
-      Rect.fromCenter(center: pt, width: 7.0, height: 7.0),
-      Paint()
-        ..color = const Color(0xFFF59E0B)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
-  }
-
-  void _drawDimensionBadge(Canvas canvas, Offset pos, String text) {
-    if (pos == Offset.zero) return;
-    final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 9.5, fontWeight: FontWeight.bold),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    final badgeRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: pos + const Offset(0, -12), width: tp.width + 10, height: tp.height + 4),
-      const Radius.circular(4),
-    );
-
-    canvas.drawRRect(badgeRect, Paint()..color = Colors.white.withAlpha(230));
-    canvas.drawRRect(
-      badgeRect,
-      Paint()
-        ..color = const Color(0xFFCBD5E1)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0,
-    );
-    tp.paint(canvas, pos + Offset(-tp.width / 2, -12 - tp.height / 2));
   }
 
   void _drawDashedLine(Canvas canvas, Offset p1, Offset p2, Paint paint) {
@@ -738,10 +1243,25 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     }
   }
 
+  /// Draws Onshape long-short-long centerline construction dashing (`─── ╌ ───`)
+  void _drawCenterlineDashedLine(Canvas canvas, Offset p1, Offset p2, Paint paint) {
+    final dist = (p2 - p1).distance;
+    if (dist < 1.0) return;
+    final dir = (p2 - p1) / dist;
+    double walked = 0.0;
+    bool longDash = true;
+    while (walked < dist) {
+      final segLen = longDash ? 10.0 : 3.5;
+      final start = p1 + dir * walked;
+      final end = p1 + dir * math.min(walked + segLen, dist);
+      canvas.drawLine(start, end, paint);
+      walked += segLen + 3.5;
+      longDash = !longDash;
+    }
+  }
 
   void _drawDashedPath(Canvas canvas, Path path, Paint paint) {
-    final metrics = path.computeMetrics();
-    for (final metric in metrics) {
+    for (final metric in path.computeMetrics()) {
       double dist = 0.0;
       while (dist < metric.length) {
         final extract = metric.extractPath(dist, math.min(dist + 6.0, metric.length));
@@ -751,8 +1271,20 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     }
   }
 
-  @override
-  bool shouldRepaint(covariant Assembly3DSurfaceSketchPainter oldDelegate) {
-    return true;
+  void _drawCenterlineDashedPath(Canvas canvas, Path path, Paint paint) {
+    for (final metric in path.computeMetrics()) {
+      double dist = 0.0;
+      bool longDash = true;
+      while (dist < metric.length) {
+        final segLen = longDash ? 10.0 : 3.5;
+        final extract = metric.extractPath(dist, math.min(dist + segLen, metric.length));
+        canvas.drawPath(extract, paint);
+        dist += segLen + 3.5;
+        longDash = !longDash;
+      }
+    }
   }
+
+  @override
+  bool shouldRepaint(covariant Assembly3DSurfaceSketchPainter oldDelegate) => true;
 }

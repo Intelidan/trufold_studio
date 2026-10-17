@@ -24,6 +24,8 @@ class _AssemblyExtrudeDialogState extends State<AssemblyExtrudeDialog> {
   late TextEditingController _distController;
   late TextEditingController _dist2Controller;
   late TextEditingController _taperController;
+  int _domainTabIndex = 0; // 0 = Solid, 1 = Surface, 2 = Thin
+  String _endType = 'Blind'; // 'Blind', 'Through all', 'Up to next', 'Up to face', 'Up to vertex'
 
   @override
   void initState() {
@@ -151,39 +153,92 @@ class _AssemblyExtrudeDialogState extends State<AssemblyExtrudeDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Profile Status Badge
+                // 1a. Onshape Domain Tabs: Solid | Surface | Thin (image_31d127.png)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: hasValidProfile ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(
-                      color: hasValidProfile ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                      width: 1.0,
-                    ),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        hasValidProfile ? Icons.check_circle_outline_rounded : Icons.warning_amber_rounded,
-                        color: hasValidProfile ? const Color(0xFF10B981) : const Color(0xFFDC2626),
-                        size: 14,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          hasValidProfile ? '1 Closed Profile Selected' : 'No Closed Profile on Plane',
-                          style: TextStyle(
-                            color: hasValidProfile ? const Color(0xFF065F46) : const Color(0xFF991B1B),
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
+                      for (final (idx, label) in [(0, 'Solid'), (1, 'Surface'), (2, 'Thin')])
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setState(() => _domainTabIndex = idx),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: _domainTabIndex == idx ? AssemblyStudioTheme.onshapeBlue : Colors.transparent,
+                                    width: 2.0,
+                                  ),
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                label,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: _domainTabIndex == idx ? FontWeight.w700 : FontWeight.w500,
+                                  color: _domainTabIndex == idx ? AssemblyStudioTheme.onshapeBlue : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // 1b. Onshape "Faces and sketch regions to extrude" Active Selection Box (image_31d127.png)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: hasValidProfile ? const Color(0xFFEFF6FF) : const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border(
+                      left: BorderSide(
+                        color: hasValidProfile ? AssemblyStudioTheme.onshapeBlue : const Color(0xFFEF4444),
+                        width: 3.5,
+                      ),
+                      top: const BorderSide(color: Color(0xFFCBD5E1)),
+                      right: const BorderSide(color: Color(0xFFCBD5E1)),
+                      bottom: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Faces and sketch regions to extrude',
+                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            hasValidProfile ? Icons.crop_square_rounded : Icons.warning_amber_rounded,
+                            color: hasValidProfile ? const Color(0xFFF59E0B) : const Color(0xFFDC2626),
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              hasValidProfile ? 'Face of ${plane?.name ?? "Sketch 1"}' : 'Select a closed sketch region',
+                              style: TextStyle(
+                                color: hasValidProfile ? const Color(0xFF0F172A) : const Color(0xFF991B1B),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
                 // Boolean Operation Selector (New, Add, Remove, Intersect)
                 const Text(
@@ -290,18 +345,75 @@ class _AssemblyExtrudeDialogState extends State<AssemblyExtrudeDialog> {
                 ),
                 const SizedBox(height: 12),
 
-                // Extrude Distance 1
+                // End Type Selector (Blind, Through all, Up to next, Up to face)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      params.direction == AssemblyExtrudeDirection.symmetric ? 'DISTANCE (± mm)' : 'DISTANCE (mm)',
-                      style: const TextStyle(
+                    const Text(
+                      'END TYPE',
+                      style: TextStyle(
                         color: Color(0xFF64748B),
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
                       ),
+                    ),
+                    DropdownButton<String>(
+                      value: _endType,
+                      isDense: true,
+                      underline: const SizedBox.shrink(),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+                      items: const [
+                        DropdownMenuItem(value: 'Blind', child: Text('Blind')),
+                        DropdownMenuItem(value: 'Through all', child: Text('Through all')),
+                        DropdownMenuItem(value: 'Up to next', child: Text('Up to next')),
+                        DropdownMenuItem(value: 'Up to face', child: Text('Up to face')),
+                      ],
+                      onChanged: (val) {
+                        if (val == null) return;
+                        setState(() => _endType = val);
+                        if (val == 'Through all') {
+                          vm.updateExtrudeDistance(params.operation == AssemblyExtrudeOperation.cut ? -100.0 : 100.0);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Extrude Depth + Flip Direction (⇄) Button (image_31d127.png)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          params.direction == AssemblyExtrudeDirection.symmetric ? 'DEPTH (± mm)' : 'DEPTH (mm)',
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        ),
+                        ),
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: 'Opposite direction (Flip ⇄)',
+                          child: InkWell(
+                            onTap: () => vm.updateExtrudeDistance(-params.distanceMm),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                              ),
+                              child: const Icon(Icons.swap_horiz_rounded, size: 14, color: Color(0xFF334155)),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     SizedBox(
                       width: 70,
@@ -415,7 +527,26 @@ class _AssemblyExtrudeDialogState extends State<AssemblyExtrudeDialog> {
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
-                      ),
+                        ),
+                        ),
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: 'Opposite direction (Flip ⇄)',
+                          child: InkWell(
+                            onTap: () => vm.updateExtrudeDistance(-params.distanceMm),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                              ),
+                              child: const Icon(Icons.swap_horiz_rounded, size: 14, color: Color(0xFF334155)),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     SizedBox(
                       width: 70,

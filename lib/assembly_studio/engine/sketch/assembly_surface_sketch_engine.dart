@@ -64,13 +64,12 @@ class AssemblySurfaceSketchEngine {
         ? vm.Vector3(nx / len, ny / len, nz / len)
         : vm.Vector3(0.0, 0.0, 1.0);
 
-    // Compute robust up vector tangent to face
-    vm.Vector3 tentativeUp = vm.Vector3(0.0, 1.0, 0.0);
-    if (normal.dot(tentativeUp).abs() > 0.85) {
-      tentativeUp = vm.Vector3(0.0, 0.0, 1.0);
-      if (normal.dot(tentativeUp).abs() > 0.85) {
-        tentativeUp = vm.Vector3(1.0, 0.0, 0.0);
-      }
+    // Compute robust up vector tangent to face in Z-Up CAD coordinates:
+    // - For vertical or angled faces (|normal.z| <= 0.90), World +Z (0, 0, 1) is screen-up.
+    // - For horizontal top/bottom faces (|normal.z| > 0.90), World +Y (0, 1, 0) is screen-up.
+    vm.Vector3 tentativeUp = vm.Vector3(0.0, 0.0, 1.0);
+    if (normal.dot(tentativeUp).abs() > 0.90) {
+      tentativeUp = vm.Vector3(0.0, 1.0, 0.0);
     }
     final up = (tentativeUp - normal * normal.dot(tentativeUp)).normalized();
 
@@ -94,8 +93,8 @@ class AssemblySurfaceSketchEngine {
           name: 'XZ Front Plane',
           planeType: CADPlaneType.datumXZ,
           origin: ori,
-          normal: vm.Vector3(0.0, 1.0, 0.0),
-          up: vm.Vector3(0.0, 0.0, 1.0),
+          normal: vm.Vector3(0.0, -1.0, 0.0), // Faces the front camera (-Y)
+          up: vm.Vector3(0.0, 0.0, 1.0),     // +Z is up on screen
           size: size,
           customColor: const Color(0xFF10B981),
         );
@@ -105,8 +104,8 @@ class AssemblySurfaceSketchEngine {
           name: 'YZ Right Plane',
           planeType: CADPlaneType.datumYZ,
           origin: ori,
-          normal: vm.Vector3(1.0, 0.0, 0.0),
-          up: vm.Vector3(0.0, 1.0, 0.0),
+          normal: vm.Vector3(1.0, 0.0, 0.0),  // Faces the right camera (+X)
+          up: vm.Vector3(0.0, 0.0, 1.0),     // +Z is up on screen
           size: size,
           customColor: const Color(0xFFF59E0B),
         );
@@ -117,8 +116,8 @@ class AssemblySurfaceSketchEngine {
           name: 'XY Top Plane',
           planeType: CADPlaneType.datumXY,
           origin: ori,
-          normal: vm.Vector3(0.0, 0.0, 1.0),
-          up: vm.Vector3(0.0, 1.0, 0.0),
+          normal: vm.Vector3(0.0, 0.0, 1.0),  // Faces the top camera (+Z)
+          up: vm.Vector3(0.0, 1.0, 0.0),     // +Y is up on screen
           size: size,
           customColor: const Color(0xFF0EA5E9),
         );

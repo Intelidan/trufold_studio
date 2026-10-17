@@ -661,6 +661,16 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// Camera pivot override point (e.g. centering directly on the sketch plane origin)
   CadPoint3D? cameraPivotOverride;
 
+  /// Hit-test rectangles for all dimension tags rendered in the current frame
+  final List<SketchDimensionTagHit> sketchDimensionHitRects = [];
+
+  /// Currently open inline floating dimension popover target (image_31d0a3.png)
+  SketchDimensionTagHit? activeEditingDimensionHit;
+  String? get activeEditingDimensionTagKey => activeEditingDimensionHit?.tagKey;
+
+  /// First clicked entity when using the 2-click Onshape Dimension ('D') tool
+  String? dimensionFirstEntityId;
+
   int _sketchCounter = 1;
   String generateNextSketchName() {
     return 'Sketch ${_sketchCounter++}';
@@ -3444,16 +3454,50 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
-  /// Aligns camera view directly perpendicular (normal view) facing the active plane and centers on plane origin.
+  /// Aligns camera view directly perpendicular (normal view) facing the active sketch plane
+  /// (or the currently selected 3D face / datum plane if not yet in Sketch Mode) and centers on its origin.
   void alignCameraToActivePlaneNormal() {
-    if (activeSketchPlane == null) return;
+    vm_math.Vector3? targetNormal;
+    CadPoint3D? targetOrigin;
+
+    if (activeSketchPlane != null) {
+      targetNormal = activeSketchPlane!.normal;
+      targetOrigin = CadPoint3D(
+        activeSketchPlane!.origin.x,
+        activeSketchPlane!.origin.y,
+        activeSketchPlane!.origin.z,
+      );
+    } else if (doc.selectedFaceId != null) {
+      final cleanId = doc.selectedFaceId!.replaceFirst('plane_', '');
+      final poly = assemblyMesh.allPolygons
+          .where((p) => p.faceId == cleanId || p.faceId.startsWith(cleanId))
+          .firstOrNull;
+      if (poly != null && poly.vertices.isNotEmpty) {
+        targetNormal = vm_math.Vector3(poly.normal.x, poly.normal.y, poly.normal.z);
+        double cx = 0, cy = 0, cz = 0;
+        for (final v in poly.vertices) {
+          cx += v.x;
+          cy += v.y;
+          cz += v.z;
+        }
+        final n = poly.vertices.length;
+        targetOrigin = CadPoint3D(cx / n, cy / n, cz / n);
+      }
+    }
+
+    if (targetNormal == null || targetOrigin == null) return;
+
     pan = Offset.zero;
-    cameraPivotOverride = CadPoint3D(activeSketchPlane!.origin.x, activeSketchPlane!.origin.y, activeSketchPlane!.origin.z);
-    final angles = AssemblySurfaceSketchEngine.computeNormalViewCameraAngles(activeSketchPlane!.normal);
+    cameraPivotOverride = targetOrigin;
+    final angles = AssemblySurfaceSketchEngine.computeNormalViewCameraAngles(targetNormal);
     azimuthDeg = angles.azimuthDeg;
     elevationDeg = angles.elevationDeg;
-    _previousOrthoBeforeSketch = isOrthoProjection;
-    isOrthoProjection = true;
+    if (isSketchMode && !isOrthoProjection) {
+      _previousOrthoBeforeSketch = isOrthoProjection;
+      isOrthoProjection = true;
+    } else {
+      isOrthoProjection = true;
+    }
     final maxDim = selectedPart != null ? math.max(selectedPart!.length, selectedPart!.height) : 400.0;
     zoom = (850.0 / (maxDim > 0 ? maxDim : 800.0)).clamp(0.65, 2.5);
     notifyListeners();
@@ -3877,6 +3921,74 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       ));
     }
 
+    solveSketchConstraints();
+    activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
+    notifyListeners();
+  }
+
+  void openInlineSketchDimensionEditor(SketchDimensionTagHit hit) {
+    activeEditingDimensionHit = hit;
+    notifyListeners();
+  }
+
+  void closeInlineSketchDimensionEditor() {
+    activeEditingDimensionHit = null;
+    dimensionFirstEntityId = null;
+    notifyListeners();
+  }
+
+  /// Commits an edited value from the floating OnshapeDimensionEditPopover (image_31d0a3.png)
+  void commitInlineSketchDimension({
+    required SketchDimensionTagHit hit,
+    required double newValue,
+    String? expression,
+    double? tolerancePlusMinus,
+  }) {
+    if (activeSketchPlane == null) return;
+    _recordUndo();
+
+    final primaryKey = hit.subKey != null ? '${hit.primaryEntityId}:${hit.subKey}' : hit.primaryEntityId;
+    final entityIds = <String>[
+      primaryKey,
+      if (hit.secondaryEntityId != null) hit.secondaryEntityId!,
+    ];
+
+    if (hit.existingConstraintId != null) {
+      final idx = activeSketchPlane!.constraints.indexWhere((c) => c.id == hit.existingConstraintId);
+      if (idx != -1) {
+        activeSketchPlane!.constraints[idx] = activeSketchPlane!.constraints[idx].copyWith(
+          parameterValue: newValue,
+          expression: expression,
+          tolerancePlus: tolerancePlusMinus,
+          toleranceMinus: tolerancePlusMinus,
+        );
+      }
+    } else {
+      final existingIdx = activeSketchPlane!.constraints.indexWhere(
+        (c) => c.type == hit.constraintType && c.entityIds.join('|') == entityIds.join('|'),
+      );
+      if (existingIdx != -1) {
+        activeSketchPlane!.constraints[existingIdx] = activeSketchPlane!.constraints[existingIdx].copyWith(
+          parameterValue: newValue,
+          expression: expression,
+          tolerancePlus: tolerancePlusMinus,
+          toleranceMinus: tolerancePlusMinus,
+        );
+      } else {
+        activeSketchPlane!.constraints.add(CadConstraint(
+          id: 'dim_${DateTime.now().millisecondsSinceEpoch}',
+          type: hit.constraintType,
+          entityIds: entityIds,
+          parameterValue: newValue,
+          expression: expression,
+          tolerancePlus: tolerancePlusMinus,
+          toleranceMinus: tolerancePlusMinus,
+        ));
+      }
+    }
+
+    activeEditingDimensionHit = null;
+    dimensionFirstEntityId = null;
     solveSketchConstraints();
     activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
     notifyListeners();

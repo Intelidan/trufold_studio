@@ -1,3 +1,5 @@
+import 'dart:ui' show Rect;
+
 // =============================================================================
 // cad_constraint.dart
 //
@@ -130,14 +132,41 @@ enum CadConstraintType {
   }
 }
 
+/// Describes a clickable Onshape dimension tag rendered on the 2D/3D sketch canvas.
+class SketchDimensionTagHit {
+  final String tagKey;
+  final Rect screenRect;
+  final String primaryEntityId;
+  final String? secondaryEntityId;
+  final CadConstraintType constraintType;
+  final String? existingConstraintId;
+  final double currentValue;
+  final String unitSuffix; // 'mm' or 'deg'
+  final String? subKey;    // 'w' or 'h' for rectangles
+
+  const SketchDimensionTagHit({
+    required this.tagKey,
+    required this.screenRect,
+    required this.primaryEntityId,
+    this.secondaryEntityId,
+    required this.constraintType,
+    this.existingConstraintId,
+    required this.currentValue,
+    this.unitSuffix = 'mm',
+    this.subKey,
+  });
+}
+
 class CadConstraint {
   final String id;
   final CadConstraintType type;
   final List<String> entityIds; // IDs of geometry or feature entities involved
-  final double?
-  parameterValue; // Target value for dimensional constraints (distance, angle)
-  final String?
-  parameterId; // Linked CadParameter ID if driven by user parameter
+  final double? parameterValue; // Target value for dimensional constraints (mm or deg)
+  final String? parameterId;    // Linked CadParameter ID if driven by user parameter
+  final String? expression;     // Optional formula expression (e.g. "60/2" or "25+10")
+  final double labelOffset;     // Witness-line offset distance in plane mm (default 18.0)
+  final double? tolerancePlus;  // Optional +tolerance (mm or deg) from Onshape '±' popover
+  final double? toleranceMinus; // Optional -tolerance (mm or deg)
   final bool isActive;
 
   const CadConstraint({
@@ -146,11 +175,21 @@ class CadConstraint {
     required this.entityIds,
     this.parameterValue,
     this.parameterId,
+    this.expression,
+    this.labelOffset = 18.0,
+    this.tolerancePlus,
+    this.toleranceMinus,
     this.isActive = true,
   });
 
   String get symbol => type.symbol;
   String get label => type.label;
+
+  bool get isDimensional =>
+      type == CadConstraintType.distance ||
+      type == CadConstraintType.angle ||
+      type == CadConstraintType.radius ||
+      type == CadConstraintType.diameter;
 
   CadConstraint copyWith({
     String? id,
@@ -158,6 +197,10 @@ class CadConstraint {
     List<String>? entityIds,
     double? parameterValue,
     String? parameterId,
+    String? expression,
+    double? labelOffset,
+    double? tolerancePlus,
+    double? toleranceMinus,
     bool? isActive,
   }) {
     return CadConstraint(
@@ -166,30 +209,40 @@ class CadConstraint {
       entityIds: entityIds ?? this.entityIds,
       parameterValue: parameterValue ?? this.parameterValue,
       parameterId: parameterId ?? this.parameterId,
+      expression: expression ?? this.expression,
+      labelOffset: labelOffset ?? this.labelOffset,
+      tolerancePlus: tolerancePlus ?? this.tolerancePlus,
+      toleranceMinus: toleranceMinus ?? this.toleranceMinus,
       isActive: isActive ?? this.isActive,
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'type': type.name,
-    'entityIds': entityIds,
-    if (parameterValue != null) 'parameterValue': parameterValue,
-    if (parameterId != null) 'parameterId': parameterId,
-    'isActive': isActive,
-  };
+        'id': id,
+        'type': type.name,
+        'entityIds': entityIds,
+        if (parameterValue != null) 'parameterValue': parameterValue,
+        if (parameterId != null) 'parameterId': parameterId,
+        if (expression != null) 'expression': expression,
+        'labelOffset': labelOffset,
+        if (tolerancePlus != null) 'tolerancePlus': tolerancePlus,
+        if (toleranceMinus != null) 'toleranceMinus': toleranceMinus,
+        'isActive': isActive,
+      };
 
   factory CadConstraint.fromJson(Map<String, dynamic> json) => CadConstraint(
-    id: json['id'] as String,
-    type: CadConstraintType.values.firstWhere(
-      (t) => t.name == json['type'],
-      orElse: () => CadConstraintType.horizontal,
-    ),
-    entityIds: (json['entityIds'] as List<dynamic>)
-        .map((e) => e as String)
-        .toList(),
-    parameterValue: (json['parameterValue'] as num?)?.toDouble(),
-    parameterId: json['parameterId'] as String?,
-    isActive: json['isActive'] as bool? ?? true,
-  );
+        id: json['id'] as String,
+        type: CadConstraintType.values.firstWhere(
+          (t) => t.name == json['type'],
+          orElse: () => CadConstraintType.horizontal,
+        ),
+        entityIds: (json['entityIds'] as List<dynamic>).map((e) => e as String).toList(),
+        parameterValue: (json['parameterValue'] as num?)?.toDouble(),
+        parameterId: json['parameterId'] as String?,
+        expression: json['expression'] as String?,
+        labelOffset: (json['labelOffset'] as num?)?.toDouble() ?? 18.0,
+        tolerancePlus: (json['tolerancePlus'] as num?)?.toDouble(),
+        toleranceMinus: (json['toleranceMinus'] as num?)?.toDouble(),
+        isActive: json['isActive'] as bool? ?? true,
+      );
 }
