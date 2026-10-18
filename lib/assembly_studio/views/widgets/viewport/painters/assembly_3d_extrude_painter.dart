@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 import 'package:trufold_studio/assembly_studio/engine/sketch/assembly_surface_sketch_engine.dart';
 import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmodel.dart';
+import 'package:vector_math/vector_math.dart' hide Colors;
+import 'cad_gpu_studio_lighting_helper.dart';
 
 class Assembly3DExtrudePainter extends CustomPainter {
   final AssemblyStudioViewModel viewModel;
@@ -42,9 +44,6 @@ class Assembly3DExtrudePainter extends CustomPainter {
     if (solidMesh.isEmpty) return;
 
     // 3. Render Translucent Glassmorphic 3D Solid Preview
-    final fillPaint = Paint()
-      ..color = opColor.withValues(alpha: 0.28)
-      ..style = PaintingStyle.fill;
 
     final wirePaint = Paint()
       ..color = opColor.withValues(alpha: 0.85)
@@ -73,7 +72,20 @@ class Assembly3DExtrudePainter extends CustomPainter {
 
       if (allValid) {
         path.close();
-        canvas.drawPath(path, fillPaint);
+        final surfacePt = poly.vertices.isNotEmpty
+            ? Vector3(poly.vertices.first.x, poly.vertices.first.y, poly.vertices.first.z)
+            : Vector3.zero();
+        final shadedColor = CadGpuStudioLightingHelper.shadeCadSurface(
+          baseAlbedo: opColor,
+          worldNormal: Vector3(poly.normal.x, poly.normal.y, poly.normal.z),
+          cameraPosition: Vector3(viewModel.cameraPosition.dx, viewModel.cameraPosition.dy, viewModel.cameraDistance),
+          surfaceWorldPoint: surfacePt,
+          cameraUp: Vector3(0.0, 1.0, 0.0),
+        );
+        final dynamicFillPaint = Paint()
+          ..color = shadedColor.withValues(alpha: 0.38)
+          ..style = PaintingStyle.fill;
+        canvas.drawPath(path, dynamicFillPaint);
         canvas.drawPath(path, wirePaint);
       }
     }

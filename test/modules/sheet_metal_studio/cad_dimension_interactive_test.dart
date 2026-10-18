@@ -445,7 +445,7 @@ void main() {
     });
 
     test('removeConstraint deletes constraint, clears selection, and supports undo', () {
-      const constraint = CadConstraint(id: 'c_to_delete', type: CadConstraintType.distance, entityIds: ['P1', 'P2'], parameterValue: 100.0);
+      final constraint = CadConstraint(id: 'c_to_delete', type: CadConstraintType.distance, entityIds: const ['P1', 'P2'], parameterValue: 100.0);
       vm.addConstraint(constraint);
       vm.selectConstraint('c_to_delete');
       expect(vm.selectedConstraintId, equals('c_to_delete'));
@@ -620,12 +620,8 @@ void main() {
         productType: 'Test Part',
         itemName: 'TEST-01',
         outerContour: [CadPoint2D(0, 0), CadPoint2D(300, 0), CadPoint2D(300, 300), CadPoint2D(0, 300)],
-        bends: [
-          FoldBendLine(id: 'B1', p1: CadPoint2D(10, 0), p2: CadPoint2D(10, 300), targetAngleDeg: 90, radiusMm: 1.5),
-        ],
-        cutLines: [
-          CadLineSegment(id: 'C1', p1: CadPoint2D(60, 50), p2: CadPoint2D(60, 250)),
-        ],
+        bends: [FoldBendLine(id: 'B1', p1: CadPoint2D(10, 0), p2: CadPoint2D(10, 300), targetAngleDeg: 90, radiusMm: 1.5)],
+        cutLines: [CadLineSegment(id: 'C1', p1: CadPoint2D(60, 50), p2: CadPoint2D(60, 250))],
         punches: [
           CncPunchPrimitive(id: 'P1', type: PunchType.roundHole, center: CadPoint2D(50, 100), diameterMm: 10),
           CncPunchPrimitive(id: 'P2', type: PunchType.roundHole, center: CadPoint2D(150, 100), diameterMm: 10),
@@ -676,10 +672,7 @@ void main() {
     test('Dimension connecting punch to bend updates when punch is moved', () {
       // Connect P1 (50, 100) to Bend B1 (at X=10) via click-and-drag
       vm.setToolMode(StudioToolMode.dragDimension);
-      vm.commitDragDimension(
-        pA: const CadPoint2D(50, 100),
-        pB: const CadPoint2D(10, 100),
-      );
+      vm.commitDragDimension(pA: const CadPoint2D(50, 100), pB: const CadPoint2D(10, 100));
 
       expect(vm.document.dimensions.length, 1);
       final dim = vm.document.dimensions.first;
@@ -727,10 +720,7 @@ void main() {
     test('Multi-entity movement updates all connected dimensions', () {
       // Connect P1 to B1
       vm.setToolMode(StudioToolMode.dragDimension);
-      vm.commitDragDimension(
-        pA: const CadPoint2D(50, 100),
-        pB: const CadPoint2D(10, 100),
-      );
+      vm.commitDragDimension(pA: const CadPoint2D(50, 100), pB: const CadPoint2D(10, 100));
 
       // Connect P1 to P2
       vm.setToolMode(StudioToolMode.addDimension);

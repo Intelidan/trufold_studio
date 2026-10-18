@@ -16,6 +16,7 @@ import '../models/assembly_timeline_item.dart';
 import '../models/assembly_cad_settings.dart';
 import '../engine/sketch/assembly_surface_sketch_engine.dart' hide WeldJointStyle;
 import '../engine/sketch/onshape_sketch_modify_engine.dart';
+import '../engine/sketch/cad_brep_topology_bridge.dart';
 import '../../sketch_draft_files/widgets/weld_overlay_ui.dart';
 
 /// Active 3D manipulation mode for the selected part.
@@ -651,9 +652,122 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   /// Timeline feature ID currently highlighted via single-click in the Feature Tree
   String? highlightedFeatureId;
+  String? get highlightedSketchId => highlightedFeatureId;
+  set highlightedSketchId(String? id) => highlightedFeatureId = id;
 
   /// Selected hole center IDs for magnetic spot highlights (Item 5.1)
   final Set<String> selectedHoleCenterIds = {};
+  String? hoveredHoleCenterId;
+  Offset? lastMouseScreenOffset;
+
+  /// All hole center spots across all visible parts for X-ray hover-snapping
+  List<HoleSnapSpot> get allHoleCenterSpots {
+    final List<HoleSnapSpot> spots = <HoleSnapSpot>[];
+    for (final part in doc.parts) {
+      if (!part.isVisible) continue;
+      for (int i = 0; i < part.holeCentersWorld.length; i++) {
+        final hc = part.holeCentersWorld[i];
+        final dia = part.holeDiametersMm.length > i ? part.holeDiametersMm[i] : 12.0;
+        spots.add(HoleSnapSpot(
+          id: 'hole_${part.id}_$i',
+          partId: part.id,
+          worldCenter: hc,
+          diameterMm: dia,
+        ));
+      }
+    }
+    return spots;
+  }
+
+  void setHoveredHoleCenterId(String? id) {
+    if (hoveredHoleCenterId == id) return;
+    hoveredHoleCenterId = id;
+    notifyListeners();
+  }
+
+  void updateMouseScreenOffset(Offset screenOffset, Size viewportSize) {
+    lastMouseScreenOffset = screenOffset;
+    String? closestHoleId;
+    double closestDist = 18.0;
+
+    for (final spot in allHoleCenterSpots) {
+      final scr = projectWorldToScreen(spot.worldCenter, viewportSize);
+      if (scr == null) continue;
+      final dist = (scr - screenOffset).distance;
+      if (dist <= closestDist) {
+        closestDist = dist;
+        closestHoleId = spot.id;
+      }
+    }
+
+    if (hoveredHoleCenterId != closestHoleId) {
+      hoveredHoleCenterId = closestHoleId;
+      notifyListeners();
+    }
+  }
+
+  /// Projects a 3D world coordinate to 2D screen coordinates without depth occlusion (X-ray snapping)
+  Offset? projectWorldToScreen(vm_math.Vector3 worldPoint, Size size) {
+    if (size.width <= 0 || size.height <= 0) return null;
+    final cx = size.width / 2.0 + pan.dx;
+    final cy = size.height / 2.0 + pan.dy;
+    const fitDim = 200.0;
+    final baseScale = (math.min(size.width, size.height) * 0.60) / fitDim;
+    final scale = baseScale * zoom;
+
+    final pivot = cameraPivotOverride ?? const CadPoint3D(0, 0, 0);
+    final cameraDist = math.max(fitDim * 2.5, 1000.0);
+
+    final rx = worldPoint.x - pivot.x;
+    final ry = worldPoint.y - pivot.y;
+    final rz = worldPoint.z - pivot.z;
+
+    final azRad = azimuthDeg * math.pi / 180.0;
+    final elRad = elevationDeg * math.pi / 180.0;
+    final cosAz = math.cos(azRad);
+    final sinAz = math.sin(azRad);
+    final cosEl = math.cos(elRad);
+    final sinEl = math.sin(elRad);
+
+    final m0 = cosAz;
+    final m1 = -sinAz;
+    final m2 = 0.0;
+    final m4 = sinAz * sinEl;
+    final m5 = cosAz * sinEl;
+    final m6 = cosEl;
+    final m8 = -sinAz * cosEl;
+    final m9 = -cosAz * cosEl;
+    final m10 = sinEl;
+
+    final x2 = rx * m0 + ry * m1 + rz * m2;
+    final y2 = rx * m4 + ry * m5 + rz * m6;
+    final z2 = rx * m8 + ry * m9 + rz * m10;
+
+    final persp = isOrthoProjection ? 1.0 : (cameraDist / math.max(cameraDist - z2, cameraDist * 0.15));
+    final sx = cx + (x2 * persp) * scale;
+    final sy = cy - (y2 * persp) * scale;
+
+    return Offset(sx, sy);
+  }
+
+  /// Camera distance / zoom locked property
+  double get cameraDistance => 1000.0 / (zoom > 0 ? zoom : 1.0);
+  set cameraDistance(double dist) {
+    if (dist > 0) {
+      zoom = 1000.0 / dist;
+      notifyListeners();
+    }
+  }
+
+  /// Camera pan / position locked property
+  Offset get cameraPosition => pan;
+  set cameraPosition(Offset pos) {
+    pan = pos;
+    notifyListeners();
+  }
+
+  void confirmActiveSketch() => finishSketch();
+  void cancelActiveSketch() => exitSketchMode();
   String? sketchPartId;
   String? sketchFaceId;
   String activeSketchTool =
@@ -1096,6 +1210,12 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   // --- 3D Feature Extrusion & Boolean Operations (Phase 5) ---
   bool isExtrudeMode = false;
+  bool get isExtrudeDialogOpen => isExtrudeMode;
+  set isExtrudeDialogOpen(bool v) {
+    if (isExtrudeMode == v) return;
+    isExtrudeMode = v;
+    notifyListeners();
+  }
   AssemblyExtrudeParams extrudeParams = const AssemblyExtrudeParams();
   bool isExtrudeArrowDragging = false;
   Offset? extrudeDragStartScreen;
@@ -1332,6 +1452,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           if (item.entityId != null) {
             doc.selectedPartId = item.entityId;
           }
+          isExtrudeDialogOpen = true;
         }
       }
     }
@@ -3597,7 +3718,11 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   // -------------------------------------------------------------
   void enterSketchMode({String? faceId}) {
     if (faceId == null && selectedPart == null && activeSketchPlane == null) {
-      enterPlaneSelectionMode();
+      if (doc.parts.isNotEmpty) {
+        focusPartAndEnterSketch(doc.parts.first.id, faceId: faceId);
+        return;
+      }
+      activateSketchOnDatum('XY');
       return;
     }
     focusPartAndEnterSketch(selectedPart?.id, faceId: faceId);
@@ -3741,8 +3866,6 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     isSketchMode = true;
     is3DMovementLocked = true;
 
-    // Orient camera perpendicular to the plane
-    alignCameraToActivePlaneNormal();
     notifyListeners();
   }
 
@@ -3761,7 +3884,6 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     isSketchMode = true;
     is3DMovementLocked = true;
 
-    alignCameraToActivePlaneNormal();
     solveSketchConstraints();
     notifyListeners();
   }
@@ -3799,7 +3921,6 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     if (targetNormal == null || targetOrigin == null) return;
 
-    pan = Offset.zero;
     cameraPivotOverride = targetOrigin;
     final angles = AssemblySurfaceSketchEngine.computeNormalViewCameraAngles(targetNormal);
     azimuthDeg = angles.azimuthDeg;

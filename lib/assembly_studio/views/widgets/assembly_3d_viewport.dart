@@ -1225,6 +1225,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                       onPointerHover: (event) {
                         _lastHoverScreenPos = event.localPosition;
                         _cursorScreenPosNotifier.value = event.localPosition;
+                        vm.updateMouseScreenOffset(event.localPosition, size);
 
                         // Snap point hover & magnetic attraction for selection/move/rotate tools (Requirement 4)
                         final isSnapTool =
@@ -3150,6 +3151,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                           isMagneticToolActive: vm.activeToolMode == SketchUpToolMode.magnetic,
                           hoverPoint: _magneticHoverPoint,
                           projectPoint: (pt) => _projectPoint(pt, size, mesh),
+                          viewModel: vm,
                         ),
                       ),
                     ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 import 'package:trufold_studio/assembly_studio/models/assembly_part.dart';
+import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmodel.dart';
+import 'package:trufold_studio/assembly_studio/engine/sketch/cad_brep_topology_bridge.dart';
 
 /// 3D Magnetic Snap Spots and Coupling Flux Overlay Painter
 class AssemblyMagneticSpotsOverlayPainter extends CustomPainter {
@@ -9,6 +11,9 @@ class AssemblyMagneticSpotsOverlayPainter extends CustomPainter {
   final bool isMagneticToolActive;
   final CadPoint3D? hoverPoint;
   final Offset Function(CadPoint3D) projectPoint;
+  final AssemblyStudioViewModel? viewModel;
+
+  static const double kSnapProximityRadiusPx = 18.0;
 
   AssemblyMagneticSpotsOverlayPainter({
     required this.parts,
@@ -16,10 +21,55 @@ class AssemblyMagneticSpotsOverlayPainter extends CustomPainter {
     required this.isMagneticToolActive,
     this.hoverPoint,
     required this.projectPoint,
+    this.viewModel,
   });
+
+  void paintHoleCenterSnaps(Canvas canvas, Size size) {
+    if (viewModel == null) return;
+    final vm = viewModel!;
+    final Offset? cursorPos = vm.lastMouseScreenOffset;
+
+    for (final HoleSnapSpot spot in vm.allHoleCenterSpots) {
+      final bool isExplicitlySelected =
+          vm.selectedHoleCenterIds.contains(spot.id);
+
+      // Project 3D hole center to 2D screen without Z-buffer occlusion
+      // so hidden hole centers remain hover-snappable!
+      final Offset? screenPt = vm.projectWorldToScreen(spot.worldCenter, size);
+      if (screenPt == null) continue;
+
+      final double distToCursor = cursorPos != null
+          ? (screenPt - cursorPos).distance
+          : double.infinity;
+      final bool isHoveredForSnap = distToCursor <= kSnapProximityRadiusPx;
+
+      // CRITICAL: Never draw unselected hole center dots unless the mouse is within 18px!
+      if (!isExplicitlySelected && !isHoveredForSnap) {
+        continue;
+      }
+
+      final Paint dotPaint = Paint()
+        ..color = isExplicitlySelected
+            ? const Color(0xFFFFAB00) // Amber for explicitly selected hole center
+            : const Color(0xFF00E5FF) // Cyan ring/dot for proximity snap target
+        ..style = PaintingStyle.fill;
+
+      canvas.drawCircle(screenPt, isExplicitlySelected ? 4.5 : 4.0, dotPaint);
+
+      if (isHoveredForSnap) {
+        final Paint ringPaint = Paint()
+          ..color = const Color(0xFF111111)
+          ..strokeWidth = 1.2
+          ..style = PaintingStyle.stroke;
+        canvas.drawCircle(screenPt, 6.0, ringPaint);
+      }
+    }
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
+    // 0. Draw Proximity-Filtered / X-Ray Hover-Snappable Hole Center Points
+    paintHoleCenterSnaps(canvas, size);
     // 1. Draw Magnetic Spots on Parts
     for (final part in parts) {
       for (final spot in part.magneticSpots) {
