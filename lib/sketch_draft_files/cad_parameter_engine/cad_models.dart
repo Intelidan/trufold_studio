@@ -28,6 +28,7 @@ class CADDependentFeatureLink {
   bool isPassThrough;
   double bendAngleDeg;
   double bendRadiusMm;
+  final List<String> profileEntityIds;
 
   CADDependentFeatureLink({
     required this.id,
@@ -47,14 +48,19 @@ class CADDependentFeatureLink {
     this.isPassThrough = false,
     this.bendAngleDeg = 0.0,
     this.bendRadiusMm = 0.0,
+    List<String>? profileEntityIds,
+    Set<String>? targetProfileIds,
   })  : operation = operation ?? operationType ?? 'newBody',
         createdPartIds = createdPartIds ?? (createdPartId != null ? [createdPartId] : []),
         distanceSide2Mm = secondDistanceMm ?? distanceSide2Mm ?? 0.0,
         taperAngleDeg = draftAngleDeg ?? taperAngleDeg ?? 0.0,
-        direction = directionName ?? direction ?? 'oneSide';
+        direction = directionName ?? direction ?? 'oneSide',
+        profileEntityIds = profileEntityIds ?? (targetProfileIds != null ? targetProfileIds.toList() : []);
 
   String get operationType => operation;
   set operationType(String val) => operation = val;
+
+  Set<String> get targetProfileIds => profileEntityIds.toSet();
 
   String? get createdPartId => createdPartIds.isNotEmpty ? createdPartIds.first : null;
   set createdPartId(String? id) {
@@ -70,6 +76,25 @@ class CADDependentFeatureLink {
 
   String get directionName => direction;
   set directionName(String v) => direction = v;
+}
+
+/// Parametric Extrude/Cut Feature Specification isolating operations per target profile (Section 6)
+class ExtrudeFeatureSpec {
+  final String featureId;
+  final String sketchId;
+  final Set<String> targetProfileIds;
+  String operation; // 'newBody', 'join', 'cut', 'intersect'
+  double depthMm;
+  bool isSymmetric;
+
+  ExtrudeFeatureSpec({
+    required this.featureId,
+    required this.sketchId,
+    required Set<String> targetProfileIds,
+    this.operation = 'newBody',
+    this.depthMm = 25.0,
+    this.isSymmetric = false,
+  }) : targetProfileIds = Set<String>.from(targetProfileIds);
 }
 
 enum WeldJointStyle { buttJoint, lapJoint, tJoint }

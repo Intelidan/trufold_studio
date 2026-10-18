@@ -211,10 +211,12 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             canvas.drawPath(rectPath, strokePaint);
           }
 
-          _drawVertexDot(canvas, p1, entityColor, isHighlighted: isSel || isHovered);
-          _drawVertexDot(canvas, p2, entityColor, isHighlighted: isSel || isHovered);
-          _drawVertexDot(canvas, p3, entityColor, isHighlighted: isSel || isHovered);
-          _drawVertexDot(canvas, p4, entityColor, isHighlighted: isSel || isHovered);
+          if (isSel || isHovered) {
+            _drawVertexDot(canvas, p1, entityColor, isHighlighted: true);
+            _drawVertexDot(canvas, p2, entityColor, isHighlighted: true);
+            _drawVertexDot(canvas, p3, entityColor, isHighlighted: true);
+            _drawVertexDot(canvas, p4, entityColor, isHighlighted: true);
+          }
 
           if ((viewModel.showSketchDimensions || isSel || viewModel.showSketchExpressions) &&
               !entitiesWithDrivingDim.contains(prim.id)) {
@@ -282,11 +284,13 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             _drawDashedLine(canvas, p4, p2, diagPaint);
           }
 
-          _drawVertexDot(canvas, cScr, entityColor, isHighlighted: isSel || isHovered);
-          _drawVertexDot(canvas, p1, entityColor, isHighlighted: isSel || isHovered);
-          _drawVertexDot(canvas, p2, entityColor, isHighlighted: isSel || isHovered);
-          _drawVertexDot(canvas, p3, entityColor, isHighlighted: isSel || isHovered);
-          _drawVertexDot(canvas, p4, entityColor, isHighlighted: isSel || isHovered);
+          if (isSel || isHovered) {
+            _drawVertexDot(canvas, cScr, entityColor, isHighlighted: true);
+            _drawVertexDot(canvas, p1, entityColor, isHighlighted: true);
+            _drawVertexDot(canvas, p2, entityColor, isHighlighted: true);
+            _drawVertexDot(canvas, p3, entityColor, isHighlighted: true);
+            _drawVertexDot(canvas, p4, entityColor, isHighlighted: true);
+          }
 
           if ((viewModel.showSketchDimensions || isSel || viewModel.showSketchExpressions) &&
               !entitiesWithDrivingDim.contains(prim.id)) {
@@ -361,9 +365,11 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             canvas.drawPath(arcPath, strokePaint);
           }
 
-          _drawVertexDot(canvas, sScr, entityColor, isHighlighted: isSel || isHovered);
-          _drawVertexDot(canvas, eScr, entityColor, isHighlighted: isSel || isHovered);
-          _drawVertexDot(canvas, cScr, entityColor, isHighlighted: isSel || isHovered);
+          if (isSel || isHovered) {
+            _drawVertexDot(canvas, sScr, entityColor, isHighlighted: true);
+            _drawVertexDot(canvas, eScr, entityColor, isHighlighted: true);
+            _drawVertexDot(canvas, cScr, entityColor, isHighlighted: true);
+          }
 
           if ((viewModel.showSketchDimensions || isSel || viewModel.showSketchExpressions) &&
               !entitiesWithDrivingDim.contains(prim.id)) {
@@ -417,7 +423,9 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             canvas.drawPath(circlePath, strokePaint);
           }
 
-          _drawVertexDot(canvas, cScr, entityColor, isHighlighted: isSel || isHovered);
+          if (isSel || isHovered) {
+            _drawVertexDot(canvas, cScr, entityColor, isHighlighted: true);
+          }
 
           if ((viewModel.showSketchDimensions || isSel || viewModel.showSketchExpressions) &&
               !entitiesWithDrivingDim.contains(prim.id) &&
@@ -448,8 +456,10 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           } else {
             canvas.drawLine(sScr, eScr, strokePaint);
           }
-          _drawVertexDot(canvas, sScr, entityColor, isHighlighted: isSel || isHovered);
-          _drawVertexDot(canvas, eScr, entityColor, isHighlighted: isSel || isHovered);
+          if (isSel || isHovered) {
+            _drawVertexDot(canvas, sScr, entityColor, isHighlighted: true);
+            _drawVertexDot(canvas, eScr, entityColor, isHighlighted: true);
+          }
 
           if ((viewModel.showSketchDimensions || isSel || viewModel.showSketchExpressions) &&
               !prim.isConstruction &&
@@ -493,8 +503,10 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           } else {
             canvas.drawPath(polyPath, strokePaint);
           }
-          for (final pt in prim.points) {
-            _drawVertexDot(canvas, toScreen(pt), entityColor, isHighlighted: isSel || isHovered);
+          if (isSel || isHovered) {
+            for (final pt in prim.points) {
+              _drawVertexDot(canvas, toScreen(pt), entityColor, isHighlighted: true);
+            }
           }
         }
       } else if (prim is CADPointEntity) {
@@ -540,7 +552,9 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
               ..strokeWidth = 1.0
               ..style = PaintingStyle.stroke,
           );
-          _drawVertexDot(canvas, toScreen(prim.center), entityColor, isHighlighted: isSel || isHovered);
+          if (isSel || isHovered) {
+            _drawVertexDot(canvas, toScreen(prim.center), entityColor, isHighlighted: true);
+          }
         }
       }
     }

@@ -559,6 +559,7 @@ class AssemblyExtrudeEngine {
           secondDistanceMm: params.distanceSide2Mm,
           draftAngleDeg: params.taperAngleDeg,
           directionName: params.direction.name,
+          profileEntityIds: params.profileEntityIds,
         ));
 
         return AssemblyExtrudeResult(
@@ -590,6 +591,7 @@ class AssemblyExtrudeEngine {
           secondDistanceMm: params.distanceSide2Mm,
           draftAngleDeg: params.taperAngleDeg,
           directionName: params.direction.name,
+          profileEntityIds: params.profileEntityIds,
         ));
 
         return AssemblyExtrudeResult(
@@ -628,6 +630,7 @@ class AssemblyExtrudeEngine {
           draftAngleDeg: params.taperAngleDeg,
           directionName: params.direction.name,
           isPassThrough: cutDepth >= target.thickness - 0.05,
+          profileEntityIds: params.profileEntityIds,
         ));
 
         return AssemblyExtrudeResult(
@@ -764,10 +767,28 @@ class AssemblyExtrudeEngine {
         orElse: () => AssemblyExtrudeDirection.oneSide,
       );
 
+      // Isolate profile loops strictly to the targetProfileIds bound to this feature (Section 6)
+      final List<List<Offset>> featureRawLoops;
+      final ({List<List<Offset>> outerLoops, Map<int, List<List<Offset>>> holesByOuterIndex}) featureClassified;
+
+      if (dep.profileEntityIds.isNotEmpty) {
+        final featVal = AssemblySurfaceSketchEngine.validatePlaneLoop(
+          plane,
+          targetEntityIds: dep.profileEntityIds,
+        );
+        featureRawLoops = featVal.allClosedLoops.isNotEmpty
+            ? featVal.allClosedLoops
+            : (featVal.orderedPathVertices.length >= 3 ? [featVal.orderedPathVertices] : <List<Offset>>[]);
+        featureClassified = classifyOuterAndHoleLoops(featureRawLoops);
+      } else {
+        featureRawLoops = rawLoops;
+        featureClassified = classified;
+      }
+
       if (dep.operationType == 'newBody') {
         final targetId = dep.createdPartId ?? dep.targetPartId;
         final part = doc.parts.where((p) => p.id == targetId).firstOrNull;
-        if (part == null || classified.outerLoops.isEmpty) continue;
+        if (part == null || featureClassified.outerLoops.isEmpty) continue;
 
         final params = AssemblyExtrudeParams(
           operation: AssemblyExtrudeOperation.newBody,
@@ -775,15 +796,16 @@ class AssemblyExtrudeEngine {
           distanceMm: dep.distanceMm,
           distanceSide2Mm: dep.secondDistanceMm,
           taperAngleDeg: dep.draftAngleDeg,
+          profileEntityIds: dep.profileEntityIds,
         );
 
         final allNewPolys = <CadFoldedPolygon3D>[];
         double maxW = 0.0, maxL = 0.0;
-        for (int i = 0; i < classified.outerLoops.length; i++) {
-          final holes = classified.holesByOuterIndex[i] ?? const [];
+        for (int i = 0; i < featureClassified.outerLoops.length; i++) {
+          final holes = featureClassified.holesByOuterIndex[i] ?? const [];
           final mesh = generateExtrudedSolid(
             plane: plane,
-            profilePoints: classified.outerLoops[i],
+            profilePoints: featureClassified.outerLoops[i],
             interiorHoleLoops: holes,
             params: params,
             color: part.color,
@@ -804,7 +826,7 @@ class AssemblyExtrudeEngine {
       } else if (dep.operationType == 'join') {
         final part = doc.parts.where((p) => p.id == dep.targetPartId).firstOrNull;
         if (part == null) continue;
-        if (classified.outerLoops.isEmpty) {
+        if (featureClassified.outerLoops.isEmpty) {
           part.joinedExtrusionsByPlane.remove(plane.id);
           part.invalidateMeshCache();
           continue;
@@ -815,13 +837,14 @@ class AssemblyExtrudeEngine {
           distanceMm: dep.distanceMm,
           distanceSide2Mm: dep.secondDistanceMm,
           taperAngleDeg: dep.draftAngleDeg,
+          profileEntityIds: dep.profileEntityIds,
         );
         final worldJoinPolys = <CadFoldedPolygon3D>[];
-        for (int i = 0; i < classified.outerLoops.length; i++) {
-          final holes = classified.holesByOuterIndex[i] ?? const [];
+        for (int i = 0; i < featureClassified.outerLoops.length; i++) {
+          final holes = featureClassified.holesByOuterIndex[i] ?? const [];
           final mesh = generateExtrudedSolid(
             plane: plane,
-            profilePoints: classified.outerLoops[i],
+            profilePoints: featureClassified.outerLoops[i],
             interiorHoleLoops: holes,
             params: params,
             color: part.color,
@@ -836,11 +859,11 @@ class AssemblyExtrudeEngine {
         if (part == null) continue;
 
         part.sketches.removeWhere((s) => s.planeId == plane.id && s.featureType != 'bend_line');
-        for (int i = 0; i < rawLoops.length; i++) {
+        for (int i = 0; i < featureRawLoops.length; i++) {
           _applyOrUpdateCutLoopOnPart(
             target: part,
             plane: plane,
-            profilePoints: rawLoops[i],
+            profilePoints: featureRawLoops[i],
             cutDepth: dep.distanceMm.abs(),
             featureId: 'extrude_cut_${plane.id}_$i',
             forcePassThrough: dep.isPassThrough,
@@ -849,6 +872,46 @@ class AssemblyExtrudeEngine {
         part.invalidateMeshCache();
       }
     }
+  }
+
+  /// Builds independent feature geometry strictly for target profiles assigned to [featureSpec] (Section 6).
+  static List<CadFoldedPolygon3D> executeExtrudeFeature({
+    required CADSketchPlane sketch,
+    required ExtrudeFeatureSpec featureSpec,
+    required List<CadFoldedPolygon3D> existingBodies,
+  }) {
+    final targetSegments = AssemblySurfaceSketchEngine.compilePlaneSegments(
+      sketch,
+      targetEntityIds: featureSpec.targetProfileIds,
+    );
+    final val = CADProfileValidator.validateProfile(targetSegments);
+    if (!val.isValidClosedLoop || val.orderedPathVertices.length < 3) {
+      return existingBodies;
+    }
+    final loops = val.allClosedLoops.isNotEmpty ? val.allClosedLoops : [val.orderedPathVertices];
+    final classified = classifyOuterAndHoleLoops(loops);
+    final op = AssemblyExtrudeOperation.values.firstWhere(
+      (o) => o.name == featureSpec.operation,
+      orElse: () => AssemblyExtrudeOperation.newBody,
+    );
+    final params = AssemblyExtrudeParams(
+      operation: op,
+      direction: featureSpec.isSymmetric ? AssemblyExtrudeDirection.symmetric : AssemblyExtrudeDirection.oneSide,
+      distanceMm: featureSpec.depthMm,
+      profileEntityIds: featureSpec.targetProfileIds.toList(),
+    );
+    final results = List<CadFoldedPolygon3D>.from(existingBodies);
+    for (int i = 0; i < classified.outerLoops.length; i++) {
+      final solid = generateExtrudedSolid(
+        plane: sketch,
+        profilePoints: classified.outerLoops[i],
+        interiorHoleLoops: classified.holesByOuterIndex[i] ?? const [],
+        params: params,
+        facePrefix: 'feat_${featureSpec.featureId}_$i',
+      );
+      results.addAll(solid.polygons);
+    }
+    return results;
   }
 
   static AssemblySketchFeature? _applyOrUpdateCutLoopOnPart({

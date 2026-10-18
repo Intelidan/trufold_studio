@@ -27,6 +27,10 @@ void main() {
     vec3 N = normalize(gl_FrontFacing ? vViewNormal : -vViewNormal);
     vec3 V = normalize(-vViewPos);
 
+    if (dot(N, V) < 0.0) {
+        N = -N;
+    }
+
     vec3 L_key  = normalize(vec3(-0.42, 0.58, 0.70));
     vec3 L_fill = normalize(vec3( 0.60, -0.45, 0.66));
     vec3 H_key  = normalize(V + L_key);
@@ -34,10 +38,11 @@ void main() {
     float NdotL = max(dot(N, L_key), 0.0);
     float wrapNdotL = clamp((dot(N, L_key) + 0.30) / 1.30, 0.0, 1.0);
     float NdotFill = max(dot(N, L_fill), 0.0);
+    float headlightTerm = max(dot(N, V), 0.0);
     float NdotH = max(dot(N, H_key), 0.0);
     float NdotV = max(dot(N, V), 0.001);
 
-    float smoothTone = 0.50 + wrapNdotL * 0.42 + NdotFill * 0.14;
+    float smoothTone = clamp(0.38 + (dot(N, L_key) * 0.5 + 0.5) * 0.36 + NdotFill * 0.18 + headlightTerm * 0.18, 0.46, 1.08);
     float steppedTone = quantizeLightingStep(wrapNdotL);
     float finalLightTone = mix(smoothTone, steppedTone, clamp(toonStepMix, 0.0, 1.0));
 

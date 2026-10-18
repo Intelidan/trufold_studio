@@ -20,3 +20,4 @@ export 'assembly_extrude_dialog.dart';
 export 'assembly_parametric_timeline.dart';
 export 'assembly_cad_settings_dialog.dart';
 export 'assembly_onshape_sketch_dialog.dart';
+export 'draggable_cad_dialog.dart';

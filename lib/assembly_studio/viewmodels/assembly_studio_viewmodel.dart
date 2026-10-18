@@ -1094,11 +1094,15 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       activeSketchPlane = allAvailablePlanes.first;
     }
     if (activeSketchPlane != null && extrudeParams.profileEntityIds.isEmpty) {
-      final selectedIds = activeSketchPlane!.primitives.where((p) => p.isSelected).map((p) => p.id).toList();
-      if (selectedIds.isNotEmpty) {
-        extrudeParams = extrudeParams.copyWith(profileEntityIds: selectedIds);
-      } else if (activeSketchPlane!.primitives.isNotEmpty) {
-        extrudeParams = extrudeParams.copyWith(profileEntityIds: [activeSketchPlane!.primitives.first.id]);
+      if (selectedSketchEntity != null) {
+        extrudeParams = extrudeParams.copyWith(profileEntityIds: [selectedSketchEntity!.id]);
+      } else {
+        final selectedIds = activeSketchPlane!.primitives.where((p) => p.isSelected).map((p) => p.id).toList();
+        if (selectedIds.isNotEmpty) {
+          extrudeParams = extrudeParams.copyWith(profileEntityIds: selectedIds);
+        } else if (activeSketchPlane!.primitives.isNotEmpty) {
+          extrudeParams = extrudeParams.copyWith(profileEntityIds: [activeSketchPlane!.primitives.first.id]);
+        }
       }
     }
     isExtrudeMode = true;
@@ -1149,7 +1153,11 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   void executeExtrudeFeature() {
     if (activeSketchPlane == null) return;
-    final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(activeSketchPlane!);
+    final targetProfileIds = extrudeParams.profileEntityIds;
+    final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(
+      activeSketchPlane!,
+      targetEntityIds: targetProfileIds.isNotEmpty ? targetProfileIds : null,
+    );
     final validation = CADProfileValidator.validateProfile(segments);
     if (!validation.isValidClosedLoop || validation.orderedPathVertices.length < 3) {
       setVcbState(label: 'Extrude Failed', value: 'Unclosed Profile', hint: 'Ensure sketch forms a closed watertight loop before extruding');
@@ -1535,6 +1543,32 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   List<AssemblyPart> get selectedParts => doc.selectedParts;
   String? get selectedWeldId => doc.selectedWeldId;
   AssemblyWeldJoint? get selectedWeld => doc.selectedWeld;
+
+  // Snap Point Selection (Requirement 1: Separated from Part Selection)
+  final Set<String> selectedSnapPointIds = {};
+  String? hoveredSnapPointId;
+
+  void selectSnapPoint(String snapId, {bool additive = false}) {
+    if (!additive) {
+      selectedSnapPointIds.clear();
+    }
+    selectedSnapPointIds.add(snapId);
+    notifyListeners();
+  }
+
+  void clearSelectedSnapPoints() {
+    if (selectedSnapPointIds.isNotEmpty) {
+      selectedSnapPointIds.clear();
+      notifyListeners();
+    }
+  }
+
+  void setHoveredSnapPoint(String? snapId) {
+    if (hoveredSnapPointId != snapId) {
+      hoveredSnapPointId = snapId;
+      notifyListeners();
+    }
+  }
 
   int _groupCounter = 1;
   int get nextGroupNumber => _groupCounter;
@@ -3656,8 +3690,11 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     } else {
       isOrthoProjection = true;
     }
-    final maxDim = selectedPart != null ? math.max(selectedPart!.length, selectedPart!.height) : 400.0;
-    zoom = (850.0 / (maxDim > 0 ? maxDim : 800.0)).clamp(0.65, 2.5);
+    // Lock and preserve user's zoom level during alignment instead of forcing zoom reset (Section 2)
+    if (zoom <= 0.05) {
+      final maxDim = selectedPart != null ? math.max(selectedPart!.length, selectedPart!.height) : 400.0;
+      zoom = (850.0 / (maxDim > 0 ? maxDim : 800.0)).clamp(0.65, 2.5);
+    }
     notifyListeners();
   }
 
@@ -3741,7 +3778,6 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     sketchPartId = part.id;
     sketchFaceId = cleanFaceId;
 
-    alignCameraToActivePlaneNormal();
     notifyListeners();
   }
 
@@ -3778,7 +3814,6 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     activeSketchTool = 'select_entity';
     activeConstraintTool = null;
     activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(plane);
-    alignCameraToActivePlaneNormal();
     notifyListeners();
   }
 
@@ -3871,7 +3906,21 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     sketchPartId = plane.targetPartId ?? selectedPart?.id;
     sketchFaceId = plane.targetFaceId ?? plane.id;
     doc.selectedFaceId = sketchFaceId;
-    alignCameraToActivePlaneNormal();
+    notifyListeners();
+  }
+
+  /// Updates geometry for a sketch entity and stays in Sketch Mode with select tool active (Section 4).
+  void updateSketchEntityGeometry(String entityId, {CADPrimitiveEntity? updatedEntity}) {
+    if (activeSketchPlane == null) return;
+    if (updatedEntity != null) {
+      final idx = activeSketchPlane!.primitives.indexWhere((p) => p.id == entityId);
+      if (idx != -1) {
+        activeSketchPlane!.primitives[idx] = updatedEntity;
+      }
+    }
+    lastConstraintSolverResult = AssemblySketchConstraintSolver.solve(activeSketchPlane!);
+    regenerateActiveSketchDependents();
+    activeSketchTool = 'select_entity';
     notifyListeners();
   }
 

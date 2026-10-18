@@ -250,17 +250,38 @@ class AssemblySurfaceSketchEngine {
   }
 
   /// Compiles all primitive shapes on the plane into discrete line segments.
-  static List<CADLineSegment> compilePlaneSegments(CADSketchPlane plane) {
-    final segments = <CADLineSegment>[...plane.entities];
-    for (final prim in plane.primitives) {
-      segments.addAll(prim.toLineSegments());
+  /// If [targetEntityIds] is provided, only segments belonging to those primitives/entities are returned.
+  static List<CADLineSegment> compilePlaneSegments(
+    CADSketchPlane plane, {
+    Iterable<String>? targetEntityIds,
+  }) {
+    final targets = targetEntityIds?.toSet();
+    final segments = <CADLineSegment>[];
+    if (targets == null || targets.isEmpty) {
+      segments.addAll(plane.entities);
+      for (final prim in plane.primitives) {
+        segments.addAll(prim.toLineSegments());
+      }
+    } else {
+      segments.addAll(
+        plane.entities.where((e) => targets.contains(e.sourceEntityId ?? e.id) || targets.contains(e.id)),
+      );
+      for (final prim in plane.primitives) {
+        if (targets.contains(prim.id)) {
+          segments.addAll(prim.toLineSegments());
+        }
+      }
     }
     return segments;
   }
 
   /// Validates closed-loop integrity of active entities on the plane.
-  static ValidationResult validatePlaneLoop(CADSketchPlane plane) {
-    final segments = compilePlaneSegments(plane);
+  /// If [targetEntityIds] is provided, validates loops strictly formed by those targeted entities.
+  static ValidationResult validatePlaneLoop(
+    CADSketchPlane plane, {
+    Iterable<String>? targetEntityIds,
+  }) {
+    final segments = compilePlaneSegments(plane, targetEntityIds: targetEntityIds);
     return CADProfileValidator.validateProfile(segments);
   }
 

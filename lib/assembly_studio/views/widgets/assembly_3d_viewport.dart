@@ -1068,8 +1068,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                     _viewportFocusNode.requestFocus();
                     return KeyEventResult.handled;
                   }
+                  // Enter in Sketch Mode commits current dimension or entity edit without exiting Sketch Mode (Requirement 4)
                   if (vm.isSketchMode) {
-                    vm.finishSketch();
                     return KeyEventResult.handled;
                   }
                 } else if (event.logicalKey == LogicalKeyboardKey.keyV && vm.isSketchMode && !isCtrl && !isAlt) {
@@ -1185,8 +1185,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                     vm.closeExtrudeDialog();
                     return KeyEventResult.handled;
                   }
+                  // Escape in Sketch Mode strictly deactivates active tool to 'select_entity', never exiting Sketch Mode (Requirement 4)
                   if (vm.isSketchMode) {
-                    vm.finishSketch();
+                    vm.deactivateSketchToolToSelect();
                     return KeyEventResult.handled;
                   }
                 }
@@ -2799,6 +2800,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                             currentSnapDragScreenPos: _currentSnapDragScreenPos,
                             showSnapLabel: vm.activeToolMode != SketchUpToolMode.move,
                             zoom: _zoom,
+                            isMoveToolActive: vm.activeToolMode == SketchUpToolMode.move,
+                            selectedSnapPointIds: vm.selectedSnapPointIds,
+                            cursorScreenPos: _lastHoverScreenPos,
                           ),
                         ),
                       ),
@@ -3589,7 +3593,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                   // =================================================================
                   // 6d. FUSION 360 3D EXTRUDE INSPECTOR DIALOG (Phase 5)
                   // =================================================================
-                  if (vm.isExtrudeMode && vm.activeSketchPlane != null) Positioned(top: 80, right: 248, child: AssemblyExtrudeDialog(viewModel: vm)),
+                  if (vm.isExtrudeMode && vm.activeSketchPlane != null)
+                    DraggableCadDialog(
+                      initialOffset: const Offset(24, 80),
+                      width: 290,
+                      child: AssemblyExtrudeDialog(viewModel: vm),
+                    ),
 
                   // =================================================================
                   // 7. SELECTED PART / WELD STATUS PILL (BOTTOM CENTER)
@@ -5789,3 +5798,36 @@ typedef _WeldSparksPainter = AssemblyWeldSparksPainter;
 typedef _WeldBeadsBrushPainter = AssemblyWeldBeadsBrushPainter;
 typedef _SketchUpWeldingTorchCursorPainter = AssemblyWeldingTorchCursorPainter;
 typedef _MagneticSpotsOverlayPainter = AssemblyMagneticSpotsOverlayPainter;
+
+/// In Canvas / CPU Face Shading Pipeline & GPU Shader Equivalent:
+Color computeCadFaceColor(Color baseColor, vm_math.Vector3 worldNormal, vm_math.Vector3 viewDir) {
+  vm_math.Vector3 n = worldNormal.normalized();
+  final vm_math.Vector3 v = viewDir.normalized();
+
+  // 1. Two-sided normal guard for sheet metal & extruded walls
+  if (n.dot(v) < 0.0) {
+    n = -n;
+  }
+
+  // 2. Three-point studio rig in world + view space
+  final vm_math.Vector3 keyLight = vm_math.Vector3(0.45, 0.80, 0.40).normalized();
+  final vm_math.Vector3 fillLight = vm_math.Vector3(-0.60, -0.35, -0.70).normalized();
+
+  // Half-Lambert wrapping prevents harsh black terminators on opposite sides
+  final double keyTerm = (n.dot(keyLight) * 0.5 + 0.5);
+  final double fillTerm = math.max(0.0, n.dot(fillLight));
+  final double headlightTerm = math.max(0.0, n.dot(v)); // Camera headlight
+
+  // Minimum ambient floor of 0.46 ensures opposite faces stay crisp CAD blue
+  final double intensity = (0.38 +
+          keyTerm * 0.36 +
+          fillTerm * 0.18 +
+          headlightTerm * 0.18)
+      .clamp(0.46, 1.08);
+
+  final a = (baseColor.a * 255.0).round().clamp(0, 255);
+  final r = (baseColor.r * 255.0 * intensity).round().clamp(0, 255);
+  final g = (baseColor.g * 255.0 * intensity).round().clamp(0, 255);
+  final b = (baseColor.b * 255.0 * intensity).round().clamp(0, 255);
+  return Color.fromARGB(a, r, g, b);
+}

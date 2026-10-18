@@ -341,6 +341,9 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
   final Offset? currentSnapDragScreenPos;
   final bool showSnapLabel;
   final double zoom;
+  final bool isMoveToolActive;
+  final Set<String> selectedSnapPointIds;
+  final Offset? cursorScreenPos;
 
   AssemblySelectedPartBoundingBoxPainter({
     required this.selectedParts,
@@ -357,6 +360,9 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
     this.currentSnapDragScreenPos,
     this.showSnapLabel = true,
     this.zoom = 1.0,
+    this.isMoveToolActive = false,
+    this.selectedSnapPointIds = const {},
+    this.cursorScreenPos,
   });
 
   @override
@@ -467,6 +473,15 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
       final scr = projectPoint(pt.worldPosition);
       if (scr == Offset.zero) continue;
 
+      // Section 7.1: Hide 27-Point OBB Dots Unless Move Tool is Active
+      if (!isMoveToolActive &&
+          (pt.type == AssemblySnapPointType.boundingBoxCorner ||
+              pt.type == AssemblySnapPointType.boundingBoxEdgeCenter ||
+              pt.type == AssemblySnapPointType.boundingBoxFaceCenter ||
+              pt.type == AssemblySnapPointType.boundingBoxCentroid)) {
+        continue;
+      }
+
       switch (pt.type) {
         case AssemblySnapPointType.boundingBoxCorner:
           // SketchUp Green Corner Endpoint
@@ -513,26 +528,28 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
           canvas.drawCircle(scr, centroidRadius, borderPaint);
           break;
         case AssemblySnapPointType.holeCenter:
-          // Parametric Cylindrical Hole Center (scales down dynamically on zoom out)
-          canvas.drawCircle(
-            scr,
-            holeRadius,
-            Paint()
-              ..color = const Color(0xFFF59E0B)
-              ..style = PaintingStyle.fill,
-          );
+          // Section 1: Only render hole center if explicitly selected OR cursor is within 18px proximity
+          final bool isExplicitlySelected = selectedSnapPointIds.contains(pt.id);
+          final double distToCursor = cursorScreenPos != null ? (scr - cursorScreenPos!).distance : double.infinity;
+          final bool isNearCursor = distToCursor <= 18.0;
+
+          if (!isExplicitlySelected && !isNearCursor) {
+            continue;
+          }
+
+          final fillPaint = Paint()
+            ..color = isExplicitlySelected
+                ? const Color(0xFFFFAB00) // Amber for selected
+                : const Color(0xFF00E5FF) // Cyan for proximity snap preview
+            ..style = PaintingStyle.fill;
+
+          canvas.drawCircle(scr, isExplicitlySelected ? 4.5 : 3.5, fillPaint);
           if (holeRadius >= 0.75) {
-            canvas.drawCircle(scr, holeRadius, borderPaint);
+            canvas.drawCircle(scr, isExplicitlySelected ? 4.5 : 3.5, borderPaint);
           }
           break;
         case AssemblySnapPointType.holePerimeter:
-          canvas.drawCircle(
-            scr,
-            (1.0 * zoomFactor).clamp(0.5, 1.2),
-            Paint()
-              ..color = const Color(0x6094A3B8)
-              ..style = PaintingStyle.fill,
-          );
+          // Raw perimeter dots culled to avoid clutter
           break;
         case AssemblySnapPointType.sketchCenter:
         case AssemblySnapPointType.sketchEndpoint:

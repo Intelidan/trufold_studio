@@ -32,6 +32,11 @@ void main() {
   vec3 N = normalize(gl_FrontFacing ? v_viewNormal : -v_viewNormal);
   vec3 V = normalize(-v_viewPos);
 
+  // 1. Two-sided normal guard for sheet metal & extruded walls
+  if (dot(N, V) < 0.0) {
+    N = -N;
+  }
+
   // 1. View-Space Studio Lights (locked to camera so orbiting is always well-lit)
   vec3 L_key  = normalize(vec3(-0.32, 0.42, 0.85)); // Top-left studio key light
   vec3 L_fill = normalize(vec3(0.48, -0.25, 0.84)); // Soft bottom-right fill light
@@ -40,31 +45,32 @@ void main() {
   vec3 H_key = normalize(V + L_key);
 
   float NdotV = max(dot(N, V), 0.001);
-  float NdotL_key  = max(dot(N, L_key), 0.0);
-  float NdotL_fill = max(dot(N, L_fill), 0.0);
-  float NdotL_rim  = max(dot(N, L_rim), 0.0);
+  float keyTerm = dot(N, L_key) * 0.5 + 0.5; // Half-Lambert wrapping prevents harsh black terminators
+  float fillTerm = max(dot(N, L_fill), 0.0);
+  float headlightTerm = max(dot(N, V), 0.0); // Camera headlight
+  float rimTerm = max(dot(N, L_rim), 0.0);
 
   // 2. Studio Hemisphere Sky/Ground Ambient (eliminates flat dead-gray look)
   vec3 skyAmbient    = u_baseColor * vec3(1.06, 1.08, 1.12);
   vec3 groundAmbient = u_baseColor * vec3(0.62, 0.65, 0.70);
   vec3 hemiAmbient   = mix(groundAmbient, skyAmbient, N.y * 0.5 + 0.5) * 0.42;
 
-  // 3. Wrap-Around Studio Diffuse (smooth tonal separation between 90° walls)
-  float wrapKey  = (dot(N, L_key) + 0.25) / 1.25;
-  float diffTerm = max(wrapKey, 0.0) * 0.52 + NdotL_fill * 0.22 + NdotL_rim * 0.08;
-  vec3 diffuse   = u_baseColor * diffTerm;
+  // 3. Wrap-Around Studio Diffuse with Camera Headlight (guaranteed >= 0.46 floor)
+  float intensity = clamp(0.38 + keyTerm * 0.36 + fillTerm * 0.18 + headlightTerm * 0.18 + rimTerm * 0.08, 0.46, 1.08);
+  vec3 diffuse   = u_baseColor * (intensity - 0.38);
 
   // 4. Energy-Conserving GGX Plastic/Anodized Specular (SS3 & SS4 glossy highlight)
   vec3 F0 = vec3(0.045); // Dielectric plastic/anodized coat reflectance
   vec3 F  = fresnelSchlick(max(dot(H_key, V), 0.0), F0);
   float D = distributionGGX(N, H_key, u_roughness);
-  vec3 specular = (D * F * NdotL_key) * 0.28;
+  vec3 specular = (D * F * max(dot(N, L_key), 0.0)) * 0.28;
 
   // Subtle grazing Fresnel rim glow for tactile 3D volume
   float rimSheen = pow(1.0 - NdotV, 3.5) * 0.09;
 
   // Combine with Crevice Ambient Occlusion (v_ao) and Reinhard soft highlight roll-off
   vec3 litColor = (hemiAmbient + diffuse) * v_ao + specular + vec3(rimSheen);
+  litColor = max(litColor, u_baseColor * 0.46);
   litColor = litColor / (litColor + vec3(0.18)) * 1.18; // Prevents harsh white clipping!
 
   // 5. Handle Solid Mode (SS3/SS4) vs. Onshape Translucent Mode (SS5)
