@@ -117,11 +117,11 @@ class AssemblyComplianceReport {
   String get badgeLabel {
     switch (overallStatus) {
       case ComplianceStatus.pass:
-        return 'OSHA / ISO: PASS ($passCount/${items.length})';
+        return 'IEC 61537 / NEMA: PASS ($passCount/${items.length})';
       case ComplianceStatus.warning:
-        return 'OSHA / ISO: $warnCount WARN ($passCount/${items.length})';
+        return 'IEC 61537 / NEMA: $warnCount WARN ($passCount/${items.length})';
       case ComplianceStatus.fail:
-        return 'OSHA / ISO: $failCount FAIL ($passCount/${items.length})';
+        return 'IEC 61537 / NEMA: $failCount FAIL ($passCount/${items.length})';
     }
   }
 }

@@ -93,36 +93,21 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Hold-down clamp
                       InkWell(
-                        onTap: vm.generateSafetyCageAssembly,
-                        borderRadius: BorderRadius.circular(3),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: theme.isLight ? const Color(0xFFFEF3C7) : const Color(0xFFD97706).withValues(alpha: 0.25),
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(color: const Color(0xFFF59E0B), width: 0.8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.flash_on_rounded, size: 10, color: Color(0xFFF59E0B)),
-                              const SizedBox(width: 3),
-                              Text(
-                                '+ Safety Cage',
-                                style: TextStyle(
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.bold,
-                                  color: theme.isLight ? const Color(0xFFB45309) : const Color(0xFFFCD34D),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      InkWell(
-                        onTap: vm.addWalkThroughParapetStiles,
+                        onTap: () {
+                          final clamp = AssemblyPart(
+                            id: 'clamp_${DateTime.now().millisecondsSinceEpoch}',
+                            name: 'Hold-Down Clamp',
+                            type: AssemblyPartType.holdDownClamp,
+                            length: 60,
+                            height: 30,
+                            flangeWidth: 30,
+                            thickness: 3.0,
+                            color: const Color(0xFF64748B),
+                          );
+                          vm.addPartAtScreenCenter(clamp);
+                        },
                         borderRadius: BorderRadius.circular(3),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -131,17 +116,54 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
                             borderRadius: BorderRadius.circular(3),
                             border: Border.all(color: const Color(0xFF38BDF8), width: 0.8),
                           ),
-                          child: Text(
-                            '+ Walk-Through',
-                            style: TextStyle(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.bold,
-                              color: theme.isLight ? const Color(0xFF0369A1) : const Color(0xFFBAE6FD),
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.build_rounded, size: 10, color: Color(0xFF38BDF8)),
+                              const SizedBox(width: 3),
+                              Text(
+                                '+ Clamp',
+                                style: TextStyle(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: theme.isLight ? const Color(0xFF0369A1) : const Color(0xFFBAE6FD),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                       const SizedBox(width: 4),
+                      // Splice Plate
+                      InkWell(
+                        onTap: () {
+                          final splice = AssemblyPart(
+                            id: 'splice_${DateTime.now().millisecondsSinceEpoch}',
+                            name: 'Splice Fishplate',
+                            type: AssemblyPartType.splicePlate,
+                            length: 250,
+                            height: 80,
+                            thickness: 3.0,
+                            color: const Color(0xFF94A3B8),
+                          );
+                          vm.addPartAtScreenCenter(splice);
+                        },
+                        borderRadius: BorderRadius.circular(3),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: theme.isLight ? const Color(0xFFF1F5F9) : const Color(0xFF334155),
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(color: theme.isLight ? const Color(0xFFCBD5E1) : const Color(0xFF475569), width: 0.8),
+                          ),
+                          child: Text(
+                            '+ Splice Plate',
+                            style: TextStyle(fontSize: 8.5, color: theme.textSecondary, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      // Standoffs
                       InkWell(
                         onTap: vm.addWallStandoffBrackets,
                         borderRadius: BorderRadius.circular(3),
@@ -159,6 +181,7 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
                         ),
                       ),
                       const SizedBox(width: 4),
+                      // Base Shoes
                       InkWell(
                         onTap: vm.addBaseFootPlates,
                         borderRadius: BorderRadius.circular(3),
@@ -175,28 +198,8 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      InkWell(
-                        onTap: vm.addSafetySwingGate,
-                        borderRadius: BorderRadius.circular(3),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: theme.isLight ? const Color(0xFFFEF3C7) : const Color(0xFF78350F),
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(color: const Color(0xFFD97706), width: 0.8),
-                          ),
-                          child: Text(
-                            '+ Swing Gate',
-                            style: TextStyle(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.bold,
-                              color: theme.isLight ? const Color(0xFF92400E) : const Color(0xFFFDE68A),
-                            ),
-                          ),
-                        ),
-                      ),
                       const SizedBox(width: 6),
+                      // Demos
                       InkWell(
                         onTap: vm.loadStandardLadderDemo,
                         borderRadius: BorderRadius.circular(3),
@@ -212,7 +215,7 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
                       ),
                       const SizedBox(width: 4),
                       InkWell(
-                        onTap: vm.loadTeeAssemblyDemo,
+                        onTap: vm.loadCableTrayDemo,
                         borderRadius: BorderRadius.circular(3),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -221,7 +224,42 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
                             borderRadius: BorderRadius.circular(3),
                             border: Border.all(color: theme.isLight ? const Color(0xFFCBD5E1) : const Color(0xFF333342), width: 0.8),
                           ),
-                          child: Text('Tee Demo', style: TextStyle(fontSize: 8.5, color: theme.textSecondary)),
+                          child: Text('Tray Demo', style: TextStyle(fontSize: 8.5, color: theme.textSecondary)),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: vm.loadCableTrunkingDemo,
+                        borderRadius: BorderRadius.circular(3),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: theme.isLight ? const Color(0xFFF1F5F9) : const Color(0xFF22222C),
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(color: theme.isLight ? const Color(0xFFCBD5E1) : const Color(0xFF333342), width: 0.8),
+                          ),
+                          child: Text('Trunking Demo', style: TextStyle(fontSize: 8.5, color: theme.textSecondary)),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: vm.importDsfFiles,
+                        borderRadius: BorderRadius.circular(3),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: theme.isLight ? const Color(0xFFE0F2FE) : const Color(0xFF0369A1).withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(color: const Color(0xFF0284C7), width: 0.8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.file_open_rounded, size: 9, color: Color(0xFF0284C7)),
+                              const SizedBox(width: 3),
+                              Text('Import DSF', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: theme.isLight ? const Color(0xFF0369A1) : const Color(0xFF38BDF8))),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -343,16 +381,16 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
   // ===========================================================================
   Widget _buildAssetViewTab(AssemblyStudioViewModel vm) {
     final allAssets = [
-      // 1. Rails & Stiles
+      // 1. Cable Ladders
       _AssetTemplateDef(
         type: AssemblyPartType.straightRail,
-        title: 'C-Channel Rail',
-        specs: '100x30x2.0 • 2000mm',
-        category: 'Rails & Stiles',
+        title: 'Cable Ladder Side Rail',
+        specs: '100x30x2.0 • 2000mm C-Rail',
+        category: 'Cable Ladders',
         accentColor: const Color(0xFF38BDF8),
         createPart: () => AssemblyPart(
           id: 'rail_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Straight Stile Rail',
+          name: 'Ladder Side Rail',
           type: AssemblyPartType.straightRail,
           length: 2000,
           height: 100,
@@ -362,48 +400,14 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
         ),
       ),
       _AssetTemplateDef(
-        type: AssemblyPartType.walkThroughStile,
-        title: 'Walk-Through Stile',
-        specs: 'OSHA 1060mm • Flared Arch',
-        category: 'Rails & Stiles',
-        accentColor: const Color(0xFF38BDF8),
-        createPart: () => AssemblyPart(
-          id: 'walkthrough_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Walk-Through Parapet Stile',
-          type: AssemblyPartType.walkThroughStile,
-          length: 1060,
-          height: 100,
-          flangeWidth: 30,
-          thickness: 2.5,
-          color: const Color(0xFF38BDF8),
-        ),
-      ),
-      _AssetTemplateDef(
-        type: AssemblyPartType.boxTubeStile,
-        title: 'RHS Box Stile',
-        specs: '60x40x2.5 • Box Tube',
-        category: 'Rails & Stiles',
-        accentColor: const Color(0xFF64748B),
-        createPart: () => AssemblyPart(
-          id: 'boxtube_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Box Tube Stile (60x40)',
-          type: AssemblyPartType.boxTubeStile,
-          length: 2000,
-          height: 60,
-          flangeWidth: 40,
-          thickness: 2.5,
-          color: const Color(0xFF64748B),
-        ),
-      ),
-      _AssetTemplateDef(
         type: AssemblyPartType.bentRail,
-        title: 'Bent 90° Rail',
+        title: 'Ladder 90° Flat Bend Rail',
         specs: '100x30 • R300mm Arc',
-        category: 'Rails & Stiles',
+        category: 'Cable Ladders',
         accentColor: const Color(0xFF60A5FA),
         createPart: () => AssemblyPart(
           id: 'bent_rail_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Bent Rail Fitting',
+          name: 'Ladder Flat Bend Rail',
           type: AssemblyPartType.bentRail,
           length: 600,
           height: 100,
@@ -412,17 +416,15 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
           color: const Color(0xFF64748B),
         ),
       ),
-
-      // 2. Rungs & Treads
       _AssetTemplateDef(
         type: AssemblyPartType.rung,
-        title: 'Slotted C-Rung',
+        title: 'Slotted Cable Rung',
         specs: '40x20x1.5 • 400mm',
-        category: 'Rungs & Treads',
+        category: 'Cable Ladders',
         accentColor: const Color(0xFF34D399),
         createPart: () => AssemblyPart(
           id: 'rung_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Slotted Rung',
+          name: 'Slotted Cable Rung',
           type: AssemblyPartType.rung,
           length: 400,
           height: 40,
@@ -433,13 +435,13 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
       ),
       _AssetTemplateDef(
         type: AssemblyPartType.diamondGripRung,
-        title: 'Diamond Grip-Strut',
-        specs: '40x20x2.0 • Perforated',
-        category: 'Rungs & Treads',
+        title: 'Perforated Heavy Rung',
+        specs: '40x20x2.0 • Heavy Grip',
+        category: 'Cable Ladders',
         accentColor: const Color(0xFF10B981),
         createPart: () => AssemblyPart(
           id: 'diamond_rung_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Diamond Grip-Strut Rung',
+          name: 'Heavy Perforated Rung',
           type: AssemblyPartType.diamondGripRung,
           length: 400,
           height: 40,
@@ -449,99 +451,303 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
         ),
       ),
       _AssetTemplateDef(
-        type: AssemblyPartType.wideStepTread,
-        title: 'Wide Safety Tread',
-        specs: '80x25x2.5 • Ribbed Step',
-        category: 'Rungs & Treads',
-        accentColor: const Color(0xFF059669),
-        createPart: () => AssemblyPart(
-          id: 'step_tread_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Wide Flanged Step Tread',
-          type: AssemblyPartType.wideStepTread,
-          length: 500,
-          height: 80,
-          flangeWidth: 25,
-          thickness: 2.5,
-          color: const Color(0xFF94A3B8),
-        ),
-      ),
-      _AssetTemplateDef(
-        type: AssemblyPartType.rod,
-        title: 'Solid Round Rod',
-        specs: 'Ø16mm Stainless 304',
-        category: 'Rungs & Treads',
-        accentColor: const Color(0xFFA78BFA),
-        createPart: () => AssemblyPart(
-          id: 'rod_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Round Tie Rod',
-          type: AssemblyPartType.rod,
-          length: 500,
-          height: 16,
-          flangeWidth: 16,
-          thickness: 16,
-          color: const Color(0xFFA78BFA),
-        ),
-      ),
-
-      // 3. Safety Cages
-      _AssetTemplateDef(
-        type: AssemblyPartType.safetyCageBellHoop,
-        title: 'Bell Entry Hoop',
-        specs: 'Flared Ø800mm • 30° Mouth',
-        category: 'Safety Cage',
-        accentColor: const Color(0xFFF59E0B),
-        createPart: () => AssemblyPart(
-          id: 'cage_bell_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Bell Entry Hoop (Flared)',
-          type: AssemblyPartType.safetyCageBellHoop,
-          length: 50,
-          height: 700,
-          flangeWidth: 700,
-          thickness: 4.0,
-          color: const Color(0xFFF59E0B),
-        ),
-      ),
-      _AssetTemplateDef(
-        type: AssemblyPartType.safetyCageHoop,
-        title: 'Standard Cage Hoop',
-        specs: 'Ø700mm Circular Hoop',
-        category: 'Safety Cage',
-        accentColor: const Color(0xFFD97706),
-        createPart: () => AssemblyPart(
-          id: 'cage_hoop_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Standard Cage Hoop',
-          type: AssemblyPartType.safetyCageHoop,
-          length: 50,
-          height: 700,
-          flangeWidth: 700,
-          thickness: 4.0,
-          color: const Color(0xFF64748B),
-        ),
-      ),
-      _AssetTemplateDef(
-        type: AssemblyPartType.cageStrap,
-        title: 'Vertical Cage Strap',
-        specs: '30x3.0mm • 2000mm Flat',
-        category: 'Safety Cage',
+        type: AssemblyPartType.splicePlate,
+        title: 'Ladder Splice Plate',
+        specs: '250x80x3.0mm Fishplate',
+        category: 'Cable Ladders',
         accentColor: const Color(0xFF94A3B8),
         createPart: () => AssemblyPart(
-          id: 'cage_strap_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Vertical Flat Strap',
-          type: AssemblyPartType.cageStrap,
-          length: 2000,
-          height: 30,
-          flangeWidth: 30,
+          id: 'splice_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Ladder Splice Fishplate',
+          type: AssemblyPartType.splicePlate,
+          length: 250,
+          height: 80,
           thickness: 3.0,
           color: const Color(0xFF94A3B8),
         ),
       ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.holdDownClamp,
+        title: 'Ladder Hold-Down Clamp',
+        specs: '60x30x3.0mm Heavy Clamp',
+        category: 'Cable Ladders',
+        accentColor: const Color(0xFF64748B),
+        createPart: () => AssemblyPart(
+          id: 'clamp_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Hold-Down Clamp',
+          type: AssemblyPartType.holdDownClamp,
+          length: 60,
+          height: 30,
+          flangeWidth: 30,
+          thickness: 3.0,
+          color: const Color(0xFF64748B),
+        ),
+      ),
 
-      // 4. Mounting & Hardware
+      // 2. Cable Trays
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrayStraight,
+        title: 'Straight Cable Tray',
+        specs: '300x50x1.5 • 2000mm Perforated',
+        category: 'Cable Trays',
+        accentColor: const Color(0xFF38BDF8),
+        createPart: () => AssemblyPart(
+          id: 'tray_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Straight Cable Tray',
+          type: AssemblyPartType.cableTrayStraight,
+          length: 2000,
+          height: 50,
+          flangeWidth: 300,
+          thickness: 1.5,
+          color: const Color(0xFF94A3B8),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrayBend90,
+        title: 'Tray 90° Flat Bend',
+        specs: '300mm R300 Elbow Fitting',
+        category: 'Cable Trays',
+        accentColor: const Color(0xFF0284C7),
+        createPart: () => AssemblyPart(
+          id: 'tray_bend90_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Tray 90° Flat Bend',
+          type: AssemblyPartType.cableTrayBend90,
+          length: 450,
+          height: 50,
+          flangeWidth: 300,
+          thickness: 1.5,
+          color: const Color(0xFF64748B),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrayBend45,
+        title: 'Tray 45° Flat Bend',
+        specs: '300mm R300 Elbow Fitting',
+        category: 'Cable Trays',
+        accentColor: const Color(0xFF0284C7),
+        createPart: () => AssemblyPart(
+          id: 'tray_bend45_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Tray 45° Flat Bend',
+          type: AssemblyPartType.cableTrayBend45,
+          length: 350,
+          height: 50,
+          flangeWidth: 300,
+          thickness: 1.5,
+          color: const Color(0xFF64748B),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrayInsideRiser,
+        title: 'Tray Inside Riser 90°',
+        specs: '300mm R300 Vertical Riser',
+        category: 'Cable Trays',
+        accentColor: const Color(0xFF0EA5E9),
+        createPart: () => AssemblyPart(
+          id: 'tray_in_riser_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Tray Inside Riser',
+          type: AssemblyPartType.cableTrayInsideRiser,
+          length: 400,
+          height: 50,
+          flangeWidth: 300,
+          thickness: 1.5,
+          color: const Color(0xFF64748B),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrayOutsideRiser,
+        title: 'Tray Outside Riser 90°',
+        specs: '300mm R300 Vertical Riser',
+        category: 'Cable Trays',
+        accentColor: const Color(0xFF0EA5E9),
+        createPart: () => AssemblyPart(
+          id: 'tray_out_riser_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Tray Outside Riser',
+          type: AssemblyPartType.cableTrayOutsideRiser,
+          length: 400,
+          height: 50,
+          flangeWidth: 300,
+          thickness: 1.5,
+          color: const Color(0xFF64748B),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrayTee,
+        title: 'Tray Equal Tee Fitting',
+        specs: '300mm 3-Way Junction',
+        category: 'Cable Trays',
+        accentColor: const Color(0xFF0284C7),
+        createPart: () => AssemblyPart(
+          id: 'tray_tee_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Tray Equal Tee',
+          type: AssemblyPartType.cableTrayTee,
+          length: 500,
+          height: 50,
+          flangeWidth: 300,
+          thickness: 1.5,
+          color: const Color(0xFF64748B),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrayReducer,
+        title: 'Tray Straight Reducer',
+        specs: '300mm to 150mm Transition',
+        category: 'Cable Trays',
+        accentColor: const Color(0xFF38BDF8),
+        createPart: () => AssemblyPart(
+          id: 'tray_red_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Tray Straight Reducer',
+          type: AssemblyPartType.cableTrayReducer,
+          length: 300,
+          height: 50,
+          flangeWidth: 300,
+          thickness: 1.5,
+          color: const Color(0xFF64748B),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrayCoupler,
+        title: 'Tray Splice Coupler',
+        specs: '50mm Height 4-Hole Plate',
+        category: 'Cable Trays',
+        accentColor: const Color(0xFF94A3B8),
+        createPart: () => AssemblyPart(
+          id: 'tray_coup_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Tray Splice Coupler',
+          type: AssemblyPartType.cableTrayCoupler,
+          length: 150,
+          height: 50,
+          thickness: 2.0,
+          color: const Color(0xFF94A3B8),
+        ),
+      ),
+
+      // 3. Cable Trunkings
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrunkingBody,
+        title: 'Trunking Duct Body',
+        specs: '100x50x1.2 • 2000mm Flanged',
+        category: 'Cable Trunkings',
+        accentColor: const Color(0xFF34D399),
+        createPart: () => AssemblyPart(
+          id: 'trunking_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Trunking Duct Body',
+          type: AssemblyPartType.cableTrunkingBody,
+          length: 2000,
+          height: 50,
+          flangeWidth: 100,
+          thickness: 1.2,
+          color: const Color(0xFF94A3B8),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrunkingCover,
+        title: 'Trunking Snap Cover',
+        specs: '100mm Wide • 2000mm Spring Cover',
+        category: 'Cable Trunkings',
+        accentColor: const Color(0xFF10B981),
+        createPart: () => AssemblyPart(
+          id: 'cover_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Trunking Snap Cover',
+          type: AssemblyPartType.cableTrunkingCover,
+          length: 2000,
+          height: 12,
+          flangeWidth: 100,
+          thickness: 1.0,
+          color: const Color(0xFFCBD5E1),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrunkingBend,
+        title: 'Trunking 90° Bend',
+        specs: '100x50 Gusseted Elbow',
+        category: 'Cable Trunkings',
+        accentColor: const Color(0xFF059669),
+        createPart: () => AssemblyPart(
+          id: 'trunk_bend_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Trunking 90° Bend',
+          type: AssemblyPartType.cableTrunkingBend,
+          length: 200,
+          height: 50,
+          flangeWidth: 100,
+          thickness: 1.2,
+          color: const Color(0xFF64748B),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrunkingTee,
+        title: 'Trunking Equal Tee',
+        specs: '100x50 3-Way Junction',
+        category: 'Cable Trunkings',
+        accentColor: const Color(0xFF059669),
+        createPart: () => AssemblyPart(
+          id: 'trunk_tee_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Trunking Equal Tee',
+          type: AssemblyPartType.cableTrunkingTee,
+          length: 250,
+          height: 50,
+          flangeWidth: 100,
+          thickness: 1.2,
+          color: const Color(0xFF64748B),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.cableTrunkingCoupler,
+        title: 'Trunking Coupler Joint',
+        specs: '100x50 Sleeve Coupler',
+        category: 'Cable Trunkings',
+        accentColor: const Color(0xFF94A3B8),
+        createPart: () => AssemblyPart(
+          id: 'trunk_coup_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Trunking Coupler Sleeve',
+          type: AssemblyPartType.cableTrunkingCoupler,
+          length: 100,
+          height: 50,
+          flangeWidth: 100,
+          thickness: 1.5,
+          color: const Color(0xFF94A3B8),
+        ),
+      ),
+
+      // 4. Profiles & Hardware
+      _AssetTemplateDef(
+        type: AssemblyPartType.channel,
+        title: 'Strut Support Channel',
+        specs: '41x41x2.5 • Slotted C-Channel',
+        category: 'Profiles & Hardware',
+        accentColor: const Color(0xFFFBBF24),
+        createPart: () => AssemblyPart(
+          id: 'channel_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Strut Channel Support',
+          type: AssemblyPartType.channel,
+          length: 1000,
+          height: 41,
+          flangeWidth: 41,
+          thickness: 2.5,
+          color: const Color(0xFFFBBF24),
+        ),
+      ),
+      _AssetTemplateDef(
+        type: AssemblyPartType.angle,
+        title: 'L-Angle Support',
+        specs: '50x50x3.0mm Flange',
+        category: 'Profiles & Hardware',
+        accentColor: const Color(0xFFF472B6),
+        createPart: () => AssemblyPart(
+          id: 'angle_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'L-Angle Support Bracket',
+          type: AssemblyPartType.angle,
+          length: 400,
+          height: 50,
+          flangeWidth: 50,
+          thickness: 3.0,
+          color: const Color(0xFFF472B6),
+        ),
+      ),
       _AssetTemplateDef(
         type: AssemblyPartType.standoffBracket,
-        title: 'Wall Standoff',
+        title: 'Wall Standoff Bracket',
         specs: '175mm Heavy Standoff',
-        category: 'Mounting & Hardware',
+        category: 'Profiles & Hardware',
         accentColor: const Color(0xFF64748B),
         createPart: () => AssemblyPart(
           id: 'standoff_${DateTime.now().millisecondsSinceEpoch}',
@@ -558,7 +764,7 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
         type: AssemblyPartType.baseFootPlate,
         title: 'Base Anchor Shoe',
         specs: '120x100x6mm • 4-Hole',
-        category: 'Mounting & Hardware',
+        category: 'Profiles & Hardware',
         accentColor: const Color(0xFF475569),
         createPart: () => AssemblyPart(
           id: 'foot_plate_${DateTime.now().millisecondsSinceEpoch}',
@@ -571,112 +777,27 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
         ),
       ),
       _AssetTemplateDef(
-        type: AssemblyPartType.splicePlate,
-        title: 'Stile Splice Plate',
-        specs: '250x80x3.0mm Fishplate',
-        category: 'Mounting & Hardware',
-        accentColor: const Color(0xFF94A3B8),
+        type: AssemblyPartType.rod,
+        title: 'Trapeze Threaded Rod',
+        specs: 'Ø12mm Threaded Rod',
+        category: 'Profiles & Hardware',
+        accentColor: const Color(0xFFA78BFA),
         createPart: () => AssemblyPart(
-          id: 'splice_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Stile Splice Fishplate',
-          type: AssemblyPartType.splicePlate,
-          length: 250,
-          height: 80,
-          thickness: 3.0,
-          color: const Color(0xFF94A3B8),
-        ),
-      ),
-      _AssetTemplateDef(
-        type: AssemblyPartType.swingGate,
-        title: 'Safety Swing Gate',
-        specs: 'OSHA 600x420mm Yellow',
-        category: 'Mounting & Hardware',
-        accentColor: const Color(0xFFFBBF24),
-        createPart: () => AssemblyPart(
-          id: 'gate_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'OSHA Safety Swing Gate',
-          type: AssemblyPartType.swingGate,
-          length: 600,
-          height: 420,
-          color: const Color(0xFFFBBF24),
-          jointType: AssemblyJointType.hinged,
-        ),
-      ),
-
-      // 5. Structural Profiles
-      _AssetTemplateDef(
-        type: AssemblyPartType.channel,
-        title: 'Structural Channel',
-        specs: 'C-Section 80x40x2.5',
-        category: 'Profiles',
-        accentColor: const Color(0xFFFBBF24),
-        createPart: () => AssemblyPart(
-          id: 'channel_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'C-Channel Stiffener',
-          type: AssemblyPartType.channel,
-          length: 600,
-          height: 80,
-          flangeWidth: 40,
-          thickness: 2.5,
-          color: const Color(0xFFFBBF24),
-        ),
-      ),
-      _AssetTemplateDef(
-        type: AssemblyPartType.angle,
-        title: 'L-Angle Stiffener',
-        specs: '50x50x3.0mm Flange',
-        category: 'Profiles',
-        accentColor: const Color(0xFFF472B6),
-        createPart: () => AssemblyPart(
-          id: 'angle_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'L-Angle Bracket',
-          type: AssemblyPartType.angle,
-          length: 400,
-          height: 50,
-          flangeWidth: 50,
-          thickness: 3.0,
-          color: const Color(0xFFF472B6),
-        ),
-      ),
-      _AssetTemplateDef(
-        type: AssemblyPartType.bar,
-        title: 'Solid Flat Bar',
-        specs: '50x6.0mm Tie Plate',
-        category: 'Profiles',
-        accentColor: const Color(0xFFC084FC),
-        createPart: () => AssemblyPart(
-          id: 'bar_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Flat Splice Bar',
-          type: AssemblyPartType.bar,
-          length: 450,
-          height: 50,
-          flangeWidth: 0,
-          thickness: 6.0,
-          color: const Color(0xFFC084FC),
-        ),
-      ),
-      _AssetTemplateDef(
-        type: AssemblyPartType.iBeam,
-        title: 'I-Beam Girder',
-        specs: '120x60x4.0 Flange',
-        category: 'Profiles',
-        accentColor: const Color(0xFFFB923C),
-        createPart: () => AssemblyPart(
-          id: 'ibeam_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Heavy I-Beam Post',
-          type: AssemblyPartType.iBeam,
-          length: 800,
-          height: 120,
-          flangeWidth: 60,
-          thickness: 4.0,
-          color: const Color(0xFFFB923C),
+          id: 'rod_${DateTime.now().millisecondsSinceEpoch}',
+          name: 'Threaded Trapeze Rod',
+          type: AssemblyPartType.rod,
+          length: 1000,
+          height: 12,
+          flangeWidth: 12,
+          thickness: 12,
+          color: const Color(0xFFA78BFA),
         ),
       ),
     ];
 
     final filteredAssets = _selectedCategory == 'All' ? allAssets : allAssets.where((a) => a.category == _selectedCategory).toList();
 
-    const categories = ['All', 'Rails & Stiles', 'Rungs & Treads', 'Safety Cage', 'Mounting & Hardware', 'Profiles'];
+    const categories = ['All', 'Cable Ladders', 'Cable Trays', 'Cable Trunkings', 'Profiles & Hardware'];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -756,23 +877,20 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
 
     final String catTag;
     switch (asset.category) {
-      case 'Rails & Stiles':
-        catTag = 'STILE';
+      case 'Cable Ladders':
+        catTag = 'LADDER';
         break;
-      case 'Rungs & Treads':
-        catTag = 'RUNG';
+      case 'Cable Trays':
+        catTag = 'TRAY';
         break;
-      case 'Safety Cage':
-        catTag = 'CAGE';
+      case 'Cable Trunkings':
+        catTag = 'TRUNK';
         break;
-      case 'Mounting & Hardware':
-        catTag = 'MOUNT';
-        break;
-      case 'Profiles':
-        catTag = 'PROFILE';
+      case 'Profiles & Hardware':
+        catTag = 'SUPPORT';
         break;
       default:
-        catTag = 'PART';
+        catTag = 'CMS';
     }
 
     return Draggable<PendingPartPlacement>(
@@ -1506,6 +1624,104 @@ class _MiniatureAssetPainter extends CustomPainter {
         fillPaint.color = frontColor;
         canvas.drawPath(iPath, fillPaint);
         canvas.drawPath(iPath, strokePaint);
+        break;
+
+      case AssemblyPartType.holdDownClamp:
+        final clampPath = Path()
+          ..moveTo(w * 0.25, h * 0.70)
+          ..lineTo(w * 0.25, h * 0.40)
+          ..lineTo(w * 0.55, h * 0.40)
+          ..lineTo(w * 0.55, h * 0.55)
+          ..lineTo(w * 0.75, h * 0.55)
+          ..lineTo(w * 0.75, h * 0.70)
+          ..close();
+        fillPaint.color = frontColor;
+        canvas.drawPath(clampPath, fillPaint);
+        canvas.drawPath(clampPath, strokePaint);
+        final holeP = Paint()
+          ..color = isLight ? const Color(0xFF1E293B) : const Color(0xFF0F172A)
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(Offset(w * 0.40, h * 0.55), 2.0, holeP);
+        break;
+
+      case AssemblyPartType.cableTrayStraight:
+      case AssemblyPartType.cableTrayBend90:
+      case AssemblyPartType.cableTrayBend45:
+      case AssemblyPartType.cableTrayInsideRiser:
+      case AssemblyPartType.cableTrayOutsideRiser:
+      case AssemblyPartType.cableTrayTee:
+      case AssemblyPartType.cableTrayCross:
+      case AssemblyPartType.cableTrayReducer:
+      case AssemblyPartType.cableTrayCoupler:
+        final trayBase = Path()
+          ..moveTo(w * 0.18, h * 0.40)
+          ..lineTo(w * 0.65, h * 0.22)
+          ..lineTo(w * 0.82, h * 0.32)
+          ..lineTo(w * 0.35, h * 0.50)
+          ..close();
+        fillPaint.color = topColor;
+        canvas.drawPath(trayBase, fillPaint);
+        canvas.drawPath(trayBase, strokePaint);
+
+        final trayWall = Path()
+          ..moveTo(w * 0.35, h * 0.50)
+          ..lineTo(w * 0.82, h * 0.32)
+          ..lineTo(w * 0.82, h * 0.60)
+          ..lineTo(w * 0.35, h * 0.78)
+          ..close();
+        fillPaint.color = frontColor;
+        canvas.drawPath(trayWall, fillPaint);
+        canvas.drawPath(trayWall, strokePaint);
+
+        final pPaint = Paint()
+          ..color = isLight ? const Color(0xFF334155) : const Color(0xFF0F172A)
+          ..style = PaintingStyle.fill;
+        for (int i = 0; i < 3; i++) {
+          final px = w * (0.35 + i * 0.15);
+          final py = h * (0.38 + i * 0.04);
+          canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(px, py), width: 2.5, height: 5.0), const Radius.circular(1.0)), pPaint);
+        }
+        break;
+
+      case AssemblyPartType.cableTrunkingBody:
+      case AssemblyPartType.cableTrunkingCover:
+      case AssemblyPartType.cableTrunkingBend:
+      case AssemblyPartType.cableTrunkingRiser:
+      case AssemblyPartType.cableTrunkingTee:
+      case AssemblyPartType.cableTrunkingCoupler:
+        final trunkTop = Path()
+          ..moveTo(w * 0.20, h * 0.35)
+          ..lineTo(w * 0.65, h * 0.20)
+          ..lineTo(w * 0.80, h * 0.28)
+          ..lineTo(w * 0.35, h * 0.43)
+          ..close();
+        fillPaint.color = topColor;
+        canvas.drawPath(trunkTop, fillPaint);
+        canvas.drawPath(trunkTop, strokePaint);
+
+        final trunkFront = Path()
+          ..moveTo(w * 0.35, h * 0.43)
+          ..lineTo(w * 0.80, h * 0.28)
+          ..lineTo(w * 0.80, h * 0.68)
+          ..lineTo(w * 0.35, h * 0.83)
+          ..close();
+        fillPaint.color = frontColor;
+        canvas.drawPath(trunkFront, fillPaint);
+        canvas.drawPath(trunkFront, strokePaint);
+        break;
+
+      case AssemblyPartType.customSheetMetal:
+        final smPath = Path()
+          ..moveTo(w * 0.20, h * 0.40)
+          ..lineTo(w * 0.50, h * 0.20)
+          ..lineTo(w * 0.80, h * 0.35)
+          ..lineTo(w * 0.50, h * 0.55)
+          ..lineTo(w * 0.50, h * 0.75)
+          ..lineTo(w * 0.20, h * 0.60)
+          ..close();
+        fillPaint.color = frontColor;
+        canvas.drawPath(smPath, fillPaint);
+        canvas.drawPath(smPath, strokePaint);
         break;
 
       case AssemblyPartType.customExtrusion:

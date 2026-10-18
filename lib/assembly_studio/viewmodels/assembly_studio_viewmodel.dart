@@ -14,6 +14,8 @@ import '../models/assembly_bom.dart';
 import '../models/weld_quality_model.dart';
 import '../models/assembly_timeline_item.dart';
 import '../models/assembly_cad_settings.dart';
+import '../engine/dam/dam_file_service.dart';
+import '../../sheet_metal_studio/models/ladder/ladder_assembly_models.dart';
 import '../engine/sketch/assembly_surface_sketch_engine.dart' hide WeldJointStyle;
 import '../engine/sketch/onshape_sketch_modify_engine.dart';
 import '../engine/sketch/cad_brep_topology_bridge.dart';
@@ -155,6 +157,10 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   // Undo / Redo history
   final List<String> _undoStack = [];
   final List<String> _redoStack = [];
+  final List<List<CADSketchPlane>> _undoSavedSketchPlanesStack = [];
+  final List<List<CADSketchPlane>> _redoSavedSketchPlanesStack = [];
+  final List<List<AssemblyTimelineItem>> _undoFeatureTreeStack = [];
+  final List<List<AssemblyTimelineItem>> _redoFeatureTreeStack = [];
   static const int _maxUndoHistory = 40;
   int _nextIdCounter = 0;
 
@@ -668,12 +674,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       for (int i = 0; i < part.holeCentersWorld.length; i++) {
         final hc = part.holeCentersWorld[i];
         final dia = part.holeDiametersMm.length > i ? part.holeDiametersMm[i] : 12.0;
-        spots.add(HoleSnapSpot(
-          id: 'hole_${part.id}_$i',
-          partId: part.id,
-          worldCenter: hc,
-          diameterMm: dia,
-        ));
+        spots.add(HoleSnapSpot(id: 'hole_${part.id}_$i', partId: part.id, worldCenter: hc, diameterMm: dia));
       }
     }
     return spots;
@@ -1102,10 +1103,9 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   void applySketchConstraint(CadConstraintType type, {List<String>? targetEntityIds}) {
     if (activeSketchPlane == null) return;
-    final ids = targetEntityIds ??
-        (selectedSketchEntityIds.isNotEmpty
-            ? selectedSketchEntityIds.toList()
-            : (selectedSketchEntity != null ? [selectedSketchEntity!.id] : <String>[]));
+    final ids =
+        targetEntityIds ??
+        (selectedSketchEntityIds.isNotEmpty ? selectedSketchEntityIds.toList() : (selectedSketchEntity != null ? [selectedSketchEntity!.id] : <String>[]));
 
     final needsTwo = constraintRequiresTwoEntities(type);
 
@@ -1133,11 +1133,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     _recordUndo();
 
-    final constraint = CadConstraint(
-      id: 'c_${type.name}_${DateTime.now().millisecondsSinceEpoch}',
-      type: type,
-      entityIds: ids,
-    );
+    final constraint = CadConstraint(id: 'c_${type.name}_${DateTime.now().millisecondsSinceEpoch}', type: type, entityIds: ids);
     activeSketchPlane!.constraints.add(constraint);
     constraintFirstEntityId = null;
     solveSketchConstraints();
@@ -1186,11 +1182,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     }
     solveSketchConstraints();
     activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
-    setVcbState(
-      label: 'Constraint Removed',
-      value: '$sketchDegreesOfFreedom DOFs Remaining',
-      hint: 'Entity is now free to move or resize',
-    );
+    setVcbState(label: 'Constraint Removed', value: '$sketchDegreesOfFreedom DOFs Remaining', hint: 'Entity is now free to move or resize');
     notifyListeners();
   }
 
@@ -1216,6 +1208,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     isExtrudeMode = v;
     notifyListeners();
   }
+
   AssemblyExtrudeParams extrudeParams = const AssemblyExtrudeParams();
   bool isExtrudeArrowDragging = false;
   Offset? extrudeDragStartScreen;
@@ -1301,13 +1294,10 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     final targetPart = doc.parts.where((p) => p.id == (activeSketchPlane!.targetPartId ?? sketchPartId)).firstOrNull ?? selectedPart;
 
-    final loopsToExtrude = validation.allClosedLoops.isNotEmpty
-        ? validation.allClosedLoops
-        : [validation.orderedPathVertices];
+    final loopsToExtrude = validation.allClosedLoops.isNotEmpty ? validation.allClosedLoops : [validation.orderedPathVertices];
 
     AssemblyExtrudeResult? lastResult;
-    if (extrudeParams.operation == AssemblyExtrudeOperation.newBody ||
-        extrudeParams.operation == AssemblyExtrudeOperation.join) {
+    if (extrudeParams.operation == AssemblyExtrudeOperation.newBody || extrudeParams.operation == AssemblyExtrudeOperation.join) {
       final classified = AssemblyExtrudeEngine.classifyOuterAndHoleLoops(loopsToExtrude);
       for (int i = 0; i < classified.outerLoops.length; i++) {
         final outer = classified.outerLoops[i];
@@ -1343,11 +1333,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         }
       }
     }
-    AssemblyExtrudeEngine.regenerateSketchDrivenFeatures(
-      doc: doc,
-      plane: activeSketchPlane!,
-      allPlanes: savedSketchPlanes,
-    );
+    AssemblyExtrudeEngine.regenerateSketchDrivenFeatures(doc: doc, plane: activeSketchPlane!, allPlanes: savedSketchPlanes);
 
     final result = lastResult ?? const AssemblyExtrudeResult(isSuccess: false, message: 'No valid closed loop found.');
 
@@ -1439,8 +1425,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   void selectTimelineFeature(String? featureId) {
     highlightedFeatureId = featureId;
     if (featureId != null) {
-      final item = doc.featureTree.where((f) => f.id == featureId).firstOrNull ??
-          timelineItems.where((t) => t.id == featureId).firstOrNull;
+      final item = doc.featureTree.where((f) => f.id == featureId).firstOrNull ?? timelineItems.where((t) => t.id == featureId).firstOrNull;
       if (item != null) {
         if (item.kind == AssemblyFeatureKind.sketch) {
           final planeId = item.entityId ?? item.parentSketchId ?? item.id;
@@ -1460,8 +1445,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   void beginEditingExtrudeFeature(String featureId) {
-    final item = doc.featureTree.where((f) => f.id == featureId).firstOrNull ??
-        timelineItems.where((t) => t.id == featureId).firstOrNull;
+    final item = doc.featureTree.where((f) => f.id == featureId).firstOrNull ?? timelineItems.where((t) => t.id == featureId).firstOrNull;
     if (item == null) return;
 
     if (item.parentSketchId != null) {
@@ -1491,8 +1475,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   void renameTimelineFeature(String featureId, String newName) {
     if (newName.trim().isEmpty) return;
-    final item = doc.featureTree.where((f) => f.id == featureId).firstOrNull ??
-        timelineItems.where((t) => t.id == featureId).firstOrNull;
+    final item = doc.featureTree.where((f) => f.id == featureId).firstOrNull ?? timelineItems.where((t) => t.id == featureId).firstOrNull;
     if (item != null) {
       item.name = newName.trim();
     }
@@ -1508,10 +1491,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   void rebuildFeatureTimeline() {
-    AssemblyExtrudeEngine.rebuildFeatureTimeline(
-      doc: doc,
-      allPlanes: savedSketchPlanes,
-    );
+    AssemblyExtrudeEngine.rebuildFeatureTimeline(doc: doc, allPlanes: savedSketchPlanes);
     invalidateMeshCache();
     notifyListeners();
   }
@@ -1614,9 +1594,36 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
-  AssemblyStudioViewModel() {
-    doc = AssemblyDocument(id: _generateId('doc'), title: 'TruFold Cable Ladder Assembly');
-    loadStandardLadderDemo();
+  AssemblyStudioViewModel({bool startWithBlank = false}) {
+    doc = AssemblyDocument(id: _generateId('doc'), title: 'Untitled Assembly');
+    if (startWithBlank) {
+      initBlankAssembly();
+    } else {
+      loadStandardLadderDemo();
+    }
+  }
+
+  /// Starts the assembly studio with a clean, blank model and opens sketch mode on the front datum plane.
+  void initBlankAssembly() {
+    _recordUndo();
+    doc.parts.clear();
+    doc.welds.clear();
+    doc.selectedPartId = null;
+    doc.selectedPartIds.clear();
+    doc.featureTree.clear();
+    timelineItems.clear();
+    savedSketchPlanes.clear();
+    activeSketchPlane = null;
+    invalidateMeshCache();
+
+    // Default to Front (XZ) plane in sketch mode ready for immediate vector CAD sketching
+    activateSketchOnDatum('XZ');
+    setVcbState(
+      label: 'Blank Assembly',
+      value: 'Front Plane (XZ)',
+      hint: 'Draw geometry or click "Templates & Demos" to load cable management models',
+    );
+    notifyListeners();
   }
 
   // -------------------------------------------------------------
@@ -1629,10 +1636,16 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     documentVersion++;
     final stateJson = jsonEncode(_serializeDocument());
     _undoStack.add(stateJson);
+    _undoSavedSketchPlanesStack.add(List<CADSketchPlane>.from(savedSketchPlanes));
+    _undoFeatureTreeStack.add(List<AssemblyTimelineItem>.from(doc.featureTree));
     if (_undoStack.length > _maxUndoHistory) {
       _undoStack.removeAt(0);
+      _undoSavedSketchPlanesStack.removeAt(0);
+      _undoFeatureTreeStack.removeAt(0);
     }
     _redoStack.clear();
+    _redoSavedSketchPlanesStack.clear();
+    _redoFeatureTreeStack.clear();
   }
 
   /// Records an undo checkpoint for interactive actions like part dragging.
@@ -1651,9 +1664,19 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     documentVersion++;
     final currentState = jsonEncode(_serializeDocument());
     _redoStack.add(currentState);
+    _redoSavedSketchPlanesStack.add(List<CADSketchPlane>.from(savedSketchPlanes));
+    _redoFeatureTreeStack.add(List<AssemblyTimelineItem>.from(doc.featureTree));
 
     final prevState = _undoStack.removeLast();
     _deserializeDocument(jsonDecode(prevState) as Map<String, dynamic>);
+    if (_undoSavedSketchPlanesStack.isNotEmpty) {
+      savedSketchPlanes.clear();
+      savedSketchPlanes.addAll(_undoSavedSketchPlanesStack.removeLast());
+    }
+    if (_undoFeatureTreeStack.isNotEmpty) {
+      doc.featureTree.clear();
+      doc.featureTree.addAll(_undoFeatureTreeStack.removeLast());
+    }
     setVcbState(label: 'Undo', value: 'Action Undone', hint: 'Ctrl+Y to redo');
     notifyListeners();
   }
@@ -1663,9 +1686,19 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     documentVersion++;
     final currentState = jsonEncode(_serializeDocument());
     _undoStack.add(currentState);
+    _undoSavedSketchPlanesStack.add(List<CADSketchPlane>.from(savedSketchPlanes));
+    _undoFeatureTreeStack.add(List<AssemblyTimelineItem>.from(doc.featureTree));
 
     final nextState = _redoStack.removeLast();
     _deserializeDocument(jsonDecode(nextState) as Map<String, dynamic>);
+    if (_redoSavedSketchPlanesStack.isNotEmpty) {
+      savedSketchPlanes.clear();
+      savedSketchPlanes.addAll(_redoSavedSketchPlanesStack.removeLast());
+    }
+    if (_redoFeatureTreeStack.isNotEmpty) {
+      doc.featureTree.clear();
+      doc.featureTree.addAll(_redoFeatureTreeStack.removeLast());
+    }
     setVcbState(label: 'Redo', value: 'Action Redone', hint: 'Ctrl+Z to undo');
     notifyListeners();
   }
@@ -2241,6 +2274,23 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       case AssemblyPartType.splicePlate:
       case AssemblyPartType.swingGate:
       case AssemblyPartType.customExtrusion:
+      case AssemblyPartType.holdDownClamp:
+      case AssemblyPartType.customSheetMetal:
+      case AssemblyPartType.cableTrayStraight:
+      case AssemblyPartType.cableTrayBend90:
+      case AssemblyPartType.cableTrayBend45:
+      case AssemblyPartType.cableTrayInsideRiser:
+      case AssemblyPartType.cableTrayOutsideRiser:
+      case AssemblyPartType.cableTrayTee:
+      case AssemblyPartType.cableTrayCross:
+      case AssemblyPartType.cableTrayReducer:
+      case AssemblyPartType.cableTrayCoupler:
+      case AssemblyPartType.cableTrunkingBody:
+      case AssemblyPartType.cableTrunkingCover:
+      case AssemblyPartType.cableTrunkingBend:
+      case AssemblyPartType.cableTrunkingRiser:
+      case AssemblyPartType.cableTrunkingTee:
+      case AssemblyPartType.cableTrunkingCoupler:
         newPart = AssemblyPart(
           id: _generateId(p.type.name.toLowerCase()),
           name: p.name,
@@ -3173,6 +3223,25 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     final part = selectedPart;
     if (part == null) return;
     _recordUndo();
+
+    // If currently in sketch mode on this part, safely exit sketch mode
+    if (isSketchMode && (sketchPartId == part.id || activeSketchPlane?.targetPartId == part.id)) {
+      exitSketchMode();
+    }
+
+    // Cascade deletion to all sketch planes attached to this part surface
+    final attachedPlaneIds = savedSketchPlanes.where((p) => p.targetPartId == part.id).map((p) => p.id).toSet();
+    savedSketchPlanes.removeWhere((p) => attachedPlaneIds.contains(p.id));
+
+    // Cascade deletion to feature tree items referencing this part or its attached sketches
+    doc.featureTree.removeWhere(
+      (item) =>
+          item.entityId == part.id ||
+          attachedPlaneIds.contains(item.id) ||
+          attachedPlaneIds.contains(item.entityId) ||
+          (item.parentSketchId != null && attachedPlaneIds.contains(item.parentSketchId)),
+    );
+
     // Remove welds referencing this part
     doc.welds.removeWhere((w) => w.partAId == part.id || w.partBId == part.id);
     for (final p in doc.parts) {
@@ -3866,6 +3935,10 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     isSketchMode = true;
     is3DMovementLocked = true;
 
+    if (part != null) {
+      AssemblySurfaceSketchEngine.imprintHostPartBRepToPlane(plane, part);
+    }
+
     notifyListeners();
   }
 
@@ -3884,6 +3957,11 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     isSketchMode = true;
     is3DMovementLocked = true;
 
+    final hostPart = selectedPart ?? (doc.parts.isNotEmpty ? doc.parts.first : null);
+    if (hostPart != null) {
+      AssemblySurfaceSketchEngine.imprintHostPartBRepToPlane(plane, hostPart);
+    }
+
     solveSketchConstraints();
     notifyListeners();
   }
@@ -3896,16 +3974,10 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     if (activeSketchPlane != null) {
       targetNormal = activeSketchPlane!.normal;
-      targetOrigin = CadPoint3D(
-        activeSketchPlane!.origin.x,
-        activeSketchPlane!.origin.y,
-        activeSketchPlane!.origin.z,
-      );
+      targetOrigin = CadPoint3D(activeSketchPlane!.origin.x, activeSketchPlane!.origin.y, activeSketchPlane!.origin.z);
     } else if (doc.selectedFaceId != null) {
       final cleanId = doc.selectedFaceId!.replaceFirst('plane_', '');
-      final poly = assemblyMesh.allPolygons
-          .where((p) => p.faceId == cleanId || p.faceId.startsWith(cleanId))
-          .firstOrNull;
+      final poly = assemblyMesh.allPolygons.where((p) => p.faceId == cleanId || p.faceId.startsWith(cleanId)).firstOrNull;
       if (poly != null && poly.vertices.isNotEmpty) {
         targetNormal = vm_math.Vector3(poly.normal.x, poly.normal.y, poly.normal.z);
         double cx = 0, cy = 0, cz = 0;
@@ -3981,6 +4053,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     if (matchingPoly != null) {
       activateSketchOnFacePolygon(matchingPoly, partId: part.id);
+      alignCameraToActivePlaneNormal();
       return;
     }
 
@@ -4018,6 +4091,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     is3DMovementLocked = true;
     sketchPartId = part.id;
     sketchFaceId = cleanFaceId;
+    alignCameraToActivePlaneNormal();
 
     notifyListeners();
   }
@@ -4030,11 +4104,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     if (targetPlane == null) return;
     targetPlane.recalculateAutoSize();
     activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(targetPlane);
-    AssemblyExtrudeEngine.regenerateSketchDrivenFeatures(
-      doc: doc,
-      plane: targetPlane,
-      allPlanes: savedSketchPlanes,
-    );
+    AssemblyExtrudeEngine.regenerateSketchDrivenFeatures(doc: doc, plane: targetPlane, allPlanes: savedSketchPlanes);
     invalidateMeshCache();
   }
 
@@ -4062,10 +4132,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   void breakSelectedPolygonOrLoop() {
     if (activeSketchPlane == null) return;
     _recordUndo();
-    final count = OnshapeSketchModifyEngine.breakPolygonOrLoop(
-      activeSketchPlane!,
-      selectedEntity: selectedSketchEntity,
-    );
+    final count = OnshapeSketchModifyEngine.breakPolygonOrLoop(activeSketchPlane!, selectedEntity: selectedSketchEntity);
     selectedSketchEntity = null;
     activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
     setVcbState(
@@ -4432,11 +4499,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   /// Applies a driving dimension constraint ('D' tool) to the selected sketch entity or pair of entities
   /// and immediately solves the sketch!
-  void applyDrivingSketchDimension({
-    required String entityId,
-    String? secondEntityId,
-    required double valueMmOrDeg,
-  }) {
+  void applyDrivingSketchDimension({required String entityId, String? secondEntityId, required double valueMmOrDeg}) {
     if (activeSketchPlane == null) return;
     final ent = activeSketchPlane!.primitives.where((p) => p.id == entityId).firstOrNull;
     if (ent == null) return;
@@ -4450,19 +4513,14 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     }
 
     // Update existing dimension constraint on this entity if one exists, otherwise add a new one
-    final existing = activeSketchPlane!.constraints
-        .where((c) => c.type == dimType && c.entityIds.contains(entityId))
-        .firstOrNull;
+    final existing = activeSketchPlane!.constraints.where((c) => c.type == dimType && c.entityIds.contains(entityId)).firstOrNull;
     if (existing != null) {
       final idx = activeSketchPlane!.constraints.indexOf(existing);
       activeSketchPlane!.constraints[idx] = existing.copyWith(parameterValue: valueMmOrDeg);
     } else {
-      activeSketchPlane!.constraints.add(CadConstraint(
-        id: 'dim_${DateTime.now().millisecondsSinceEpoch}',
-        type: dimType,
-        entityIds: [entityId, ?secondEntityId],
-        parameterValue: valueMmOrDeg,
-      ));
+      activeSketchPlane!.constraints.add(
+        CadConstraint(id: 'dim_${DateTime.now().millisecondsSinceEpoch}', type: dimType, entityIds: [entityId, ?secondEntityId], parameterValue: valueMmOrDeg),
+      );
     }
 
     solveSketchConstraints();
@@ -4482,20 +4540,12 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   }
 
   /// Commits an edited value from the floating OnshapeDimensionEditPopover (image_31d0a3.png)
-  void commitInlineSketchDimension({
-    required SketchDimensionTagHit hit,
-    required double newValue,
-    String? expression,
-    double? tolerancePlusMinus,
-  }) {
+  void commitInlineSketchDimension({required SketchDimensionTagHit hit, required double newValue, String? expression, double? tolerancePlusMinus}) {
     if (activeSketchPlane == null) return;
     _recordUndo();
 
     final primaryKey = hit.subKey != null ? '${hit.primaryEntityId}:${hit.subKey}' : hit.primaryEntityId;
-    final entityIds = <String>[
-      primaryKey,
-      if (hit.secondaryEntityId != null) hit.secondaryEntityId!,
-    ];
+    final entityIds = <String>[primaryKey, if (hit.secondaryEntityId != null) hit.secondaryEntityId!];
 
     if (hit.existingConstraintId != null) {
       final idx = activeSketchPlane!.constraints.indexWhere((c) => c.id == hit.existingConstraintId);
@@ -4508,9 +4558,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         );
       }
     } else {
-      final existingIdx = activeSketchPlane!.constraints.indexWhere(
-        (c) => c.type == hit.constraintType && c.entityIds.join('|') == entityIds.join('|'),
-      );
+      final existingIdx = activeSketchPlane!.constraints.indexWhere((c) => c.type == hit.constraintType && c.entityIds.join('|') == entityIds.join('|'));
       if (existingIdx != -1) {
         activeSketchPlane!.constraints[existingIdx] = activeSketchPlane!.constraints[existingIdx].copyWith(
           parameterValue: newValue,
@@ -4519,15 +4567,17 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
           toleranceMinus: tolerancePlusMinus,
         );
       } else {
-        activeSketchPlane!.constraints.add(CadConstraint(
-          id: 'dim_${DateTime.now().millisecondsSinceEpoch}',
-          type: hit.constraintType,
-          entityIds: entityIds,
-          parameterValue: newValue,
-          expression: expression,
-          tolerancePlus: tolerancePlusMinus,
-          toleranceMinus: tolerancePlusMinus,
-        ));
+        activeSketchPlane!.constraints.add(
+          CadConstraint(
+            id: 'dim_${DateTime.now().millisecondsSinceEpoch}',
+            type: hit.constraintType,
+            entityIds: entityIds,
+            parameterValue: newValue,
+            expression: expression,
+            tolerancePlus: tolerancePlusMinus,
+            toleranceMinus: tolerancePlusMinus,
+          ),
+        );
       }
     }
 
@@ -4537,11 +4587,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       if (prim is CADCircleEntity) {
         prim.radius = (hit.constraintType == CadConstraintType.diameter ? newValue / 2.0 : newValue).clamp(0.5, 10000.0);
       } else if (prim is CADLineEntity && hit.constraintType == CadConstraintType.distance) {
-        OnshapeSketchModifyEngine.resizeLinePreservingPolygonBond(
-          activeSketchPlane!,
-          prim,
-          newValue,
-        );
+        OnshapeSketchModifyEngine.resizeLinePreservingPolygonBond(activeSketchPlane!, prim, newValue);
       } else if (prim is CADRectangleEntity && hit.constraintType == CadConstraintType.distance) {
         if (hit.subKey == 'h') {
           prim.height = newValue.clamp(0.5, 10000.0);
@@ -4594,14 +4640,8 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     final axisLine = activeSketchPlane!.primitives.whereType<CADLineEntity>().where((l) => l.isConstruction).firstOrNull;
     if (axisLine == null) return;
     _recordUndo();
-    final targets = selectedSketchEntity != null
-        ? [selectedSketchEntity!]
-        : activeSketchPlane!.primitives.where((p) => p.id != axisLine.id).toList();
-    OnshapeSketchModifyEngine.mirrorEntitiesAcrossLine(
-      plane: activeSketchPlane!,
-      mirrorAxisLine: axisLine,
-      entitiesToMirror: targets,
-    );
+    final targets = selectedSketchEntity != null ? [selectedSketchEntity!] : activeSketchPlane!.primitives.where((p) => p.id != axisLine.id).toList();
+    OnshapeSketchModifyEngine.mirrorEntitiesAcrossLine(plane: activeSketchPlane!, mirrorAxisLine: axisLine, entitiesToMirror: targets);
     activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(activeSketchPlane!);
     notifyListeners();
   }
@@ -4718,10 +4758,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       }
     }
 
-    final guides = <CADInferenceMatch>[
-      ?bestH,
-      ?bestV,
-    ];
+    final guides = <CADInferenceMatch>[?bestH, ?bestV];
 
     activePlaneHoverLocal = Offset(finalX, finalY);
     activePlaneHoverWorld = activeSketchPlane!.toWorld(activePlaneHoverLocal!);
@@ -5191,6 +5228,9 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// Spawns a realistic standard ladder segment: 2 side rails + 4 slotted rungs fitted into punched slot entities.
   void loadStandardLadderDemo() {
     _recordUndo();
+    isSketchModeActive = false;
+    activeSketchPlane = null;
+    is3DMovementLocked = false;
     doc.parts.clear();
     doc.welds.clear();
     doc.selectedPartId = null;
@@ -5329,6 +5369,9 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// Spawns a Tee junction ladder assembly using straight rail, 2 bent rails (with flange V-notches), and welded rungs.
   void loadTeeAssemblyDemo() {
     _recordUndo();
+    isSketchModeActive = false;
+    activeSketchPlane = null;
+    is3DMovementLocked = false;
     doc.parts.clear();
     doc.welds.clear();
 
@@ -5401,6 +5444,169 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
     doc.selectedPartId = 'branch_left';
     notifyListeners();
+  }
+
+  /// Spawns a Cable Tray assembly demo: 1000mm straight tray mated with a 90° horizontal bend and splice plates.
+  void loadCableTrayDemo() {
+    _recordUndo();
+    isSketchModeActive = false;
+    activeSketchPlane = null;
+    is3DMovementLocked = false;
+    doc.parts.clear();
+    doc.welds.clear();
+    doc.selectedPartId = null;
+    doc.selectedPartIds.clear();
+
+    const double trayW = 300.0;
+    const double trayH = 50.0;
+    const double trayL = 1000.0;
+
+    // 1. Straight Cable Tray
+    final straightTray = AssemblyPart(
+      id: 'tray_straight_1',
+      name: 'Cable Tray Straight 300x50',
+      type: AssemblyPartType.cableTrayStraight,
+      length: trayL,
+      height: trayH,
+      flangeWidth: trayW,
+      thickness: 1.5,
+      position: const CadPoint3D(0.0, 0.0, 0.0),
+      color: const Color(0xFF64748B), // Slate Grey Metallic
+    );
+
+    // 2. 90° Horizontal Cable Tray Bend
+    final trayBend = AssemblyPart(
+      id: 'tray_bend_90',
+      name: 'Cable Tray 90° Bend 300x50',
+      type: AssemblyPartType.cableTrayBend90,
+      length: 600.0,
+      height: trayH,
+      flangeWidth: 15.0,
+      thickness: 1.5,
+      position: const CadPoint3D(1000.0, 0.0, 0.0),
+      color: const Color(0xFF64748B),
+    );
+
+    // 3. Coupler / Splice Plate
+    final coupler = AssemblyPart(
+      id: 'tray_coupler_1',
+      name: 'Tray Splice Coupler Plate',
+      type: AssemblyPartType.cableTrayCoupler,
+      length: 200.0,
+      height: 45.0,
+      flangeWidth: 12.0,
+      thickness: 2.0,
+      position: const CadPoint3D(900.0, -2.0, 0.0),
+      color: const Color(0xFFF59E0B), // Zinc Dichromate Gold
+    );
+
+    doc.parts.addAll([straightTray, trayBend, coupler]);
+
+    timelineItems.clear();
+    recordTimelineFeature(name: 'Origin Datum (XY)', type: AssemblyTimelineFeatureType.originPlane, entityId: 'datum_XY');
+    recordTimelineFeature(name: 'Cable Tray Straight 300x50', type: AssemblyTimelineFeatureType.extrude, entityId: straightTray.id);
+    recordTimelineFeature(name: 'Cable Tray 90° Bend 300x50', type: AssemblyTimelineFeatureType.extrude, entityId: trayBend.id);
+    recordTimelineFeature(name: 'Splice Coupler Plate', type: AssemblyTimelineFeatureType.extrude, entityId: coupler.id);
+
+    doc.selectedPartId = straightTray.id;
+    invalidateMeshCache();
+    notifyListeners();
+  }
+
+  /// Spawns a Cable Trunking assembly demo: 1000mm base channel + snap-on cover + 90° flat bend.
+  void loadCableTrunkingDemo() {
+    _recordUndo();
+    isSketchModeActive = false;
+    activeSketchPlane = null;
+    is3DMovementLocked = false;
+    doc.parts.clear();
+    doc.welds.clear();
+    doc.selectedPartId = null;
+    doc.selectedPartIds.clear();
+
+    const double trunkW = 100.0;
+    const double trunkH = 100.0;
+    const double trunkL = 1000.0;
+
+    // 1. Trunking Base Channel
+    final trunkBase = AssemblyPart(
+      id: 'trunking_base_1',
+      name: 'Cable Trunking Channel 100x100',
+      type: AssemblyPartType.cableTrunkingBody,
+      length: trunkL,
+      height: trunkH,
+      flangeWidth: 12.0,
+      thickness: 1.5,
+      position: const CadPoint3D(0.0, 0.0, 0.0),
+      color: const Color(0xFF78909C), // Steel Grey
+    );
+
+    // 2. Trunking Snap-on Cover
+    final trunkCover = AssemblyPart(
+      id: 'trunking_cover_1',
+      name: 'Trunking Snap-On Cover 100x1000',
+      type: AssemblyPartType.cableTrunkingCover,
+      length: trunkL,
+      height: 15.0,
+      flangeWidth: trunkW + 2.0,
+      thickness: 1.2,
+      position: const CadPoint3D(0.0, -1.0, trunkH),
+      color: const Color(0xFF90A4AE), // Light Slate Cover
+    );
+
+    // 3. Trunking 90° Flat Bend
+    final trunkBend = AssemblyPart(
+      id: 'trunking_bend_90',
+      name: 'Trunking 90° Flat Bend 100x100',
+      type: AssemblyPartType.cableTrunkingBend,
+      length: 300.0,
+      height: trunkH,
+      flangeWidth: 12.0,
+      thickness: 1.5,
+      position: const CadPoint3D(1000.0, 0.0, 0.0),
+      color: const Color(0xFF78909C),
+    );
+
+    doc.parts.addAll([trunkBase, trunkCover, trunkBend]);
+
+    timelineItems.clear();
+    recordTimelineFeature(name: 'Origin Datum (XY)', type: AssemblyTimelineFeatureType.originPlane, entityId: 'datum_XY');
+    recordTimelineFeature(name: 'Trunking Channel 100x100', type: AssemblyTimelineFeatureType.extrude, entityId: trunkBase.id);
+    recordTimelineFeature(name: 'Trunking Snap-On Cover', type: AssemblyTimelineFeatureType.extrude, entityId: trunkCover.id);
+    recordTimelineFeature(name: 'Trunking 90° Bend', type: AssemblyTimelineFeatureType.extrude, entityId: trunkBend.id);
+
+    doc.selectedPartId = trunkBase.id;
+    invalidateMeshCache();
+    notifyListeners();
+  }
+
+  void recordUndoCheckpoint() => _recordUndo();
+
+  /// Saves the active assembly session to a .dam file.
+  Future<String?> saveDamDocument({BuildContext? context, String? customFileName}) async {
+    if (context == null) return null;
+    return await DamFileService.saveDamFile(context: context, vm: this, customFileName: customFileName);
+  }
+
+  /// Opens an assembly from a .dam file.
+  Future<bool> openDamDocument({BuildContext? context}) async {
+    if (context == null) return false;
+    return await DamFileService.pickAndOpenDamFile(context: context, vm: this);
+  }
+
+  /// Prompts user to pick one or more .dsf files and imports them.
+  Future<int> importDsfFiles({BuildContext? context}) async {
+    if (context == null) return 0;
+    return await DamFileService.pickAndImportDsfFiles(context: context, vm: this);
+  }
+
+  /// Imports a procedural cable ladder assembly from engineering parameters as discrete editable parts.
+  void importLadderAssemblyDsf(DsfLadderAssembly ladderAssembly) {
+    _recordUndo();
+    final parts = DamFileService.decomposeLadderAssembly(ladderAssembly: ladderAssembly);
+    doc.parts.addAll(parts);
+    invalidateMeshCache();
+    notifyDocChanged();
   }
 
   // -------------------------------------------------------------
@@ -6220,90 +6426,72 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       );
     }
 
-    // 4. Safety Cage Start Height: Required when H >= 6.0m (starts 2200–2500mm above ground)
-    final cageHoops = doc.parts.where((p) => p.type == AssemblyPartType.safetyCageHoop || p.type == AssemblyPartType.safetyCageBellHoop).toList();
+    // 4. Structural Weld Joint Soundness (AWS D1.1 / ISO 2553 / NEMA VE 1)
+    final welds = doc.welds;
+    final rungsWithWelds = rungs.where((r) => welds.any((w) => w.partAId == r.id || w.partBId == r.id)).length;
+    final bothSidesCount = welds.where((w) => w.bothSides).length;
 
-    if (cageHoops.isNotEmpty) {
-      final double entryElevation = cageHoops.map((h) => math.max(h.position.x, h.position.z)).reduce(math.min);
-      final ComplianceStatus cageStatus = (entryElevation >= 2100.0 && entryElevation <= 2550.0) ? ComplianceStatus.pass : ComplianceStatus.warning;
-
-      items.add(
-        ComplianceItemResult(
-          id: 'cage_height',
-          title: 'Safety Cage Entry Height',
-          standardCode: 'OSHA 1910.28(b)(9) / EN ISO 14122-4',
-          status: cageStatus,
-          measuredValueMm: entryElevation,
-          minAllowedMm: 2200.0,
-          maxAllowedMm: 2500.0,
-          description: 'Bottom entry hoop begins at ${entryElevation.toStringAsFixed(0)} mm above floor.',
-          recommendation: cageStatus == ComplianceStatus.pass
-              ? 'Meets entry height window (2.2 m to 2.5 m above ground).'
-              : 'Adjust cage entry hoop to 2200 mm above base.',
-          fixActionId: 'fix_cage_height',
-        ),
-      );
+    ComplianceStatus weldStatus;
+    if (rungs.isNotEmpty && rungsWithWelds == rungs.length && bothSidesCount >= rungs.length) {
+      weldStatus = ComplianceStatus.pass;
+    } else if (rungsWithWelds > 0) {
+      weldStatus = ComplianceStatus.warning;
     } else {
-      final bool requiresCage = ladderHeightMm >= 6000.0;
-      items.add(
-        ComplianceItemResult(
-          id: 'cage_height',
-          title: 'Safety Cage Requirement',
-          standardCode: 'OSHA 1910.28(b)(9) / EN ISO 14122-4',
-          status: requiresCage ? ComplianceStatus.warning : ComplianceStatus.pass,
-          measuredValueMm: ladderHeightMm,
-          minAllowedMm: 2200.0,
-          maxAllowedMm: 2500.0,
-          description: requiresCage
-              ? 'Ladder height (${(ladderHeightMm / 1000.0).toStringAsFixed(1)} m) exceeds 6.0 m; cage or fall arrest required.'
-              : 'Ladder height (${(ladderHeightMm / 1000.0).toStringAsFixed(1)} m) is below 6.0 m; cage is optional.',
-          recommendation: requiresCage ? 'Attach safety cage assembly starting at 2200 mm.' : 'No cage required for short access ladders.',
-          fixActionId: requiresCage ? 'fix_cage_height' : '',
-        ),
-      );
+      weldStatus = rungs.isEmpty ? ComplianceStatus.pass : ComplianceStatus.fail;
     }
 
-    // 5. Parapet Walk-Through Extension: Extension >= 1060mm (42 in) above landing
-    final parapets = doc.parts.where((p) => p.type == AssemblyPartType.walkThroughStile || p.name.toLowerCase().contains('parapet')).toList();
+    items.add(
+      ComplianceItemResult(
+        id: 'weld_integrity',
+        title: 'Weld Joint Structural Soundness',
+        standardCode: 'AWS D1.1 / ISO 2553 / NEMA VE 1',
+        status: weldStatus,
+        measuredValueMm: bothSidesCount.toDouble(),
+        minAllowedMm: rungs.length.toDouble(),
+        maxAllowedMm: (rungs.length * 2).toDouble(),
+        units: 'welds',
+        description: '$rungsWithWelds/${rungs.length} rungs have AWS D1.1 structural welds ($bothSidesCount both-sides fillet joints).',
+        recommendation: weldStatus == ComplianceStatus.pass
+            ? 'Meets structural both-sides weld requirement for heavy cabling loads.'
+            : 'Apply both-sides fillet welds (6mm) to all rung-to-rail joints.',
+        fixActionId: 'fix_welds',
+      ),
+    );
 
-    if (parapets.isNotEmpty) {
-      final double extHeight = math.max(parapets.first.height, parapets.first.length);
-      final ComplianceStatus parapetStatus = extHeight >= 1060.0 ? ComplianceStatus.pass : ComplianceStatus.warning;
-      items.add(
-        ComplianceItemResult(
-          id: 'parapet_extension',
-          title: 'Walk-Through Parapet Extension',
-          standardCode: 'OSHA 1910.23(d)(4) / EN ISO 14122-4',
-          status: parapetStatus,
-          measuredValueMm: extHeight,
-          minAllowedMm: 1060.0,
-          maxAllowedMm: 1400.0,
-          description: 'Side rail handgrip extension is ${extHeight.toStringAsFixed(0)} mm above roof landing.',
-          recommendation: parapetStatus == ComplianceStatus.pass
-              ? 'Meets standard >= 1060 mm (42 in) landing handrail extension.'
-              : 'Extend parapet stiles to at least 1060–1100 mm.',
-          fixActionId: 'fix_parapet_extension',
-        ),
-      );
-    } else {
-      final bool needsParapet = rungs.length >= 6 || ladderHeightMm >= 2000.0;
-      items.add(
-        ComplianceItemResult(
-          id: 'parapet_extension',
-          title: 'Walk-Through Parapet Extension',
-          standardCode: 'OSHA 1910.23(d)(4) / EN ISO 14122-4',
-          status: needsParapet ? ComplianceStatus.warning : ComplianceStatus.pass,
-          measuredValueMm: null,
-          minAllowedMm: 1060.0,
-          maxAllowedMm: 1400.0,
-          description: needsParapet
-              ? 'Elevated ladder has no flared walk-through parapet extension for roof access.'
-              : 'Single-stage ladder without elevated landing.',
-          recommendation: needsParapet ? 'Add 1100 mm walk-through parapet top stiles.' : 'Parapet not required.',
-          fixActionId: needsParapet ? 'fix_parapet_extension' : '',
-        ),
-      );
+    // 5. Sheet Metal Material Thickness & Gauge Rating (IEC 61537 / NEMA VE 1)
+    double minPartThickness = 10.0;
+    for (final p in doc.parts) {
+      if (p.thickness > 0 && p.thickness < minPartThickness) {
+        minPartThickness = p.thickness;
+      }
     }
+    if (doc.parts.isEmpty) minPartThickness = 2.0;
+
+    ComplianceStatus gaugeStatus;
+    if (minPartThickness >= 1.5) {
+      gaugeStatus = ComplianceStatus.pass;
+    } else if (minPartThickness >= 1.2) {
+      gaugeStatus = ComplianceStatus.warning;
+    } else {
+      gaugeStatus = ComplianceStatus.fail;
+    }
+
+    items.add(
+      ComplianceItemResult(
+        id: 'sheet_gauge',
+        title: 'Sheet Metal Gauge & Load Rating',
+        standardCode: 'IEC 61537 / NEMA VE 1 Table 1',
+        status: gaugeStatus,
+        measuredValueMm: minPartThickness,
+        minAllowedMm: 1.5,
+        maxAllowedMm: 3.0,
+        description: 'Minimum part thickness is ${minPartThickness.toStringAsFixed(2)} mm across assembly components.',
+        recommendation: gaugeStatus == ComplianceStatus.pass
+            ? 'Complies with >= 1.5 mm industrial cable load rating.'
+            : 'Upgrade sheet metal gauge to at least 1.5 mm (16 ga) or 2.0 mm (14 ga).',
+        fixActionId: 'fix_gauge',
+      ),
+    );
 
     return AssemblyComplianceReport(items: items, ladderTotalHeightMm: ladderHeightMm, totalRungCount: rungs.length);
   }

@@ -488,18 +488,39 @@ class _AssemblySceneHierarchyTreeState extends State<AssemblySceneHierarchyTree>
       case AssemblyPartType.wideStepTread:
         typeColor = const Color(0xFF34D399); // Green
         break;
-      case AssemblyPartType.safetyCageHoop:
-      case AssemblyPartType.safetyCageBellHoop:
-      case AssemblyPartType.cageStrap:
-        typeColor = const Color(0xFFF59E0B); // Amber / Safety Cage
+      case AssemblyPartType.cableTrayStraight:
+      case AssemblyPartType.cableTrayBend90:
+      case AssemblyPartType.cableTrayBend45:
+      case AssemblyPartType.cableTrayInsideRiser:
+      case AssemblyPartType.cableTrayOutsideRiser:
+      case AssemblyPartType.cableTrayTee:
+      case AssemblyPartType.cableTrayCross:
+      case AssemblyPartType.cableTrayReducer:
+      case AssemblyPartType.cableTrayCoupler:
+        typeColor = const Color(0xFF38BDF8); // Tray Cyan
         break;
+      case AssemblyPartType.cableTrunkingBody:
+      case AssemblyPartType.cableTrunkingCover:
+      case AssemblyPartType.cableTrunkingBend:
+      case AssemblyPartType.cableTrunkingRiser:
+      case AssemblyPartType.cableTrunkingTee:
+      case AssemblyPartType.cableTrunkingCoupler:
+        typeColor = const Color(0xFF34D399); // Trunking Green
+        break;
+      case AssemblyPartType.customSheetMetal:
+        typeColor = const Color(0xFF06B6D4); // Cyan
+        break;
+      case AssemblyPartType.holdDownClamp:
       case AssemblyPartType.standoffBracket:
       case AssemblyPartType.baseFootPlate:
       case AssemblyPartType.splicePlate:
-        typeColor = const Color(0xFF94A3B8); // Slate hardware
+        typeColor = const Color(0xFF94A3B8); // Hardware
         break;
+      case AssemblyPartType.safetyCageHoop:
+      case AssemblyPartType.safetyCageBellHoop:
+      case AssemblyPartType.cageStrap:
       case AssemblyPartType.swingGate:
-        typeColor = const Color(0xFFEAB308); // Yellow gate
+        typeColor = const Color(0xFF64748B); // Legacy / Deprecated
         break;
       case AssemblyPartType.channel:
         typeColor = const Color(0xFFFBBF24); // Amber

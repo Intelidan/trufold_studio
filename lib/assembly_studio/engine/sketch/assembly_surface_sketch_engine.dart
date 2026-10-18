@@ -11,6 +11,8 @@ import '../../../sketch_draft_files/math_and_processing/cad_grid_solver.dart';
 import '../../../sketch_draft_files/math_and_processing/cad_profile_validator.dart';
 import '../../../sketch_draft_files/math_and_processing/cad_tessellator.dart';
 import '../../../sheet_metal_studio/models/cad_primitives.dart';
+import '../../models/assembly_part.dart';
+import 'cad_brep_topology_bridge.dart';
 
 export '../../../sketch_draft_files/cad_parameter_engine/cad_models.dart';
 export '../../../sketch_draft_files/data_operations_persistance_compliers/cad_serializer.dart';
@@ -221,6 +223,42 @@ class AssemblySurfaceSketchEngine {
     }
 
     return plane;
+  }
+
+  /// Imprints the host part face outer border edges and hole centers directly onto [plane]
+  /// so dimensional constraints can be attached between sketch geometry and 3D body borders (SS2 & SS5).
+  static void imprintHostPartBRepToPlane(CADSketchPlane plane, AssemblyPart part) {
+    final brep = CadPlanarFaceBRep.extractFromPartFace(
+      part: part,
+      planeOriginWorld: plane.origin,
+      planeNormalWorld: plane.normal,
+      planeUAxisWorld: plane.xAxis,
+      planeVAxisWorld: plane.yAxis,
+    );
+    for (final border in brep.outerBorderEdges2D) {
+      if (!plane.primitives.any((p) => p.id == border.id)) {
+        plane.primitives.add(CADLineEntity(
+          id: border.id,
+          start: Offset(border.start2D.x, border.start2D.y),
+          end: Offset(border.end2D.x, border.end2D.y),
+          isImprintedReference: true,
+          isFixed: true,
+          isFullyConstrained: true,
+        ));
+      }
+    }
+    for (final hole in brep.holes2D) {
+      if (!plane.primitives.any((p) => p.id == hole.id)) {
+        plane.primitives.add(CADCircleEntity(
+          id: hole.id,
+          center: Offset(hole.center2D.x, hole.center2D.y),
+          radius: hole.diameterMm / 2.0,
+          isImprintedReference: true,
+          isFixed: true,
+          isFullyConstrained: true,
+        ));
+      }
+    }
   }
 
   /// Constructs a standard datum sketch plane (XY, XZ, or YZ).
@@ -471,4 +509,140 @@ class AssemblySurfaceSketchEngine {
       stride: stride,
     );
   }
+
+  /// Resolves any primitive entity or host part face B-Rep border/hole into 2D line or point geometry.
+  static CadEntityGeometryRef? resolveEntityGeometry(
+    String rawId,
+    CADSketchPlane plane, {
+    AssemblyPart? hostPart,
+  }) {
+    final baseId = rawId.split(':').first;
+    final subKey = rawId.contains(':') ? rawId.split(':').last : null;
+
+    // 1. Check host part B-Rep outer borders and holes
+    if (hostPart != null) {
+      final brep = CadPlanarFaceBRep.extractFromPartFace(
+        part: hostPart,
+        planeOriginWorld: plane.origin,
+        planeNormalWorld: plane.normal,
+        planeUAxisWorld: plane.xAxis,
+        planeVAxisWorld: plane.yAxis,
+      );
+      for (final border in brep.outerBorderEdges2D) {
+        if (border.id == baseId || border.id.startsWith(baseId) || baseId.startsWith(border.id)) {
+          return CadEntityGeometryRef.line(
+            id: border.id,
+            start: Offset(border.start2D.x, border.start2D.y),
+            end: Offset(border.end2D.x, border.end2D.y),
+          );
+        }
+      }
+      for (final hole in brep.holes2D) {
+        if (hole.id == baseId || hole.id.startsWith(baseId) || baseId.startsWith(hole.id)) {
+          return CadEntityGeometryRef.point(
+            id: hole.id,
+            center: Offset(hole.center2D.x, hole.center2D.y),
+            radius: hole.diameterMm / 2.0,
+          );
+        }
+      }
+    }
+
+    // 2. Check primitives on plane
+    final prim = plane.primitives.where((p) => p.id == baseId).firstOrNull;
+    if (prim == null) return null;
+
+    if (prim is CADLineEntity) {
+      return CadEntityGeometryRef.line(id: prim.id, start: prim.start, end: prim.end);
+    } else if (prim is CADCircleEntity) {
+      return CadEntityGeometryRef.point(id: prim.id, center: prim.center, radius: prim.radius);
+    } else if (prim is CADRegularPolygonEntity) {
+      return CadEntityGeometryRef.point(id: prim.id, center: prim.center, radius: prim.radius);
+    } else if (prim is CADPointEntity) {
+      return CadEntityGeometryRef.point(id: prim.id, center: prim.position);
+    } else if (prim is CADRectangleEntity) {
+      final p1 = prim.startPoint;
+      final p2 = Offset(prim.startPoint.dx + prim.width, prim.startPoint.dy);
+      final p3 = Offset(prim.startPoint.dx + prim.width, prim.startPoint.dy + prim.height);
+      final p4 = Offset(prim.startPoint.dx, prim.startPoint.dy + prim.height);
+      if (subKey == 'h' || subKey == 'left') return CadEntityGeometryRef.line(id: '${prim.id}:left', start: p1, end: p4);
+      if (subKey == 'right') return CadEntityGeometryRef.line(id: '${prim.id}:right', start: p2, end: p3);
+      if (subKey == 'top') return CadEntityGeometryRef.line(id: '${prim.id}:top', start: p4, end: p3);
+      return CadEntityGeometryRef.line(id: '${prim.id}:w', start: p1, end: p2);
+    } else if (prim is CADCenterRectangleEntity) {
+      if (subKey == 'h' || subKey == 'left') return CadEntityGeometryRef.line(id: '${prim.id}:left', start: prim.topLeft, end: prim.bottomLeft);
+      if (subKey == 'right') return CadEntityGeometryRef.line(id: '${prim.id}:right', start: prim.topRight, end: prim.bottomRight);
+      if (subKey == 'top') return CadEntityGeometryRef.line(id: '${prim.id}:top', start: prim.topLeft, end: prim.topRight);
+      return CadEntityGeometryRef.line(id: '${prim.id}:w', start: prim.bottomLeft, end: prim.bottomRight);
+    } else if (prim is CADArcEntity) {
+      final g = prim.computeCircumcircle();
+      return CadEntityGeometryRef.point(id: prim.id, center: g?.center ?? prim.pointOnArc, radius: g?.radius ?? 10.0);
+    } else if (prim is CADCenterPointArcEntity) {
+      return CadEntityGeometryRef.point(id: prim.id, center: prim.center, radius: prim.radius);
+    }
+    return null;
+  }
+
+  /// Calculates the exact distance or angle between two CAD entity references.
+  static ({CadConstraintType type, double value, String unit}) computeTwoEntityDistance(
+    CadEntityGeometryRef g1,
+    CadEntityGeometryRef g2,
+  ) {
+    if (g1.isLine && g2.isLine) {
+      final d1 = g1.end - g1.start;
+      final d2 = g2.end - g2.start;
+      final cross = (d1.dx * d2.dy - d1.dy * d2.dx).abs();
+      final lenProd = d1.distance * d2.distance;
+      if (lenProd > 1e-4 && (cross / lenProd) > 0.08) {
+        final dot = (d1.dx * d2.dx + d1.dy * d2.dy) / lenProd;
+        final angDeg = math.acos(dot.clamp(-1.0, 1.0)) * 180.0 / math.pi;
+        return (type: CadConstraintType.angle, value: (angDeg * 10).roundToDouble() / 10.0, unit: 'deg');
+      } else {
+        final lLen = d1.distance;
+        final n = Offset(-d1.dy / lLen, d1.dx / lLen);
+        final dist = ((g2.start.dx - g1.start.dx) * n.dx + (g2.start.dy - g1.start.dy) * n.dy).abs();
+        return (type: CadConstraintType.distance, value: (dist * 10).roundToDouble() / 10.0, unit: 'mm');
+      }
+    } else if (g1.isLine && !g2.isLine) {
+      final lVec = g1.end - g1.start;
+      final lLen = lVec.distance;
+      final unitN = Offset(-lVec.dy / lLen, lVec.dx / lLen);
+      final dist = ((g2.center.dx - g1.start.dx) * unitN.dx + (g2.center.dy - g1.start.dy) * unitN.dy).abs();
+      return (type: CadConstraintType.distance, value: (dist * 10).roundToDouble() / 10.0, unit: 'mm');
+    } else if (!g1.isLine && g2.isLine) {
+      final lVec = g2.end - g2.start;
+      final lLen = lVec.distance;
+      final unitN = Offset(-lVec.dy / lLen, lVec.dx / lLen);
+      final dist = ((g1.center.dx - g2.start.dx) * unitN.dx + (g1.center.dy - g2.start.dy) * unitN.dy).abs();
+      return (type: CadConstraintType.distance, value: (dist * 10).roundToDouble() / 10.0, unit: 'mm');
+    } else {
+      final dist = (g2.center - g1.center).distance;
+      return (type: CadConstraintType.distance, value: (dist * 10).roundToDouble() / 10.0, unit: 'mm');
+    }
+  }
+}
+
+class CadEntityGeometryRef {
+  final String id;
+  final bool isLine;
+  final Offset start;
+  final Offset end;
+  final Offset center;
+  final double radius;
+
+  CadEntityGeometryRef.line({
+    required this.id,
+    required this.start,
+    required this.end,
+  })  : isLine = true,
+        center = (start + end) * 0.5,
+        radius = 0.0;
+
+  CadEntityGeometryRef.point({
+    required this.id,
+    required this.center,
+    this.radius = 0.0,
+  })  : isLine = false,
+        start = center,
+        end = center;
 }

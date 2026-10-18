@@ -128,11 +128,13 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       }
     }
 
-    // Track which entities already have an explicit driving dimensional constraint
+    // Track which entities and sub-dimensions already have an explicit driving dimensional constraint
     final entitiesWithDrivingDim = <String>{};
+    final explicitDrivingSubKeys = <String>{};
     for (final c in plane.constraints) {
       if (c.isActive && c.isDimensional) {
         for (final eid in c.entityIds) {
+          explicitDrivingSubKeys.add(eid);
           entitiesWithDrivingDim.add(eid.split(':').first);
         }
       }
@@ -146,35 +148,27 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           (prim.id == viewModel.constraintFirstEntityId) ||
           (prim.id == viewModel.dimensionFirstEntityId);
       final isHovered = prim.id == viewModel.hoveredSketchEntityId;
-      final isConstrained = prim.isFullyConstrained;
       final isOverConstrained = viewModel.lastConstraintSolverResult?.conflictingConstraints.any((c) => c.entityIds.contains(prim.id)) ?? false;
 
-      // Onshape SS4 Color System:
-      // - Hovered or Selected (especially in Constraint/Dimension mode): Warm Yellow/Orange (#F59E0B)
-      // - Conflicting / Over-Constrained: Red (#EF4444)
-      // - Fully Defined: Crisp Black (#0F172A)
-      // - Under-Defined: Onshape Blue (#0284C7)
       final isTreeHighlighted = viewModel.highlightedFeatureId == plane.id;
 
-      // Onshape Master Color System:
-      // - Constrained / Defined: const Color(0xFF111111) (1.65px crisp black)
-      // - Under-Constrained: const Color(0xFF1565C0) (1.65px deep Onshape blue)
-      // - Construction Geometry: const Color(0xFF546E7A) (1.3px dashed)
-      // - Imprinted Host Part Borders: const Color(0xFF263238) (1.2px solid)
+      // Onshape Master Color System (Item 6):
+      // - Fully Defined / Sketch Borders: const Color(0xFF111111) (1.65px crisp dark charcoal / black)
+      // - Under-Constrained: const Color(0xFF1E293B) (crisp dark slate / black)
+      // - Construction Geometry: const Color(0xFF64748B) (1.3px dashed)
+      // - Imprinted Host Part Borders: const Color(0xFF1E293B) (1.2px solid dark border)
       // - Hovered / Selected or Tree-Highlighted: const Color(0xFFFF9800) (2.4px amber/orange)
       final Color entityColor = isOverConstrained
           ? const Color(0xFFEF4444)
           : (isHovered || isSel || isTreeHighlighted)
           ? const Color(0xFFFF9800)
           : prim.isImprintedReference
-          ? const Color(0xFF263238)
+          ? const Color(0xFF1E293B)
           : prim.isConstruction
-          ? const Color(0xFF546E7A)
+          ? const Color(0xFF64748B)
           : prim.isProjected
           ? const Color(0xFF7C3AED)
-          : isConstrained
-          ? const Color(0xFF111111)
-          : const Color(0xFF1565C0);
+          : const Color(0xFF111111);
 
       final strokePaint = Paint()
         ..color = entityColor
@@ -231,7 +225,11 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             _drawVertexDot(canvas, p4, entityColor, isHighlighted: true);
           }
 
-          if ((viewModel.showSketchDimensions || isSel || viewModel.showSketchExpressions) && !entitiesWithDrivingDim.contains(prim.id)) {
+          final bool showDims = (viewModel.showSketchDimensions || isSel || viewModel.showSketchExpressions);
+          final bool hasDrivingW = explicitDrivingSubKeys.contains('${prim.id}:w') || explicitDrivingSubKeys.contains(prim.id);
+          final bool hasDrivingH = explicitDrivingSubKeys.contains('${prim.id}:h');
+
+          if (showDims && !hasDrivingW) {
             _drawLinearCadDimension(
               canvas: canvas,
               pA: p1,
@@ -248,6 +246,8 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
                 subKey: 'w',
               ),
             );
+          }
+          if (showDims && !hasDrivingH) {
             _drawLinearCadDimension(
               canvas: canvas,
               pA: p2,
@@ -304,7 +304,11 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             _drawVertexDot(canvas, p4, entityColor, isHighlighted: true);
           }
 
-          if ((viewModel.showSketchDimensions || isSel || viewModel.showSketchExpressions) && !entitiesWithDrivingDim.contains(prim.id)) {
+          final bool showDims = (viewModel.showSketchDimensions || isSel || viewModel.showSketchExpressions);
+          final bool hasDrivingW = explicitDrivingSubKeys.contains('${prim.id}:w') || explicitDrivingSubKeys.contains(prim.id);
+          final bool hasDrivingH = explicitDrivingSubKeys.contains('${prim.id}:h');
+
+          if (showDims && !hasDrivingW) {
             _drawLinearCadDimension(
               canvas: canvas,
               pA: p1,
@@ -321,6 +325,8 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
                 subKey: 'w',
               ),
             );
+          }
+          if (showDims && !hasDrivingH) {
             _drawLinearCadDimension(
               canvas: canvas,
               pA: p2,
@@ -535,24 +541,6 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           }
         }
         if (prim is CADRegularPolygonEntity) {
-          final cPath = Path();
-          for (int i = 0; i <= 36; i++) {
-            final a = (2.0 * math.pi * i) / 36;
-            final pt = toScreen(prim.center + Offset(math.cos(a), math.sin(a)) * prim.radius);
-            if (i == 0) {
-              cPath.moveTo(pt.dx, pt.dy);
-            } else {
-              cPath.lineTo(pt.dx, pt.dy);
-            }
-          }
-          _drawCenterlineDashedPath(
-            canvas,
-            cPath,
-            Paint()
-              ..color = const Color(0xFF64748B)
-              ..strokeWidth = 1.0
-              ..style = PaintingStyle.stroke,
-          );
           if (isSel || isHovered) {
             _drawVertexDot(canvas, toScreen(prim.center), entityColor, isHighlighted: true);
           }
@@ -723,33 +711,33 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
   void _drawDrivingDimensionConstraint(Canvas canvas, CADSketchPlane plane, CadConstraint c, Offset Function(Offset) toScreen) {
     if (c.entityIds.isEmpty) return;
     final val = c.parameterValue ?? 0.0;
-    final rawId0 = c.entityIds[0];
-    final baseId0 = rawId0.split(':').first;
-    final subKey0 = rawId0.contains(':') ? rawId0.split(':').last : null;
-    final e1 = plane.primitives.where((p) => p.id == baseId0).firstOrNull;
-    if (e1 == null) return;
-
     final String formattedVal = _formatConstraintText(c, val);
 
-    // 1. TWO-ENTITY DIMENSIONS (Angle 27° or Distance 60 / 65 / 99)
-    if (c.entityIds.length >= 2) {
-      final baseId1 = c.entityIds[1].split(':').first;
-      final e2 = plane.primitives.where((p) => p.id == baseId1).firstOrNull;
-      if (e2 == null) return;
+    final hostPart = viewModel.sketchPartId != null
+        ? viewModel.doc.parts.where((p) => p.id == viewModel.sketchPartId).firstOrNull
+        : viewModel.selectedPart;
 
-      if (c.type == CadConstraintType.angle && e1 is CADLineEntity && e2 is CADLineEntity) {
+    // 1. TWO-ENTITY RELATIONAL DIMENSIONS (circle-to-circle, circle-to-border, line-to-border, angle, etc.)
+    if (c.entityIds.length >= 2) {
+      final id1 = c.entityIds[0];
+      final id2 = c.entityIds[1];
+      final g1 = AssemblySurfaceSketchEngine.resolveEntityGeometry(id1, plane, hostPart: hostPart);
+      final g2 = AssemblySurfaceSketchEngine.resolveEntityGeometry(id2, plane, hostPart: hostPart);
+      if (g1 == null || g2 == null) return;
+
+      if (c.type == CadConstraintType.angle && g1.isLine && g2.isLine) {
         _drawAngularCadDimension(
           canvas: canvas,
-          l1: e1,
-          l2: e2,
+          l1: CADLineEntity(id: g1.id, start: g1.start, end: g1.end),
+          l2: CADLineEntity(id: g2.id, start: g2.start, end: g2.end),
           toScreen: toScreen,
           label: '$formattedVal°',
           isDriving: c.isDriving,
           hitInfo: SketchDimensionTagHit(
             tagKey: c.id,
             screenRect: Rect.zero,
-            primaryEntityId: e1.id,
-            secondaryEntityId: e2.id,
+            primaryEntityId: id1,
+            secondaryEntityId: id2,
             constraintType: CadConstraintType.angle,
             existingConstraintId: c.id,
             currentValue: val,
@@ -761,21 +749,19 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
 
       Offset pALocal;
       Offset pBLocal;
-      if (e1 is CADLineEntity && e2 is! CADLineEntity) {
-        final anchor2 = _getEntityCenter(e2);
-        pALocal = _projectPointToInfiniteLine(anchor2, e1.start, e1.end);
-        pBLocal = anchor2;
-      } else if (e2 is CADLineEntity && e1 is! CADLineEntity) {
-        final anchor1 = _getEntityCenter(e1);
-        pALocal = anchor1;
-        pBLocal = _projectPointToInfiniteLine(anchor1, e2.start, e2.end);
-      } else if (e1 is CADLineEntity && e2 is CADLineEntity) {
-        final mid1 = (e1.start + e1.end) * 0.5;
+      if (g1.isLine && !g2.isLine) {
+        pALocal = _projectPointToInfiniteLine(g2.center, g1.start, g1.end);
+        pBLocal = g2.center;
+      } else if (g2.isLine && !g1.isLine) {
+        pALocal = g1.center;
+        pBLocal = _projectPointToInfiniteLine(g1.center, g2.start, g2.end);
+      } else if (g1.isLine && g2.isLine) {
+        final mid1 = (g1.start + g1.end) * 0.5;
         pALocal = mid1;
-        pBLocal = _projectPointToInfiniteLine(mid1, e2.start, e2.end);
+        pBLocal = _projectPointToInfiniteLine(mid1, g2.start, g2.end);
       } else {
-        pALocal = _getEntityCenter(e1);
-        pBLocal = _getEntityCenter(e2);
+        pALocal = g1.center;
+        pBLocal = g2.center;
       }
 
       final pA = toScreen(pALocal);
@@ -795,8 +781,8 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           hitInfo: SketchDimensionTagHit(
             tagKey: c.id,
             screenRect: Rect.zero,
-            primaryEntityId: e1.id,
-            secondaryEntityId: e2.id,
+            primaryEntityId: id1,
+            secondaryEntityId: id2,
             constraintType: CadConstraintType.distance,
             existingConstraintId: c.id,
             currentValue: val,
@@ -807,10 +793,17 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     }
 
     // 2. SINGLE-ENTITY DRIVING DIMENSIONS
-    if (c.type == CadConstraintType.diameter && e1 is CADCircleEntity) {
-      final cScr = toScreen(e1.center);
+    final rawId0 = c.entityIds[0];
+    final baseId0 = rawId0.split(':').first;
+    final subKey0 = rawId0.contains(':') ? rawId0.split(':').last : null;
+    final e1 = plane.primitives.where((p) => p.id == baseId0).firstOrNull;
+    if (e1 == null) return;
+    if (c.type == CadConstraintType.diameter && (e1 is CADCircleEntity || e1 is CADRegularPolygonEntity)) {
+      final centerLocal = e1 is CADCircleEntity ? e1.center : (e1 as CADRegularPolygonEntity).center;
+      final radiusVal = e1 is CADCircleEntity ? e1.radius : (e1 as CADRegularPolygonEntity).radius;
+      final cScr = toScreen(centerLocal);
       const double leaderAng = -math.pi * 0.72;
-      final rScr = toScreen(Offset(e1.center.dx + e1.radius * math.cos(leaderAng), e1.center.dy + e1.radius * math.sin(leaderAng)));
+      final rScr = toScreen(Offset(centerLocal.dx + radiusVal * math.cos(leaderAng), centerLocal.dy + radiusVal * math.sin(leaderAng)));
       if (cScr != Offset.zero && rScr != Offset.zero) {
         _drawRadialOrDiameterLeaderDimension(
           canvas: canvas,
@@ -1334,18 +1327,6 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       return '${c.expression} = $base$tol';
     }
     return '$base$tol';
-  }
-
-  Offset _getEntityCenter(CADPrimitiveEntity e) {
-    if (e is CADCircleEntity) return e.center;
-    if (e is CADPointEntity) return e.position;
-    if (e is CADCenterRectangleEntity) return e.center;
-    if (e is CADRectangleEntity) {
-      return Offset(e.startPoint.dx + e.width * 0.5, e.startPoint.dy + e.height * 0.5);
-    }
-    if (e is CADLineEntity) return (e.start + e.end) * 0.5;
-    if (e is CADArcEntity) return e.computeCircumcircle()?.center ?? e.pointOnArc;
-    return Offset.zero;
   }
 
   static Offset _projectPointToInfiniteLine(Offset p, Offset a, Offset b) {

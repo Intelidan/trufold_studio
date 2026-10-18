@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmodel.dart';
 import 'package:trufold_studio/assembly_studio/views/widgets/viewport/overlays/assembly_viewport_dialogs.dart';
+import 'package:trufold_studio/assembly_studio/views/widgets/viewport/overlays/assembly_dsf_anatomy_dialog.dart';
 
 class AssemblyDesktopMenuBar extends StatelessWidget {
   final AssemblyStudioViewModel viewModel;
@@ -59,32 +60,47 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
       title: 'File',
       items: [
         _buildItem(value: 'new', label: 'New Blank Assembly', shortcut: 'Ctrl+N', icon: Icons.create_new_folder_outlined),
-        _buildItem(value: 'open', label: 'Open Assembly...', shortcut: 'Ctrl+O', icon: Icons.folder_open_outlined),
-        _buildItem(value: 'save', label: 'Save Document', shortcut: 'Ctrl+S', icon: Icons.save_outlined),
+        _buildItem(value: 'open', label: 'Open Assembly (.dam)...', shortcut: 'Ctrl+O', icon: Icons.folder_open_outlined),
+        _buildItem(value: 'save', label: 'Save Assembly (.dam)', shortcut: 'Ctrl+S', icon: Icons.save_outlined),
+        _buildItem(value: 'import_dsf', label: 'Import DSF Part(s)...', shortcut: 'Ctrl+I', icon: Icons.file_download_outlined),
         const PopupMenuDivider(),
-        _buildItem(value: 'sample_ladder', label: 'Load Standard Industrial Ladder', icon: Icons.stairs_rounded),
-        _buildItem(value: 'sample_bent', label: 'Load Ladder with Branch Rails', icon: Icons.alt_route_rounded),
+        _buildItem(value: 'cad_anatomy', label: 'View Part CAD Anatomy...', icon: Icons.architecture_rounded, enabled: vm.selectedPart != null),
+        const PopupMenuDivider(),
+        _buildItem(value: 'sample_ladder', label: 'Load Cable Ladder Demo (600x1000mm)', icon: Icons.view_headline_rounded),
+        _buildItem(value: 'sample_tray', label: 'Load Cable Tray Demo (Perforated + Bend)', icon: Icons.dashboard_outlined),
+        _buildItem(value: 'sample_trunking', label: 'Load Cable Trunking Demo (Base + Cover)', icon: Icons.view_stream_rounded),
+        _buildItem(value: 'sample_bent', label: 'Load Cable Ladder Tee Branch', icon: Icons.alt_route_rounded),
         const PopupMenuDivider(),
         _buildItem(value: 'bom', label: 'Cut List & Bill of Materials (BOM)', icon: Icons.table_chart_outlined),
-        _buildItem(value: 'compliance', label: 'OSHA & ISO Compliance Audit', icon: Icons.verified_user_outlined),
+        _buildItem(value: 'compliance', label: 'IEC 61537 / NEMA VE 1 Cable System Verification', icon: Icons.verified_user_outlined),
       ],
       onSelected: (val) {
         switch (val) {
           case 'new':
-            vm.doc.parts.clear();
-            vm.doc.welds.clear();
-            vm.timelineItems.clear();
-            vm.invalidateMeshCache();
-            vm.notifyDocChanged();
+            vm.initBlankAssembly();
             break;
           case 'open':
+            vm.openDamDocument(context: context);
+            break;
           case 'save':
-            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-              SnackBar(content: Text('Assembly "${vm.doc.title}" saved successfully.')),
-            );
+            vm.saveDamDocument(context: context);
+            break;
+          case 'import_dsf':
+            vm.importDsfFiles(context: context);
+            break;
+          case 'cad_anatomy':
+            if (vm.selectedPart != null) {
+              AssemblyDsfAnatomyDialog.show(context, vm.selectedPart!, vm);
+            }
             break;
           case 'sample_ladder':
             vm.loadStandardLadderDemo();
+            break;
+          case 'sample_tray':
+            vm.loadCableTrayDemo();
+            break;
+          case 'sample_trunking':
+            vm.loadCableTrunkingDemo();
             break;
           case 'sample_bent':
             vm.loadTeeAssemblyDemo();

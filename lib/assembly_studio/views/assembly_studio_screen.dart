@@ -36,7 +36,7 @@ class _AssemblyStudioScreenState extends State<AssemblyStudioScreen> {
   @override
   void initState() {
     super.initState();
-    _viewModel = widget.viewModel ?? AssemblyStudioViewModel();
+    _viewModel = widget.viewModel ?? AssemblyStudioViewModel(startWithBlank: true);
     _viewModel.addListener(_onViewModelChanged);
   }
 
@@ -63,6 +63,12 @@ class _AssemblyStudioScreenState extends State<AssemblyStudioScreen> {
         const SingleActivator(LogicalKeyboardKey.keyZ, control: true): () => _viewModel.undo(),
         const SingleActivator(LogicalKeyboardKey.keyY, control: true): () => _viewModel.redo(),
         const SingleActivator(LogicalKeyboardKey.keyZ, control: true, shift: true): () => _viewModel.redo(),
+
+        // File & Assembly Management (.dam & .dsf)
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true): () => _viewModel.saveDamDocument(context: context),
+        const SingleActivator(LogicalKeyboardKey.keyO, control: true): () => _viewModel.openDamDocument(context: context),
+        const SingleActivator(LogicalKeyboardKey.keyI, control: true): () => _viewModel.importDsfFiles(context: context),
+        const SingleActivator(LogicalKeyboardKey.keyN, control: true): () => _viewModel.initBlankAssembly(),
 
         // Onshape Part Studio / Modeling Shortcuts
         const SingleActivator(LogicalKeyboardKey.keyS, shift: true): () => _viewModel.enterSketchMode(),
@@ -125,10 +131,24 @@ class _AssemblyStudioScreenState extends State<AssemblyStudioScreen> {
 
         // Accept & Cancel
         const SingleActivator(LogicalKeyboardKey.escape): () {
-          if (_viewModel.isSketchMode) _viewModel.exitSketchMode();
+          if (_viewModel.isSketchMode) {
+            if (_viewModel.activeEditingDimensionHit != null) {
+              _viewModel.closeInlineSketchDimensionEditor();
+            } else if (_viewModel.activeSketchTool != 'select_entity' && _viewModel.activeSketchTool.isNotEmpty) {
+              _viewModel.deactivateSketchToolToSelect();
+            } else {
+              _viewModel.exitSketchMode();
+            }
+          }
         },
         const SingleActivator(LogicalKeyboardKey.enter): () {
-          if (_viewModel.isSketchMode) _viewModel.finishSketch();
+          if (_viewModel.isSketchMode) {
+            // CRITICAL: Pressing enter while editing a dimension tag must NEVER exit sketch mode!
+            if (_viewModel.activeEditingDimensionHit != null) return;
+            final primaryFocus = FocusManager.instance.primaryFocus;
+            if (primaryFocus != null && primaryFocus.context?.widget is EditableText) return;
+            _viewModel.finishSketch();
+          }
         },
       },
       child: Scaffold(

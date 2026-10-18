@@ -63,38 +63,49 @@ class AssemblyPartsPalette extends StatelessWidget {
           // Quick Demos / Template Bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: viewModel.loadStandardLadderDemo,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      side: const BorderSide(color: Color(0xFFCBD5E1)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                    ),
-                    child: const Text('Ladder Demo', style: TextStyle(fontSize: 10, color: Color(0xFF475569))),
+                OutlinedButton.icon(
+                  onPressed: viewModel.loadStandardLadderDemo,
+                  icon: const Icon(Icons.view_headline_rounded, size: 12),
+                  label: const Text('Ladder', style: TextStyle(fontSize: 10)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                   ),
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: viewModel.loadTeeAssemblyDemo,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      side: const BorderSide(color: Color(0xFFCBD5E1)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                    ),
-                    child: const Text('Tee Demo', style: TextStyle(fontSize: 10, color: Color(0xFF475569))),
+                OutlinedButton.icon(
+                  onPressed: viewModel.loadCableTrayDemo,
+                  icon: const Icon(Icons.dashboard_outlined, size: 12),
+                  label: const Text('Tray', style: TextStyle(fontSize: 10)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                   ),
                 ),
-                const SizedBox(width: 6),
-                IconButton(
-                  tooltip: 'Clear All Parts',
-                  icon: const Icon(Icons.delete_sweep_rounded, size: 16, color: Color(0xFF64748B)),
-                  onPressed: () {
-                    viewModel.clearAll();
-                  },
+                OutlinedButton.icon(
+                  onPressed: viewModel.loadCableTrunkingDemo,
+                  icon: const Icon(Icons.view_stream_rounded, size: 12),
+                  label: const Text('Trunking', style: TextStyle(fontSize: 10)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => viewModel.importDsfFiles(context: context),
+                  icon: const Icon(Icons.file_download_outlined, size: 12, color: Color(0xFF0284C7)),
+                  label: const Text('Import DSF', style: TextStyle(fontSize: 10, color: Color(0xFF0284C7), fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    side: const BorderSide(color: Color(0xFF0284C7)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
                 ),
               ],
             ),
@@ -894,6 +905,32 @@ class AssemblyPartsPalette extends StatelessWidget {
         typeIcon = Icons.layers_rounded;
         typeColor = const Color(0xFF6366F1);
         break;
+      case AssemblyPartType.cableTrayStraight:
+      case AssemblyPartType.cableTrayBend90:
+      case AssemblyPartType.cableTrayBend45:
+      case AssemblyPartType.cableTrayInsideRiser:
+      case AssemblyPartType.cableTrayOutsideRiser:
+      case AssemblyPartType.cableTrayTee:
+      case AssemblyPartType.cableTrayCross:
+      case AssemblyPartType.cableTrayReducer:
+      case AssemblyPartType.cableTrayCoupler:
+      case AssemblyPartType.holdDownClamp:
+        typeIcon = Icons.dashboard_outlined;
+        typeColor = const Color(0xFF0284C7);
+        break;
+      case AssemblyPartType.cableTrunkingBody:
+      case AssemblyPartType.cableTrunkingCover:
+      case AssemblyPartType.cableTrunkingBend:
+      case AssemblyPartType.cableTrunkingRiser:
+      case AssemblyPartType.cableTrunkingTee:
+      case AssemblyPartType.cableTrunkingCoupler:
+        typeIcon = Icons.view_stream_rounded;
+        typeColor = const Color(0xFF0D9488);
+        break;
+      case AssemblyPartType.customSheetMetal:
+        typeIcon = Icons.architecture_rounded;
+        typeColor = const Color(0xFF38BDF8);
+        break;
     }
 
     return Container(
@@ -1449,6 +1486,32 @@ class _PartMiniaturePainter extends CustomPainter {
         fillPaint.color = const Color(0xFF6366F1);
         canvas.drawRect(box, fillPaint);
         canvas.drawRect(box, strokePaint);
+        break;
+
+      case AssemblyPartType.cableTrayStraight:
+      case AssemblyPartType.cableTrayBend90:
+      case AssemblyPartType.cableTrayBend45:
+      case AssemblyPartType.cableTrayInsideRiser:
+      case AssemblyPartType.cableTrayOutsideRiser:
+      case AssemblyPartType.cableTrayTee:
+      case AssemblyPartType.cableTrayCross:
+      case AssemblyPartType.cableTrayReducer:
+      case AssemblyPartType.cableTrayCoupler:
+      case AssemblyPartType.holdDownClamp:
+      case AssemblyPartType.cableTrunkingBody:
+      case AssemblyPartType.cableTrunkingCover:
+      case AssemblyPartType.cableTrunkingBend:
+      case AssemblyPartType.cableTrunkingRiser:
+      case AssemblyPartType.cableTrunkingTee:
+      case AssemblyPartType.cableTrunkingCoupler:
+      case AssemblyPartType.customSheetMetal:
+        final trayBox = Rect.fromCenter(center: Offset(w * 0.5, h * 0.5), width: w * 0.7, height: h * 0.45);
+        fillPaint.color = const Color(0xFF64748B);
+        canvas.drawRect(trayBox, fillPaint);
+        canvas.drawRect(trayBox, strokePaint);
+        for (final dx in [-0.2, 0.0, 0.2]) {
+          canvas.drawCircle(Offset(w * (0.5 + dx), h * 0.5), 2.2, holePaint);
+        }
         break;
     }
   }

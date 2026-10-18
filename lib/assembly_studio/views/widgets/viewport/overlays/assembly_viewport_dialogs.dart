@@ -45,11 +45,11 @@ class AssemblyViewportDialogs {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'OSHA 1910 & EN ISO 14122-4 Audit',
+                                  'IEC 61537 & NEMA VE 1 Cable System Audit',
                                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                                 ),
                                 const Text(
-                                  'Automated Live Industrial Safety Verification',
+                                  'Cable Tray, Trunking & Cable Ladder Structural Verification',
                                   style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                                 ),
                               ],

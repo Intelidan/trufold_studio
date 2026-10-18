@@ -1,35 +1,62 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 
 import '../../sheet_metal_studio/models/cad_primitives.dart';
+import '../../sheet_metal_studio/models/dsf_document.dart';
 import '../../sheet_metal_studio/engine/kinematic_fold_engine.dart';
 import 'weld_quality_model.dart';
 
 /// Type of modular component used in the assembly studio.
 enum AssemblyPartType {
-  rung,
+  // Cable Ladder System Components:
+  straightRail, // Cable ladder side rail (C-channel or I-profile with punched slots)
+  bentRail, // Cable ladder curved/faceted rail (horizontal bend or vertical riser)
+  rung, // Cable ladder slotted C-channel rung
+  splicePlate, // Cable ladder joint fishplate / coupler
+  standoffBracket, // Mounting / wall support bracket
+  baseFootPlate, // Ground / floor mounting bracket
+  holdDownClamp, // Ladder / tray hold-down clamp
+
+  // Cable Tray System Components:
+  cableTrayStraight, // Straight perforated or solid bottom cable tray
+  cableTrayBend90, // 90° horizontal cable tray bend
+  cableTrayBend45, // 45° horizontal cable tray bend
+  cableTrayInsideRiser, // 90°/45° vertical inside riser
+  cableTrayOutsideRiser, // 90°/45° vertical outside riser
+  cableTrayTee, // Equal or unequal horizontal tee
+  cableTrayCross, // Equal horizontal cross
+  cableTrayReducer, // Straight / eccentric reducer
+  cableTrayCoupler, // Straight / wrapped tray coupler
+
+  // Cable Trunking System Components:
+  cableTrunkingBody, // Trunking base channel
+  cableTrunkingCover, // Trunking snap-on / turn-buckle cover
+  cableTrunkingBend, // 90° / 45° trunking flat bend
+  cableTrunkingRiser, // Inside / outside trunking riser
+  cableTrunkingTee, // Trunking tee
+  cableTrunkingCoupler, // Trunking connector
+
+  // General CAD & Structural Profiles:
   channel,
   angle,
   rod,
   bar,
   iBeam,
-  straightRail,
-  bentRail,
-  // Phase 2 Industrial Ladder & Safety Accessories:
-  walkThroughStile,
-  boxTubeStile,
-  diamondGripRung,
-  wideStepTread,
-  safetyCageHoop,
-  safetyCageBellHoop,
-  cageStrap,
-  standoffBracket,
-  baseFootPlate,
-  splicePlate,
-  swingGate,
   customExtrusion,
+  customSheetMetal, // Imported .dsf folded sheet metal component
+
+  // Deprecated human climbing ladder elements (kept for backward compatibility):
+  @Deprecated('Replaced by CMS cable ladder components') walkThroughStile,
+  @Deprecated('Replaced by CMS cable ladder components') boxTubeStile,
+  @Deprecated('Replaced by CMS cable ladder components') diamondGripRung,
+  @Deprecated('Replaced by CMS cable ladder components') wideStepTread,
+  @Deprecated('Discarded climbing ladder safety part') safetyCageHoop,
+  @Deprecated('Discarded climbing ladder safety part') safetyCageBellHoop,
+  @Deprecated('Discarded climbing ladder safety part') cageStrap,
+  @Deprecated('Discarded climbing ladder safety part') swingGate,
 }
 
 /// Joint style configuration for welding simulation per welding_simulation_docs.md
@@ -500,8 +527,25 @@ class AssemblyPart {
   String? createdByFeatureId; // ID of timeline feature that created this part if spawned by New Body
   List<CadFoldedPolygon3D>? _baseMeshSnapshot; // Snapshot of base mesh prior to parametric replay
   final List<AssemblyCutHole> cutHoles = [];
+  String? sourceDsfJson; // Raw .dsf JSON string if imported from Sheet Metal Studio
+  DsfDocument? sourceDsfDocument; // Cached DsfDocument for CAD anatomy inspection
 
   bool get isComponentInstance => componentDefinitionId != null;
+
+  /// Retrieves or deserializes the effective Sheet Metal [DsfDocument] CAD anatomy.
+  DsfDocument? getEffectiveDsfDocument() {
+    if (sourceDsfDocument != null) return sourceDsfDocument;
+    if (sourceDsfJson != null && sourceDsfJson!.isNotEmpty) {
+      try {
+        final map = jsonDecode(sourceDsfJson!) as Map<String, dynamic>;
+        sourceDsfDocument = DsfDocument.fromJson(map);
+        return sourceDsfDocument;
+      } catch (e) {
+        debugPrint('Error parsing sourceDsfJson on part $id: $e');
+      }
+    }
+    return null;
+  }
 
   AssemblyPart({
     required this.id,
@@ -534,6 +578,8 @@ class AssemblyPart {
     this.sourceSketchPlaneId,
     Map<String, List<CadFoldedPolygon3D>>? joinedExtrusionsByPlane,
     this.createdByFeatureId,
+    this.sourceDsfJson,
+    this.sourceDsfDocument,
   }) : joinedExtrusionsByPlane = joinedExtrusionsByPlane ?? {},
        segments = segments ?? [],
        sketches = sketches ?? [],
@@ -574,6 +620,8 @@ class AssemblyPart {
     String? sourceSketchPlaneId,
     Map<String, List<CadFoldedPolygon3D>>? joinedExtrusionsByPlane,
     String? createdByFeatureId,
+    String? sourceDsfJson,
+    dynamic sourceDsfDocument,
   }) {
     return AssemblyPart(
       id: id ?? this.id,
@@ -606,6 +654,8 @@ class AssemblyPart {
       sourceSketchPlaneId: sourceSketchPlaneId ?? this.sourceSketchPlaneId,
       joinedExtrusionsByPlane: joinedExtrusionsByPlane ?? Map.from(this.joinedExtrusionsByPlane),
       createdByFeatureId: createdByFeatureId ?? this.createdByFeatureId,
+      sourceDsfJson: sourceDsfJson ?? this.sourceDsfJson,
+      sourceDsfDocument: sourceDsfDocument ?? this.sourceDsfDocument,
     );
   }
 
@@ -857,6 +907,28 @@ class AssemblyPart {
         _buildSwingGatePolygons(polys, thickPolys);
         break;
       case AssemblyPartType.customExtrusion:
+      case AssemblyPartType.customSheetMetal:
+      case AssemblyPartType.holdDownClamp:
+      case AssemblyPartType.cableTrayStraight:
+      case AssemblyPartType.cableTrayBend90:
+      case AssemblyPartType.cableTrayBend45:
+      case AssemblyPartType.cableTrayInsideRiser:
+      case AssemblyPartType.cableTrayOutsideRiser:
+      case AssemblyPartType.cableTrayTee:
+      case AssemblyPartType.cableTrayCross:
+      case AssemblyPartType.cableTrayReducer:
+      case AssemblyPartType.cableTrayCoupler:
+      case AssemblyPartType.cableTrunkingBody:
+      case AssemblyPartType.cableTrunkingCover:
+      case AssemblyPartType.cableTrunkingBend:
+      case AssemblyPartType.cableTrunkingRiser:
+      case AssemblyPartType.cableTrunkingTee:
+      case AssemblyPartType.cableTrunkingCoupler:
+        if (customPolygons != null && customPolygons!.isNotEmpty) {
+          polys.addAll(customPolygons!);
+        } else {
+          _buildChannelPolygons(polys, thickPolys);
+        }
         break;
     }
 

@@ -19,7 +19,6 @@ class AssemblyOnshapeSketchDialog extends StatefulWidget {
 }
 
 class _AssemblyOnshapeSketchDialogState extends State<AssemblyOnshapeSketchDialog> {
-  Offset _dragOffset = const Offset(68.0, 14.0);
   bool _isCollapsed = false;
   bool _disableImprinting = false;
   bool _showErrors = true;
@@ -31,33 +30,23 @@ class _AssemblyOnshapeSketchDialogState extends State<AssemblyOnshapeSketchDialo
     final plane = vm.activeSketchPlane;
     final planeName = plane?.name ?? (vm.sketchPartId != null ? 'Face of ${vm.sketchPartId}' : 'Select Plane');
 
-    return Transform.translate(
-      offset: _dragOffset,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: 230,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFFCBD5E1), width: 1.0),
-            boxShadow: const [BoxShadow(color: Color(0x1F000000), blurRadius: 12, offset: Offset(0, 4))],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. Draggable Header with Editable Title, Collapse Toggle, and Green Check / Red X buttons (Item 5c)
-              GestureDetector(
-                onPanUpdate: (details) {
-                  setState(() {
-                    _dragOffset += details.delta;
-                  });
-                },
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.move,
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: 260,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFCBD5E1), width: 1.0),
+          boxShadow: const [BoxShadow(color: Color(0x1F000000), blurRadius: 12, offset: Offset(0, 4))],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. Draggable Header with Editable Title, Collapse Toggle, and Green Check / Red X buttons (Item 5c)
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.vertical(
@@ -101,9 +90,9 @@ class _AssemblyOnshapeSketchDialogState extends State<AssemblyOnshapeSketchDialo
                         // Green Checkmark Accept Button
                         Tooltip(
                           message: 'Accept sketch (Enter)',
-                          child: InkWell(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
                             onTap: widget.onAccept ?? () => vm.finishSketch(),
-                            borderRadius: BorderRadius.circular(14),
                             child: Container(
                               width: 22,
                               height: 22,
@@ -116,9 +105,9 @@ class _AssemblyOnshapeSketchDialogState extends State<AssemblyOnshapeSketchDialo
                         // Red X Cancel Button
                         Tooltip(
                           message: 'Cancel sketch (Esc)',
-                          child: InkWell(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
                             onTap: widget.onCancel ?? () => vm.exitSketchMode(),
-                            borderRadius: BorderRadius.circular(14),
                             child: Container(
                               width: 22,
                               height: 22,
@@ -130,8 +119,6 @@ class _AssemblyOnshapeSketchDialogState extends State<AssemblyOnshapeSketchDialo
                       ],
                     ),
                   ),
-                ),
-              ),
 
               // 2. Body Options (Hidden when collapsed)
               if (!_isCollapsed)
@@ -166,13 +153,14 @@ class _AssemblyOnshapeSketchDialogState extends State<AssemblyOnshapeSketchDialo
                           ),
                         ),
                         if (plane != null)
-                          InkWell(
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
                             onTap: () {
-                              vm.enterPlaneSelectionMode();
+                              vm.cancelActiveSketch();
                             },
                             child: const Padding(
-                              padding: EdgeInsets.all(2.0),
-                              child: Icon(Icons.close, size: 12, color: Color(0xFF94A3B8)),
+                              padding: EdgeInsets.all(4.0),
+                              child: Icon(Icons.close, size: 13, color: Color(0xFF64748B)),
                             ),
                           ),
                       ],
@@ -433,7 +421,6 @@ class _AssemblyOnshapeSketchDialogState extends State<AssemblyOnshapeSketchDialo
               ),
             ),
           ],
-          ),
         ),
       ),
     );

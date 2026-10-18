@@ -1185,9 +1185,29 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                     vm.closeExtrudeDialog();
                     return KeyEventResult.handled;
                   }
-                  // Escape in Sketch Mode strictly deactivates active tool to 'select_entity', never exiting Sketch Mode (Requirement 4)
+                  // Escape in Sketch Mode: cancel editing popover, reset tool to select, or exit sketch mode if already in select
                   if (vm.isSketchMode) {
-                    vm.deactivateSketchToolToSelect();
+                    if (vm.activeEditingDimensionHit != null) {
+                      vm.closeInlineSketchDimensionEditor();
+                      return KeyEventResult.handled;
+                    }
+                    if (vm.dimensionFirstEntityId != null) {
+                      vm.dimensionFirstEntityId = null;
+                      vm.notifyListeners();
+                      return KeyEventResult.handled;
+                    }
+                    if (vm.activeSketchTool != 'select_entity' && vm.activeSketchTool.isNotEmpty) {
+                      vm.deactivateSketchToolToSelect();
+                      return KeyEventResult.handled;
+                    }
+                    if (vm.selectedSketchEntity != null || vm.selectedSketchEntityIds.isNotEmpty) {
+                      vm.selectedSketchEntity = null;
+                      vm.selectedSketchEntityIds.clear();
+                      vm.selectedSketchFeatureId = null;
+                      vm.notifyListeners();
+                      return KeyEventResult.handled;
+                    }
+                    vm.exitSketchMode();
                     return KeyEventResult.handled;
                   }
                 }
@@ -1794,7 +1814,6 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   if (r > 0.5) {
                                     final rot = math.atan2(snapped.dy - center.dy, snapped.dx - center.dx);
                                     final polyId = 'poly_${DateTime.now().millisecondsSinceEpoch}';
-                                    final constCircleId = 'circle_const_${DateTime.now().millisecondsSinceEpoch}';
                                     vm.addPrimitiveEntityToActivePlane(CADRegularPolygonEntity(
                                       id: polyId,
                                       center: center,
@@ -1804,17 +1823,11 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                       isInscribed: tool == 'polygon_inscribed',
                                       isConstruction: vm.isSketchConstructionMode,
                                     ));
-                                    // Part 2.2 D.2: Insert dashed inscribed construction circle and diameter dimension
-                                    vm.addPrimitiveEntityToActivePlane(CADCircleEntity(
-                                      id: constCircleId,
-                                      center: center,
-                                      radius: r,
-                                      isConstruction: true,
-                                    ));
+                                    // SS1 Fix: No extra auxiliary circles; diameter constraint drives polygon directly
                                     vm.activeSketchPlane?.constraints.add(CadConstraint(
                                       id: 'dim_dia_${DateTime.now().millisecondsSinceEpoch}',
                                       type: CadConstraintType.diameter,
-                                      entityIds: [constCircleId],
+                                      entityIds: [polyId],
                                       parameterValue: (r * 2.0).roundToDouble(),
                                       labelOffset: 24.0,
                                     ));
@@ -1910,111 +1923,171 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   }
                                   return;
                                 } else if (tool == 'dimension') {
+                                  final hostPart = vm.sketchPartId != null
+                                      ? vm.doc.parts.where((p) => p.id == vm.sketchPartId).firstOrNull
+                                      : vm.selectedPart;
+                                  if (hostPart != null) {
+                                    AssemblySurfaceSketchEngine.imprintHostPartBRepToPlane(plane, hostPart);
+                                  }
+
+                                  String? hitId;
                                   CADPrimitiveEntity? hitPrim;
+
+                                  // Hit test primitives on plane (including imprinted host face borders & holes)
                                   for (final p in plane.primitives.reversed) {
                                     if (p is CADCircleEntity && (localPoint - p.center).distance <= p.radius + 6.0) {
                                       hitPrim = p;
+                                      hitId = p.id;
                                       break;
-                                    } else if (p is CADLineEntity && _distanceToSegment(localPoint, p.start, p.end) <= 6.0) {
+                                    } else if (p is CADRegularPolygonEntity && (localPoint - p.center).distance <= p.radius + 6.0) {
                                       hitPrim = p;
+                                      hitId = p.id;
                                       break;
+                                    } else if (p is CADLineEntity && _distanceToSegment(localPoint, p.start, p.end) <= 8.0) {
+                                      hitPrim = p;
+                                      hitId = p.id;
+                                      break;
+                                    } else if (p is CADRectangleEntity) {
+                                      final p1 = p.startPoint;
+                                      final p2 = Offset(p.startPoint.dx + p.width, p.startPoint.dy);
+                                      final p3 = Offset(p.startPoint.dx + p.width, p.startPoint.dy + p.height);
+                                      final p4 = Offset(p.startPoint.dx, p.startPoint.dy + p.height);
+                                      if (_distanceToSegment(localPoint, p1, p2) <= 6.0) {
+                                        hitPrim = p;
+                                        hitId = '${p.id}:w';
+                                        break;
+                                      } else if (_distanceToSegment(localPoint, p2, p3) <= 6.0) {
+                                        hitPrim = p;
+                                        hitId = '${p.id}:h';
+                                        break;
+                                      } else if (_distanceToSegment(localPoint, p4, p3) <= 6.0) {
+                                        hitPrim = p;
+                                        hitId = '${p.id}:top';
+                                        break;
+                                      } else if (_distanceToSegment(localPoint, p1, p4) <= 6.0) {
+                                        hitPrim = p;
+                                        hitId = '${p.id}:left';
+                                        break;
+                                      }
+                                    } else if (p is CADCenterRectangleEntity) {
+                                      final p1 = p.topLeft;
+                                      final p2 = p.topRight;
+                                      final p3 = p.bottomRight;
+                                      final p4 = p.bottomLeft;
+                                      if (_distanceToSegment(localPoint, p4, p3) <= 6.0) {
+                                        hitPrim = p;
+                                        hitId = '${p.id}:w';
+                                        break;
+                                      } else if (_distanceToSegment(localPoint, p1, p2) <= 6.0) {
+                                        hitPrim = p;
+                                        hitId = '${p.id}:top';
+                                        break;
+                                      } else if (_distanceToSegment(localPoint, p2, p3) <= 6.0) {
+                                        hitPrim = p;
+                                        hitId = '${p.id}:h';
+                                        break;
+                                      } else if (_distanceToSegment(localPoint, p1, p4) <= 6.0) {
+                                        hitPrim = p;
+                                        hitId = '${p.id}:left';
+                                        break;
+                                      }
                                     } else {
                                       for (final seg in p.toLineSegments()) {
                                         if (_distanceToSegment(localPoint, seg.start, seg.end) <= 6.0) {
                                           hitPrim = p;
+                                          hitId = p.id;
                                           break;
                                         }
                                       }
-                                      if (hitPrim != null) break;
+                                      if (hitId != null) break;
                                     }
                                   }
 
-                                  if (hitPrim != null) {
-                                    if (vm.dimensionFirstEntityId != null && vm.dimensionFirstEntityId != hitPrim.id) {
-                                      final firstEnt = plane.primitives.where((p) => p.id == vm.dimensionFirstEntityId).firstOrNull;
-                                      if (firstEnt != null) {
-                                        CadConstraintType relType = CadConstraintType.distance;
-                                        double initVal = 25.0;
-                                        String unit = 'mm';
-
-                                        if (firstEnt is CADLineEntity && hitPrim is CADLineEntity) {
-                                          final d1 = firstEnt.end - firstEnt.start;
-                                          final d2 = hitPrim.end - hitPrim.start;
-                                          final cross = (d1.dx * d2.dy - d1.dy * d2.dx).abs();
-                                          final lenProd = d1.distance * d2.distance;
-                                          if (lenProd > 1e-4 && (cross / lenProd) > 0.05) {
-                                            relType = CadConstraintType.angle;
-                                            final dot = (d1.dx * d2.dx + d1.dy * d2.dy) / lenProd;
-                                            initVal = math.acos(dot.clamp(-1.0, 1.0)) * 180.0 / math.pi;
-                                            unit = 'deg';
-                                          } else {
-                                            final lLen = d1.distance;
-                                            final n = Offset(-d1.dy / lLen, d1.dx / lLen);
-                                            initVal = ((hitPrim.start.dx - firstEnt.start.dx) * n.dx + (hitPrim.start.dy - firstEnt.start.dy) * n.dy).abs();
-                                          }
-                                        } else {
-                                          final c1 = firstEnt is CADCircleEntity ? firstEnt.center : (firstEnt is CADLineEntity ? (firstEnt.start + firstEnt.end) * 0.5 : Offset.zero);
-                                          final c2 = hitPrim is CADCircleEntity ? hitPrim.center : (hitPrim is CADLineEntity ? (hitPrim.start + hitPrim.end) * 0.5 : Offset.zero);
-                                          initVal = (c2 - c1).distance;
-                                        }
-
-                                        final newConstraint = CadConstraint(
-                                          id: 'dim_${DateTime.now().millisecondsSinceEpoch}',
-                                          type: relType,
-                                          entityIds: [firstEnt.id, hitPrim.id],
-                                          parameterValue: initVal,
-                                        );
-                                        plane.constraints.add(newConstraint);
-                                        vm.dimensionFirstEntityId = null;
-                                        vm.solveSketchConstraints();
-                                        vm.openInlineSketchDimensionEditor(SketchDimensionTagHit(
-                                          tagKey: newConstraint.id,
-                                          screenRect: Rect.fromCenter(center: event.localPosition, width: 60, height: 24),
-                                          primaryEntityId: firstEnt.id,
-                                          secondaryEntityId: hitPrim.id,
-                                          constraintType: relType,
-                                          existingConstraintId: newConstraint.id,
-                                          currentValue: initVal,
-                                          unitSuffix: unit,
-                                        ));
-                                        setState(() {});
-                                        return;
-                                      }
+                                  // CASE 1: First click in Dimension mode -> Select anchor entity A
+                                  if (vm.dimensionFirstEntityId == null) {
+                                    if (hitId != null) {
+                                      vm.dimensionFirstEntityId = hitId;
+                                      vm.selectedSketchFeatureId = hitId;
+                                      if (hitPrim != null) vm.selectSketchPrimitive(hitPrim);
+                                      vm.setVcbState(
+                                        label: 'Dimension',
+                                        value: hitId,
+                                        hint: 'Click 2nd entity/border for relational dimension, or click again to place',
+                                      );
+                                      setState(() {});
                                     }
+                                    return;
+                                  }
 
-                                    vm.dimensionFirstEntityId = hitPrim.id;
-                                    vm.selectSketchPrimitive(hitPrim);
-                                    final double currentVal = hitPrim is CADCircleEntity
-                                        ? hitPrim.radius * 2.0
-                                        : hitPrim is CADLineEntity
-                                            ? (hitPrim.end - hitPrim.start).distance
-                                            : hitPrim is CADRectangleEntity
-                                                ? hitPrim.width
-                                                : hitPrim is CADCenterRectangleEntity
-                                                    ? hitPrim.width
-                                                    : 20.0;
-                                    final dimType = hitPrim is CADCircleEntity
+                                  // CASE 2: Second click in Dimension mode
+                                  final firstId = vm.dimensionFirstEntityId!;
+                                  if (hitId != null && hitId != firstId) {
+                                    // TWO-ENTITY RELATIONAL DIMENSION (circle-to-circle, circle-to-border, line-to-border, etc.)
+                                    final g1 = AssemblySurfaceSketchEngine.resolveEntityGeometry(firstId, plane, hostPart: hostPart);
+                                    final g2 = AssemblySurfaceSketchEngine.resolveEntityGeometry(hitId, plane, hostPart: hostPart);
+                                    if (g1 != null && g2 != null) {
+                                      final result = AssemblySurfaceSketchEngine.computeTwoEntityDistance(g1, g2);
+                                      final newConstraint = CadConstraint(
+                                        id: 'dim_${DateTime.now().millisecondsSinceEpoch}',
+                                        type: result.type,
+                                        entityIds: [firstId, hitId],
+                                        parameterValue: result.value,
+                                        labelOffset: 24.0,
+                                      );
+                                      plane.constraints.add(newConstraint);
+                                      vm.dimensionFirstEntityId = null;
+                                      vm.solveSketchConstraints();
+                                      vm.openInlineSketchDimensionEditor(SketchDimensionTagHit(
+                                        tagKey: newConstraint.id,
+                                        screenRect: Rect.fromCenter(center: event.localPosition, width: 64, height: 26),
+                                        primaryEntityId: firstId,
+                                        secondaryEntityId: hitId,
+                                        constraintType: result.type,
+                                        existingConstraintId: newConstraint.id,
+                                        currentValue: result.value,
+                                        unitSuffix: result.unit,
+                                      ));
+                                      setState(() {});
+                                      return;
+                                    }
+                                  }
+
+                                  // CASE 3: Single-entity dimension placement (clicked same entity or clicked empty space to place)
+                                  final targetEntityId = (hitId != null && hitId == firstId) ? firstId : firstId;
+                                  final primToDim = plane.primitives.where((p) => p.id == targetEntityId.split(':').first).firstOrNull;
+                                  if (primToDim != null && !primToDim.isImprintedReference) {
+                                    final double currentVal = primToDim is CADCircleEntity
+                                        ? primToDim.radius * 2.0
+                                        : primToDim is CADRegularPolygonEntity
+                                            ? primToDim.radius * 2.0
+                                            : primToDim is CADLineEntity
+                                                ? (primToDim.end - primToDim.start).distance
+                                                : primToDim is CADRectangleEntity
+                                                    ? (targetEntityId.endsWith(':h') ? primToDim.height : primToDim.width)
+                                                    : primToDim is CADCenterRectangleEntity
+                                                        ? (targetEntityId.endsWith(':h') ? primToDim.height : primToDim.width)
+                                                        : 20.0;
+                                    final dimType = (primToDim is CADCircleEntity || primToDim is CADRegularPolygonEntity)
                                         ? CadConstraintType.diameter
-                                        : (hitPrim is CADArcEntity || hitPrim is CADCenterPointArcEntity)
+                                        : (primToDim is CADArcEntity || primToDim is CADCenterPointArcEntity)
                                             ? CadConstraintType.radius
                                             : CadConstraintType.distance;
                                     vm.applyDrivingSketchDimension(
-                                      entityId: hitPrim.id,
+                                      entityId: targetEntityId,
                                       valueMmOrDeg: currentVal,
                                     );
                                     final createdConstraint = plane.constraints.lastOrNull;
                                     vm.openInlineSketchDimensionEditor(SketchDimensionTagHit(
-                                      tagKey: createdConstraint?.id ?? hitPrim.id,
+                                      tagKey: createdConstraint?.id ?? targetEntityId,
                                       screenRect: Rect.fromCenter(center: event.localPosition, width: 60, height: 24),
-                                      primaryEntityId: hitPrim.id,
+                                      primaryEntityId: targetEntityId,
                                       constraintType: dimType,
                                       existingConstraintId: createdConstraint?.id,
                                       currentValue: currentVal,
                                     ));
-                                    setState(() {});
-                                  } else {
-                                    vm.dimensionFirstEntityId = null;
                                   }
+                                  vm.dimensionFirstEntityId = null;
+                                  setState(() {});
                                   return;
                                 } else {
                                 // Selection mode: hit test primitive entities on active plane
