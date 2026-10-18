@@ -28,6 +28,101 @@ export '../../../sketch_draft_files/procedural_layout_mesh_builders/cad_geometry
 export 'assembly_sketch_constraint_solver.dart';
 export 'assembly_extrude_engine.dart';
 
+enum SketchDimensionOrientation { horizontal, vertical, aligned, radial, diameter, angular }
+
+class ResolvedLinearDimension2D {
+  final vm.Vector2 anchor1; // On entity in Sketch 2D space
+  final vm.Vector2 anchor2; // On entity in Sketch 2D space
+  final vm.Vector2 dimLineStart; // On dimension line in Sketch 2D space
+  final vm.Vector2 dimLineEnd;   // On dimension line in Sketch 2D space
+  final vm.Vector2 witness1End;  // Overshoot tip 1
+  final vm.Vector2 witness2End;  // Overshoot tip 2
+  final vm.Vector2 labelCenter;
+  final double measuredValue;
+
+  ResolvedLinearDimension2D({
+    required this.anchor1,
+    required this.anchor2,
+    required this.dimLineStart,
+    required this.dimLineEnd,
+    required this.witness1End,
+    required this.witness2End,
+    required this.labelCenter,
+    required this.measuredValue,
+  });
+}
+
+ResolvedLinearDimension2D computeOrthogonalDimension2D({
+  required vm.Vector2 p1,
+  required vm.Vector2 p2,
+  required vm.Vector2 labelPosition2D,
+  required SketchDimensionOrientation orientation,
+  double witnessOvershootMm = 2.5,
+}) {
+  late vm.Vector2 measureDir;
+  late vm.Vector2 perpNormal;
+
+  if (orientation == SketchDimensionOrientation.horizontal) {
+    measureDir = vm.Vector2(1.0, 0.0);
+    perpNormal = vm.Vector2(0.0, 1.0);
+  } else if (orientation == SketchDimensionOrientation.vertical) {
+    measureDir = vm.Vector2(0.0, 1.0);
+    perpNormal = vm.Vector2(1.0, 0.0);
+  } else {
+    // Aligned: strictly parallel to p1 -> p2
+    final vm.Vector2 delta = p2 - p1;
+    final double len = delta.length;
+    measureDir = len > 1e-5 ? (delta / len) : vm.Vector2(1.0, 0.0);
+    // Exact 90-degree perpendicular normal in 2D sketch plane: (-dy, dx)
+    perpNormal = vm.Vector2(-measureDir.y, measureDir.x);
+  }
+
+  // Project labelPosition2D onto perpNormal to get signed perpendicular offset distance
+  final vm.Vector2 mid = (p1 + p2) * 0.5;
+  final double signedOffset = (labelPosition2D - mid).dot(perpNormal);
+  final double sign = signedOffset >= 0.0 ? 1.0 : -1.0;
+
+  // Project both anchors onto the dimension line so witness lines are 100% parallel to perpNormal
+  final vm.Vector2 lineOrigin = mid + perpNormal * signedOffset;
+  final double t1 = (p1 - lineOrigin).dot(measureDir);
+  final double t2 = (p2 - lineOrigin).dot(measureDir);
+
+  final vm.Vector2 dimStart = lineOrigin + measureDir * t1;
+  final vm.Vector2 dimEnd = lineOrigin + measureDir * t2;
+
+  final vm.Vector2 w1End = dimStart + perpNormal * (sign * witnessOvershootMm);
+  final vm.Vector2 w2End = dimEnd + perpNormal * (sign * witnessOvershootMm);
+  final double value = (t2 - t1).abs();
+
+  return ResolvedLinearDimension2D(
+    anchor1: p1,
+    anchor2: p2,
+    dimLineStart: dimStart,
+    dimLineEnd: dimEnd,
+    witness1End: w1End,
+    witness2End: w2End,
+    labelCenter: (dimStart + dimEnd) * 0.5,
+    measuredValue: value,
+  );
+}
+
+SketchDimensionOrientation inferOrientationFromCursor(vm.Vector2 p1, vm.Vector2 p2, vm.Vector2 cursor2D) {
+  final double minX = math.min(p1.x, p2.x);
+  final double maxX = math.max(p1.x, p2.x);
+  final double minY = math.min(p1.y, p2.y);
+  final double maxY = math.max(p1.y, p2.y);
+
+  final bool outsideX = cursor2D.x < minX - 2.0 || cursor2D.x > maxX + 2.0;
+  final bool outsideY = cursor2D.y < minY - 2.0 || cursor2D.y > maxY + 2.0;
+
+  if (outsideX && !outsideY) {
+    return SketchDimensionOrientation.vertical; // Cursor moved left/right of span -> Vertical dim
+  } else if (outsideY && !outsideX) {
+    return SketchDimensionOrientation.horizontal; // Cursor moved above/below span -> Horizontal dim
+  }
+  return SketchDimensionOrientation.aligned; // Cursor in diagonal quadrant -> Aligned dim
+}
+
 /// Orchestrates parametric 3D surface sketching, plane coordinate mapping,
 /// profile loop validation, and CSG boolean cuts for OnShape / Fusion 360 workflows.
 class AssemblySurfaceSketchEngine {
@@ -73,7 +168,7 @@ class AssemblySurfaceSketchEngine {
     }
     final up = (tentativeUp - normal * normal.dot(tentativeUp)).normalized();
 
-    return CADSketchPlane(
+    final plane = CADSketchPlane(
       id: 'plane_${polygon.faceId}',
       origin: origin,
       normal: normal,
@@ -81,6 +176,51 @@ class AssemblySurfaceSketchEngine {
       targetPartId: partId,
       targetFaceId: polygon.faceId,
     );
+
+    // Auto-imprint host part face borders and hole centers as locked reference entities
+    if (polygon.vertices.length >= 3) {
+      for (int i = 0; i < polygon.vertices.length; i++) {
+        final vCurrent = polygon.vertices[i];
+        final vNext = polygon.vertices[(i + 1) % polygon.vertices.length];
+        final p1 = plane.toLocal(vm.Vector3(vCurrent.x, vCurrent.y, vCurrent.z));
+        final p2 = plane.toLocal(vm.Vector3(vNext.x, vNext.y, vNext.z));
+        plane.primitives.add(CADLineEntity(
+          id: 'imprint_border_${polygon.faceId}_$i',
+          start: p1,
+          end: p2,
+          isImprintedReference: true,
+          isFixed: true,
+          isFullyConstrained: true,
+        ));
+      }
+    }
+
+    if (polygon.holes.isNotEmpty) {
+      for (int h = 0; h < polygon.holes.length; h++) {
+        final hole = polygon.holes[h];
+        if (hole.length < 3) continue;
+        double hSumX = 0, hSumY = 0, hSumZ = 0;
+        for (final hv in hole) {
+          hSumX += hv.x;
+          hSumY += hv.y;
+          hSumZ += hv.z;
+        }
+        final holeCenterWorld = vm.Vector3(hSumX / hole.length, hSumY / hole.length, hSumZ / hole.length);
+        final holeCenter2D = plane.toLocal(holeCenterWorld);
+        final firstHolePt2D = plane.toLocal(vm.Vector3(hole.first.x, hole.first.y, hole.first.z));
+        final radius = (firstHolePt2D - holeCenter2D).distance;
+        plane.primitives.add(CADCircleEntity(
+          id: 'imprint_hole_${polygon.faceId}_$h',
+          center: holeCenter2D,
+          radius: radius > 0.1 ? radius : 5.0,
+          isImprintedReference: true,
+          isFixed: true,
+          isFullyConstrained: true,
+        ));
+      }
+    }
+
+    return plane;
   }
 
   /// Constructs a standard datum sketch plane (XY, XZ, or YZ).

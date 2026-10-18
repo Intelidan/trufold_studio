@@ -1,16 +1,17 @@
-// Autodesk Fusion 360 Style Assembly Browser Tree Widget
-// TruFold Assembly Studio - Phase 6 Browser Tree
+// Onshape-Style Unified Assembly Browser Tree Widget
+// TruFold Assembly Studio - Parametric Feature Tree Overhaul
 // Modular MVVM Architecture (<600 lines)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:trufold_studio/assembly_studio/models/assembly_part.dart';
+import 'package:trufold_studio/assembly_studio/models/assembly_timeline_item.dart';
 import 'package:trufold_studio/assembly_studio/engine/sketch/assembly_surface_sketch_engine.dart';
 import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmodel.dart';
 import 'package:trufold_studio/assembly_studio/views/theme/assembly_studio_theme.dart';
 
-/// Autodesk Fusion 360-style hierarchical Browser Tree inspector.
-/// Groups Origin, Construction Planes, Sketches, Bodies, and Joints/Welds.
+/// Onshape-style hierarchical Feature Tree and Parts inspector.
+/// Unifies Default Geometry, chronological Features (N), and solid Parts (N).
 class AssemblyBrowserTree extends StatefulWidget {
   final AssemblyStudioViewModel viewModel;
   final double width;
@@ -23,8 +24,10 @@ class AssemblyBrowserTree extends StatefulWidget {
 
 class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
   final TextEditingController _searchCtrl = TextEditingController();
+  final TextEditingController _renameCtrl = TextEditingController();
   final Set<String> _collapsedFolderIds = {};
   String _filterQuery = '';
+  String? _editingFeatureId;
 
   AssemblyStudioTheme get theme => AssemblyStudioTheme(isLight: widget.viewModel.isLightBackground);
 
@@ -41,6 +44,7 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _renameCtrl.dispose();
     super.dispose();
   }
 
@@ -69,9 +73,27 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
             allSketches.add(p);
           }
         }
-        final constructionCount = vm.constructionPlanes.length;
+
+        // Unified chronological features list
+        final List<AssemblyTimelineItem> features = [];
+        if (vm.doc.featureTree.isNotEmpty) {
+          features.addAll(vm.doc.featureTree);
+        } else if (vm.timelineItems.isNotEmpty) {
+          features.addAll(vm.timelineItems);
+        } else {
+          for (final plane in allSketches) {
+            features.add(AssemblyTimelineItem(
+              id: plane.id,
+              name: plane.name,
+              kind: AssemblyFeatureKind.sketch,
+              entityId: plane.id,
+            ));
+          }
+        }
+
         final bodiesCount = vm.doc.parts.length;
         final weldsCount = vm.doc.welds.length;
+        final totalFeaturesCount = 4 + features.length;
 
         return Container(
           width: widget.width,
@@ -82,7 +104,7 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Header Bar
+              // 1. Top Header Bar: Features (N)
               Container(
                 height: 32,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -96,16 +118,19 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Features (${allSketches.length + constructionCount + (vm.timelineItems.length)})',
+                        'Features ($totalFeaturesCount)',
                         style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.8, color: theme.textPrimary),
                       ),
                     ),
-                    // Quick Action: Add Construction Plane
                     Tooltip(
                       message: 'Add Construction Plane',
                       child: InkWell(
                         onTap: () {
-                          vm.addOffsetConstructionPlane(parentPlaneId: 'datum_xy', offsetMm: 25.0, name: 'Offset Plane ${vm.constructionPlanes.length + 1}');
+                          vm.addOffsetConstructionPlane(
+                            parentPlaneId: 'datum_xy',
+                            offsetMm: 25.0,
+                            name: 'Offset Plane ${vm.constructionPlanes.length + 1}',
+                          );
                         },
                         borderRadius: BorderRadius.circular(4),
                         child: const Padding(
@@ -115,7 +140,6 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    // Quick Action: Settings
                     Tooltip(
                       message: 'CAD & Viewport Settings',
                       child: InkWell(
@@ -131,7 +155,7 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
                 ),
               ),
 
-              // 2. Search / Filter Field (Matches Onshape 'Filter by name or type')
+              // 2. Search / Filter Field
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 decoration: BoxDecoration(
@@ -174,12 +198,12 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
                 ),
               ),
 
-              // 3. Tree View: Features & Parts List
+              // 3. Tree View: Unified Chronological Feature Tree & Parts
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   children: [
-                    // Folder 1: Default Geometry (Origin, Top, Front, Right)
+                    // Section 1: Default Geometry (Origin, Top, Front, Right)
                     _buildFolderHeader(
                       id: 'folder_default_geometry',
                       title: 'Default geometry',
@@ -196,39 +220,19 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
                       _buildOriginItem('Right', Icons.crop_square_rounded, vm.datumPlaneYZ, vm),
                     ],
 
-                    // Folder 2: Construction Planes
-                    _buildFolderHeader(
-                      id: 'folder_construction',
-                      title: 'Construction',
-                      icon: Icons.layers_outlined,
-                      color: const Color(0xFFF59E0B),
-                      countText: '$constructionCount',
-                      isVisible: vm.showConstructionPlanes,
-                      onToggleVisibility: vm.toggleConstructionPlanesVisibility,
-                    ),
-                    if (!_collapsedFolderIds.contains('folder_construction')) ...[
-                      if (vm.constructionPlanes.isEmpty)
-                        _buildEmptyFolderHint('No construction planes created')
-                      else
-                        ...vm.constructionPlanes.map((plane) => _buildConstructionItem(plane, vm)),
+                    // Section 2: Chronological Parametric Features (Sketches, Extrudes, Cuts, etc.)
+                    if (features.isNotEmpty) ...[
+                      ...features.map((item) => _buildFeatureTreeItem(item, vm)),
+                    ] else ...[
+                      _buildEmptyFolderHint('No features created yet (Press S to sketch)'),
                     ],
 
-                    // Folder 3: Sketches
-                    _buildFolderHeader(
-                      id: 'folder_sketches',
-                      title: 'Sketches',
-                      icon: Icons.draw_rounded,
-                      color: AssemblyStudioTheme.onshapeBlue,
-                      countText: '${allSketches.length}',
-                    ),
-                    if (!_collapsedFolderIds.contains('folder_sketches')) ...[
-                      if (allSketches.isEmpty)
-                        _buildEmptyFolderHint('No active sketches (Press S or select plane)')
-                      else
-                        ...allSketches.map((plane) => _buildSketchItem(plane, vm)),
-                    ],
+                    // Rollback bar indicator
+                    _buildRollbackBar(vm),
 
-                    // Folder 4: Parts (Matches Onshape 'Parts (N)')
+                    const Divider(height: 12, thickness: 0.5),
+
+                    // Section 3: Resulting Solid Parts (Matches Onshape 'Parts (N)')
                     _buildFolderHeader(
                       id: 'folder_bodies',
                       title: 'Parts',
@@ -237,19 +241,24 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
                       countText: '$bodiesCount',
                     ),
                     if (!_collapsedFolderIds.contains('folder_bodies')) ...[
-                      if (vm.doc.parts.isEmpty) _buildEmptyFolderHint('No bodies present') else ...vm.doc.parts.map((part) => _buildBodyItem(part, vm)),
+                      if (vm.doc.parts.isEmpty)
+                        _buildEmptyFolderHint('No solid parts present')
+                      else
+                        ...vm.doc.parts.map((part) => _buildBodyItem(part, vm)),
                     ],
 
-                    // Folder 5: Joints & Welds
-                    _buildFolderHeader(
-                      id: 'folder_welds',
-                      title: 'Joints & Welds',
-                      icon: Icons.flash_on_rounded,
-                      color: const Color(0xFFA855F7),
-                      countText: '$weldsCount',
-                    ),
-                    if (!_collapsedFolderIds.contains('folder_welds')) ...[
-                      if (vm.doc.welds.isEmpty) _buildEmptyFolderHint('No welds present') else ...vm.doc.welds.map((weld) => _buildWeldItem(weld, vm)),
+                    // Section 4: Joints & Welds
+                    if (weldsCount > 0) ...[
+                      _buildFolderHeader(
+                        id: 'folder_welds',
+                        title: 'Joints & Welds',
+                        icon: Icons.flash_on_rounded,
+                        color: const Color(0xFFA855F7),
+                        countText: '$weldsCount',
+                      ),
+                      if (!_collapsedFolderIds.contains('folder_welds')) ...[
+                        ...vm.doc.welds.map((weld) => _buildWeldItem(weld, vm)),
+                      ],
                     ],
                   ],
                 ),
@@ -258,6 +267,133 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildRollbackBar(AssemblyStudioViewModel vm) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      height: 16,
+      decoration: BoxDecoration(
+        color: theme.inputBackground,
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: theme.panelBorder, width: 0.6),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(width: 24, height: 2, color: const Color(0xFF94A3B8)),
+          const SizedBox(width: 4),
+          const Text(
+            'Rollback bar',
+            style: TextStyle(fontSize: 8, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(width: 4),
+          Container(width: 24, height: 2, color: const Color(0xFF94A3B8)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureTreeItem(AssemblyTimelineItem item, AssemblyStudioViewModel vm) {
+    if (_filterQuery.isNotEmpty && !item.name.toLowerCase().contains(_filterQuery)) {
+      return const SizedBox.shrink();
+    }
+    final isHighlighted = vm.highlightedFeatureId == item.id ||
+        (item.kind == AssemblyFeatureKind.sketch && (vm.activeSketchPlane?.id == item.entityId || vm.activeSketchPlane?.id == item.id));
+    final isEditing = _editingFeatureId == item.id;
+
+    return InkWell(
+      onTap: () {
+        // Single-click: Highlight feature in Onshape Orange on 3D model, NEVER enter sketch mode
+        vm.selectTimelineFeature(item.id);
+      },
+      onDoubleTap: () {
+        // Double-click: Edit sketch or open extrude dialog
+        if (item.kind == AssemblyFeatureKind.sketch) {
+          final planeId = item.entityId ?? item.parentSketchId ?? item.id;
+          vm.editExistingSketchPlane(planeId);
+        } else if (item.kind == AssemblyFeatureKind.extrude || item.kind == AssemblyFeatureKind.cut) {
+          vm.beginEditingExtrudeFeature(item.id);
+        }
+      },
+      child: Container(
+        height: 26,
+        padding: const EdgeInsets.only(left: 16, right: 8),
+        color: isHighlighted
+            ? const Color(0x33FF9800) // Translucent amber/orange highlight
+            : Colors.transparent,
+        child: Row(
+          children: [
+            Icon(
+              item.kind.icon,
+              size: 13,
+              color: isHighlighted ? const Color(0xFFFF9800) : item.kind.color,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: isEditing
+                  ? TextField(
+                      controller: _renameCtrl,
+                      autofocus: true,
+                      style: TextStyle(fontSize: 10, color: theme.textPrimary, fontWeight: FontWeight.bold),
+                      decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.zero, border: InputBorder.none),
+                      onSubmitted: (val) {
+                        vm.renameTimelineFeature(item.id, val);
+                        setState(() => _editingFeatureId = null);
+                      },
+                    )
+                  : GestureDetector(
+                      onSecondaryTap: () {
+                        setState(() {
+                          _editingFeatureId = item.id;
+                          _renameCtrl.text = item.name;
+                        });
+                      },
+                      child: Text(
+                        item.name,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
+                          color: isHighlighted ? const Color(0xFFFF9800) : theme.textPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+            ),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _editingFeatureId = item.id;
+                  _renameCtrl.text = item.name;
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(Icons.edit_outlined, size: 11, color: isHighlighted ? const Color(0xFFFF9800) : theme.textMuted),
+              ),
+            ),
+            GestureDetector(
+              onTap: () {
+                item.isVisible = !item.isVisible;
+                if (item.kind == AssemblyFeatureKind.sketch) {
+                  final planeId = item.entityId ?? item.id;
+                  vm.togglePlaneVisibility(planeId);
+                } else if (item.entityId != null) {
+                  vm.togglePartVisibility(item.entityId!);
+                }
+                vm.notifyDocChanged();
+              },
+              child: SvgPicture.asset(
+                item.isVisible ? 'assets/icons/onshape/eyeball_open.svg' : 'assets/icons/onshape/eyeball_closed.svg',
+                width: 13,
+                height: 13,
+                colorFilter: ColorFilter.mode(item.isVisible ? const Color(0xFF64748B) : const Color(0xFFCBD5E1), BlendMode.srcIn),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -330,6 +466,11 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
     return InkWell(
       onTap: () {
         if (plane != null) {
+          vm.selectTimelineFeature(plane.id);
+        }
+      },
+      onDoubleTap: () {
+        if (plane != null) {
           vm.selectPlaneForSketch(plane);
         }
       },
@@ -343,154 +484,6 @@ class _AssemblyBrowserTreeState extends State<AssemblyBrowserTree> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(name, style: TextStyle(fontSize: 9.5, color: isPlaneActive ? const Color(0xFF38BDF8) : theme.textSecondary)),
-            ),
-            if (plane != null)
-              GestureDetector(
-                onTap: () => vm.selectPlaneForSketch(plane),
-                child: Tooltip(
-                  message: 'Create 2D Sketch on $name',
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-                    decoration: BoxDecoration(color: const Color(0xFF0284C7).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(3)),
-                    child: const Text(
-                      'Sketch',
-                      style: TextStyle(fontSize: 8, color: Color(0xFF38BDF8), fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConstructionItem(CADSketchPlane plane, AssemblyStudioViewModel vm) {
-    if (_filterQuery.isNotEmpty && !plane.name.toLowerCase().contains(_filterQuery)) return const SizedBox.shrink();
-    final isSelected = vm.activeSketchPlane?.id == plane.id;
-
-    return InkWell(
-      onTap: () {
-        vm.selectPlaneForSketch(plane);
-      },
-      child: Container(
-        height: 24,
-        padding: const EdgeInsets.only(left: 28, right: 8),
-        color: isSelected ? const Color(0xFFF59E0B).withValues(alpha: 0.2) : Colors.transparent,
-        child: Row(
-          children: [
-            const Icon(Icons.layers_rounded, size: 12, color: Color(0xFFF59E0B)),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                plane.name,
-                style: TextStyle(fontSize: 9.5, color: isSelected ? const Color(0xFFF59E0B) : theme.textSecondary),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            GestureDetector(
-              onTap: () => vm.togglePlaneVisibility(plane.id),
-              child: Icon(
-                plane.isVisible ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-                size: 12,
-                color: plane.isVisible ? const Color(0xFFF59E0B) : theme.textMuted,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSketchItem(CADSketchPlane plane, AssemblyStudioViewModel vm) {
-    if (_filterQuery.isNotEmpty && !plane.name.toLowerCase().contains(_filterQuery)) return const SizedBox.shrink();
-    final isSelected = vm.activeSketchPlane?.id == plane.id && vm.isSketchMode;
-    final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(plane);
-    final validation = segments.isNotEmpty ? CADProfileValidator.validateProfile(segments) : null;
-    final isClosed = validation?.isValidClosedLoop ?? false;
-
-    return InkWell(
-      onTap: () {
-        if (isSelected) {
-          vm.alignCameraToActivePlaneNormal();
-        } else {
-          vm.editSketch(plane);
-        }
-      },
-      child: Container(
-        height: 26,
-        padding: const EdgeInsets.only(left: 28, right: 8),
-        color: isSelected ? const Color(0xFFE0F2FE) : Colors.transparent,
-        child: Row(
-          children: [
-            SvgPicture.asset(
-              'assets/icons/onshape/tree_sketch.svg',
-              width: 13,
-              height: 13,
-              colorFilter: ColorFilter.mode(isSelected ? AssemblyStudioTheme.onshapeBlue : theme.textSecondary, BlendMode.srcIn),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                plane.name,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected ? AssemblyStudioTheme.onshapeBlue : theme.textPrimary,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (plane.dependentFeatures.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(right: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: const Color(0x220284C7),
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(color: const Color(0xFF0284C7), width: 0.6),
-                ),
-                child: Text(
-                  '${plane.dependentFeatures.length} 3D',
-                  style: const TextStyle(fontSize: 7.5, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
-                ),
-              ),
-            if (segments.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(right: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: isClosed ? const Color(0x2210B981) : const Color(0x22F59E0B),
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(color: isClosed ? const Color(0xFF10B981) : const Color(0xFFF59E0B), width: 0.6),
-                ),
-                child: Text(
-                  isClosed ? 'Closed' : 'Open',
-                  style: TextStyle(fontSize: 7.5, fontWeight: FontWeight.bold, color: isClosed ? const Color(0xFF10B981) : const Color(0xFFF59E0B)),
-                ),
-              ),
-            Tooltip(
-              message: 'Re-edit Sketch & Update Attached 3D Bodies',
-              child: GestureDetector(
-                onTap: () => vm.editExistingSketchPlane(plane.id),
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 5),
-                  child: Icon(
-                    Icons.edit_note_rounded,
-                    size: 14,
-                    color: isSelected ? AssemblyStudioTheme.onshapeBlue : const Color(0xFF0284C7),
-                  ),
-                ),
-              ),
-            ),
-            GestureDetector(
-              onTap: () => vm.togglePlaneVisibility(plane.id),
-              child: SvgPicture.asset(
-                plane.isVisible ? 'assets/icons/onshape/eyeball_open.svg' : 'assets/icons/onshape/eyeball_closed.svg',
-                width: 13,
-                height: 13,
-                colorFilter: ColorFilter.mode(plane.isVisible ? const Color(0xFF64748B) : const Color(0xFFCBD5E1), BlendMode.srcIn),
-              ),
             ),
           ],
         ),

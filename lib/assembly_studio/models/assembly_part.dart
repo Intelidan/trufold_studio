@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:vector_math/vector_math.dart' as vm;
 
 import '../../sheet_metal_studio/models/cad_primitives.dart';
 import '../../sheet_metal_studio/engine/kinematic_fold_engine.dart';
@@ -458,6 +459,21 @@ class AssemblyWeldJoint {
   }
 }
 
+/// Represents a registered cut hole punched into an assembly part.
+class AssemblyCutHole {
+  final vm.Vector3 centerWorld;
+  final vm.Vector3 axisWorld;
+  final double diameterMm;
+  final double depthMm;
+
+  const AssemblyCutHole({
+    required this.centerWorld,
+    required this.axisWorld,
+    required this.diameterMm,
+    required this.depthMm,
+  });
+}
+
 /// Core modular 3D sheet metal part entity for direct manipulation & assembly.
 class AssemblyPart {
   final String id;
@@ -489,6 +505,9 @@ class AssemblyPart {
   List<CadFoldedPolygon3D>? customPolygons; // Custom 3D extruded/modeled polygons
   String? sourceSketchPlaneId; // Sketch plane that created this extruded body
   Map<String, List<CadFoldedPolygon3D>> joinedExtrusionsByPlane; // Plane ID -> joined extruded polygons
+  String? createdByFeatureId; // ID of timeline feature that created this part if spawned by New Body
+  List<CadFoldedPolygon3D>? _baseMeshSnapshot; // Snapshot of base mesh prior to parametric replay
+  final List<AssemblyCutHole> cutHoles = [];
 
   bool get isComponentInstance => componentDefinitionId != null;
 
@@ -522,6 +541,7 @@ class AssemblyPart {
     this.customPolygons,
     this.sourceSketchPlaneId,
     Map<String, List<CadFoldedPolygon3D>>? joinedExtrusionsByPlane,
+    this.createdByFeatureId,
   }) : joinedExtrusionsByPlane = joinedExtrusionsByPlane ?? {},
        segments = segments ?? [],
        sketches = sketches ?? [],
@@ -561,6 +581,7 @@ class AssemblyPart {
     List<CadFoldedPolygon3D>? customPolygons,
     String? sourceSketchPlaneId,
     Map<String, List<CadFoldedPolygon3D>>? joinedExtrusionsByPlane,
+    String? createdByFeatureId,
   }) {
     return AssemblyPart(
       id: id ?? this.id,
@@ -592,7 +613,73 @@ class AssemblyPart {
       customPolygons: customPolygons ?? (this.customPolygons != null ? List.from(this.customPolygons!) : null),
       sourceSketchPlaneId: sourceSketchPlaneId ?? this.sourceSketchPlaneId,
       joinedExtrusionsByPlane: joinedExtrusionsByPlane ?? Map.from(this.joinedExtrusionsByPlane),
+      createdByFeatureId: createdByFeatureId ?? this.createdByFeatureId,
     );
+  }
+
+  void saveBaseMeshSnapshot() {
+    if (customPolygons != null) {
+      _baseMeshSnapshot = List<CadFoldedPolygon3D>.from(customPolygons!);
+    } else {
+      final polys = <CadFoldedPolygon3D>[];
+      final thickPolys = <CadFoldedPolygon3D>[];
+      _buildLocalPolygons(polys, thickPolys);
+      _baseMeshSnapshot = [...polys, ...thickPolys];
+    }
+  }
+
+  void restoreToBaseMeshSnapshot() {
+    if (_baseMeshSnapshot != null) {
+      customPolygons = List<CadFoldedPolygon3D>.from(_baseMeshSnapshot!);
+    }
+    joinedExtrusionsByPlane.clear();
+    cutHoles.clear();
+    sketches.removeWhere((s) => s.featureType == 'extrude_cut' || s.id.startsWith('cut_') || s.id.startsWith('extrude_cut_'));
+    invalidateMeshCache();
+  }
+
+  void registerCutHole({
+    required vm.Vector3 centerWorld,
+    required vm.Vector3 axisWorld,
+    required double diameterMm,
+    required double depthMm,
+  }) {
+    cutHoles.add(AssemblyCutHole(
+      centerWorld: centerWorld,
+      axisWorld: axisWorld,
+      diameterMm: diameterMm,
+      depthMm: depthMm,
+    ));
+    final localCenter = toLocal(CadPoint3D(centerWorld.x, centerWorld.y, centerWorld.z));
+    sketches.add(AssemblySketchFeature(
+      id: 'cut_${DateTime.now().microsecondsSinceEpoch}',
+      planeId: sourceSketchPlaneId ?? 'plane_cut',
+      featureType: 'circle_hole',
+      localCenter: CadPoint2D(localCenter.x, localCenter.y),
+      widthMm: diameterMm,
+      heightMm: diameterMm,
+      angleDeg: 0.0,
+      cutDepthMm: depthMm,
+    ));
+    invalidateMeshCache();
+  }
+
+  void recomputeNormalsAndBounds() {
+    invalidateMeshCache();
+    build3DMesh();
+  }
+
+  vm.Aabb3 get worldBoundingBox {
+    final corners = getOrientedBoundingBoxCorners();
+    if (corners.isEmpty) {
+      return vm.Aabb3.minMax(vm.Vector3(-1, -1, -1), vm.Vector3(1, 1, 1));
+    }
+    final first = vm.Vector3(corners.first.x, corners.first.y, corners.first.z);
+    final aabb = vm.Aabb3.minMax(first.clone(), first.clone());
+    for (int i = 1; i < corners.length; i++) {
+      aabb.hullPoint(vm.Vector3(corners[i].x, corners[i].y, corners[i].z));
+    }
+    return aabb;
   }
 
   /// Transforms a local point into World coordinates using position and rotationDeg.

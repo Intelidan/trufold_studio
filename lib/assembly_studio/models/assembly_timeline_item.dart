@@ -4,104 +4,176 @@
 
 import 'package:flutter/material.dart';
 
-/// Supported parametric feature types shown in the Fusion 360-style design history timeline.
-enum AssemblyTimelineFeatureType {
+import '../../../sketch_draft_files/cad_parameter_engine/cad_models.dart';
+
+typedef ExtrudeOperationSpec = ExtrudeFeatureSpec;
+
+/// Supported parametric feature types shown in the Onshape / Fusion 360-style design history timeline.
+enum AssemblyFeatureKind {
   originPlane,
   constructionPlane,
   sketch,
   extrude,
   cut,
+  revolve,
+  sheetMetalModel,
+  flange,
+  tab,
+  mirror,
+  modifyJoint,
+  hole,
   weld;
 
   String get label {
     switch (this) {
-      case AssemblyTimelineFeatureType.originPlane:
+      case AssemblyFeatureKind.originPlane:
         return 'Origin Plane';
-      case AssemblyTimelineFeatureType.constructionPlane:
+      case AssemblyFeatureKind.constructionPlane:
         return 'Construction Plane';
-      case AssemblyTimelineFeatureType.sketch:
-        return '2D Sketch';
-      case AssemblyTimelineFeatureType.extrude:
+      case AssemblyFeatureKind.sketch:
+        return 'Sketch';
+      case AssemblyFeatureKind.extrude:
         return 'Extrude';
-      case AssemblyTimelineFeatureType.cut:
+      case AssemblyFeatureKind.cut:
         return 'Extruded Cut';
-      case AssemblyTimelineFeatureType.weld:
+      case AssemblyFeatureKind.revolve:
+        return 'Revolve';
+      case AssemblyFeatureKind.sheetMetalModel:
+        return 'Sheet Metal Model';
+      case AssemblyFeatureKind.flange:
+        return 'Flange';
+      case AssemblyFeatureKind.tab:
+        return 'Tab';
+      case AssemblyFeatureKind.mirror:
+        return 'Mirror';
+      case AssemblyFeatureKind.modifyJoint:
+        return 'Modify Joint';
+      case AssemblyFeatureKind.hole:
+        return 'Hole';
+      case AssemblyFeatureKind.weld:
         return 'Weld Joint';
     }
   }
 
   IconData get icon {
     switch (this) {
-      case AssemblyTimelineFeatureType.originPlane:
+      case AssemblyFeatureKind.originPlane:
         return Icons.grid_3x3_rounded;
-      case AssemblyTimelineFeatureType.constructionPlane:
+      case AssemblyFeatureKind.constructionPlane:
         return Icons.layers_outlined;
-      case AssemblyTimelineFeatureType.sketch:
+      case AssemblyFeatureKind.sketch:
         return Icons.draw_rounded;
-      case AssemblyTimelineFeatureType.extrude:
+      case AssemblyFeatureKind.extrude:
         return Icons.view_in_ar_rounded;
-      case AssemblyTimelineFeatureType.cut:
+      case AssemblyFeatureKind.cut:
         return Icons.content_cut_rounded;
-      case AssemblyTimelineFeatureType.weld:
+      case AssemblyFeatureKind.revolve:
+        return Icons.refresh_rounded;
+      case AssemblyFeatureKind.sheetMetalModel:
+        return Icons.architecture_rounded;
+      case AssemblyFeatureKind.flange:
+        return Icons.crop_square_rounded;
+      case AssemblyFeatureKind.tab:
+        return Icons.tab_rounded;
+      case AssemblyFeatureKind.mirror:
+        return Icons.flip_rounded;
+      case AssemblyFeatureKind.modifyJoint:
+        return Icons.link_rounded;
+      case AssemblyFeatureKind.hole:
+        return Icons.radio_button_unchecked_rounded;
+      case AssemblyFeatureKind.weld:
         return Icons.flash_on_rounded;
     }
   }
 
   Color get color {
     switch (this) {
-      case AssemblyTimelineFeatureType.originPlane:
+      case AssemblyFeatureKind.originPlane:
         return const Color(0xFF38BDF8); // Sky blue
-      case AssemblyTimelineFeatureType.constructionPlane:
+      case AssemblyFeatureKind.constructionPlane:
         return const Color(0xFFF59E0B); // Amber
-      case AssemblyTimelineFeatureType.sketch:
-        return const Color(0xFF06B6D4); // Cyan
-      case AssemblyTimelineFeatureType.extrude:
+      case AssemblyFeatureKind.sketch:
+        return const Color(0xFF0284C7); // Cyan
+      case AssemblyFeatureKind.extrude:
         return const Color(0xFF10B981); // Emerald
-      case AssemblyTimelineFeatureType.cut:
+      case AssemblyFeatureKind.cut:
         return const Color(0xFFEF4444); // Red
-      case AssemblyTimelineFeatureType.weld:
+      case AssemblyFeatureKind.weld:
         return const Color(0xFFA855F7); // Purple
+      default:
+        return const Color(0xFF64748B);
     }
   }
 }
 
+typedef AssemblyTimelineFeatureType = AssemblyFeatureKind;
+
 /// A single discrete parametric feature in the timeline history.
 class AssemblyTimelineItem {
   final String id;
-  final String name;
-  final AssemblyTimelineFeatureType type;
+  String name; // Editable in-place: "Sketch 1", "Extrude 1", "Tab 1", etc.
+  final AssemblyFeatureKind kind;
+  AssemblyFeatureKind get type => kind;
+  final String? parentSketchId; // For Extrude/Tab referencing a Sketch
+  final Set<String> targetProfileIds; // Specific closed loop IDs inside parentSketchId
+  ExtrudeFeatureSpec? extrudeSpec;
+  bool isVisible;
+  bool isSuppressed;
+  bool hasError;
+  String? errorMessage;
   final DateTime timestamp;
   final String? entityId; // e.g. planeId, sketchPlaneId, partId, weldId
   final Map<String, dynamic> parameters;
-  bool isSuppressed;
 
   AssemblyTimelineItem({
     required this.id,
     required this.name,
-    required this.type,
+    AssemblyFeatureKind? kind,
+    AssemblyFeatureKind? type,
+    this.parentSketchId,
+    Set<String>? targetProfileIds,
+    this.extrudeSpec,
+    this.isVisible = true,
+    this.isSuppressed = false,
+    this.hasError = false,
+    this.errorMessage,
     DateTime? timestamp,
     this.entityId,
     this.parameters = const {},
-    this.isSuppressed = false,
-  }) : timestamp = timestamp ?? DateTime.now();
+  })  : kind = kind ?? type ?? AssemblyFeatureKind.sketch,
+        targetProfileIds = targetProfileIds ?? <String>{},
+        timestamp = timestamp ?? DateTime.now();
 
   AssemblyTimelineItem copyWith({
     String? id,
     String? name,
-    AssemblyTimelineFeatureType? type,
+    AssemblyFeatureKind? kind,
+    AssemblyFeatureKind? type,
+    String? parentSketchId,
+    Set<String>? targetProfileIds,
+    ExtrudeFeatureSpec? extrudeSpec,
+    bool? isVisible,
+    bool? isSuppressed,
+    bool? hasError,
+    String? errorMessage,
     DateTime? timestamp,
     String? entityId,
     Map<String, dynamic>? parameters,
-    bool? isSuppressed,
   }) {
     return AssemblyTimelineItem(
       id: id ?? this.id,
       name: name ?? this.name,
-      type: type ?? this.type,
+      kind: kind ?? type ?? this.kind,
+      parentSketchId: parentSketchId ?? this.parentSketchId,
+      targetProfileIds: targetProfileIds ?? this.targetProfileIds,
+      extrudeSpec: extrudeSpec ?? this.extrudeSpec,
+      isVisible: isVisible ?? this.isVisible,
+      isSuppressed: isSuppressed ?? this.isSuppressed,
+      hasError: hasError ?? this.hasError,
+      errorMessage: errorMessage ?? this.errorMessage,
       timestamp: timestamp ?? this.timestamp,
       entityId: entityId ?? this.entityId,
       parameters: parameters ?? this.parameters,
-      isSuppressed: isSuppressed ?? this.isSuppressed,
     );
   }
 }

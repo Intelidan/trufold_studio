@@ -112,6 +112,7 @@ class AssemblySketchConstraintSolver {
     }
 
     // Pre-check for inherently conflicting constraints
+    // Pre-check for inherently conflicting constraints & driven dimensions
     final conflictingSet = <CadConstraint>{};
     for (int i = 0; i < constraints.length; i++) {
       final c1 = constraints[i];
@@ -127,10 +128,22 @@ class AssemblySketchConstraintSolver {
           final isDim1 = c1.type == CadConstraintType.distance || c1.type == CadConstraintType.radius || c1.type == CadConstraintType.diameter;
           final isDim2 = c2.type == CadConstraintType.distance || c2.type == CadConstraintType.radius || c2.type == CadConstraintType.diameter;
           if (isDim1 && isDim2 && c1.type == c2.type && c1.parameterValue != null && c2.parameterValue != null) {
-            if ((c1.parameterValue! - c2.parameterValue!).abs() > 1e-3) {
-              conflictingSet.add(c1);
-              conflictingSet.add(c2);
-            }
+            c2.isDriven = true;
+          }
+        }
+      }
+    }
+
+    // Auto-mark dimensional constraints as driven if all reference entities are fixed or imprinted references
+    for (final c in constraints) {
+      if (c.type == CadConstraintType.distance || c.type == CadConstraintType.radius || c.type == CadConstraintType.diameter || c.type == CadConstraintType.angle) {
+        if (c.entityIds.length >= 2) {
+          final allFixed = c.entityIds.every((id) {
+            final ent = entityMap[id.split(':').first];
+            return ent != null && (ent.isFixed || ent.isImprintedReference);
+          });
+          if (allFixed) {
+            c.isDriven = true;
           }
         }
       }
@@ -141,6 +154,10 @@ class AssemblySketchConstraintSolver {
     const int maxIterations = 5;
     for (int iter = 0; iter < maxIterations; iter++) {
       for (final c in geometricConstraints) {
+        if (c.isDriven) {
+          if (iter == 0) satisfied.add(c);
+          continue;
+        }
         if (conflictingSet.contains(c)) {
           if (iter == 0) conflicting.add(c);
           continue;
@@ -538,9 +555,12 @@ class AssemblySketchConstraintSolver {
       return false;
     }
 
-    // 2. TWO-ENTITY LINEAR DISTANCE (Point/Circle-to-Line, Line-to-Line, Center-to-Center)
+    // 2. TWO-ENTITY LINEAR DISTANCE (Point/Circle-to-Line, Line-to-Line, Center-to-Center, Polygon Anchors)
     if (c.type == CadConstraintType.distance && c.entityIds.length >= 2) {
-      final ent2 = entityMap[c.entityIds[1].split(':').first];
+      final rawId1 = c.entityIds[1];
+      final baseId1 = rawId1.split(':').first;
+      final subKey1 = rawId1.contains(':') ? rawId1.split(':').last : '';
+      final ent2 = entityMap[baseId1];
       if (ent2 == null) return false;
 
       if (ent is CADLineEntity && ent2 is! CADLineEntity) {
@@ -548,22 +568,22 @@ class AssemblySketchConstraintSolver {
         final lLen = lVec.distance;
         if (lLen < 1e-4) return false;
         final unitN = Offset(-lVec.dy / lLen, lVec.dx / lLen);
-        final p2 = _getEntityCenterOrAnchor(ent2);
+        final p2 = _getEntityCenterOrAnchor(ent2, subKey1);
         final signedDist = (p2.dx - ent.start.dx) * unitN.dx + (p2.dy - ent.start.dy) * unitN.dy;
         final sign = signedDist >= 0 ? 1.0 : -1.0;
         final delta = unitN * (sign * val - signedDist);
-        _shiftEntityTo(ent2, p2 + delta);
+        _shiftEntityTo(ent2, p2 + delta, subKey1);
         return true;
       } else if (ent2 is CADLineEntity && ent is! CADLineEntity) {
         final lVec = ent2.end - ent2.start;
         final lLen = lVec.distance;
         if (lLen < 1e-4) return false;
         final unitN = Offset(-lVec.dy / lLen, lVec.dx / lLen);
-        final p1 = _getEntityCenterOrAnchor(ent);
+        final p1 = _getEntityCenterOrAnchor(ent, subKey0);
         final signedDist = (p1.dx - ent2.start.dx) * unitN.dx + (p1.dy - ent2.start.dy) * unitN.dy;
         final sign = signedDist >= 0 ? 1.0 : -1.0;
         final delta = unitN * (sign * val - signedDist);
-        _shiftEntityTo(ent, p1 + delta);
+        _shiftEntityTo(ent, p1 + delta, subKey0);
         return true;
       } else if (ent is CADLineEntity && ent2 is CADLineEntity) {
         final lVec = ent.end - ent.start;
@@ -582,12 +602,12 @@ class AssemblySketchConstraintSolver {
         _propagateBondedVertexShift(entityMap, ent2.id, oldE, ent2.end);
         return true;
       } else {
-        final p1 = _getEntityCenterOrAnchor(ent);
-        final p2 = _getEntityCenterOrAnchor(ent2);
+        final p1 = _getEntityCenterOrAnchor(ent, subKey0);
+        final p2 = _getEntityCenterOrAnchor(ent2, subKey1);
         final d = p2 - p1;
         final len = d.distance;
         final dir = len > 1e-4 ? d / len : const Offset(1.0, 0.0);
-        _shiftEntityTo(ent2, p1 + dir * val);
+        _shiftEntityTo(ent2, p1 + dir * val, subKey1);
         return true;
       }
     }
@@ -665,6 +685,18 @@ class AssemblySketchConstraintSolver {
         ent.startCenter = mid - unit * (val / 2.0);
         ent.endCenter = mid + unit * (val / 2.0);
         return true;
+      } else if (ent is CADRegularPolygonEntity) {
+        final anchor = _getEntityCenterOrAnchor(ent, subKey0);
+        final d = anchor - ent.center;
+        final currLen = d.distance;
+        if (currLen > 1e-4) {
+          final unit = d / currLen;
+          final newAnchor = ent.center + unit * val;
+          _shiftEntityTo(ent, newAnchor, subKey0);
+        } else {
+          ent.center = Offset(val, ent.center.dy);
+        }
+        return true;
       }
     }
     return false;
@@ -740,16 +772,36 @@ class AssemblySketchConstraintSolver {
     }
   }
 
-  static Offset _getEntityCenterOrAnchor(CADPrimitiveEntity e) {
-    if (e is CADLineEntity) {
+  static Offset _getEntityCenterOrAnchor(CADPrimitiveEntity e, [String? subKey]) {
+    if (e is CADRegularPolygonEntity) {
+      if (subKey != null && subKey.isNotEmpty) {
+        if (subKey.startsWith('v_')) {
+          final idx = int.tryParse(subKey.substring(2)) ?? 0;
+          final vList = e.vertices;
+          if (vList.isNotEmpty) {
+            return vList[idx % vList.length];
+          }
+        } else if (subKey.startsWith('mid_') || subKey.startsWith('midpoint_')) {
+          final numStr = subKey.startsWith('midpoint_') ? subKey.substring(9) : subKey.substring(4);
+          final idx = int.tryParse(numStr) ?? 0;
+          final vList = e.vertices;
+          if (vList.isNotEmpty) {
+            final v1 = vList[idx % vList.length];
+            final v2 = vList[(idx + 1) % vList.length];
+            return (v1 + v2) * 0.5;
+          }
+        }
+      }
+      return e.center;
+    } else if (e is CADLineEntity) {
+      if (subKey == 'start') return e.start;
+      if (subKey == 'end') return e.end;
       return Offset((e.start.dx + e.end.dx) / 2.0, (e.start.dy + e.end.dy) / 2.0);
     } else if (e is CADCircleEntity) {
       return e.center;
     } else if (e is CADEllipseEntity) {
       return e.center;
     } else if (e is CADCenterPointArcEntity) {
-      return e.center;
-    } else if (e is CADRegularPolygonEntity) {
       return e.center;
     } else if (e is CADSlotEntity) {
       return (e.startCenter + e.endCenter) * 0.5;
@@ -774,8 +826,8 @@ class AssemblySketchConstraintSolver {
     return Offset.zero;
   }
 
-  static void _shiftEntityTo(CADPrimitiveEntity e, Offset newAnchor) {
-    final curr = _getEntityCenterOrAnchor(e);
+  static void _shiftEntityTo(CADPrimitiveEntity e, Offset newAnchor, [String? subKey]) {
+    final curr = _getEntityCenterOrAnchor(e, subKey);
     final delta = newAnchor - curr;
     if (e is CADLineEntity) {
       e.start = e.start + delta;
@@ -786,13 +838,13 @@ class AssemblySketchConstraintSolver {
       e.p3 = e.p3 + delta;
       e.recomputeFromThreePoints();
     } else if (e is CADCircleEntity) {
-      e.center = newAnchor;
+      e.center = e.center + delta;
     } else if (e is CADEllipseEntity) {
-      e.center = newAnchor;
+      e.center = e.center + delta;
     } else if (e is CADCenterPointArcEntity) {
-      e.center = newAnchor;
+      e.center = e.center + delta;
     } else if (e is CADRegularPolygonEntity) {
-      e.center = newAnchor;
+      e.center = e.center + delta;
     } else if (e is CADSlotEntity) {
       e.startCenter = e.startCenter + delta;
       e.endCenter = e.endCenter + delta;

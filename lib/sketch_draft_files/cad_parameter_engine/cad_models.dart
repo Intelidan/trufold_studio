@@ -86,6 +86,7 @@ class ExtrudeFeatureSpec {
   String operation; // 'newBody', 'join', 'cut', 'intersect'
   double depthMm;
   bool isSymmetric;
+  final String? targetPartId;
 
   ExtrudeFeatureSpec({
     required this.featureId,
@@ -94,6 +95,7 @@ class ExtrudeFeatureSpec {
     this.operation = 'newBody',
     this.depthMm = 25.0,
     this.isSymmetric = false,
+    this.targetPartId,
   }) : targetProfileIds = Set<String>.from(targetProfileIds);
 }
 
@@ -165,6 +167,13 @@ class CADSketchPlane {
     return Offset(d.dot(xAxis), d.dot(yAxis));
   }
 
+  vm.Vector3 sketch2DToWorld(vm.Vector2 p2d) => toWorld(Offset(p2d.x, p2d.y));
+  vm.Vector2 worldToSketch2D(vm.Vector3 world) {
+    final l = toLocal(world);
+    return vm.Vector2(l.dx, l.dy);
+  }
+  vm.Vector3 get planeNormal => zAxis;
+
   /// Dynamically auto-sizes this sketch plane's boundary to enclose all sketch entities & dimensions.
   void recalculateAutoSize() {
     if (primitives.isEmpty) return;
@@ -229,6 +238,8 @@ abstract class CADPrimitiveEntity {
   bool isSelected;
   bool isConstruction;
   bool isProjected;
+  bool isImprintedReference;
+  bool isFixed;
   String? sourceEntityId;
   bool isFullyConstrained;
   FeatureType featureType;
@@ -240,6 +251,8 @@ abstract class CADPrimitiveEntity {
     this.isSelected = false,
     this.isConstruction = false,
     this.isProjected = false,
+    this.isImprintedReference = false,
+    this.isFixed = false,
     this.sourceEntityId,
     this.isFullyConstrained = false,
     this.featureType = FeatureType.cut,
@@ -251,6 +264,8 @@ abstract class CADPrimitiveEntity {
   List<CADLineSegment> toLineSegments({int curveResolution = 36});
 }
 
+typedef SurfaceSketch = CADSketchPlane;
+
 /// A mathematical 2D line segment structure tracking layout properties
 class CADLineSegment {
   final String id;
@@ -259,6 +274,7 @@ class CADLineSegment {
   bool isDeleted;
   bool isConstruction;
   bool isProjected;
+  bool isImprintedReference;
   bool isFullyConstrained;
   String? sourceEntityId;
 
@@ -269,6 +285,7 @@ class CADLineSegment {
     this.isDeleted = false,
     this.isConstruction = false,
     this.isProjected = false,
+    this.isImprintedReference = false,
     this.isFullyConstrained = false,
     this.sourceEntityId,
   });
@@ -338,6 +355,9 @@ class CADCircleEntity extends CADPrimitiveEntity {
     super.isSelected,
     super.isConstruction,
     super.isProjected,
+    super.isImprintedReference,
+    super.isFixed,
+    super.isFullyConstrained,
     super.sourceEntityId,
     super.featureType,
     super.isPassThrough,
@@ -372,6 +392,9 @@ class CADLineEntity extends CADPrimitiveEntity {
     super.isSelected,
     super.isConstruction,
     super.isProjected,
+    super.isImprintedReference,
+    super.isFixed,
+    super.isFullyConstrained,
     super.sourceEntityId,
     super.featureType,
     super.isPassThrough,

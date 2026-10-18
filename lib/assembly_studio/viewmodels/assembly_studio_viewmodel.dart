@@ -642,6 +642,18 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   // WYSIWYG Face Sketch Mode (OnShape / Fusion 360 Style)
   bool isSketchMode = false;
+  bool get isSketchModeActive => isSketchMode;
+  set isSketchModeActive(bool v) {
+    if (isSketchMode == v) return;
+    isSketchMode = v;
+    notifyListeners();
+  }
+
+  /// Timeline feature ID currently highlighted via single-click in the Feature Tree
+  String? highlightedFeatureId;
+
+  /// Selected hole center IDs for magnetic spot highlights (Item 5.1)
+  final Set<String> selectedHoleCenterIds = {};
   String? sketchPartId;
   String? sketchFaceId;
   String activeSketchTool =
@@ -1231,10 +1243,23 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         ),
       );
 
+      final featureSpec = ExtrudeFeatureSpec(
+        featureId: 'extrude_${DateTime.now().millisecondsSinceEpoch}',
+        sketchId: activeSketchPlane!.id,
+        targetProfileIds: extrudeParams.profileEntityIds.toSet(),
+        operation: extrudeParams.operation.name,
+        depthMm: extrudeParams.distanceMm,
+        isSymmetric: extrudeParams.direction == AssemblyExtrudeDirection.symmetric,
+        targetPartId: targetPart?.id,
+      );
+
       recordTimelineFeature(
         name: '${extrudeParams.operation.label} (${extrudeParams.distanceMm.toStringAsFixed(1)}mm)',
         type: extrudeParams.operation == AssemblyExtrudeOperation.cut ? AssemblyTimelineFeatureType.cut : AssemblyTimelineFeatureType.extrude,
         entityId: result.createdPart?.id ?? targetPart?.id,
+        parentSketchId: activeSketchPlane!.id,
+        targetProfileIds: extrudeParams.profileEntityIds.toSet(),
+        extrudeSpec: featureSpec,
         parameters: {'distance': extrudeParams.distanceMm, 'operation': extrudeParams.operation.name},
       );
 
@@ -1263,18 +1288,111 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   AssemblyCadSettings cadSettings = const AssemblyCadSettings();
   bool isCadSettingsOpen = false;
 
-  void recordTimelineFeature({required String name, required AssemblyTimelineFeatureType type, String? entityId, Map<String, dynamic> parameters = const {}}) {
+  void recordTimelineFeature({
+    required String name,
+    required AssemblyTimelineFeatureType type,
+    String? entityId,
+    String? parentSketchId,
+    Set<String>? targetProfileIds,
+    ExtrudeOperationSpec? extrudeSpec,
+    Map<String, dynamic> parameters = const {},
+  }) {
     final item = AssemblyTimelineItem(
       id: 'timeline_${DateTime.now().millisecondsSinceEpoch}_${timelineItems.length}',
       name: name,
-      type: type,
+      kind: type,
       entityId: entityId,
+      parentSketchId: parentSketchId,
+      targetProfileIds: targetProfileIds,
+      extrudeSpec: extrudeSpec,
       parameters: parameters,
       isSuppressed: false,
     );
     timelineItems.add(item);
+    if (!doc.featureTree.any((f) => f.id == item.id)) {
+      doc.featureTree.add(item);
+    }
     timelineRollbackIndex = timelineItems.length;
     notifyDocChanged();
+  }
+
+  void selectTimelineFeature(String? featureId) {
+    highlightedFeatureId = featureId;
+    if (featureId != null) {
+      final item = doc.featureTree.where((f) => f.id == featureId).firstOrNull ??
+          timelineItems.where((t) => t.id == featureId).firstOrNull;
+      if (item != null) {
+        if (item.kind == AssemblyFeatureKind.sketch) {
+          final planeId = item.entityId ?? item.parentSketchId ?? item.id;
+          final plane = savedSketchPlanes.where((p) => p.id == planeId || p.id == item.id).firstOrNull;
+          if (plane != null) {
+            activeSketchPlane = plane;
+          }
+        } else if (item.kind == AssemblyFeatureKind.extrude || item.kind == AssemblyFeatureKind.cut) {
+          if (item.entityId != null) {
+            doc.selectedPartId = item.entityId;
+          }
+        }
+      }
+    }
+    notifyListeners();
+  }
+
+  void beginEditingExtrudeFeature(String featureId) {
+    final item = doc.featureTree.where((f) => f.id == featureId).firstOrNull ??
+        timelineItems.where((t) => t.id == featureId).firstOrNull;
+    if (item == null) return;
+
+    if (item.parentSketchId != null) {
+      final plane = savedSketchPlanes.where((p) => p.id == item.parentSketchId).firstOrNull;
+      if (plane != null) {
+        activeSketchPlane = plane;
+      }
+    }
+
+    if (item.extrudeSpec != null) {
+      final spec = item.extrudeSpec!;
+      final op = AssemblyExtrudeOperation.values.firstWhere(
+        (o) => o.name == spec.operation,
+        orElse: () => spec.operation == 'cut' ? AssemblyExtrudeOperation.cut : AssemblyExtrudeOperation.newBody,
+      );
+      extrudeParams = extrudeParams.copyWith(
+        operation: op,
+        distanceMm: spec.depthMm,
+        direction: spec.isSymmetric ? AssemblyExtrudeDirection.symmetric : AssemblyExtrudeDirection.oneSide,
+        profileEntityIds: spec.targetProfileIds.toList(),
+      );
+    }
+
+    openExtrudeDialog();
+    notifyListeners();
+  }
+
+  void renameTimelineFeature(String featureId, String newName) {
+    if (newName.trim().isEmpty) return;
+    final item = doc.featureTree.where((f) => f.id == featureId).firstOrNull ??
+        timelineItems.where((t) => t.id == featureId).firstOrNull;
+    if (item != null) {
+      item.name = newName.trim();
+    }
+    final plane = savedSketchPlanes.where((p) => p.id == featureId || p.id == item?.entityId).firstOrNull;
+    if (plane != null) {
+      plane.name = newName.trim();
+    }
+    final part = doc.parts.where((p) => p.id == featureId || p.id == item?.entityId).firstOrNull;
+    if (part != null) {
+      part.name = newName.trim();
+    }
+    notifyListeners();
+  }
+
+  void rebuildFeatureTimeline() {
+    AssemblyExtrudeEngine.rebuildFeatureTimeline(
+      doc: doc,
+      allPlanes: savedSketchPlanes,
+    );
+    invalidateMeshCache();
+    notifyListeners();
   }
 
   void setTimelineRollbackIndex(int index) {
@@ -1349,6 +1467,8 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
         break;
       case AssemblyTimelineFeatureType.originPlane:
       case AssemblyTimelineFeatureType.weld:
+        break;
+      default:
         break;
     }
   }

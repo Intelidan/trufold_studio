@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../sheet_metal_studio/models/cad_primitives.dart';
 import '../../sheet_metal_studio/engine/kinematic_fold_engine.dart';
 import 'assembly_part.dart';
+import 'assembly_timeline_item.dart';
 
 /// Full document state for an assembly project in the Assembly Studio.
 class AssemblyDocument {
@@ -13,6 +14,7 @@ class AssemblyDocument {
   List<AssemblyPart> parts;
   List<AssemblyWeldJoint> welds;
   List<AssemblyMagneticJoint> magneticJoints;
+  List<AssemblyTimelineItem> featureTree;
   String? selectedPartId;
   String? selectedFaceId;
   Set<String> selectedPartIds;
@@ -24,6 +26,7 @@ class AssemblyDocument {
     List<AssemblyPart>? parts,
     List<AssemblyWeldJoint>? welds,
     List<AssemblyMagneticJoint>? magneticJoints,
+    List<AssemblyTimelineItem>? featureTree,
     this.selectedPartId,
     this.selectedFaceId,
     Set<String>? selectedPartIds,
@@ -31,6 +34,7 @@ class AssemblyDocument {
   }) : parts = parts ?? [],
        welds = welds ?? [],
        magneticJoints = magneticJoints ?? [],
+       featureTree = featureTree ?? [],
        selectedPartIds = selectedPartIds ?? (selectedPartId != null ? {selectedPartId} : {});
 
   AssemblyPart? get selectedPart {

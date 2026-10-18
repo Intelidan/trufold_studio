@@ -1,9 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:vector_math/vector_math.dart' as vm;
 
 import '../../../../../sheet_metal_studio/models/cad_primitives.dart';
-import '../../../../../sketch_draft_files/cad_parameter_engine/cad_models.dart';
+import '../../../../engine/sketch/assembly_surface_sketch_engine.dart';
 import '../../../../viewmodels/assembly_studio_viewmodel.dart';
 
 /// Renders real-time 3D parametric sketch geometry and Onshape SS4 CAD Engineering Dimensions
@@ -81,11 +82,14 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           ? validation.allClosedLoops
           : (validation.orderedPathVertices.length >= 3 ? [validation.orderedPathVertices] : <List<Offset>>[]);
 
+      final isTreeHighlighted = viewModel.highlightedFeatureId == plane.id;
       final isExtrudeHighlight = viewModel.isExtrudeMode;
       final fillPaint = Paint()
-        ..color = isExtrudeHighlight
+        ..color = isTreeHighlighted
+            ? const Color(0x38FFB74D) // Onshape amber fill when highlighted from feature tree
+            : isExtrudeHighlight
             ? const Color(0x40F59E0B)
-            : const Color(0x2864748B) // Authentic Onshape SS4 soft neutral-cool profile shading
+            : const Color(0x3890A4AE) // Authentic Onshape cool slate translucent fill (SS4)
         ..style = PaintingStyle.fill;
 
       final combinedRegionPath = Path()..fillType = PathFillType.evenOdd;
@@ -112,13 +116,13 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       }
       if (hasAnyLoop) {
         canvas.drawPath(combinedRegionPath, fillPaint);
-        if (isExtrudeHighlight) {
+        if (isTreeHighlighted || isExtrudeHighlight) {
           canvas.drawPath(
             combinedRegionPath,
             Paint()
-              ..color = const Color(0xFFF59E0B)
+              ..color = const Color(0xFFFF9800)
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 2.2,
+              ..strokeWidth = 2.4,
           );
         }
       }
@@ -150,23 +154,35 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       // - Conflicting / Over-Constrained: Red (#EF4444)
       // - Fully Defined: Crisp Black (#0F172A)
       // - Under-Defined: Onshape Blue (#0284C7)
+      final isTreeHighlighted = viewModel.highlightedFeatureId == plane.id;
+
+      // Onshape Master Color System:
+      // - Constrained / Defined: const Color(0xFF111111) (1.65px crisp black)
+      // - Under-Constrained: const Color(0xFF1565C0) (1.65px deep Onshape blue)
+      // - Construction Geometry: const Color(0xFF546E7A) (1.3px dashed)
+      // - Imprinted Host Part Borders: const Color(0xFF263238) (1.2px solid)
+      // - Hovered / Selected or Tree-Highlighted: const Color(0xFFFF9800) (2.4px amber/orange)
       final Color entityColor = isOverConstrained
           ? const Color(0xFFEF4444)
-          : isHovered
-          ? const Color(0xFFF59E0B)
-          : isSel
-          ? const Color(0xFFD97706)
+          : (isHovered || isSel || isTreeHighlighted)
+          ? const Color(0xFFFF9800)
+          : prim.isImprintedReference
+          ? const Color(0xFF263238)
+          : prim.isConstruction
+          ? const Color(0xFF546E7A)
           : prim.isProjected
           ? const Color(0xFF7C3AED)
-          : prim.isConstruction
-          ? const Color(0xFF475569)
           : isConstrained
-          ? const Color(0xFF0F172A)
-          : const Color(0xFF0284C7);
+          ? const Color(0xFF111111)
+          : const Color(0xFF1565C0);
 
       final strokePaint = Paint()
         ..color = entityColor
-        ..strokeWidth = (isHovered || isSel) ? 2.6 : (prim.isConstruction ? 1.3 : 1.85)
+        ..strokeWidth = (isHovered || isSel || isTreeHighlighted)
+            ? 2.4
+            : prim.isImprintedReference
+            ? 1.2
+            : (prim.isConstruction ? 1.3 : 1.65)
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
@@ -728,6 +744,7 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           l2: e2,
           toScreen: toScreen,
           label: '$formattedVal°',
+          isDriving: c.isDriving,
           hitInfo: SketchDimensionTagHit(
             tagKey: c.id,
             screenRect: Rect.zero,
@@ -742,33 +759,39 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
         return;
       }
 
-      Offset pA;
-      Offset pB;
+      Offset pALocal;
+      Offset pBLocal;
       if (e1 is CADLineEntity && e2 is! CADLineEntity) {
         final anchor2 = _getEntityCenter(e2);
-        pA = toScreen(_projectPointToInfiniteLine(anchor2, e1.start, e1.end));
-        pB = toScreen(anchor2);
+        pALocal = _projectPointToInfiniteLine(anchor2, e1.start, e1.end);
+        pBLocal = anchor2;
       } else if (e2 is CADLineEntity && e1 is! CADLineEntity) {
         final anchor1 = _getEntityCenter(e1);
-        pA = toScreen(anchor1);
-        pB = toScreen(_projectPointToInfiniteLine(anchor1, e2.start, e2.end));
+        pALocal = anchor1;
+        pBLocal = _projectPointToInfiniteLine(anchor1, e2.start, e2.end);
       } else if (e1 is CADLineEntity && e2 is CADLineEntity) {
         final mid1 = (e1.start + e1.end) * 0.5;
-        pA = toScreen(mid1);
-        pB = toScreen(_projectPointToInfiniteLine(mid1, e2.start, e2.end));
+        pALocal = mid1;
+        pBLocal = _projectPointToInfiniteLine(mid1, e2.start, e2.end);
       } else {
-        pA = toScreen(_getEntityCenter(e1));
-        pB = toScreen(_getEntityCenter(e2));
+        pALocal = _getEntityCenter(e1);
+        pBLocal = _getEntityCenter(e2);
       }
+
+      final pA = toScreen(pALocal);
+      final pB = toScreen(pBLocal);
 
       if (pA != Offset.zero && pB != Offset.zero) {
         _drawLinearCadDimension(
           canvas: canvas,
           pA: pA,
           pB: pB,
+          localA: pALocal,
+          localB: pBLocal,
+          toScreen: toScreen,
           offsetPx: c.labelOffset * 1.5,
           label: formattedVal,
-          isDriving: true,
+          isDriving: c.isDriving,
           hitInfo: SketchDimensionTagHit(
             tagKey: c.id,
             screenRect: Rect.zero,
@@ -794,7 +817,7 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
           centerScr: cScr,
           rimScr: rScr,
           label: 'Ø$formattedVal',
-          isDriving: true,
+          isDriving: c.isDriving,
           hitInfo: SketchDimensionTagHit(
             tagKey: c.id,
             screenRect: Rect.zero,
@@ -847,9 +870,12 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             canvas: canvas,
             pA: pA,
             pB: pB,
+            localA: e1.start,
+            localB: e1.end,
+            toScreen: toScreen,
             offsetPx: -c.labelOffset.abs() * 1.5,
             label: formattedVal,
-            isDriving: true,
+            isDriving: c.isDriving,
             hitInfo: SketchDimensionTagHit(
               tagKey: c.id,
               screenRect: Rect.zero,
@@ -862,16 +888,21 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
         }
       } else if (e1 is CADRectangleEntity) {
         final p1 = toScreen(e1.startPoint);
-        final p2 = toScreen(Offset(e1.startPoint.dx + e1.width, e1.startPoint.dy));
-        final p3 = toScreen(Offset(e1.startPoint.dx + e1.width, e1.startPoint.dy + e1.height));
+        final p2Local = Offset(e1.startPoint.dx + e1.width, e1.startPoint.dy);
+        final p3Local = Offset(e1.startPoint.dx + e1.width, e1.startPoint.dy + e1.height);
+        final p2 = toScreen(p2Local);
+        final p3 = toScreen(p3Local);
         if (subKey0 == 'h') {
           _drawLinearCadDimension(
             canvas: canvas,
             pA: p2,
             pB: p3,
+            localA: p2Local,
+            localB: p3Local,
+            toScreen: toScreen,
             offsetPx: 30.0,
             label: formattedVal,
-            isDriving: true,
+            isDriving: c.isDriving,
             hitInfo: SketchDimensionTagHit(
               tagKey: c.id,
               screenRect: Rect.zero,
@@ -887,9 +918,12 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             canvas: canvas,
             pA: p1,
             pB: p2,
+            localA: e1.startPoint,
+            localB: p2Local,
+            toScreen: toScreen,
             offsetPx: -28.0,
             label: formattedVal,
-            isDriving: true,
+            isDriving: c.isDriving,
             hitInfo: SketchDimensionTagHit(
               tagKey: c.id,
               screenRect: Rect.zero,
@@ -910,9 +944,12 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             canvas: canvas,
             pA: p2,
             pB: p3,
+            localA: e1.topRight,
+            localB: e1.bottomRight,
+            toScreen: toScreen,
             offsetPx: 30.0,
             label: formattedVal,
-            isDriving: true,
+            isDriving: c.isDriving,
             hitInfo: SketchDimensionTagHit(
               tagKey: c.id,
               screenRect: Rect.zero,
@@ -928,9 +965,12 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
             canvas: canvas,
             pA: p1,
             pB: p2,
+            localA: e1.topLeft,
+            localB: e1.topRight,
+            toScreen: toScreen,
             offsetPx: -28.0,
             label: formattedVal,
-            isDriving: true,
+            isDriving: c.isDriving,
             hitInfo: SketchDimensionTagHit(
               tagKey: c.id,
               screenRect: Rect.zero,
@@ -950,40 +990,101 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
   /// - Crisp 1.0px dark witness/extension lines
   /// - Split dimension line with a clean center break for the text (no clunky box border!)
   /// - Sharp filled CAD arrowheads
+  /// Draws an authentic Onshape SS4 Linear Dimension (`60`, `99`, `65`, `90`):
+  /// - Strictly orthogonal witness/extension lines in 2D sketch plane coordinates
+  /// - Split dimension line with a clean center break for the text
+  /// - Sharp filled CAD arrowheads
   void _drawLinearCadDimension({
     required Canvas canvas,
     required Offset pA,
     required Offset pB,
+    Offset? localA,
+    Offset? localB,
+    Offset Function(Offset)? toScreen,
     required double offsetPx,
     required String label,
     required bool isDriving,
     SketchDimensionTagHit? hitInfo,
   }) {
-    final seg = pB - pA;
-    final len = seg.distance;
-    if (len < 6.0) return;
-
-    final dir = seg / len;
-    final sign = offsetPx >= 0 ? 1.0 : -1.0;
-    final n = Offset(-dir.dy, dir.dx) * sign;
-    final absOff = offsetPx.abs().clamp(18.0, 130.0);
-
-    final dimA = pA + n * absOff;
-    final dimB = pB + n * absOff;
-    final mid = (dimA + dimB) * 0.5;
-
-    const dimColor = Color(0xFF1E293B);
+    final dimColor = !isDriving ? const Color(0xFF8C96A0) : const Color(0xFF1E293B);
     final linePaint = Paint()
       ..color = dimColor
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke
       ..isAntiAlias = true;
 
-    // 1. Extension / witness lines (3px gap from entity vertex, 6px overshoot past dimension line)
-    canvas.drawLine(pA + n * 3.0, dimA + n * 6.0, linePaint);
-    canvas.drawLine(pB + n * 3.0, dimB + n * 6.0, linePaint);
+    Offset dimA;
+    Offset dimB;
+    Offset w1End;
+    Offset w2End;
+    Offset a1Scr = pA;
+    Offset a2Scr = pB;
+    Offset dir;
+    Offset mid;
+    double len;
 
-    // 2. Measure text width so the dimension line breaks cleanly around the number (Onshape image_41a6fb.png!)
+    if (localA != null && localB != null && toScreen != null) {
+      final v1 = vm.Vector2(localA.dx, localA.dy);
+      final v2 = vm.Vector2(localB.dx, localB.dy);
+      SketchDimensionOrientation orient = SketchDimensionOrientation.aligned;
+      if ((v1.y - v2.y).abs() < 1e-4) {
+        orient = SketchDimensionOrientation.horizontal;
+      } else if ((v1.x - v2.x).abs() < 1e-4) {
+        orient = SketchDimensionOrientation.vertical;
+      }
+      final midLocal = (v1 + v2) * 0.5;
+      final offsetMm = offsetPx / 3.0;
+      final delta = v2 - v1;
+      final vlen = delta.length;
+      final vdir = vlen > 1e-5 ? delta / vlen : vm.Vector2(1.0, 0.0);
+      final perp = vm.Vector2(-vdir.y, vdir.x);
+      final labelPos2D = midLocal + perp * offsetMm;
+
+      final res = computeOrthogonalDimension2D(
+        p1: v1,
+        p2: v2,
+        labelPosition2D: labelPos2D,
+        orientation: orient,
+        witnessOvershootMm: 3.5,
+      );
+
+      dimA = toScreen(Offset(res.dimLineStart.x, res.dimLineStart.y));
+      dimB = toScreen(Offset(res.dimLineEnd.x, res.dimLineEnd.y));
+      a1Scr = toScreen(Offset(res.anchor1.x, res.anchor1.y));
+      a2Scr = toScreen(Offset(res.anchor2.x, res.anchor2.y));
+      w1End = toScreen(Offset(res.witness1End.x, res.witness1End.y));
+      w2End = toScreen(Offset(res.witness2End.x, res.witness2End.y));
+
+      final seg = dimB - dimA;
+      len = seg.distance;
+      dir = len > 1e-4 ? seg / len : const Offset(1, 0);
+      mid = (dimA + dimB) * 0.5;
+    } else {
+      final seg = pB - pA;
+      len = seg.distance;
+      if (len < 6.0) return;
+
+      dir = seg / len;
+      final sign = offsetPx >= 0 ? 1.0 : -1.0;
+      final n = Offset(-dir.dy, dir.dx) * sign;
+      final absOff = offsetPx.abs().clamp(18.0, 130.0);
+
+      dimA = pA + n * absOff;
+      dimB = pB + n * absOff;
+      mid = (dimA + dimB) * 0.5;
+      w1End = dimA + n * 6.0;
+      w2End = dimB + n * 6.0;
+      a1Scr = pA + n * 3.0;
+      a2Scr = pB + n * 3.0;
+    }
+
+    if (len < 6.0) return;
+
+    // 1. Extension / witness lines (strictly orthogonal in 2D sketch plane coordinates)
+    canvas.drawLine(a1Scr, w1End, linePaint);
+    canvas.drawLine(a2Scr, w2End, linePaint);
+
+    // 2. Measure text width so the dimension line breaks cleanly around the number
     final tp = _layoutDimensionText(label, isDriving: isDriving, hitInfo: hitInfo);
     final halfGap = (tp.width * 0.5) + 5.5;
     double textAngle = math.atan2(dir.dy, dir.dx);
@@ -997,7 +1098,7 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
       _drawCadArrowhead(canvas, dimA, dir, dimColor);
       _drawCadArrowhead(canvas, dimB, -dir, dimColor);
     } else {
-      // Narrow dimension (like '10' in image_41a6fb.png): outside extension tails + inward-pointing arrowheads!
+      // Narrow dimension: outside extension tails + inward-pointing arrowheads
       canvas.drawLine(dimA - dir * 13.0, dimA, linePaint);
       canvas.drawLine(dimB, dimB + dir * 13.0, linePaint);
       _drawCadArrowhead(canvas, dimA, -dir, dimColor);
@@ -1025,7 +1126,7 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     final shoulderDir = unit.dx >= 0 ? const Offset(14.0, 0.0) : const Offset(-14.0, 0.0);
     final tagAnchor = elbow + shoulderDir;
 
-    const dimColor = Color(0xFF1E293B);
+    final dimColor = !isDriving ? const Color(0xFF8C96A0) : const Color(0xFF1E293B);
     final linePaint = Paint()
       ..color = dimColor
       ..strokeWidth = 1.0
@@ -1049,6 +1150,7 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
     required CADLineEntity l2,
     required Offset Function(Offset) toScreen,
     required String label,
+    bool isDriving = true,
     SketchDimensionTagHit? hitInfo,
   }) {
     final s1 = toScreen(l1.start);
@@ -1074,7 +1176,7 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
 
     const double arcR = 42.0;
     final arcRect = Rect.fromCircle(center: vertex, radius: arcR);
-    const dimColor = Color(0xFF1E293B);
+    final dimColor = !isDriving ? const Color(0xFF8C96A0) : const Color(0xFF1E293B);
     final linePaint = Paint()
       ..color = dimColor
       ..strokeWidth = 1.0
@@ -1092,8 +1194,8 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
 
     final midAngle = a1 + sweep * 0.5;
     final tagCenter = vertex + Offset(math.cos(midAngle), math.sin(midAngle)) * arcR;
-    final tp = _layoutDimensionText(label, isDriving: true, hitInfo: hitInfo);
-    _drawClickableDimensionTag(canvas, tagCenter, tp, isDriving: true, hitInfo: hitInfo);
+    final tp = _layoutDimensionText(label, isDriving: isDriving, hitInfo: hitInfo);
+    _drawClickableDimensionTag(canvas, tagCenter, tp, isDriving: isDriving, hitInfo: hitInfo);
   }
 
   void _drawCadArrowhead(Canvas canvas, Offset tip, Offset inwardDir, Color color) {
@@ -1127,9 +1229,9 @@ class Assembly3DSurfaceSketchPainter extends CustomPainter {
         style: TextStyle(
           color: isBeingEdited
               ? const Color(0xFF0284C7)
-              : isDriving
-              ? const Color(0xFF0F172A)
-              : const Color(0xFF1E293B),
+              : !isDriving
+              ? const Color(0xFF8C96A0) // Onshape Driven Grey (SS5)
+              : const Color(0xFF0F172A),
           fontSize: 12.0,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.1,

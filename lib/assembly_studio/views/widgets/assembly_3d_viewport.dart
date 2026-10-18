@@ -1380,6 +1380,11 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                           // 0A. Check if the user clicked directly on an Onshape Dimension Tag (image_31d0a3.png)!
                           for (final dimHit in vm.sketchDimensionHitRects.reversed) {
                             if (dimHit.screenRect.contains(event.localPosition)) {
+                              final cObj = vm.activeSketchPlane?.constraints.where((c) => c.id == dimHit.existingConstraintId).firstOrNull;
+                              if (cObj != null && cObj.isDriven) {
+                                // Driven dimension: non-editable live readout only
+                                return;
+                              }
                               vm.openInlineSketchDimensionEditor(dimHit);
                               setState(() {});
                               return;
@@ -1787,14 +1792,30 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   final r = (snapped - center).distance;
                                   if (r > 0.5) {
                                     final rot = math.atan2(snapped.dy - center.dy, snapped.dx - center.dx);
+                                    final polyId = 'poly_${DateTime.now().millisecondsSinceEpoch}';
+                                    final constCircleId = 'circle_const_${DateTime.now().millisecondsSinceEpoch}';
                                     vm.addPrimitiveEntityToActivePlane(CADRegularPolygonEntity(
-                                      id: 'poly_${DateTime.now().millisecondsSinceEpoch}',
+                                      id: polyId,
                                       center: center,
                                       radius: r,
                                       sides: 6,
                                       rotationRad: rot,
                                       isInscribed: tool == 'polygon_inscribed',
                                       isConstruction: vm.isSketchConstructionMode,
+                                    ));
+                                    // Part 2.2 D.2: Insert dashed inscribed construction circle and diameter dimension
+                                    vm.addPrimitiveEntityToActivePlane(CADCircleEntity(
+                                      id: constCircleId,
+                                      center: center,
+                                      radius: r,
+                                      isConstruction: true,
+                                    ));
+                                    vm.activeSketchPlane?.constraints.add(CadConstraint(
+                                      id: 'dim_dia_${DateTime.now().millisecondsSinceEpoch}',
+                                      type: CadConstraintType.diameter,
+                                      entityIds: [constCircleId],
+                                      parameterValue: (r * 2.0).roundToDouble(),
+                                      labelOffset: 24.0,
                                     ));
                                     vm.clearSketchInteractiveState();
                                     vm.activeSketchTool = 'select_entity';
@@ -3558,7 +3579,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                   // =================================================================
                   // 6. ONSHAPE FLOATING SKETCH FEATURE DIALOG CARD (TOP-LEFT)
                   // =================================================================
-                  if (vm.isSketchMode) Positioned(top: 0, left: 0, child: _buildOnshapeSketchHUD(vm)),
+                  if (vm.isSketchMode) _buildOnshapeSketchHUD(vm),
 
                   // =================================================================
                   // 6a. ONSHAPE DIRECT 3D SKETCH TOOLBAR HUD (TOP-RIGHT)
@@ -4491,16 +4512,20 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   // ONSHAPE FLOATING SKETCH FEATURE DIALOG
   // ---------------------------------------------------------------------------
   Widget _buildOnshapeSketchHUD(AssemblyStudioViewModel vm) {
-    return AssemblyOnshapeSketchDialog(
-      viewModel: vm,
-      onAccept: () {
-        vm.finishSketch();
-        setState(() {});
-      },
-      onCancel: () {
-        vm.exitSketchMode();
-        setState(() {});
-      },
+    return DraggableCadDialog(
+      initialOffset: const Offset(16, 16),
+      width: 290,
+      child: AssemblyOnshapeSketchDialog(
+        viewModel: vm,
+        onAccept: () {
+          vm.finishSketch();
+          setState(() {});
+        },
+        onCancel: () {
+          vm.exitSketchMode();
+          setState(() {});
+        },
+      ),
     );
   }
 
@@ -5815,15 +5840,15 @@ Color computeCadFaceColor(Color baseColor, vm_math.Vector3 worldNormal, vm_math.
 
   // Half-Lambert wrapping prevents harsh black terminators on opposite sides
   final double keyTerm = (n.dot(keyLight) * 0.5 + 0.5);
-  final double fillTerm = math.max(0.0, n.dot(fillLight));
-  final double headlightTerm = math.max(0.0, n.dot(v)); // Camera headlight
+  final double fillTerm = (n.dot(fillLight) * 0.5 + 0.5);
+  final double headlightTerm = math.max(0.0, n.dot(v)); // Camera headlight (0.22 weight)
 
   // Minimum ambient floor of 0.46 ensures opposite faces stay crisp CAD blue
-  final double intensity = (0.38 +
-          keyTerm * 0.36 +
-          fillTerm * 0.18 +
-          headlightTerm * 0.18)
-      .clamp(0.46, 1.08);
+  final double intensity = (0.46 +
+          keyTerm * 0.32 +
+          fillTerm * 0.15 +
+          headlightTerm * 0.22)
+      .clamp(0.46, 1.15);
 
   final a = (baseColor.a * 255.0).round().clamp(0, 255);
   final r = (baseColor.r * 255.0 * intensity).round().clamp(0, 255);

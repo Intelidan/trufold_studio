@@ -9,6 +9,7 @@ import 'package:vector_math/vector_math.dart' as vm_math;
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 import 'package:trufold_studio/assembly_studio/models/assembly_document.dart';
 import 'package:trufold_studio/assembly_studio/models/assembly_part.dart';
+import 'package:trufold_studio/assembly_studio/models/assembly_timeline_item.dart';
 import 'package:trufold_studio/assembly_studio/engine/sketch/assembly_surface_sketch_engine.dart';
 
 /// Boolean operation type for 3D extrusion features.
@@ -880,6 +881,9 @@ class AssemblyExtrudeEngine {
     required ExtrudeFeatureSpec featureSpec,
     required List<CadFoldedPolygon3D> existingBodies,
   }) {
+    if (featureSpec.operation == 'cut') {
+      return existingBodies; // Cut operations punch into host parts and do NOT append solid bodies!
+    }
     final targetSegments = AssemblySurfaceSketchEngine.compilePlaneSegments(
       sketch,
       targetEntityIds: featureSpec.targetProfileIds,
@@ -912,6 +916,111 @@ class AssemblyExtrudeEngine {
       results.addAll(solid.polygons);
     }
     return results;
+  }
+
+  static void applyFeature({
+    required AssemblyDocument doc,
+    required AssemblyTimelineItem featureItem,
+    required CADSketchPlane plane,
+    required ExtrudeFeatureSpec spec,
+  }) {
+    final targetPart = doc.parts.where((p) => p.id == (plane.targetPartId ?? spec.targetPartId)).firstOrNull ??
+        (doc.parts.isNotEmpty ? doc.parts.first : null);
+
+    final targetSegments = AssemblySurfaceSketchEngine.compilePlaneSegments(
+      plane,
+      targetEntityIds: spec.targetProfileIds.isNotEmpty ? spec.targetProfileIds : null,
+    );
+    final val = CADProfileValidator.validateProfile(targetSegments);
+    if (!val.isValidClosedLoop || val.orderedPathVertices.length < 3) return;
+
+    final loops = val.allClosedLoops.isNotEmpty ? val.allClosedLoops : [val.orderedPathVertices];
+    final op = AssemblyExtrudeOperation.values.firstWhere(
+      (o) => o.name == spec.operation,
+      orElse: () => spec.operation == 'cut' ? AssemblyExtrudeOperation.cut : AssemblyExtrudeOperation.newBody,
+    );
+
+    final params = AssemblyExtrudeParams(
+      operation: op,
+      direction: spec.isSymmetric ? AssemblyExtrudeDirection.symmetric : AssemblyExtrudeDirection.oneSide,
+      distanceMm: spec.depthMm,
+      profileEntityIds: spec.targetProfileIds.toList(),
+    );
+
+    if (op == AssemblyExtrudeOperation.cut) {
+      if (targetPart == null) return;
+      for (final loop in loops) {
+        if (loop.length < 3) continue;
+        executeExtrusion(
+          doc: doc,
+          plane: plane,
+          profilePoints: loop,
+          params: params,
+          targetPart: targetPart,
+        );
+        final double minX = loop.map((p) => p.dx).reduce(math.min);
+        final double maxX = loop.map((p) => p.dx).reduce(math.max);
+        final double minY = loop.map((p) => p.dy).reduce(math.min);
+        final double maxY = loop.map((p) => p.dy).reduce(math.max);
+        final double w = maxX - minX;
+        final double h = maxY - minY;
+        if ((w - h).abs() < 1.0 && loop.length >= 8) {
+          final center2D = Offset((minX + maxX) / 2.0, (minY + maxY) / 2.0);
+          final centerWorld = plane.toWorld(center2D);
+          targetPart.registerCutHole(
+            centerWorld: vm_math.Vector3(centerWorld.x, centerWorld.y, centerWorld.z),
+            axisWorld: plane.planeNormal,
+            diameterMm: (w + h) / 2.0,
+            depthMm: spec.depthMm,
+          );
+        }
+      }
+      targetPart.recomputeNormalsAndBounds();
+    } else {
+      final classified = classifyOuterAndHoleLoops(loops);
+      for (int i = 0; i < classified.outerLoops.length; i++) {
+        final res = executeExtrusion(
+          doc: doc,
+          plane: plane,
+          profilePoints: classified.outerLoops[i],
+          interiorHoleLoops: classified.holesByOuterIndex[i] ?? const [],
+          params: params,
+          targetPart: targetPart,
+        );
+        if (op == AssemblyExtrudeOperation.newBody && res.createdPart != null) {
+          res.createdPart!.createdByFeatureId = featureItem.id;
+        }
+      }
+    }
+  }
+
+  static void rebuildFeatureTimeline({
+    required AssemblyDocument doc,
+    required List<CADSketchPlane> allPlanes,
+  }) {
+    // 1. Remove all parts that were dynamically spawned by previous 'New Body' extrude features
+    doc.parts.removeWhere((p) => p.createdByFeatureId != null);
+
+    // 2. Restore all original assembly parts to their clean pre-feature base mesh
+    for (final part in doc.parts) {
+      part.restoreToBaseMeshSnapshot();
+    }
+
+    // 3. Replay all active features in chronological order from featureTree
+    for (final item in doc.featureTree) {
+      if (item.isSuppressed) continue;
+      if ((item.kind == AssemblyFeatureKind.extrude || item.kind == AssemblyFeatureKind.cut) && item.extrudeSpec != null) {
+        final plane = allPlanes.where((p) => p.id == item.parentSketchId).firstOrNull;
+        if (plane != null) {
+          applyFeature(
+            doc: doc,
+            featureItem: item,
+            plane: plane,
+            spec: item.extrudeSpec!,
+          );
+        }
+      }
+    }
   }
 
   static AssemblySketchFeature? _applyOrUpdateCutLoopOnPart({

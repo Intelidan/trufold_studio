@@ -177,10 +177,11 @@ class CadConstraint {
   final String? expression;     // Optional formula expression (e.g. "60/2" or "25+10")
   final double labelOffset;     // Witness-line offset distance in plane mm (default 18.0)
   final double? tolerancePlus;  // Optional +tolerance (mm or deg) from Onshape '±' popover
-  final double? toleranceMinus; // Optional -tolerance (mm or deg)
+  final double? toleranceMinus; // Optional -tolerance (mm or deg) from Onshape '±' popover
   final bool isActive;
+  bool isDriven; // When true, dimension is driven (reference only, grey text #8C96A0)
 
-  const CadConstraint({
+  CadConstraint({
     required this.id,
     required this.type,
     required this.entityIds,
@@ -191,6 +192,7 @@ class CadConstraint {
     this.tolerancePlus,
     this.toleranceMinus,
     this.isActive = true,
+    this.isDriven = false,
   });
 
   String get symbol => type.symbol;
@@ -201,6 +203,8 @@ class CadConstraint {
       type == CadConstraintType.angle ||
       type == CadConstraintType.radius ||
       type == CadConstraintType.diameter;
+
+  bool get isDriving => isDimensional && !isDriven;
 
   CadConstraint copyWith({
     String? id,
@@ -213,6 +217,7 @@ class CadConstraint {
     double? tolerancePlus,
     double? toleranceMinus,
     bool? isActive,
+    bool? isDriven,
   }) {
     return CadConstraint(
       id: id ?? this.id,
@@ -225,6 +230,7 @@ class CadConstraint {
       tolerancePlus: tolerancePlus ?? this.tolerancePlus,
       toleranceMinus: toleranceMinus ?? this.toleranceMinus,
       isActive: isActive ?? this.isActive,
+      isDriven: isDriven ?? this.isDriven,
     );
   }
 
@@ -239,6 +245,7 @@ class CadConstraint {
         if (tolerancePlus != null) 'tolerancePlus': tolerancePlus,
         if (toleranceMinus != null) 'toleranceMinus': toleranceMinus,
         'isActive': isActive,
+        'isDriven': isDriven,
       };
 
   factory CadConstraint.fromJson(Map<String, dynamic> json) => CadConstraint(
@@ -255,5 +262,8 @@ class CadConstraint {
         tolerancePlus: (json['tolerancePlus'] as num?)?.toDouble(),
         toleranceMinus: (json['toleranceMinus'] as num?)?.toDouble(),
         isActive: json['isActive'] as bool? ?? true,
+        isDriven: json['isDriven'] as bool? ?? false,
       );
 }
+
+typedef SketchDimension = CadConstraint;

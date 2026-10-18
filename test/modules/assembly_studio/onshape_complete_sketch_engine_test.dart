@@ -1,8 +1,12 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vector_math/vector_math.dart' as vm_math;
 
 import 'package:trufold_studio/assembly_studio/engine/sketch/assembly_surface_sketch_engine.dart';
 import 'package:trufold_studio/assembly_studio/engine/sketch/onshape_sketch_modify_engine.dart';
+import 'package:trufold_studio/assembly_studio/models/assembly_document.dart';
+import 'package:trufold_studio/assembly_studio/models/assembly_part.dart';
+import 'package:trufold_studio/assembly_studio/models/assembly_timeline_item.dart';
 import 'package:trufold_studio/assembly_studio/models/onshape_toolbar_items.dart';
 import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmodel.dart';
 
@@ -284,7 +288,7 @@ void main() {
 
       // Part sketches must NOT have mutated while drawing in 2D!
       expect(part.sketches.length, initialSketchesCount);
-      expect(vm.activeSketchPlane!.primitives.length, 2);
+      expect(vm.activeSketchPlane!.primitives.where((p) => !p.isImprintedReference).length, 2);
     });
 
     test('Multi-Profile Loop Validation detects all closed loops cleanly (Fix 3)', () {
@@ -306,6 +310,230 @@ void main() {
       expect(validation.isValidClosedLoop, isTrue);
       expect(validation.allClosedLoops.length, 2);
       expect(validation.reportFeedback, contains('Closed Profile(s) Ready'));
+    });
+  });
+
+  group('Onshape Master Specification Regressions (Part 6)', () {
+    test('singleClickSketchHighlightsOnly_doubleClickEntersSketchMode', () {
+      final vm = AssemblyStudioViewModel();
+      final sketchItem = AssemblyTimelineItem(
+        id: 'sketch_test_1',
+        name: 'Sketch 1',
+        kind: AssemblyFeatureKind.sketch,
+      );
+      vm.doc.featureTree.add(sketchItem);
+
+      // 1. Single click tap: highlights feature only, NEVER enters sketch mode
+      vm.selectTimelineFeature(sketchItem.id);
+      expect(vm.highlightedFeatureId, equals('sketch_test_1'));
+      expect(vm.isSketchModeActive, isFalse);
+
+      // 2. Double click: enters sketch mode
+      vm.enterSketchMode();
+      expect(vm.isSketchModeActive, isTrue);
+    });
+
+    test('witnessLinesAreStrictlyPerpendicularToMeasuredEdge', () {
+      final p1 = vm_math.Vector2(10.0, 15.0);
+      final p2 = vm_math.Vector2(50.0, 45.0);
+      final edgeDir = (p2 - p1).normalized();
+
+      final dim = computeOrthogonalDimension2D(
+        p1: p1,
+        p2: p2,
+        labelPosition2D: vm_math.Vector2(15.0, 60.0),
+        orientation: SketchDimensionOrientation.aligned,
+        witnessOvershootMm: 4.0,
+      );
+
+      final witness1Dir = (dim.witness1End - dim.dimLineStart).normalized();
+      final witness2Dir = (dim.witness2End - dim.dimLineEnd).normalized();
+
+      expect(witness1Dir.dot(edgeDir).abs(), lessThan(1e-5));
+      expect(witness2Dir.dot(edgeDir).abs(), lessThan(1e-5));
+      expect(dim.anchor1, equals(p1));
+      expect(dim.anchor2, equals(p2));
+    });
+
+    test('twoEntityAndBorderDimensions_supportDrivenGreyState', () {
+      final plane = CADSketchPlane(
+        id: 'plane_dim_test',
+        name: 'Dimension Test Plane',
+        origin: vm_math.Vector3.zero(),
+        normal: vm_math.Vector3(0, 0, 1),
+        up: vm_math.Vector3(0, 1, 0),
+      );
+
+      // Circle 1 and Circle 2
+      final c1 = CADCircleEntity(id: 'c1', center: const Offset(20, 30), radius: 6);
+      final c2 = CADCircleEntity(id: 'c2', center: const Offset(119, 30), radius: 6);
+      // Imprinted fixed border line
+      final borderLine = CADLineEntity(
+        id: 'border_1',
+        start: const Offset(0, 0),
+        end: const Offset(0, 100),
+        isImprintedReference: true,
+        isFixed: true,
+        isFullyConstrained: true,
+      );
+      plane.primitives.addAll([c1, c2, borderLine]);
+
+      // Dim 1: distance from border to circle 1 center = 65
+      final dimBorderToC1 = CadConstraint(
+        id: 'dim_border_c1',
+        type: CadConstraintType.distance,
+        entityIds: ['border_1', 'c1'],
+        parameterValue: 65.0,
+      );
+
+      // Dim 2: distance between circle 1 and circle 2 centers = 99
+      final dimC1ToC2 = CadConstraint(
+        id: 'dim_c1_c2',
+        type: CadConstraintType.distance,
+        entityIds: ['c1', 'c2'],
+        parameterValue: 99.0,
+      );
+
+      // Dim 3: over-constraining distance directly locking circle 2 to border
+      // since both c1 and c2 are already fully locked horizontally
+      final dimOver = CadConstraint(
+        id: 'dim_over',
+        type: CadConstraintType.distance,
+        entityIds: ['border_1', 'c2'],
+        parameterValue: 164.0,
+      );
+
+      plane.constraints.addAll([dimBorderToC1, dimC1ToC2, dimOver]);
+
+      final result = AssemblySketchConstraintSolver.solve(plane);
+      expect(result.isSuccess, isTrue);
+
+      // Over-constrained dimension is automatically flagged as driven
+      expect(dimOver.isDriven, isTrue);
+      expect(dimOver.isDriving, isFalse);
+    });
+
+    test('closedPolygonMovesRigidlyWhenConstrainedFromEdgeMidpointOrCenter', () {
+      final plane = CADSketchPlane(
+        id: 'plane_poly_rigid',
+        name: 'Polygon Plane',
+        origin: vm_math.Vector3.zero(),
+        normal: vm_math.Vector3(0, 0, 1),
+        up: vm_math.Vector3(0, 1, 0),
+      );
+
+      final poly = CADRegularPolygonEntity(
+        id: 'poly_1',
+        center: const Offset(50, 50),
+        radius: 20.0,
+        sides: 5, // Pentagon
+        rotationRad: 0.0,
+      );
+      final initialVerts = List<Offset>.from(poly.vertices);
+      final initialEdgeLength = (initialVerts[1] - initialVerts[0]).distance;
+
+      plane.primitives.add(poly);
+
+      // Shift pentagon via midpoint subKey constraint
+      final cst = CadConstraint(
+        id: 'cst_poly_shift',
+        type: CadConstraintType.distance,
+        entityIds: ['poly_1:mid_0'],
+        parameterValue: 35.0,
+      );
+      plane.constraints.add(cst);
+
+      final solved = AssemblySketchConstraintSolver.solve(plane);
+      expect(solved.isSuccess, isTrue);
+
+      final movedVerts = poly.vertices;
+      final movedEdgeLength = (movedVerts[1] - movedVerts[0]).distance;
+
+      // Internal edge length must be identical (no deformation!)
+      expect(movedEdgeLength, closeTo(initialEdgeLength, 1e-4));
+      final delta = movedVerts[0] - initialVerts[0];
+      for (int i = 1; i < 5; i++) {
+        expect((movedVerts[i] - initialVerts[i]).dx, closeTo(delta.dx, 1e-4));
+        expect((movedVerts[i] - initialVerts[i]).dy, closeTo(delta.dy, 1e-4));
+      }
+    });
+
+    test('extrudeCutSubtractsFromRail_andEditingOperationReplacesPreviousBody', () {
+      final doc = AssemblyDocument(
+        id: 'doc_extrude_test',
+        title: 'Extrude Test Document',
+        parts: [
+          AssemblyPart(
+            id: 'right_rail',
+            name: 'Right Side Rail',
+            type: AssemblyPartType.straightRail,
+            color: const Color(0xFF1565C0),
+            thickness: 3.0,
+          )..saveBaseMeshSnapshot(),
+        ],
+      );
+
+      final plane = CADSketchPlane(
+        id: 'sketch_cut_plane',
+        name: 'Cut Sketch',
+        origin: vm_math.Vector3(0, 0, 0),
+        normal: vm_math.Vector3(0, 0, 1),
+        up: vm_math.Vector3(0, 1, 0),
+        targetPartId: 'right_rail',
+      );
+      plane.primitives.add(
+        CADCircleEntity(id: 'hole_circle', center: const Offset(20, 20), radius: 8),
+      );
+
+      // Step 1: Create 'New Body' extrude feature
+      final extrudeFeature = AssemblyTimelineItem(
+        id: 'feat_extrude_1',
+        name: 'Extrude 1',
+        kind: AssemblyFeatureKind.extrude,
+        parentSketchId: plane.id,
+        targetProfileIds: {'hole_circle'},
+        extrudeSpec: ExtrudeFeatureSpec(
+          featureId: 'feat_extrude_1',
+          sketchId: plane.id,
+          targetProfileIds: {'hole_circle'},
+          depthMm: 25.0,
+          operation: 'newBody',
+          targetPartId: 'right_rail',
+        ),
+      );
+      doc.featureTree.add(extrudeFeature);
+
+      AssemblyExtrudeEngine.rebuildFeatureTimeline(
+        doc: doc,
+        allPlanes: [plane],
+      );
+
+      expect(doc.parts.any((p) => p.createdByFeatureId == 'feat_extrude_1'), isTrue);
+      expect(doc.parts.length, equals(2));
+
+      // Step 2: Edit 'Extrude 1' to 'cut' operation
+      extrudeFeature.extrudeSpec = ExtrudeFeatureSpec(
+        featureId: 'feat_extrude_1',
+        sketchId: plane.id,
+        targetProfileIds: {'hole_circle'},
+        depthMm: 25.0,
+        operation: 'cut',
+        targetPartId: 'right_rail',
+      );
+
+      AssemblyExtrudeEngine.rebuildFeatureTimeline(
+        doc: doc,
+        allPlanes: [plane],
+      );
+
+      // Previous 'Extruded Body' is removed
+      expect(doc.parts.any((p) => p.createdByFeatureId == 'feat_extrude_1'), isFalse);
+      expect(doc.parts.length, equals(1));
+
+      // Right rail registered the hole cut
+      final rail = doc.parts.firstWhere((p) => p.id == 'right_rail');
+      expect(rail.cutHoles.length, equals(1));
+      expect(rail.cutHoles.first.diameterMm, closeTo(16.0, 1e-4));
     });
   });
 }
