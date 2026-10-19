@@ -99,6 +99,16 @@ class DxfParsedData {
 }
 
 class DxfMiniParser {
+  static double _requiredDouble(String value, int groupCode, String entityType) {
+    final parsed = double.tryParse(value);
+    if (parsed == null || !parsed.isFinite) {
+      throw FormatException(
+        '$entityType has an invalid numeric value for DXF group code $groupCode: "$value".',
+      );
+    }
+    return parsed;
+  }
+
   /// Parses ASCII DXF string content into [DxfParsedData].
   static DxfParsedData parse(String dxfContent) {
     final lines = const LineSplitter().convert(dxfContent);
@@ -179,15 +189,14 @@ class DxfMiniParser {
 
   static (DxfRawLine?, int) _parseLine(List<String> lines, int startIdx) {
     int idx = startIdx;
-    double x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+    double? x1, y1, x2, y2;
     String layer = '0';
     int color = 7;
 
     while (idx < lines.length - 1) {
       final code = int.tryParse(lines[idx].trim()) ?? -1;
       final val = lines[idx + 1].trim();
-
-      if (code == 0) break; // Next entity started
+      if (code == 0) break;
       idx += 2;
 
       switch (code) {
@@ -198,18 +207,22 @@ class DxfMiniParser {
           color = int.tryParse(val) ?? 7;
           break;
         case 10:
-          x1 = double.tryParse(val) ?? 0;
+          x1 = _requiredDouble(val, code, 'LINE');
           break;
         case 20:
-          y1 = double.tryParse(val) ?? 0;
+          y1 = _requiredDouble(val, code, 'LINE');
           break;
         case 11:
-          x2 = double.tryParse(val) ?? 0;
+          x2 = _requiredDouble(val, code, 'LINE');
           break;
         case 21:
-          y2 = double.tryParse(val) ?? 0;
+          y2 = _requiredDouble(val, code, 'LINE');
           break;
       }
+    }
+
+    if (x1 == null || y1 == null || x2 == null || y2 == null) {
+      throw FormatException('LINE is missing a required coordinate group (10, 20, 11, or 21).');
     }
 
     return (
@@ -234,7 +247,6 @@ class DxfMiniParser {
     while (idx < lines.length - 1) {
       final code = int.tryParse(lines[idx].trim()) ?? -1;
       final val = lines[idx + 1].trim();
-
       if (code == 0) break;
       idx += 2;
 
@@ -250,18 +262,24 @@ class DxfMiniParser {
           isClosed = (flags & 1) == 1;
           break;
         case 10:
-          curX = double.tryParse(val);
+          if (curX != null) {
+            throw FormatException('LWPOLYLINE has an x coordinate without a matching y coordinate.');
+          }
+          curX = _requiredDouble(val, code, 'LWPOLYLINE');
           break;
         case 20:
-          if (curX != null) {
-            final curY = double.tryParse(val) ?? 0;
-            vertices.add(CadPoint2D(curX, curY));
-            curX = null;
+          if (curX == null) {
+            throw FormatException('LWPOLYLINE has a y coordinate without a matching x coordinate.');
           }
+          vertices.add(CadPoint2D(curX, _requiredDouble(val, code, 'LWPOLYLINE')));
+          curX = null;
           break;
       }
     }
 
+    if (curX != null) {
+      throw FormatException('LWPOLYLINE is missing a y coordinate for its final vertex.');
+    }
     if (vertices.isEmpty) return (null, idx);
     return (
       DxfRawPolyline(
@@ -281,12 +299,10 @@ class DxfMiniParser {
     int color = 7;
     bool isClosed = false;
 
-    // Read POLYLINE header tags
     while (idx < lines.length - 1) {
       final code = int.tryParse(lines[idx].trim()) ?? -1;
       final val = lines[idx + 1].trim();
-
-      if (code == 0) break; // Next entity (typically VERTEX)
+      if (code == 0) break;
       idx += 2;
 
       switch (code) {
@@ -303,22 +319,23 @@ class DxfMiniParser {
       }
     }
 
-    // Read following VERTEX entities until SEQEND or next entity
     while (idx < lines.length - 1) {
       final code = int.tryParse(lines[idx].trim()) ?? -1;
       final val = lines[idx + 1].trim().toUpperCase();
-
       if (code == 0) {
         if (val == 'VERTEX') {
           idx += 2;
-          double vx = 0.0, vy = 0.0;
+          double? vx, vy;
           while (idx < lines.length - 1) {
             final vCode = int.tryParse(lines[idx].trim()) ?? -1;
             final vVal = lines[idx + 1].trim();
             if (vCode == 0) break;
             idx += 2;
-            if (vCode == 10) vx = double.tryParse(vVal) ?? 0.0;
-            if (vCode == 20) vy = double.tryParse(vVal) ?? 0.0;
+            if (vCode == 10) vx = _requiredDouble(vVal, vCode, 'POLYLINE VERTEX');
+            if (vCode == 20) vy = _requiredDouble(vVal, vCode, 'POLYLINE VERTEX');
+          }
+          if (vx == null || vy == null) {
+            throw FormatException('POLYLINE VERTEX is missing a required coordinate group (10 or 20).');
           }
           vertices.add(CadPoint2D(vx, vy));
         } else if (val == 'SEQEND') {
@@ -351,14 +368,13 @@ class DxfMiniParser {
 
   static (DxfRawCircle?, int) _parseCircle(List<String> lines, int startIdx) {
     int idx = startIdx;
-    double cx = 0, cy = 0, r = 0;
+    double? cx, cy, r;
     String layer = '0';
     int color = 7;
 
     while (idx < lines.length - 1) {
       final code = int.tryParse(lines[idx].trim()) ?? -1;
       final val = lines[idx + 1].trim();
-
       if (code == 0) break;
       idx += 2;
 
@@ -370,17 +386,20 @@ class DxfMiniParser {
           color = int.tryParse(val) ?? 7;
           break;
         case 10:
-          cx = double.tryParse(val) ?? 0;
+          cx = _requiredDouble(val, code, 'CIRCLE');
           break;
         case 20:
-          cy = double.tryParse(val) ?? 0;
+          cy = _requiredDouble(val, code, 'CIRCLE');
           break;
         case 40:
-          r = double.tryParse(val) ?? 0;
+          r = _requiredDouble(val, code, 'CIRCLE');
           break;
       }
     }
 
+    if (cx == null || cy == null || r == null || r <= 0) {
+      throw FormatException('CIRCLE has missing coordinates or a non-positive radius.');
+    }
     return (
       DxfRawCircle(
         center: CadPoint2D(cx, cy),
@@ -394,14 +413,13 @@ class DxfMiniParser {
 
   static (DxfRawArc?, int) _parseArc(List<String> lines, int startIdx) {
     int idx = startIdx;
-    double cx = 0, cy = 0, r = 0, startA = 0, endA = 0;
+    double? cx, cy, r, startA, endA;
     String layer = '0';
     int color = 7;
 
     while (idx < lines.length - 1) {
       final code = int.tryParse(lines[idx].trim()) ?? -1;
       final val = lines[idx + 1].trim();
-
       if (code == 0) break;
       idx += 2;
 
@@ -413,23 +431,26 @@ class DxfMiniParser {
           color = int.tryParse(val) ?? 7;
           break;
         case 10:
-          cx = double.tryParse(val) ?? 0;
+          cx = _requiredDouble(val, code, 'ARC');
           break;
         case 20:
-          cy = double.tryParse(val) ?? 0;
+          cy = _requiredDouble(val, code, 'ARC');
           break;
         case 40:
-          r = double.tryParse(val) ?? 0;
+          r = _requiredDouble(val, code, 'ARC');
           break;
         case 50:
-          startA = double.tryParse(val) ?? 0;
+          startA = _requiredDouble(val, code, 'ARC');
           break;
         case 51:
-          endA = double.tryParse(val) ?? 0;
+          endA = _requiredDouble(val, code, 'ARC');
           break;
       }
     }
 
+    if (cx == null || cy == null || r == null || r <= 0 || startA == null || endA == null) {
+      throw FormatException('ARC has missing coordinates/angles or a non-positive radius.');
+    }
     return (
       DxfRawArc(
         center: CadPoint2D(cx, cy),
@@ -445,7 +466,7 @@ class DxfMiniParser {
 
   static (DxfRawText?, int) _parseText(List<String> lines, int startIdx) {
     int idx = startIdx;
-    double x = 0, y = 0;
+    double? x, y;
     String text = '';
     String layer = '0';
     int color = 7;
@@ -453,7 +474,6 @@ class DxfMiniParser {
     while (idx < lines.length - 1) {
       final code = int.tryParse(lines[idx].trim()) ?? -1;
       final val = lines[idx + 1].trim();
-
       if (code == 0) break;
       idx += 2;
 
@@ -468,12 +488,29 @@ class DxfMiniParser {
           color = int.tryParse(val) ?? 7;
           break;
         case 10:
-          x = double.tryParse(val) ?? 0;
+          x = _requiredDouble(val, code, 'TEXT');
           break;
         case 20:
-          y = double.tryParse(val) ?? 0;
+          y = _requiredDouble(val, code, 'TEXT');
           break;
       }
+    }
+
+    if (x == null || y == null) {
+      throw FormatException('TEXT is missing a required insertion coordinate group (10 or 20).');
+    }
+    return (
+      DxfRawText(
+        text: text,
+        position: CadPoint2D(x, y),
+        layer: layer,
+        colorIndex: color,
+      ),
+      idx
+    );
+  }
+}
+}
     }
 
     return (
