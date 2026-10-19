@@ -510,17 +510,3 @@ class DxfMiniParser {
     );
   }
 }
-}
-    }
-
-    return (
-      DxfRawText(
-        text: text,
-        position: CadPoint2D(x, y),
-        layer: layer,
-        colorIndex: color,
-      ),
-      idx
-    );
-  }
-}
