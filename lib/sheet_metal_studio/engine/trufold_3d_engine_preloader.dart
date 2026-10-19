@@ -11,7 +11,7 @@
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_scene/scene.dart';
+import 'cad_brep_flutter_gpu_scene.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 
 /// Callback for real-time progress updates during 3D engine preloading.

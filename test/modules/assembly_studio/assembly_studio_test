@@ -1,9 +1,9 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_scene/scene.dart';
 import 'package:vector_math/vector_math.dart' as vm_math;
 
 import 'package:trufold_studio/assembly_studio/models/assembly_compliance.dart';
@@ -69,14 +69,7 @@ void main() {
     });
 
     test('creates slotted C-channel rung with obround slots', () {
-      final rung = AssemblyPart(
-        id: 'rung_test_1',
-        name: 'Slotted Rung',
-        type: AssemblyPartType.rung,
-        length: 600.0,
-        height: 20.0,
-        flangeWidth: 20.0,
-      );
+      final rung = AssemblyPart(id: 'rung_test_1', name: 'Slotted Rung', type: AssemblyPartType.rung, length: 600.0, height: 20.0, flangeWidth: 20.0);
 
       final mesh = rung.build3DMesh();
       expect(mesh.polygons.isNotEmpty, isTrue);
@@ -150,12 +143,7 @@ void main() {
 
       final initialSketchCount = vm.selectedPart!.sketches.length;
 
-      vm.addSketchFeature(
-        featureType: 'circle_hole',
-        localCenter: const CadPoint2D(150.0, 50.0),
-        widthMm: 12.0,
-        heightMm: 12.0,
-      );
+      vm.addSketchFeature(featureType: 'circle_hole', localCenter: const CadPoint2D(150.0, 50.0), widthMm: 12.0, heightMm: 12.0);
 
       final rail = vm.doc.parts.firstWhere((p) => p.id == 'rail_left');
       expect(rail.sketches.length, initialSketchCount + 1);
@@ -203,11 +191,7 @@ void main() {
       final newRungId = vm.selectedPart!.id;
 
       // 3. Link C-channel rung to the punched slot entity (Pass-Through style)
-      vm.linkRungToSlot(
-        rungPartId: newRungId,
-        slotEntityId: punchedSlot.id,
-        mateStyle: 'passThrough',
-      );
+      vm.linkRungToSlot(rungPartId: newRungId, slotEntityId: punchedSlot.id, mateStyle: 'passThrough');
 
       final matedRung = vm.doc.parts.firstWhere((p) => p.id == newRungId);
       expect(matedRung.parentPartId, rail.id);
@@ -326,12 +310,7 @@ void main() {
       final rail = vm.selectedPart!;
 
       // Add circle hole at (100, 30)
-      vm.addSketchFeature(
-        featureType: 'circle_hole',
-        localCenter: const CadPoint2D(100.0, 30.0),
-        widthMm: 12.0,
-        heightMm: 12.0,
-      );
+      vm.addSketchFeature(featureType: 'circle_hole', localCenter: const CadPoint2D(100.0, 30.0), widthMm: 12.0, heightMm: 12.0);
       final hole = rail.sketches.last;
       expect(hole.localCenter.x, 100.0);
       expect(hole.localCenter.y, 30.0);
@@ -348,12 +327,7 @@ void main() {
       final rail = vm.selectedPart!;
 
       // Add a bend line at X = 250mm
-      vm.addSketchFeature(
-        featureType: 'bend_line',
-        localCenter: const CadPoint2D(250.0, 50.0),
-        widthMm: 2.0,
-        heightMm: 100.0,
-      );
+      vm.addSketchFeature(featureType: 'bend_line', localCenter: const CadPoint2D(250.0, 50.0), widthMm: 2.0, heightMm: 100.0);
       final bend = rail.sketches.last;
       expect(bend.featureType, 'bend_line');
       expect(bend.localCenter.x, 250.0);
@@ -379,18 +353,8 @@ void main() {
       // Add C-channel
       vm.addChannel(length: 800.0, webHeight: 80.0, flangeWidth: 40.0);
       final channel = vm.selectedPart!;
-      vm.addSketchFeature(
-        featureType: 'circle_hole',
-        localCenter: const CadPoint2D(120.0, 40.0),
-        widthMm: 14.0,
-        heightMm: 14.0,
-      );
-      vm.addSketchFeature(
-        featureType: 'bend_line',
-        localCenter: const CadPoint2D(400.0, 40.0),
-        widthMm: 2.0,
-        heightMm: 80.0,
-      );
+      vm.addSketchFeature(featureType: 'circle_hole', localCenter: const CadPoint2D(120.0, 40.0), widthMm: 14.0, heightMm: 14.0);
+      vm.addSketchFeature(featureType: 'bend_line', localCenter: const CadPoint2D(400.0, 40.0), widthMm: 2.0, heightMm: 80.0);
 
       final chMesh = channel.build3DMesh();
       final webPoly = chMesh.polygons.firstWhere((p) => p.faceId.contains('web'));
@@ -400,12 +364,7 @@ void main() {
       // Add I-beam
       vm.addIBeam(length: 1000.0, height: 120.0, flangeWidth: 70.0);
       final iBeam = vm.selectedPart!;
-      vm.addSketchFeature(
-        featureType: 'obround_slot',
-        localCenter: const CadPoint2D(200.0, 60.0),
-        widthMm: 30.0,
-        heightMm: 15.0,
-      );
+      vm.addSketchFeature(featureType: 'obround_slot', localCenter: const CadPoint2D(200.0, 60.0), widthMm: 30.0, heightMm: 15.0);
       final ibMesh = iBeam.build3DMesh();
       final ibWeb = ibMesh.polygons.firstWhere((p) => p.faceId.contains('web'));
       expect(ibWeb.holes.isNotEmpty, isTrue);
@@ -433,14 +392,9 @@ void main() {
       final initialCount = vm.doc.parts.length;
 
       // User selects a part in Common Parts palette
-      vm.setPendingPlacement(const PendingPartPlacement(
-        type: AssemblyPartType.channel,
-        name: '75x35mm C-Channel',
-        length: 1500.0,
-        height: 75.0,
-        flangeWidth: 35.0,
-        thickness: 3.0,
-      ));
+      vm.setPendingPlacement(
+        const PendingPartPlacement(type: AssemblyPartType.channel, name: '75x35mm C-Channel', length: 1500.0, height: 75.0, flangeWidth: 35.0, thickness: 3.0),
+      );
 
       // Part must NOT be added immediately to the drawing board!
       expect(vm.doc.parts.length, initialCount);
@@ -453,14 +407,9 @@ void main() {
       expect(vm.doc.parts.length, initialCount);
 
       // Re-set and place at clicked 3D point on the drawing board
-      vm.setPendingPlacement(const PendingPartPlacement(
-        type: AssemblyPartType.channel,
-        name: '75x35mm C-Channel',
-        length: 1500.0,
-        height: 75.0,
-        flangeWidth: 35.0,
-        thickness: 3.0,
-      ));
+      vm.setPendingPlacement(
+        const PendingPartPlacement(type: AssemblyPartType.channel, name: '75x35mm C-Channel', length: 1500.0, height: 75.0, flangeWidth: 35.0, thickness: 3.0),
+      );
 
       final placedPart = vm.placePendingPartAt(const CadPoint3D(350.0, 0.0, 500.0));
       expect(placedPart, isNotNull);
@@ -866,9 +815,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: Assembly3DViewport(viewModel: vm),
-          ),
+          home: Scaffold(body: Assembly3DViewport(viewModel: vm)),
         ),
       );
       await tester.pumpAndSettle();
@@ -903,16 +850,11 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 1000,
-              height: 800,
-              child: Assembly3DViewport(viewModel: vm),
-            ),
+            body: SizedBox(width: 1000, height: 800, child: Assembly3DViewport(viewModel: vm)),
           ),
         ),
       );
       await tester.pumpAndSettle();
-
 
       // 1. Tapping empty canvas on the left ('O' in user screenshot) never selects any rung
       await tester.tapAt(const Offset(150.0, 400.0));
@@ -938,11 +880,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 1000,
-              height: 800,
-              child: Assembly3DViewport(viewModel: vm),
-            ),
+            body: SizedBox(width: 1000, height: 800, child: Assembly3DViewport(viewModel: vm)),
           ),
         ),
       );
@@ -982,8 +920,11 @@ void main() {
       await gesture2.up();
       await tester.pumpAndSettle();
 
-      expect(rung2.position.x != originalPos.x || rung2.position.y != originalPos.y || rung2.position.z != originalPos.z,
-          isTrue, reason: 'Part must move when move tool is active');
+      expect(
+        rung2.position.x != originalPos.x || rung2.position.y != originalPos.y || rung2.position.z != originalPos.z,
+        isTrue,
+        reason: 'Part must move when move tool is active',
+      );
 
       // 3. In Rotate mode: Dragging the part should rotate in place (position remains unchanged!)
       final posBeforeRotate = CadPoint3D(rung2.position.x, rung2.position.y, rung2.position.z);
@@ -1017,11 +958,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 1000,
-              height: 800,
-              child: Assembly3DViewport(viewModel: vm),
-            ),
+            body: SizedBox(width: 1000, height: 800, child: Assembly3DViewport(viewModel: vm)),
           ),
         ),
       );
@@ -1077,8 +1014,7 @@ void main() {
       await gestureFreeMove.up();
       await tester.pumpAndSettle();
 
-      expect(rung2.position.x != initialPos.x || rung2.position.y != initialPos.y, isTrue,
-          reason: 'Entity becomes movable once bond/weld is broken');
+      expect(rung2.position.x != initialPos.x || rung2.position.y != initialPos.y, isTrue, reason: 'Entity becomes movable once bond/weld is broken');
     });
 
     test('Phase 1: Measurements VCB & Linear Array Multiplier (*N)', () {
@@ -1089,10 +1025,7 @@ void main() {
       final rung = vm.doc.parts.firstWhere((p) => p.type == AssemblyPartType.rung);
 
       // Record a manual move delta of 250mm along Z
-      vm.recordLastMove(
-        partId: rung.id,
-        delta: const CadPoint3D(0.0, 0.0, 250.0),
-      );
+      vm.recordLastMove(partId: rung.id, delta: const CadPoint3D(0.0, 0.0, 250.0));
 
       // User types *4 into the Measurements VCB to create 4 total instances (3 copies)
       final success = vm.submitVcbInput('*4');
@@ -1119,10 +1052,7 @@ void main() {
       final initialZ = rung.position.z;
       // User moved rung to the end of the span (+900mm along Z)
       rung.position = CadPoint3D(rung.position.x, rung.position.y, initialZ + 900.0);
-      vm.recordLastMove(
-        partId: rung.id,
-        delta: const CadPoint3D(0.0, 0.0, 900.0),
-      );
+      vm.recordLastMove(partId: rung.id, delta: const CadPoint3D(0.0, 0.0, 900.0));
 
       // User types /3 to divide span into 3 segments (places 2 intermediate rungs at 300mm and 600mm)
       final success = vm.submitVcbInput('/3');
@@ -1198,9 +1128,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: Assembly3DViewport(viewModel: vm),
-          ),
+          home: Scaffold(body: Assembly3DViewport(viewModel: vm)),
         ),
       );
       await tester.pumpAndSettle();
@@ -1233,14 +1161,7 @@ void main() {
           height: 100.0,
           flangeWidth: 30.0,
         ),
-        AssemblyPart(
-          id: 'test_boxtube',
-          name: 'Box Tube Stile',
-          type: AssemblyPartType.boxTubeStile,
-          length: 2000.0,
-          height: 60.0,
-          flangeWidth: 40.0,
-        ),
+        AssemblyPart(id: 'test_boxtube', name: 'Box Tube Stile', type: AssemblyPartType.boxTubeStile, length: 2000.0, height: 60.0, flangeWidth: 40.0),
         AssemblyPart(
           id: 'test_diamond_rung',
           name: 'Diamond Grip-Strut',
@@ -1249,22 +1170,8 @@ void main() {
           height: 40.0,
           flangeWidth: 20.0,
         ),
-        AssemblyPart(
-          id: 'test_step_tread',
-          name: 'Wide Step Tread',
-          type: AssemblyPartType.wideStepTread,
-          length: 500.0,
-          height: 80.0,
-          flangeWidth: 25.0,
-        ),
-        AssemblyPart(
-          id: 'test_bell_hoop',
-          name: 'Bell Entry Hoop',
-          type: AssemblyPartType.safetyCageBellHoop,
-          length: 50.0,
-          height: 700.0,
-          flangeWidth: 700.0,
-        ),
+        AssemblyPart(id: 'test_step_tread', name: 'Wide Step Tread', type: AssemblyPartType.wideStepTread, length: 500.0, height: 80.0, flangeWidth: 25.0),
+        AssemblyPart(id: 'test_bell_hoop', name: 'Bell Entry Hoop', type: AssemblyPartType.safetyCageBellHoop, length: 50.0, height: 700.0, flangeWidth: 700.0),
         AssemblyPart(
           id: 'test_standard_hoop',
           name: 'Standard Cage Hoop',
@@ -1273,14 +1180,7 @@ void main() {
           height: 700.0,
           flangeWidth: 700.0,
         ),
-        AssemblyPart(
-          id: 'test_strap',
-          name: 'Vertical Cage Strap',
-          type: AssemblyPartType.cageStrap,
-          length: 2000.0,
-          height: 30.0,
-          flangeWidth: 30.0,
-        ),
+        AssemblyPart(id: 'test_strap', name: 'Vertical Cage Strap', type: AssemblyPartType.cageStrap, length: 2000.0, height: 30.0, flangeWidth: 30.0),
         AssemblyPart(
           id: 'test_standoff',
           name: 'Wall Standoff Bracket',
@@ -1289,29 +1189,9 @@ void main() {
           height: 80.0,
           flangeWidth: 50.0,
         ),
-        AssemblyPart(
-          id: 'test_foot_plate',
-          name: 'Base Anchor Shoe Plate',
-          type: AssemblyPartType.baseFootPlate,
-          length: 120.0,
-          height: 100.0,
-          thickness: 6.0,
-        ),
-        AssemblyPart(
-          id: 'test_splice',
-          name: 'Stile Splice Fishplate',
-          type: AssemblyPartType.splicePlate,
-          length: 250.0,
-          height: 80.0,
-          thickness: 3.0,
-        ),
-        AssemblyPart(
-          id: 'test_gate',
-          name: 'OSHA Safety Swing Gate',
-          type: AssemblyPartType.swingGate,
-          length: 600.0,
-          height: 420.0,
-        ),
+        AssemblyPart(id: 'test_foot_plate', name: 'Base Anchor Shoe Plate', type: AssemblyPartType.baseFootPlate, length: 120.0, height: 100.0, thickness: 6.0),
+        AssemblyPart(id: 'test_splice', name: 'Stile Splice Fishplate', type: AssemblyPartType.splicePlate, length: 250.0, height: 80.0, thickness: 3.0),
+        AssemblyPart(id: 'test_gate', name: 'OSHA Safety Swing Gate', type: AssemblyPartType.swingGate, length: 600.0, height: 420.0),
       ];
 
       for (final part in accessories) {
@@ -1334,13 +1214,7 @@ void main() {
       final initialWeldCount = vm.doc.welds.length;
 
       // Generate cage
-      vm.generateSafetyCageAssembly(
-        startHeight: 400.0,
-        totalHeight: 1000.0,
-        hoopDiameter: 700.0,
-        strapCount: 5,
-        hoopSpacing: 300.0,
-      );
+      vm.generateSafetyCageAssembly(startHeight: 400.0, totalHeight: 1000.0, hoopDiameter: 700.0, strapCount: 5, hoopSpacing: 300.0);
 
       expect(vm.doc.parts.length, greaterThan(initialPartCount));
       expect(vm.doc.welds.length, greaterThan(initialWeldCount));
@@ -1426,12 +1300,7 @@ void main() {
         AssemblyPartType.splicePlate,
         AssemblyPartType.swingGate,
       ]) {
-        vm.setPendingPlacement(PendingPartPlacement(
-          type: type,
-          name: 'Test ${type.name}',
-          length: 500.0,
-          height: 100.0,
-        ));
+        vm.setPendingPlacement(PendingPartPlacement(type: type, name: 'Test ${type.name}', length: 500.0, height: 100.0));
         final placed = vm.placePendingPartAt(const CadPoint3D(100.0, 200.0, 50.0));
         expect(placed, isNotNull);
         expect(placed!.type, equals(type));
@@ -1490,10 +1359,7 @@ void main() {
       );
       vm.doc.parts.add(template);
 
-      vm.recordLastMove(
-        partId: template.id,
-        delta: const CadPoint3D(0.0, 0.0, 300.0),
-      );
+      vm.recordLastMove(partId: template.id, delta: const CadPoint3D(0.0, 0.0, 300.0));
       vm.createLinearArray(4); // 4 total copies
 
       final rungs = vm.doc.parts.where((p) => p.type == AssemblyPartType.diamondGripRung).toList();
@@ -1572,12 +1438,7 @@ void main() {
 
       // 2. Off-Center Pivot Rotation record
       const customPivot = CadPoint3D(100.0, 0.0, 0.0);
-      vm.recordLastRotate(
-        partId: part.id,
-        deltaDeg: 45.0,
-        centerPoint: customPivot,
-        axis: GizmoAxis.z,
-      );
+      vm.recordLastRotate(partId: part.id, deltaDeg: 45.0, centerPoint: customPivot, axis: GizmoAxis.z);
       expect(vm.lastRotateCenterPoint, equals(customPivot));
       expect(vm.lastRotateAxis, equals(GizmoAxis.z));
 
@@ -1589,20 +1450,14 @@ void main() {
 
       // Verify that all copies orbit around the custom pivot (distance from pivot is ~100mm)
       for (final b in brackets) {
-        final dist = (b.position.x - customPivot.x) * (b.position.x - customPivot.x) +
-            (b.position.y - customPivot.y) * (b.position.y - customPivot.y);
+        final dist = (b.position.x - customPivot.x) * (b.position.x - customPivot.x) + (b.position.y - customPivot.y) * (b.position.y - customPivot.y);
         expect(dist, closeTo(10000.0, 1.0));
       }
 
       // 4. Radial divide via VCB /2 around custom pivot
       vm.doc.parts.clear();
       vm.doc.parts.add(part);
-      vm.recordLastRotate(
-        partId: part.id,
-        deltaDeg: 90.0,
-        centerPoint: customPivot,
-        axis: GizmoAxis.z,
-      );
+      vm.recordLastRotate(partId: part.id, deltaDeg: 90.0, centerPoint: customPivot, axis: GizmoAxis.z);
       final handledDivide = vm.submitVcbInput('/2');
       expect(handledDivide, isTrue);
       final dividedBrackets = vm.doc.parts.where((p) => p.name.startsWith('Rotated Bracket')).toList();
@@ -1641,12 +1496,7 @@ void main() {
       expect(vm.bridgeSourcePartId, equals(stileLeft.id));
 
       // Click second stile -> auto spans bridge rung & creates dual welds!
-      final bridgedRung = vm.bridgeParts(
-        stileLeft.id,
-        stileRight.id,
-        distanceX: 500.0,
-        rungType: AssemblyPartType.diamondGripRung,
-      );
+      final bridgedRung = vm.bridgeParts(stileLeft.id, stileRight.id, distanceX: 500.0, rungType: AssemblyPartType.diamondGripRung);
       expect(bridgedRung, isNotNull);
       expect(bridgedRung!.length, 450.0); // Exact span distance!
       expect(bridgedRung.position.x, 500.0);
@@ -1677,9 +1527,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: AssemblyInspectorPanel(viewModel: vm),
-          ),
+          home: Scaffold(body: AssemblyInspectorPanel(viewModel: vm)),
         ),
       );
       await tester.pumpAndSettle();
@@ -1703,33 +1551,13 @@ void main() {
       final rail = vm.doc.parts.firstWhere((p) => p.type == AssemblyPartType.straightRail);
 
       // Punch void circular hole on web
-      vm.punchVoidHole(
-        partId: rail.id,
-        targetFace: 'web',
-        localCenter: const CadPoint2D(200.0, 40.0),
-        shape: 'circle_hole',
-        widthMm: 16.0,
-      );
+      vm.punchVoidHole(partId: rail.id, targetFace: 'web', localCenter: const CadPoint2D(200.0, 40.0), shape: 'circle_hole', widthMm: 16.0);
 
       // Punch void obround slot on web
-      vm.punchVoidHole(
-        partId: rail.id,
-        targetFace: 'web',
-        localCenter: const CadPoint2D(500.0, 40.0),
-        shape: 'obround_slot',
-        widthMm: 50.0,
-        heightMm: 20.0,
-      );
+      vm.punchVoidHole(partId: rail.id, targetFace: 'web', localCenter: const CadPoint2D(500.0, 40.0), shape: 'obround_slot', widthMm: 50.0, heightMm: 20.0);
 
       // Punch rectangular cutout on top flange
-      vm.punchVoidHole(
-        partId: rail.id,
-        targetFace: 'flange_top',
-        localCenter: const CadPoint2D(350.0, 10.0),
-        shape: 'rect_cut',
-        widthMm: 30.0,
-        heightMm: 15.0,
-      );
+      vm.punchVoidHole(partId: rail.id, targetFace: 'flange_top', localCenter: const CadPoint2D(350.0, 10.0), shape: 'rect_cut', widthMm: 30.0, heightMm: 15.0);
 
       // Verify sketch features created
       expect(rail.sketches.any((s) => s.featureType == 'circle_hole' && s.widthMm == 16.0), isTrue);
@@ -1898,9 +1726,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: Assembly3DViewport(viewModel: vm),
-          ),
+          home: Scaffold(body: Assembly3DViewport(viewModel: vm)),
         ),
       );
       await tester.pumpAndSettle();
@@ -1924,9 +1750,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: AssemblyInspectorPanel(viewModel: vm),
-          ),
+          home: Scaffold(body: AssemblyInspectorPanel(viewModel: vm)),
         ),
       );
       await tester.pumpAndSettle();
@@ -1957,9 +1781,7 @@ void main() {
       // Pump viewport with light background mode active
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: Assembly3DViewport(viewModel: vm),
-          ),
+          home: Scaffold(body: Assembly3DViewport(viewModel: vm)),
         ),
       );
       await tester.pumpAndSettle();
@@ -1988,11 +1810,7 @@ void main() {
       final vm = AssemblyStudioViewModel();
       expect(vm.isLightMode, isTrue);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: AssemblyStudioScreen(viewModel: vm),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(home: AssemblyStudioScreen(viewModel: vm)));
       await tester.pumpAndSettle();
 
       // Initially Light Mode
@@ -2019,11 +1837,7 @@ void main() {
 
     testWidgets('Precision 3D Hit-Testing: Direct click selects exact frontmost entity without proximity stealing', (tester) async {
       final vm = AssemblyStudioViewModel();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: AssemblyStudioScreen(viewModel: vm),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(home: AssemblyStudioScreen(viewModel: vm)));
       await tester.pumpAndSettle();
 
       // Enter direct sketch mode to verify SingleChildScrollView doesn't throw unbounded RenderFlex
@@ -2052,9 +1866,7 @@ void main() {
       expect(dirNorm.z, closeTo(-1.0, 1e-3));
 
       final cameraNode = Node(name: 'CameraNode');
-      final cameraComp = CameraComponent(
-        projection: PerspectiveProjection(fovRadiansY: 45.0 * vm_math.degrees2Radians, near: 1.0, far: 10000.0),
-      );
+      final cameraComp = CameraComponent(projection: PerspectiveProjection(fovRadiansY: 45.0 * vm_math.degrees2Radians, near: 1.0, far: 10000.0));
       cameraNode.addComponent(cameraComp);
       cameraNode.lookAtFrom(vm_math.Vector3(0, 0, 100), vm_math.Vector3(0, 0, 0));
       final nodeCam = cameraComp.toCamera();
@@ -2078,31 +1890,16 @@ void main() {
       final frontPlate = CadFoldedPolygon3D(
         faceId: 'front_plate',
         normal: const CadPoint3D(0, 0, 1),
-        vertices: const [
-          CadPoint3D(-50, -50, 20),
-          CadPoint3D(50, -50, 20),
-          CadPoint3D(50, 50, 20),
-          CadPoint3D(-50, 50, 20),
-        ],
+        vertices: const [CadPoint3D(-50, -50, 20), CadPoint3D(50, -50, 20), CadPoint3D(50, 50, 20), CadPoint3D(-50, 50, 20)],
         holes: const [
-          [
-            CadPoint3D(-10, -10, 20),
-            CadPoint3D(10, -10, 20),
-            CadPoint3D(10, 10, 20),
-            CadPoint3D(-10, 10, 20),
-          ],
+          [CadPoint3D(-10, -10, 20), CadPoint3D(10, -10, 20), CadPoint3D(10, 10, 20), CadPoint3D(-10, 10, 20)],
         ],
       );
 
       final backPlate = CadFoldedPolygon3D(
         faceId: 'back_plate',
         normal: const CadPoint3D(0, 0, 1),
-        vertices: const [
-          CadPoint3D(-50, -50, 0),
-          CadPoint3D(50, -50, 0),
-          CadPoint3D(50, 50, 0),
-          CadPoint3D(-50, 50, 0),
-        ],
+        vertices: const [CadPoint3D(-50, -50, 0), CadPoint3D(50, -50, 0), CadPoint3D(50, 50, 0), CadPoint3D(-50, 50, 0)],
       );
 
       final mesh = FoldedMeshResult(
@@ -2116,11 +1913,7 @@ void main() {
       );
 
       // 1. Ray aimed at solid area of front plate (at x=25, y=25):
-      final hit1 = AssemblyRaycaster.raycast(
-        rayOrigin: vm_math.Vector3(25, 25, 100),
-        rayDirection: vm_math.Vector3(0, 0, -1),
-        mesh: mesh,
-      );
+      final hit1 = AssemblyRaycaster.raycast(rayOrigin: vm_math.Vector3(25, 25, 100), rayDirection: vm_math.Vector3(0, 0, -1), mesh: mesh);
       expect(hit1, isNotNull);
       expect(hit1!.polygon.faceId, equals('front_plate'));
       expect(hit1.distance, closeTo(80.0, 1e-3));
@@ -2128,21 +1921,13 @@ void main() {
 
       // 2. Ray aimed through hole in front plate (at x=0, y=0):
       // Passes through front plate hole, should hit back plate!
-      final hitHole = AssemblyRaycaster.raycast(
-        rayOrigin: vm_math.Vector3(0, 0, 100),
-        rayDirection: vm_math.Vector3(0, 0, -1),
-        mesh: mesh,
-      );
+      final hitHole = AssemblyRaycaster.raycast(rayOrigin: vm_math.Vector3(0, 0, 100), rayDirection: vm_math.Vector3(0, 0, -1), mesh: mesh);
       expect(hitHole, isNotNull);
       expect(hitHole!.polygon.faceId, equals('back_plate'));
       expect(hitHole.distance, closeTo(100.0, 1e-3));
 
       // 3. Ray aimed into empty space (at x=200, y=200):
-      final hitEmpty = AssemblyRaycaster.raycast(
-        rayOrigin: vm_math.Vector3(200, 200, 100),
-        rayDirection: vm_math.Vector3(0, 0, -1),
-        mesh: mesh,
-      );
+      final hitEmpty = AssemblyRaycaster.raycast(rayOrigin: vm_math.Vector3(200, 200, 100), rayDirection: vm_math.Vector3(0, 0, -1), mesh: mesh);
       expect(hitEmpty, isNull);
     });
 
@@ -2217,11 +2002,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 1000,
-              height: 700,
-              child: Assembly3DViewport(viewModel: vm),
-            ),
+            body: SizedBox(width: 1000, height: 700, child: Assembly3DViewport(viewModel: vm)),
           ),
         ),
       );
@@ -2277,11 +2058,7 @@ void main() {
       expect(mesh.allPolygons.any((p) => p.holes.isNotEmpty), isTrue);
 
       try {
-        final node = FlutterSceneCadMeshBuilder.buildCadModel(
-          mesh,
-          renderMode: OnshapeRenderMode.shadedWithEdges,
-          showWireframe: true,
-        );
+        final node = FlutterSceneCadMeshBuilder.buildCadModel(mesh, renderMode: OnshapeRenderMode.shadedWithEdges, showWireframe: true);
         expect(node, isNotNull);
         final edgeNode = node.children.where((n) => n.name == 'CadBoundaryEdges').firstOrNull;
         expect(edgeNode, isNotNull);
@@ -2301,31 +2078,16 @@ void main() {
       final partB = parts[1];
 
       // 1. Add magnetic spots to both parts
-      final spotA = vm.addMagneticSpot(
-        partA.id,
-        const CadPoint3D(100.0, 50.0, 0.0),
-        const CadPoint3D(0.0, 0.0, 1.0),
-        name: 'Spot A',
-      );
+      final spotA = vm.addMagneticSpot(partA.id, const CadPoint3D(100.0, 50.0, 0.0), const CadPoint3D(0.0, 0.0, 1.0), name: 'Spot A');
       expect(spotA, isNotNull);
       expect(vm.doc.parts.firstWhere((p) => p.id == partA.id).magneticSpots.length, 1);
 
-      final spotB = vm.addMagneticSpot(
-        partB.id,
-        const CadPoint3D(20.0, 30.0, 0.0),
-        const CadPoint3D(0.0, 0.0, -1.0),
-        name: 'Spot B',
-      );
+      final spotB = vm.addMagneticSpot(partB.id, const CadPoint3D(20.0, 30.0, 0.0), const CadPoint3D(0.0, 0.0, -1.0), name: 'Spot B');
       expect(spotB, isNotNull);
       expect(vm.doc.parts.firstWhere((p) => p.id == partB.id).magneticSpots.length, 1);
 
       // 2. Couple the spots with a magnetic joint (attracts part B to part A)
-      final success = vm.createMagneticJoint(
-        partAId: partA.id,
-        spotAId: spotA!.id,
-        partBId: partB.id,
-        spotBId: spotB!.id,
-      );
+      final success = vm.createMagneticJoint(partAId: partA.id, spotAId: spotA!.id, partBId: partB.id, spotBId: spotB!.id);
       expect(success, isTrue);
       expect(vm.doc.magneticJoints.length, 1);
       expect(vm.isPartMagneticallyLinked(partA.id), isTrue);
@@ -2376,7 +2138,3 @@ void main() {
     });
   });
 }
-
-
-
-

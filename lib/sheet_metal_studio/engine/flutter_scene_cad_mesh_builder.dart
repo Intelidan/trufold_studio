@@ -2,7 +2,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' show Color;
 
-import 'package:flutter_scene/scene.dart';
+import 'cad_brep_flutter_gpu_scene.dart';
+export 'cad_brep_flutter_gpu_scene.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 import '../models/cad_primitives.dart';
 import '../viewmodels/sheet_metal_studio_viewmodel.dart';
@@ -18,6 +19,12 @@ class FlutterSceneCadMeshBuilder {
   static double _srgbToLinear(double s) {
     final c = s.clamp(0.0, 1.0);
     return c <= 0.04045 ? c / 12.92 : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
+  }
+
+  /// Converts a Linear RGB channel [0..1] back to sRGB [0..1] for B-Rep CustomPaint + flutter_gpu rendering.
+  static double _linearToSrgb(double l) {
+    final c = l.clamp(0.0, 1.0);
+    return c <= 0.0031308 ? c * 12.92 : (1.055 * math.pow(c, 1.0 / 2.4).toDouble() - 0.055);
   }
 
   /// Computes Onshape Studio 3-Light + Hemisphere + Crevice AO Linear RGB color for a face.
@@ -115,6 +122,7 @@ class FlutterSceneCadMeshBuilder {
 
     final opaqueBuilder = GeometryBuilder(deduplicate: false);
     final translucentBuilder = GeometryBuilder(deduplicate: false);
+    final resolvedFaceColors = <String, Color>{};
 
     // Collect outer boundary lines for wireframe (single border line per segment)
     final List<(CadPoint3D, CadPoint3D)> rawBoundarySegs = [];
@@ -201,6 +209,12 @@ class FlutterSceneCadMeshBuilder {
       }
 
       currentBuilder.color(faceColor);
+      resolvedFaceColors[poly.faceId] = Color.from(
+        alpha: faceColor.w.clamp(0.0, 1.0),
+        red: _linearToSrgb(faceColor.x).clamp(0.0, 1.0),
+        green: _linearToSrgb(faceColor.y).clamp(0.0, 1.0),
+        blue: _linearToSrgb(faceColor.z).clamp(0.0, 1.0),
+      );
 
       // Normal
       final n = poly.normal;
@@ -437,6 +451,23 @@ class FlutterSceneCadMeshBuilder {
       final tangentNode = Node(name: 'CadPhantomTangentEdges', mesh: tangentMesh);
       rootNode.add(tangentNode);
     }
+
+    rootNode.brepModelData = CadBRepModelData(
+      meshResult: meshResult,
+      selectedFaceId: selectedFaceId,
+      hoveredFaceId: hoveredFaceId,
+      showWireframe: showWireframe,
+      baseColorOverride: baseColorOverride,
+      preferences: preferences,
+      renderMode: renderMode,
+      hiddenPartIds: hiddenPartIds,
+      isolatedPartIds: isolatedPartIds,
+      transparentPartIds: transparentPartIds,
+      sectionViewConfig: sectionViewConfig,
+      partColorOverrides: partColorOverrides,
+      pivot: pivot,
+      resolvedFaceColors: resolvedFaceColors,
+    )..compiledBuffers;
 
     return rootNode;
   }

@@ -2,7 +2,7 @@
 
 import 'dart:typed_data';
 
-import 'package:flutter_scene/scene.dart';
+import '../../sheet_metal_studio/engine/cad_brep_flutter_gpu_scene.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 
 import '../cad_parameter_engine/cad_models.dart';

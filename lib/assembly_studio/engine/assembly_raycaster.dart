@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter_scene/scene.dart';
+import '../../sheet_metal_studio/engine/cad_brep_flutter_gpu_scene.dart' hide Material;
 import 'package:vector_math/vector_math.dart' as vm_math;
 
 import '../../sheet_metal_studio/models/cad_primitives.dart';

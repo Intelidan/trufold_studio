@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_scene/scene.dart';
 import 'package:trufold_studio/sheet_metal_studio/engine/cad_polygon_triangulator.dart';
 import 'package:trufold_studio/sheet_metal_studio/models/cad_primitives.dart';
 
@@ -8,18 +7,8 @@ void main() {
 
   test('CadPolygonTriangulator correctly triangulates simple 2D polygon with hole', () {
     // 100x100 square with 40x40 square hole in the center
-    final outer = [
-      0.0, 0.0,
-      100.0, 0.0,
-      100.0, 100.0,
-      0.0, 100.0,
-    ];
-    final hole = [
-      30.0, 30.0,
-      70.0, 30.0,
-      70.0, 70.0,
-      30.0, 70.0,
-    ];
+    final outer = [0.0, 0.0, 100.0, 0.0, 100.0, 100.0, 0.0, 100.0];
+    final hole = [30.0, 30.0, 70.0, 30.0, 70.0, 70.0, 30.0, 70.0];
 
     final flatCoords = [...outer, ...hole];
     final holeIndices = [4]; // hole starts at vertex index 4
@@ -55,18 +44,8 @@ void main() {
   test('CadPolygonTriangulator.triangulateToBuilder triangulates 3D face with cutout hole', () {
     final builder = GeometryBuilder(deduplicate: true);
 
-    final outer3D = [
-      const CadPoint3D(0, 0, 0),
-      const CadPoint3D(100, 0, 0),
-      const CadPoint3D(100, 100, 0),
-      const CadPoint3D(0, 100, 0),
-    ];
-    final hole3D = [
-      const CadPoint3D(30, 30, 0),
-      const CadPoint3D(70, 30, 0),
-      const CadPoint3D(70, 70, 0),
-      const CadPoint3D(30, 70, 0),
-    ];
+    final outer3D = [const CadPoint3D(0, 0, 0), const CadPoint3D(100, 0, 0), const CadPoint3D(100, 100, 0), const CadPoint3D(0, 100, 0)];
+    final hole3D = [const CadPoint3D(30, 30, 0), const CadPoint3D(70, 30, 0), const CadPoint3D(70, 70, 0), const CadPoint3D(30, 70, 0)];
 
     CadPolygonTriangulator.triangulateToBuilder(
       outerVertices: outer3D,

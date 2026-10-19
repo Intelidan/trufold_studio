@@ -1,3 +1,4 @@
+import '../../../engine/cad_brep_flutter_gpu_scene.dart' show CadToolbarFpsBadge;
 // =============================================================================
 // studio_ribbon_toolbar.dart
 //
@@ -172,6 +173,7 @@ class _StudioRibbonToolbarState extends State<StudioRibbonToolbar> {
           const SizedBox(width: 8),
 
           // Active Drawing Status Pill
+          const Padding(padding: EdgeInsets.only(right: 6), child: CadToolbarFpsBadge()),
           _buildActiveDrawingStatusPill(vm),
 
           // Parametric Template Library Action Button (Always visible on top bar)

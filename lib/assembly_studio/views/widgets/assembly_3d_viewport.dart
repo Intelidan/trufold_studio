@@ -4,12 +4,11 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_scene/scene.dart' hide Material;
 import 'package:vector_math/vector_math.dart' as vm_math;
 
 import '../../../sheet_metal_studio/models/cad_primitives.dart';
 import '../../../sheet_metal_studio/engine/kinematic_fold_engine.dart';
-import '../../../sheet_metal_studio/engine/flutter_scene_cad_mesh_builder.dart';
+import '../../../sheet_metal_studio/engine/flutter_scene_cad_mesh_builder.dart' hide Material;
 import '../../../sheet_metal_studio/engine/trufold_3d_engine_preloader.dart';
 import '../../../sheet_metal_studio/views/widgets/studio/studio_3d_navigation_bar.dart';
 import '../../../sheet_metal_studio/views/widgets/studio/studio_view_cube.dart';
@@ -69,6 +68,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   double _cameraFitDim = 600.0;
   bool _cameraInitialized = false;
   CadPoint3D? _lastCameraPivot;
+  String? _lastMeshBoundsKey;
+  Offset _sketchupToolbarPos = const Offset(12.0, 14.0);
 
   // Direct Sketch Entity & Handle Dragging State (Onshape 2D/3D Plane Drag)
   CADPrimitiveEntity? _draggingSketchPrimitive;
@@ -179,7 +180,6 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   // Two-Way Selection Box State (Window Left-to-Right vs Crossing Right-to-Left)
   Offset? _selectionBoxStart;
   Offset? _selectionBoxCurrent;
-
 
   // VCB Measurements HUD Controller
   final TextEditingController _vcbController = TextEditingController();
@@ -426,11 +426,32 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   }
 
   void _initCameraTargetIfNeeded(FoldedMeshResult mesh) {
-    if (!_cameraInitialized && mesh.polygons.isNotEmpty) {
+    if (mesh.polygons.isEmpty) return;
+    final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+    final boundsKey = '${mesh.boundWidth.round()}_${mesh.boundLength.round()}_${mesh.boundHeight.round()}_'
+        '${mesh.center.x.round()}_${mesh.center.y.round()}_${mesh.center.z.round()}';
+    if (!_cameraInitialized) {
       _cameraPivot = mesh.center;
-      final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
       _cameraFitDim = maxDim > 0 ? maxDim : 600.0;
+      _lastMeshBoundsKey = boundsKey;
       _cameraInitialized = true;
+    } else if (_lastMeshBoundsKey != boundsKey && !_isMovingEntity && _draggingPart == null) {
+      // Fix #1 (SS1): If a new model (such as the ladder) is loaded as not the 1st model after restart,
+      // automatically update _cameraFitDim and _cameraPivot so perspective distance & orbit never break!
+      final prevFit = _cameraFitDim > 0 ? _cameraFitDim : 600.0;
+      final nextFit = maxDim > 0 ? maxDim : 600.0;
+      final pivotShift = _cameraPivot.distanceTo(mesh.center);
+      _lastMeshBoundsKey = boundsKey;
+      if ((nextFit - prevFit).abs() > prevFit * 0.20 || pivotShift > prevFit * 0.35) {
+        _cameraPivot = mesh.center;
+        _cameraFitDim = nextFit;
+        _pan = Offset.zero;
+        _zoom = 0.85;
+        widget.viewModel.pan = _pan;
+        widget.viewModel.zoom = _zoom;
+      } else {
+        _cameraFitDim = math.max(_cameraFitDim, nextFit);
+      }
     }
   }
 
@@ -473,21 +494,24 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     final target = right * (_pan.dx * unitsPerPixel) + up * (_pan.dy * unitsPerPixel);
     final eye = target + d * orbitDist;
     _cameraNode.lookAtFrom(eye, target, up: up);
+    _scene!.syncCadCamera(
+      azimuthDeg: _azimuthDeg,
+      elevationDeg: _elevationDeg,
+      zoom: _zoom,
+      pan: _pan,
+      fitDim: fitDim,
+      pivot: _cameraPivot,
+      isOrthoProjection: isOrtho,
+      rotationMatrix: m,
+    );
 
     // Camera-relative CAD 3-light key direction from top-left: creates natural contrast across top, flange, and end faces
     if (_scene != null) {
       final prefs = widget.viewModel.graphicsPreferences;
       final azOff = (prefs.lightAzimuthDeg - 45.0) * vm_math.degrees2Radians;
       final elOff = (prefs.lightElevationDeg - 55.0) * vm_math.degrees2Radians;
-      final lightDir = (right * (-0.52 + math.sin(azOff) * 0.35) +
-              up * (0.68 + math.sin(elOff) * 0.25) +
-              d * 0.52)
-          .normalized();
-      _scene!.directionalLight = DirectionalLight(
-        direction: lightDir,
-        intensity: (prefs.keyLightIntensity * 0.92).clamp(0.3, 2.2),
-        castsShadow: false,
-      );
+      final lightDir = (right * (-0.52 + math.sin(azOff) * 0.35) + up * (0.68 + math.sin(elOff) * 0.25) + d * 0.52).normalized();
+      _scene!.directionalLight = DirectionalLight(direction: lightDir, intensity: (prefs.keyLightIntensity * 0.92).clamp(0.3, 2.2), castsShadow: false);
     }
   }
 
@@ -535,22 +559,22 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _elevationDeg = (_elevationDeg + dEl).clamp(-89.0, 89.0);
     widget.viewModel.azimuthDeg = _azimuthDeg;
     widget.viewModel.elevationDeg = _elevationDeg;
-    _cameraRepaintNotifier.value++;
     _updateGpuCamera();
+    _cameraRepaintNotifier.value++;
   }
 
   void _panCamera(Offset delta) {
     _pan += delta;
     widget.viewModel.pan = _pan;
-    _cameraRepaintNotifier.value++;
     _updateGpuCamera();
+    _cameraRepaintNotifier.value++;
   }
 
   void _zoomCamera(double factor) {
     _zoom = (_zoom * factor).clamp(0.02, 120.0);
     widget.viewModel.zoom = _zoom;
-    _cameraRepaintNotifier.value++;
     _updateGpuCamera();
+    _cameraRepaintNotifier.value++;
   }
 
   void _zoomToFit() {
@@ -712,7 +736,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
               // CRITICAL FIX (Issue #3): When the inline dimension editor popover is open (or any TextField has focus),
               // let the TextField receive all digits (0-9, ., -), Backspace, and Enter directly!
               final primaryFocus = FocusManager.instance.primaryFocus;
-              final isTextInputFocused = _vcbFocusNode.hasFocus ||
+              final isTextInputFocused =
+                  _vcbFocusNode.hasFocus ||
                   vm.activeEditingDimensionHit != null ||
                   (primaryFocus != null && primaryFocus != _viewportFocusNode && primaryFocus.context?.widget is EditableText);
 
@@ -1247,12 +1272,12 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                         _cursorScreenPosNotifier.value = event.localPosition;
                         vm.updateMouseScreenOffset(event.localPosition, size);
 
-                        // Snap point hover & magnetic attraction for selection/move/rotate tools (Requirement 4)
+                        // Snap point hover & magnetic attraction: only run in Move/Rotate modes or when a part is selected in Select mode
                         final isSnapTool =
                             !vm.isSketchMode &&
-                            (vm.activeToolMode == SketchUpToolMode.select ||
-                                vm.activeToolMode == SketchUpToolMode.move ||
-                                vm.activeToolMode == SketchUpToolMode.rotate);
+                            (vm.activeToolMode == SketchUpToolMode.move ||
+                                vm.activeToolMode == SketchUpToolMode.rotate ||
+                                (vm.activeToolMode == SketchUpToolMode.select && vm.selectedPart != null));
                         if (isSnapTool && !_isOrbitingWithMouse && !_isPanningWithMouse && !_isMovingEntity) {
                           _handleMagneticSnapHover(event.localPosition, size, mesh, vm);
                         }
@@ -1345,23 +1370,28 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                           return;
                         }
 
-                        // 1b-2. Direct Plane Selection Mode (Click datum plane, construction plane, or solid face)
-                        if (vm.isPlaneSelectionMode && (event.buttons & kPrimaryMouseButton) != 0) {
-                          final hitPlane = _findPlaneUnderScreenCursor(event.localPosition, size, mesh, vm);
-                          if (hitPlane != null) {
-                            vm.selectPlaneForSketch(hitPlane);
-                            setState(() {});
-                            return;
-                          }
+                        // 1b-2. Direct Plane Selection Mode (Click solid 3D surface face FIRST, then datum/construction plane)
+                        if ((vm.isPlaneSelectionMode || (vm.isSketchMode && vm.activeSketchPlane == null)) &&
+                            (event.buttons & kPrimaryMouseButton) != 0) {
                           final hitPoly = _findFrontmostPolygonUnderCursor(event.localPosition, size, mesh);
-                          if (hitPoly != null) {
+                          if (hitPoly != null && !hitPoly.faceId.startsWith('weld_') && !hitPoly.faceId.startsWith('WELD_')) {
                             final hitPart = vm.findPartForFaceId(hitPoly.faceId);
                             if (hitPart != null) {
                               vm.activateSketchOnFacePolygon(hitPoly, partId: hitPart.id);
                               vm.exitPlaneSelectionMode();
+                              _rebuildGpuCadModel(force: true);
+                              _updateGpuCamera(size);
                               setState(() {});
                               return;
                             }
+                          }
+                          final hitPlane = _findPlaneUnderScreenCursor(event.localPosition, size, mesh, vm);
+                          if (hitPlane != null) {
+                            vm.selectPlaneForSketch(hitPlane);
+                            _rebuildGpuCadModel(force: true);
+                            _updateGpuCamera(size);
+                            setState(() {});
+                            return;
                           }
                         }
 
@@ -1578,11 +1608,9 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                     );
                                     vm.addPrimitiveEntityToActivePlane(newLine);
                                     if (autoDirConstraint != null) {
-                                      plane.constraints.add(CadConstraint(
-                                        id: 'auto_${autoDirConstraint.name}_${newLine.id}',
-                                        type: autoDirConstraint,
-                                        entityIds: [newLine.id],
-                                      ));
+                                      plane.constraints.add(
+                                        CadConstraint(id: 'auto_${autoDirConstraint.name}_${newLine.id}', type: autoDirConstraint, entityIds: [newLine.id]),
+                                      );
                                       vm.solveSketchConstraints();
                                     }
                                     // Continuous chaining: next segment starts where current finished
@@ -1661,13 +1689,15 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   final perp = len > 1e-4 ? Offset(-edge.dy / len, edge.dx / len) : const Offset(0, 1);
                                   final hSigned = (snapped.dx - p1.dx) * perp.dx + (snapped.dy - p1.dy) * perp.dy;
                                   if (hSigned.abs() > 0.1) {
-                                    vm.addPrimitiveEntityToActivePlane(CADAlignedRectangleEntity(
-                                      id: 'arect_${DateTime.now().millisecondsSinceEpoch}',
-                                      corner1: p1,
-                                      corner2: p2,
-                                      height: hSigned,
-                                      isConstruction: vm.isSketchConstructionMode,
-                                    ));
+                                    vm.addPrimitiveEntityToActivePlane(
+                                      CADAlignedRectangleEntity(
+                                        id: 'arect_${DateTime.now().millisecondsSinceEpoch}',
+                                        corner1: p1,
+                                        corner2: p2,
+                                        height: hSigned,
+                                        isConstruction: vm.isSketchConstructionMode,
+                                      ),
+                                    );
                                     vm.clearSketchInteractiveState();
                                     vm.activeSketchTool = 'select_entity';
                                     setState(() {});
@@ -1685,13 +1715,15 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   vm.setInteractiveSketchMid(snapped);
                                   return;
                                 } else {
-                                  vm.addPrimitiveEntityToActivePlane(CADThreePointCircleEntity(
-                                    id: 'c3pt_${DateTime.now().millisecondsSinceEpoch}',
-                                    p1: vm.sketchInteractiveStartPoint!,
-                                    p2: vm.sketchInteractiveMidPoint!,
-                                    p3: snapped,
-                                    isConstruction: vm.isSketchConstructionMode,
-                                  ));
+                                  vm.addPrimitiveEntityToActivePlane(
+                                    CADThreePointCircleEntity(
+                                      id: 'c3pt_${DateTime.now().millisecondsSinceEpoch}',
+                                      p1: vm.sketchInteractiveStartPoint!,
+                                      p2: vm.sketchInteractiveMidPoint!,
+                                      p3: snapped,
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    ),
+                                  );
                                   vm.clearSketchInteractiveState();
                                   vm.activeSketchTool = 'select_entity';
                                   setState(() {});
@@ -1714,15 +1746,17 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   final rx = majorVec.distance.clamp(1.0, 10000.0);
                                   final rot = math.atan2(majorVec.dy, majorVec.dx);
                                   final ry = (snapped - center).distance.clamp(1.0, 10000.0);
-                                  vm.addPrimitiveEntityToActivePlane(CADEllipseEntity(
-                                    id: 'ellipse_${DateTime.now().millisecondsSinceEpoch}',
-                                    center: center,
-                                    radiusX: rx,
-                                    radiusY: ry,
-                                    rotationRad: rot,
-                                    sweepAngleRad: tool == 'arc_ellipse' ? math.pi : 2.0 * math.pi,
-                                    isConstruction: vm.isSketchConstructionMode,
-                                  ));
+                                  vm.addPrimitiveEntityToActivePlane(
+                                    CADEllipseEntity(
+                                      id: 'ellipse_${DateTime.now().millisecondsSinceEpoch}',
+                                      center: center,
+                                      radiusX: rx,
+                                      radiusY: ry,
+                                      rotationRad: rot,
+                                      sweepAngleRad: tool == 'arc_ellipse' ? math.pi : 2.0 * math.pi,
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    ),
+                                  );
                                   vm.clearSketchInteractiveState();
                                   vm.activeSketchTool = 'select_entity';
                                   setState(() {});
@@ -1737,13 +1771,15 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   return;
                                 } else {
                                   final p0 = vm.sketchInteractiveStartPoint!;
-                                  vm.addPrimitiveEntityToActivePlane(CADTangentArcEntity(
-                                    id: 'tarc_${DateTime.now().millisecondsSinceEpoch}',
-                                    startPoint: p0,
-                                    endPoint: snapped,
-                                    startTangentDir: const Offset(1.0, 0.0),
-                                    isConstruction: vm.isSketchConstructionMode,
-                                  ));
+                                  vm.addPrimitiveEntityToActivePlane(
+                                    CADTangentArcEntity(
+                                      id: 'tarc_${DateTime.now().millisecondsSinceEpoch}',
+                                      startPoint: p0,
+                                      endPoint: snapped,
+                                      startTangentDir: const Offset(1.0, 0.0),
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    ),
+                                  );
                                   vm.clearSketchInteractiveState();
                                   vm.activeSketchTool = 'select_entity';
                                   setState(() {});
@@ -1766,14 +1802,16 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   while (sweep <= 0) {
                                     sweep += 2.0 * math.pi;
                                   }
-                                  vm.addPrimitiveEntityToActivePlane(CADCenterPointArcEntity(
-                                    id: 'cparc_${DateTime.now().millisecondsSinceEpoch}',
-                                    center: c,
-                                    radius: r,
-                                    startAngleRad: a0,
-                                    sweepAngleRad: sweep,
-                                    isConstruction: vm.isSketchConstructionMode,
-                                  ));
+                                  vm.addPrimitiveEntityToActivePlane(
+                                    CADCenterPointArcEntity(
+                                      id: 'cparc_${DateTime.now().millisecondsSinceEpoch}',
+                                      center: c,
+                                      radius: r,
+                                      startAngleRad: a0,
+                                      sweepAngleRad: sweep,
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    ),
+                                  );
                                   vm.clearSketchInteractiveState();
                                   vm.activeSketchTool = 'select_entity';
                                   setState(() {});
@@ -1787,14 +1825,16 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   vm.setInteractiveSketchMid(snapped);
                                   return;
                                 } else {
-                                  vm.addPrimitiveEntityToActivePlane(CADConicEntity(
-                                    id: 'conic_${DateTime.now().millisecondsSinceEpoch}',
-                                    startPoint: vm.sketchInteractiveStartPoint!,
-                                    endPoint: vm.sketchInteractiveMidPoint!,
-                                    apexControlPoint: snapped,
-                                    rho: 0.5,
-                                    isConstruction: vm.isSketchConstructionMode,
-                                  ));
+                                  vm.addPrimitiveEntityToActivePlane(
+                                    CADConicEntity(
+                                      id: 'conic_${DateTime.now().millisecondsSinceEpoch}',
+                                      startPoint: vm.sketchInteractiveStartPoint!,
+                                      endPoint: vm.sketchInteractiveMidPoint!,
+                                      apexControlPoint: snapped,
+                                      rho: 0.5,
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    ),
+                                  );
                                   vm.clearSketchInteractiveState();
                                   vm.activeSketchTool = 'select_entity';
                                   setState(() {});
@@ -1814,23 +1854,27 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   if (r > 0.5) {
                                     final rot = math.atan2(snapped.dy - center.dy, snapped.dx - center.dx);
                                     final polyId = 'poly_${DateTime.now().millisecondsSinceEpoch}';
-                                    vm.addPrimitiveEntityToActivePlane(CADRegularPolygonEntity(
-                                      id: polyId,
-                                      center: center,
-                                      radius: r,
-                                      sides: 6,
-                                      rotationRad: rot,
-                                      isInscribed: tool == 'polygon_inscribed',
-                                      isConstruction: vm.isSketchConstructionMode,
-                                    ));
+                                    vm.addPrimitiveEntityToActivePlane(
+                                      CADRegularPolygonEntity(
+                                        id: polyId,
+                                        center: center,
+                                        radius: r,
+                                        sides: 6,
+                                        rotationRad: rot,
+                                        isInscribed: tool == 'polygon_inscribed',
+                                        isConstruction: vm.isSketchConstructionMode,
+                                      ),
+                                    );
                                     // SS1 Fix: No extra auxiliary circles; diameter constraint drives polygon directly
-                                    vm.activeSketchPlane?.constraints.add(CadConstraint(
-                                      id: 'dim_dia_${DateTime.now().millisecondsSinceEpoch}',
-                                      type: CadConstraintType.diameter,
-                                      entityIds: [polyId],
-                                      parameterValue: (r * 2.0).roundToDouble(),
-                                      labelOffset: 24.0,
-                                    ));
+                                    vm.activeSketchPlane?.constraints.add(
+                                      CadConstraint(
+                                        id: 'dim_dia_${DateTime.now().millisecondsSinceEpoch}',
+                                        type: CadConstraintType.diameter,
+                                        entityIds: [polyId],
+                                        parameterValue: (r * 2.0).roundToDouble(),
+                                        labelOffset: 24.0,
+                                      ),
+                                    );
                                     vm.clearSketchInteractiveState();
                                     vm.activeSketchTool = 'select_entity';
                                     setState(() {});
@@ -1841,14 +1885,15 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                               }
                               // --- FIT SPLINE & BEZIER ---
                               else if (tool == 'spline' || tool == 'bezier') {
-                                if (vm.sketchPolylinePoints.length >= 2 &&
-                                    (snapped - vm.sketchPolylinePoints.last).distance < 3.0) {
-                                  vm.addPrimitiveEntityToActivePlane(CADSplineEntity(
-                                    id: 'spline_${DateTime.now().millisecondsSinceEpoch}',
-                                    controlPoints: List.from(vm.sketchPolylinePoints),
-                                    isBezier: tool == 'bezier',
-                                    isConstruction: vm.isSketchConstructionMode,
-                                  ));
+                                if (vm.sketchPolylinePoints.length >= 2 && (snapped - vm.sketchPolylinePoints.last).distance < 3.0) {
+                                  vm.addPrimitiveEntityToActivePlane(
+                                    CADSplineEntity(
+                                      id: 'spline_${DateTime.now().millisecondsSinceEpoch}',
+                                      controlPoints: List.from(vm.sketchPolylinePoints),
+                                      isBezier: tool == 'bezier',
+                                      isConstruction: vm.isSketchConstructionMode,
+                                    ),
+                                  );
                                   vm.clearSketchInteractiveState();
                                   vm.activeSketchTool = 'select_entity';
                                   setState(() {});
@@ -1867,13 +1912,15 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                 } else {
                                   final p0 = vm.sketchInteractiveStartPoint!;
                                   if ((snapped - p0).distance > 1.0) {
-                                    vm.addPrimitiveEntityToActivePlane(CADSlotEntity(
-                                      id: 'slot_${DateTime.now().millisecondsSinceEpoch}',
-                                      startCenter: p0,
-                                      endCenter: snapped,
-                                      diameter: 20.0,
-                                      isConstruction: vm.isSketchConstructionMode,
-                                    ));
+                                    vm.addPrimitiveEntityToActivePlane(
+                                      CADSlotEntity(
+                                        id: 'slot_${DateTime.now().millisecondsSinceEpoch}',
+                                        startCenter: p0,
+                                        endCenter: snapped,
+                                        diameter: 20.0,
+                                        isConstruction: vm.isSketchConstructionMode,
+                                      ),
+                                    );
                                     vm.clearSketchInteractiveState();
                                     vm.activeSketchTool = 'select_entity';
                                     setState(() {});
@@ -1883,19 +1930,13 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                               }
                               // --- STANDALONE POINT & TEXT ---
                               else if (tool == 'point') {
-                                vm.addPrimitiveEntityToActivePlane(CADPointEntity(
-                                  id: 'pt_${DateTime.now().millisecondsSinceEpoch}',
-                                  position: snapped,
-                                ));
+                                vm.addPrimitiveEntityToActivePlane(CADPointEntity(id: 'pt_${DateTime.now().millisecondsSinceEpoch}', position: snapped));
                                 setState(() {});
                                 return;
                               } else if (tool == 'text') {
-                                vm.addPrimitiveEntityToActivePlane(CADTextEntity(
-                                  id: 'txt_${DateTime.now().millisecondsSinceEpoch}',
-                                  origin: snapped,
-                                  text: 'TRUFOLD',
-                                  heightMm: 16.0,
-                                ));
+                                vm.addPrimitiveEntityToActivePlane(
+                                  CADTextEntity(id: 'txt_${DateTime.now().millisecondsSinceEpoch}', origin: snapped, text: 'TRUFOLD', heightMm: 16.0),
+                                );
                                 vm.activeSketchTool = 'select_entity';
                                 setState(() {});
                                 return;
@@ -1915,129 +1956,128 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                   setState(() {});
                                 }
                                 return;
-                                } else if (tool == 'split') {
-                                  if (OnshapeSketchModifyEngine.splitAtPoint(plane, localPoint)) {
-                                    vm.activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(plane);
-                                    vm.notifyDocChanged();
+                              } else if (tool == 'split') {
+                                if (OnshapeSketchModifyEngine.splitAtPoint(plane, localPoint)) {
+                                  vm.activeSketchValidation = AssemblySurfaceSketchEngine.validatePlaneLoop(plane);
+                                  vm.notifyDocChanged();
+                                  setState(() {});
+                                }
+                                return;
+                              } else if (tool == 'dimension') {
+                                final hostPart = vm.sketchPartId != null ? vm.doc.parts.where((p) => p.id == vm.sketchPartId).firstOrNull : vm.selectedPart;
+                                if (hostPart != null) {
+                                  AssemblySurfaceSketchEngine.imprintHostPartBRepToPlane(plane, hostPart);
+                                }
+
+                                String? hitId;
+                                CADPrimitiveEntity? hitPrim;
+
+                                // Hit test primitives on plane (including imprinted host face borders & holes)
+                                for (final p in plane.primitives.reversed) {
+                                  if (p is CADCircleEntity && (localPoint - p.center).distance <= p.radius + 6.0) {
+                                    hitPrim = p;
+                                    hitId = p.id;
+                                    break;
+                                  } else if (p is CADRegularPolygonEntity && (localPoint - p.center).distance <= p.radius + 6.0) {
+                                    hitPrim = p;
+                                    hitId = p.id;
+                                    break;
+                                  } else if (p is CADLineEntity && _distanceToSegment(localPoint, p.start, p.end) <= 8.0) {
+                                    hitPrim = p;
+                                    hitId = p.id;
+                                    break;
+                                  } else if (p is CADRectangleEntity) {
+                                    final p1 = p.startPoint;
+                                    final p2 = Offset(p.startPoint.dx + p.width, p.startPoint.dy);
+                                    final p3 = Offset(p.startPoint.dx + p.width, p.startPoint.dy + p.height);
+                                    final p4 = Offset(p.startPoint.dx, p.startPoint.dy + p.height);
+                                    if (_distanceToSegment(localPoint, p1, p2) <= 6.0) {
+                                      hitPrim = p;
+                                      hitId = '${p.id}:w';
+                                      break;
+                                    } else if (_distanceToSegment(localPoint, p2, p3) <= 6.0) {
+                                      hitPrim = p;
+                                      hitId = '${p.id}:h';
+                                      break;
+                                    } else if (_distanceToSegment(localPoint, p4, p3) <= 6.0) {
+                                      hitPrim = p;
+                                      hitId = '${p.id}:top';
+                                      break;
+                                    } else if (_distanceToSegment(localPoint, p1, p4) <= 6.0) {
+                                      hitPrim = p;
+                                      hitId = '${p.id}:left';
+                                      break;
+                                    }
+                                  } else if (p is CADCenterRectangleEntity) {
+                                    final p1 = p.topLeft;
+                                    final p2 = p.topRight;
+                                    final p3 = p.bottomRight;
+                                    final p4 = p.bottomLeft;
+                                    if (_distanceToSegment(localPoint, p4, p3) <= 6.0) {
+                                      hitPrim = p;
+                                      hitId = '${p.id}:w';
+                                      break;
+                                    } else if (_distanceToSegment(localPoint, p1, p2) <= 6.0) {
+                                      hitPrim = p;
+                                      hitId = '${p.id}:top';
+                                      break;
+                                    } else if (_distanceToSegment(localPoint, p2, p3) <= 6.0) {
+                                      hitPrim = p;
+                                      hitId = '${p.id}:h';
+                                      break;
+                                    } else if (_distanceToSegment(localPoint, p1, p4) <= 6.0) {
+                                      hitPrim = p;
+                                      hitId = '${p.id}:left';
+                                      break;
+                                    }
+                                  } else {
+                                    for (final seg in p.toLineSegments()) {
+                                      if (_distanceToSegment(localPoint, seg.start, seg.end) <= 6.0) {
+                                        hitPrim = p;
+                                        hitId = p.id;
+                                        break;
+                                      }
+                                    }
+                                    if (hitId != null) break;
+                                  }
+                                }
+
+                                // CASE 1: First click in Dimension mode -> Select anchor entity A
+                                if (vm.dimensionFirstEntityId == null) {
+                                  if (hitId != null) {
+                                    vm.dimensionFirstEntityId = hitId;
+                                    vm.selectedSketchFeatureId = hitId;
+                                    if (hitPrim != null) vm.selectSketchPrimitive(hitPrim);
+                                    vm.setVcbState(
+                                      label: 'Dimension',
+                                      value: hitId,
+                                      hint: 'Click 2nd entity/border for relational dimension, or click again to place',
+                                    );
                                     setState(() {});
                                   }
                                   return;
-                                } else if (tool == 'dimension') {
-                                  final hostPart = vm.sketchPartId != null
-                                      ? vm.doc.parts.where((p) => p.id == vm.sketchPartId).firstOrNull
-                                      : vm.selectedPart;
-                                  if (hostPart != null) {
-                                    AssemblySurfaceSketchEngine.imprintHostPartBRepToPlane(plane, hostPart);
-                                  }
+                                }
 
-                                  String? hitId;
-                                  CADPrimitiveEntity? hitPrim;
-
-                                  // Hit test primitives on plane (including imprinted host face borders & holes)
-                                  for (final p in plane.primitives.reversed) {
-                                    if (p is CADCircleEntity && (localPoint - p.center).distance <= p.radius + 6.0) {
-                                      hitPrim = p;
-                                      hitId = p.id;
-                                      break;
-                                    } else if (p is CADRegularPolygonEntity && (localPoint - p.center).distance <= p.radius + 6.0) {
-                                      hitPrim = p;
-                                      hitId = p.id;
-                                      break;
-                                    } else if (p is CADLineEntity && _distanceToSegment(localPoint, p.start, p.end) <= 8.0) {
-                                      hitPrim = p;
-                                      hitId = p.id;
-                                      break;
-                                    } else if (p is CADRectangleEntity) {
-                                      final p1 = p.startPoint;
-                                      final p2 = Offset(p.startPoint.dx + p.width, p.startPoint.dy);
-                                      final p3 = Offset(p.startPoint.dx + p.width, p.startPoint.dy + p.height);
-                                      final p4 = Offset(p.startPoint.dx, p.startPoint.dy + p.height);
-                                      if (_distanceToSegment(localPoint, p1, p2) <= 6.0) {
-                                        hitPrim = p;
-                                        hitId = '${p.id}:w';
-                                        break;
-                                      } else if (_distanceToSegment(localPoint, p2, p3) <= 6.0) {
-                                        hitPrim = p;
-                                        hitId = '${p.id}:h';
-                                        break;
-                                      } else if (_distanceToSegment(localPoint, p4, p3) <= 6.0) {
-                                        hitPrim = p;
-                                        hitId = '${p.id}:top';
-                                        break;
-                                      } else if (_distanceToSegment(localPoint, p1, p4) <= 6.0) {
-                                        hitPrim = p;
-                                        hitId = '${p.id}:left';
-                                        break;
-                                      }
-                                    } else if (p is CADCenterRectangleEntity) {
-                                      final p1 = p.topLeft;
-                                      final p2 = p.topRight;
-                                      final p3 = p.bottomRight;
-                                      final p4 = p.bottomLeft;
-                                      if (_distanceToSegment(localPoint, p4, p3) <= 6.0) {
-                                        hitPrim = p;
-                                        hitId = '${p.id}:w';
-                                        break;
-                                      } else if (_distanceToSegment(localPoint, p1, p2) <= 6.0) {
-                                        hitPrim = p;
-                                        hitId = '${p.id}:top';
-                                        break;
-                                      } else if (_distanceToSegment(localPoint, p2, p3) <= 6.0) {
-                                        hitPrim = p;
-                                        hitId = '${p.id}:h';
-                                        break;
-                                      } else if (_distanceToSegment(localPoint, p1, p4) <= 6.0) {
-                                        hitPrim = p;
-                                        hitId = '${p.id}:left';
-                                        break;
-                                      }
-                                    } else {
-                                      for (final seg in p.toLineSegments()) {
-                                        if (_distanceToSegment(localPoint, seg.start, seg.end) <= 6.0) {
-                                          hitPrim = p;
-                                          hitId = p.id;
-                                          break;
-                                        }
-                                      }
-                                      if (hitId != null) break;
-                                    }
-                                  }
-
-                                  // CASE 1: First click in Dimension mode -> Select anchor entity A
-                                  if (vm.dimensionFirstEntityId == null) {
-                                    if (hitId != null) {
-                                      vm.dimensionFirstEntityId = hitId;
-                                      vm.selectedSketchFeatureId = hitId;
-                                      if (hitPrim != null) vm.selectSketchPrimitive(hitPrim);
-                                      vm.setVcbState(
-                                        label: 'Dimension',
-                                        value: hitId,
-                                        hint: 'Click 2nd entity/border for relational dimension, or click again to place',
-                                      );
-                                      setState(() {});
-                                    }
-                                    return;
-                                  }
-
-                                  // CASE 2: Second click in Dimension mode
-                                  final firstId = vm.dimensionFirstEntityId!;
-                                  if (hitId != null && hitId != firstId) {
-                                    // TWO-ENTITY RELATIONAL DIMENSION (circle-to-circle, circle-to-border, line-to-border, etc.)
-                                    final g1 = AssemblySurfaceSketchEngine.resolveEntityGeometry(firstId, plane, hostPart: hostPart);
-                                    final g2 = AssemblySurfaceSketchEngine.resolveEntityGeometry(hitId, plane, hostPart: hostPart);
-                                    if (g1 != null && g2 != null) {
-                                      final result = AssemblySurfaceSketchEngine.computeTwoEntityDistance(g1, g2);
-                                      final newConstraint = CadConstraint(
-                                        id: 'dim_${DateTime.now().millisecondsSinceEpoch}',
-                                        type: result.type,
-                                        entityIds: [firstId, hitId],
-                                        parameterValue: result.value,
-                                        labelOffset: 24.0,
-                                      );
-                                      plane.constraints.add(newConstraint);
-                                      vm.dimensionFirstEntityId = null;
-                                      vm.solveSketchConstraints();
-                                      vm.openInlineSketchDimensionEditor(SketchDimensionTagHit(
+                                // CASE 2: Second click in Dimension mode
+                                final firstId = vm.dimensionFirstEntityId!;
+                                if (hitId != null && hitId != firstId) {
+                                  // TWO-ENTITY RELATIONAL DIMENSION (circle-to-circle, circle-to-border, line-to-border, etc.)
+                                  final g1 = AssemblySurfaceSketchEngine.resolveEntityGeometry(firstId, plane, hostPart: hostPart);
+                                  final g2 = AssemblySurfaceSketchEngine.resolveEntityGeometry(hitId, plane, hostPart: hostPart);
+                                  if (g1 != null && g2 != null) {
+                                    final result = AssemblySurfaceSketchEngine.computeTwoEntityDistance(g1, g2);
+                                    final newConstraint = CadConstraint(
+                                      id: 'dim_${DateTime.now().millisecondsSinceEpoch}',
+                                      type: result.type,
+                                      entityIds: [firstId, hitId],
+                                      parameterValue: result.value,
+                                      labelOffset: 24.0,
+                                    );
+                                    plane.constraints.add(newConstraint);
+                                    vm.dimensionFirstEntityId = null;
+                                    vm.solveSketchConstraints();
+                                    vm.openInlineSketchDimensionEditor(
+                                      SketchDimensionTagHit(
                                         tagKey: newConstraint.id,
                                         screenRect: Rect.fromCenter(center: event.localPosition, width: 64, height: 26),
                                         primaryEntityId: firstId,
@@ -2046,50 +2086,50 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                         existingConstraintId: newConstraint.id,
                                         currentValue: result.value,
                                         unitSuffix: result.unit,
-                                      ));
-                                      setState(() {});
-                                      return;
-                                    }
-                                  }
-
-                                  // CASE 3: Single-entity dimension placement (clicked same entity or clicked empty space to place)
-                                  final targetEntityId = (hitId != null && hitId == firstId) ? firstId : firstId;
-                                  final primToDim = plane.primitives.where((p) => p.id == targetEntityId.split(':').first).firstOrNull;
-                                  if (primToDim != null && !primToDim.isImprintedReference) {
-                                    final double currentVal = primToDim is CADCircleEntity
-                                        ? primToDim.radius * 2.0
-                                        : primToDim is CADRegularPolygonEntity
-                                            ? primToDim.radius * 2.0
-                                            : primToDim is CADLineEntity
-                                                ? (primToDim.end - primToDim.start).distance
-                                                : primToDim is CADRectangleEntity
-                                                    ? (targetEntityId.endsWith(':h') ? primToDim.height : primToDim.width)
-                                                    : primToDim is CADCenterRectangleEntity
-                                                        ? (targetEntityId.endsWith(':h') ? primToDim.height : primToDim.width)
-                                                        : 20.0;
-                                    final dimType = (primToDim is CADCircleEntity || primToDim is CADRegularPolygonEntity)
-                                        ? CadConstraintType.diameter
-                                        : (primToDim is CADArcEntity || primToDim is CADCenterPointArcEntity)
-                                            ? CadConstraintType.radius
-                                            : CadConstraintType.distance;
-                                    vm.applyDrivingSketchDimension(
-                                      entityId: targetEntityId,
-                                      valueMmOrDeg: currentVal,
+                                      ),
                                     );
-                                    final createdConstraint = plane.constraints.lastOrNull;
-                                    vm.openInlineSketchDimensionEditor(SketchDimensionTagHit(
+                                    setState(() {});
+                                    return;
+                                  }
+                                }
+
+                                // CASE 3: Single-entity dimension placement (clicked same entity or clicked empty space to place)
+                                final targetEntityId = (hitId != null && hitId == firstId) ? firstId : firstId;
+                                final primToDim = plane.primitives.where((p) => p.id == targetEntityId.split(':').first).firstOrNull;
+                                if (primToDim != null && !primToDim.isImprintedReference) {
+                                  final double currentVal = primToDim is CADCircleEntity
+                                      ? primToDim.radius * 2.0
+                                      : primToDim is CADRegularPolygonEntity
+                                      ? primToDim.radius * 2.0
+                                      : primToDim is CADLineEntity
+                                      ? (primToDim.end - primToDim.start).distance
+                                      : primToDim is CADRectangleEntity
+                                      ? (targetEntityId.endsWith(':h') ? primToDim.height : primToDim.width)
+                                      : primToDim is CADCenterRectangleEntity
+                                      ? (targetEntityId.endsWith(':h') ? primToDim.height : primToDim.width)
+                                      : 20.0;
+                                  final dimType = (primToDim is CADCircleEntity || primToDim is CADRegularPolygonEntity)
+                                      ? CadConstraintType.diameter
+                                      : (primToDim is CADArcEntity || primToDim is CADCenterPointArcEntity)
+                                      ? CadConstraintType.radius
+                                      : CadConstraintType.distance;
+                                  vm.applyDrivingSketchDimension(entityId: targetEntityId, valueMmOrDeg: currentVal);
+                                  final createdConstraint = plane.constraints.lastOrNull;
+                                  vm.openInlineSketchDimensionEditor(
+                                    SketchDimensionTagHit(
                                       tagKey: createdConstraint?.id ?? targetEntityId,
                                       screenRect: Rect.fromCenter(center: event.localPosition, width: 60, height: 24),
                                       primaryEntityId: targetEntityId,
                                       constraintType: dimType,
                                       existingConstraintId: createdConstraint?.id,
                                       currentValue: currentVal,
-                                    ));
-                                  }
-                                  vm.dimensionFirstEntityId = null;
-                                  setState(() {});
-                                  return;
-                                } else {
+                                    ),
+                                  );
+                                }
+                                vm.dimensionFirstEntityId = null;
+                                setState(() {});
+                                return;
+                              } else {
                                 // Selection mode: hit test primitive entities on active plane
                                 CADPrimitiveEntity? hitPrimitive;
                                 for (final p in plane.primitives.reversed) {
@@ -2374,15 +2414,18 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                               }
 
                               if (vm.activeToolMode == SketchUpToolMode.select) {
-                                // Fix #1: Removed camera reset / jump on double click
-
+                                // Fix #3: Preserve selectedFaceId (`hitPoly.faceId`) so clicking 'Sketch' or pressing 'S'
+                                // immediately starts a new sketch on the clicked 3D surface!
                                 if (isCtrl) {
                                   vm.togglePartSelection(hitPart.id);
                                 } else if (isShift) {
                                   vm.addToSelection(hitPart.id);
                                 } else {
-                                  vm.selectPart(hitPart.id);
+                                  vm.selectPart(hitPart.id, preserveFaceSelection: true);
                                 }
+                                vm.doc.selectedFaceId = hitPoly.faceId;
+                                _rebuildGpuCadModel(force: true);
+                                setState(() {});
                                 return;
                               }
 
@@ -2791,11 +2834,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                                     listenable: _cameraRepaintNotifier,
                                     builder: (context, _) {
                                       final bool useGpu = _isGpuAvailable && _scene != null && _isSceneReady;
-                                      return useGpu
-                                          ? RepaintBoundary(
-                                              child: SceneView(_scene!),
-                                            )
-                                          : const RepaintBoundary(child: SizedBox.shrink());
+                                      return useGpu ? RepaintBoundary(child: SceneView(_scene!)) : const RepaintBoundary(child: SizedBox.shrink());
                                     },
                                   ),
                                 ),
@@ -3451,13 +3490,24 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                     ),
 
                   // =================================================================
-                  // 3. SKETCHUP-STYLE VERTICAL TOOL PALETTE (SS2)
+                  // 3. DRAGGABLE SKETCHUP-STYLE VERTICAL TOOL PALETTE (Fix #5 / SS4)
                   // =================================================================
                   if (!vm.isCleanCanvasMode && vm.showSketchupToolbar)
                     Positioned(
-                      top: 14,
-                      left: 12,
-                      child: AssemblySketchupToolbar(viewModel: vm, onZoomExtents: _zoomToFit),
+                      left: _sketchupToolbarPos.dx.clamp(4.0, math.max(4.0, size.width - 52.0)),
+                      top: _sketchupToolbarPos.dy.clamp(4.0, math.max(4.0, size.height - 120.0)),
+                      child: AssemblySketchupToolbar(
+                        viewModel: vm,
+                        onZoomExtents: _zoomToFit,
+                        onDragUpdate: (details) {
+                          setState(() {
+                            _sketchupToolbarPos = Offset(
+                              (_sketchupToolbarPos.dx + details.delta.dx).clamp(4.0, math.max(4.0, size.width - 52.0)),
+                              (_sketchupToolbarPos.dy + details.delta.dy).clamp(4.0, math.max(4.0, size.height - 120.0)),
+                            );
+                          });
+                        },
+                      ),
                     ),
 
                   // =================================================================
@@ -4109,8 +4159,10 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     _initCameraTargetIfNeeded(mesh);
     final pivot = _cameraPivot;
     if (_isGpuAvailable && _scene != null && _isSceneReady) {
-      final camera = _cameraComponent.toCamera();
-      final ray = camera.screenPointToRay(cursorLocalPos, size);
+      if (!_scene!.hasSyncedCadCamera) {
+        _updateGpuCamera(size);
+      }
+      final ray = _scene!.screenPointToRelativeRay(cursorLocalPos, size);
       final rayDir = ray.direction.normalized();
       final rayOrigin = ray.origin + vm_math.Vector3(pivot.x, pivot.y, pivot.z);
       return (rayOrigin, rayDir);
@@ -4542,11 +4594,13 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   Offset _projectPoint(CadPoint3D p, Size size, FoldedMeshResult mesh) {
     if (size.width <= 0 || size.height <= 0) return Offset.zero;
     if (_isGpuAvailable && _scene != null && _isSceneReady) {
-      final camera = _cameraComponent.toCamera();
       _initCameraTargetIfNeeded(mesh);
+      if (!_scene!.hasSyncedCadCamera) {
+        _updateGpuCamera(size);
+      }
       final pivot = _cameraPivot;
-      final worldPt = vm_math.Vector3(p.x - pivot.x, p.y - pivot.y, p.z - pivot.z);
-      final screenPt = camera.worldToScreen(worldPt, size);
+      final relPt = CadPoint3D(p.x - pivot.x, p.y - pivot.y, p.z - pivot.z);
+      final screenPt = _scene!.projectRelativePointToScreen(relPt, size);
       if (screenPt != null) return screenPt;
       return _projectPointPaint(p, size, mesh);
     }
@@ -5175,11 +5229,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
     final curMesh = mesh ?? vm.assemblyMesh;
     final curSize = _lastViewportSize ?? const Size(1280, 800);
     final initPlaneHit = _intersectCameraViewPlane(screenPos, curSize, curMesh, baseAnchor);
-    _moveInitialRayOffset = CadPoint3D(
-      initPlaneHit.x - baseAnchor.x,
-      initPlaneHit.y - baseAnchor.y,
-      initPlaneHit.z - baseAnchor.z,
-    );
+    _moveInitialRayOffset = CadPoint3D(initPlaneHit.x - baseAnchor.x, initPlaneHit.y - baseAnchor.y, initPlaneHit.z - baseAnchor.z);
     _moveInitialAxisScalar = _computeAxisRayParameter(screenPos, curSize, curMesh, baseAnchor, vm.lockedAxis);
 
     // Pre-cache other visible parts snap points for zero-overhead 120 FPS movement
@@ -5789,16 +5839,37 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
   // ---------------------------------------------------------------------------
   // MAGNETIC SNAP POINT HOVER & ATTRACTION LOGIC (Requirement 4)
   // ---------------------------------------------------------------------------
+  List<AssemblySnapPoint>? _cachedHoverSnapPoints;
+  int _cachedHoverSnapDocVersion = -1;
+  String? _cachedHoverSnapSelectedPartId;
+  SketchUpToolMode? _cachedHoverSnapToolMode;
+
   void _handleMagneticSnapHover(Offset localPos, Size size, FoldedMeshResult mesh, AssemblyStudioViewModel vm) {
-    final candidateSnapPoints = <AssemblySnapPoint>[];
-    for (final part in vm.doc.parts) {
-      if (!part.isVisible) continue;
-      candidateSnapPoints.addAll(AssemblyDockingEngine.getAllSnapPointsForPart(part, cachedMesh: mesh));
+    final selId = vm.selectedPart?.id;
+    if (_cachedHoverSnapPoints == null ||
+        _cachedHoverSnapDocVersion != vm.documentVersion ||
+        _cachedHoverSnapSelectedPartId != selId ||
+        _cachedHoverSnapToolMode != vm.activeToolMode) {
+      final pts = <AssemblySnapPoint>[];
+      if (vm.activeToolMode == SketchUpToolMode.select) {
+        if (vm.selectedPart != null && vm.selectedPart!.isVisible) {
+          pts.addAll(AssemblyDockingEngine.getAllSnapPointsForPart(vm.selectedPart!, cachedMesh: mesh));
+        }
+      } else {
+        for (final part in vm.doc.parts) {
+          if (!part.isVisible) continue;
+          pts.addAll(AssemblyDockingEngine.getAllSnapPointsForPart(part, cachedMesh: mesh));
+        }
+        for (final weld in vm.doc.welds) {
+          pts.addAll(AssemblyDockingEngine.getAllSnapPointsForWeld(weld));
+        }
+      }
+      _cachedHoverSnapPoints = pts;
+      _cachedHoverSnapDocVersion = vm.documentVersion;
+      _cachedHoverSnapSelectedPartId = selId;
+      _cachedHoverSnapToolMode = vm.activeToolMode;
     }
-    // Weld string snap points: start edge, center, end edge (Item 2)
-    for (final weld in vm.doc.welds) {
-      candidateSnapPoints.addAll(AssemblyDockingEngine.getAllSnapPointsForWeld(weld));
-    }
+    final candidateSnapPoints = _cachedHoverSnapPoints!;
 
     final targetSnap = AssemblyDockingEngine.findNearestSnapPoint(
       screenCursor: localPos,
@@ -5919,11 +5990,7 @@ Color computeCadFaceColor(Color baseColor, vm_math.Vector3 worldNormal, vm_math.
   final double headlightTerm = math.max(0.0, n.dot(v)); // Camera headlight (0.22 weight)
 
   // Minimum ambient floor of 0.46 ensures opposite faces stay crisp CAD blue
-  final double intensity = (0.46 +
-          keyTerm * 0.32 +
-          fillTerm * 0.15 +
-          headlightTerm * 0.22)
-      .clamp(0.46, 1.15);
+  final double intensity = (0.46 + keyTerm * 0.32 + fillTerm * 0.15 + headlightTerm * 0.22).clamp(0.46, 1.15);
 
   final a = (baseColor.a * 255.0).round().clamp(0, 255);
   final r = (baseColor.r * 255.0 * intensity).round().clamp(0, 255);

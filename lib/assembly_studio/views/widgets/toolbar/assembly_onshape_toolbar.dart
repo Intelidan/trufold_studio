@@ -1,3 +1,4 @@
+import '../../../../sheet_metal_studio/engine/cad_brep_flutter_gpu_scene.dart' show CadToolbarFpsBadge;
 // Complete Onshape Dynamic Contextual Ribbon Toolbar
 // TruFold Assembly Studio - Phase 7 Onshape Transformation
 // Seamlessly switches between 3D Modeling Toolbar and 2D Sketch Toolbar.
@@ -487,6 +488,12 @@ class _AssemblyOnshapeToolbarState extends State<AssemblyOnshapeToolbar> {
             ),
           ),
         ),
+      ),
+      const OnshapeToolbarDivider(),
+      // Fix #4 (v9.0): Real-Time FPS Badge placed cleanly inside the top toolbar (never hidden behind left toolset bar!)
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 6),
+        child: Center(child: CadToolbarFpsBadge()),
       ),
     ];
   }

@@ -1183,7 +1183,7 @@ class _AssemblyAssetDrawerState extends State<AssemblyAssetDrawer> {
             const Color(0xFFFBBF24),
           ),
           const SizedBox(width: 16),
-          _buildDiagMetric('GPU Engine', 'flutter_scene (Impeller)', Icons.speed_rounded, const Color(0xFFA855F7)),
+          _buildDiagMetric('GPU Engine', 'B-Rep + flutter_gpu (Impeller)', Icons.speed_rounded, const Color(0xFFA855F7)),
         ],
       ),
     );

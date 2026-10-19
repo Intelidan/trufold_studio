@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'package:flutter_scene/scene.dart';
+import 'cad_brep_flutter_gpu_scene.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 import '../models/cad_primitives.dart';
 

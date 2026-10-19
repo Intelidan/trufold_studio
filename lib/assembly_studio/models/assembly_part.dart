@@ -1243,6 +1243,7 @@ class AssemblyPart {
       }
     }
 
+    _addHoleBoreWalls(thickPolys, holes, webNorm, T);
     polys.add(CadFoldedPolygon3D(faceId: '${id}_top_web', vertices: topFace, holes: holes, normal: webNorm, color: color));
 
     // Inner Web face (real sheet metal thickness T, Item 4)
@@ -1511,7 +1512,7 @@ class AssemblyPart {
         faceId: '${id}_web',
         vertices: [CadPoint3D(0.0, 0.0, 0.0), CadPoint3D(L, 0.0, 0.0), CadPoint3D(L, 0.0, H), CadPoint3D(0.0, 0.0, H)],
         holes: webHoles,
-        normal: const CadPoint3D(0.0, -1.0, 0.0),
+        normal: CadPoint3D(0.0, -fDir, 0.0),
         color: color,
       ),
     );
@@ -2738,13 +2739,25 @@ class AssemblyPart {
       final boreDepth = (holeDepths != null && h < holeDepths.length) ? holeDepths[h] : t;
       final isBlind = (isBlindList != null && h < isBlindList.length) ? isBlindList[h] : false;
 
+      double hcx = 0.0, hcy = 0.0, hcz = 0.0;
+      for (final p in loop) {
+        hcx += p.x;
+        hcy += p.y;
+        hcz += p.z;
+      }
+      if (loop.isNotEmpty) {
+        hcx /= loop.length;
+        hcy /= loop.length;
+        hcz /= loop.length;
+      }
+
       for (int i = 0; i < loop.length; i++) {
         final v0 = loop[i];
         final v1 = loop[(i + 1) % loop.length];
         final v1In = CadPoint3D(v1.x - faceNormal.x * boreDepth, v1.y - faceNormal.y * boreDepth, v1.z - faceNormal.z * boreDepth);
         final v0In = CadPoint3D(v0.x - faceNormal.x * boreDepth, v0.y - faceNormal.y * boreDepth, v0.z - faceNormal.z * boreDepth);
 
-        // Accurate split normal: perpendicular to rim segment and plate normal pointing inward
+        // Accurate split normal: perpendicular to rim segment and plate normal pointing inward toward hole center
         final dx = v1.x - v0.x;
         final dy = v1.y - v0.y;
         final dz = v1.z - v0.z;
@@ -2752,7 +2765,18 @@ class AssemblyPart {
         final cY = dz * (-faceNormal.x) - dx * (-faceNormal.z);
         final cZ = dx * (-faceNormal.y) - dy * (-faceNormal.x);
         final len = math.sqrt(cX * cX + cY * cY + cZ * cZ);
-        final wallNorm = len > 1e-6 ? CadPoint3D(cX / len, cY / len, cZ / len) : CadPoint3D(-faceNormal.y, faceNormal.x, 0.0);
+        var nx = len > 1e-6 ? cX / len : -faceNormal.y;
+        var ny = len > 1e-6 ? cY / len : faceNormal.x;
+        var nz = len > 1e-6 ? cZ / len : 0.0;
+        final mx = (v0.x + v1.x) * 0.5;
+        final my = (v0.y + v1.y) * 0.5;
+        final mz = (v0.z + v1.z) * 0.5;
+        if ((hcx - mx) * nx + (hcy - my) * ny + (hcz - mz) * nz < 0.0) {
+          nx = -nx;
+          ny = -ny;
+          nz = -nz;
+        }
+        final wallNorm = CadPoint3D(nx, ny, nz);
 
         thickPolys.add(CadFoldedPolygon3D(faceId: '${id}_bore_${h}_$i', vertices: [v0, v1, v1In, v0In], normal: wallNorm, color: const Color(0xFF475569)));
       }

@@ -1901,7 +1901,7 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     notifyListeners();
   }
 
-  void selectPart(String? id, {bool multiSelect = false}) {
+  void selectPart(String? id, {bool multiSelect = false, bool preserveFaceSelection = false}) {
     if (multiSelect && id != null) {
       togglePartSelection(id);
       return;
@@ -1922,7 +1922,9 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       }
     }
     doc.selectedWeldId = null;
-    doc.selectedFaceId = null;
+    if (!preserveFaceSelection) {
+      doc.selectedFaceId = null;
+    }
     notifyListeners();
   }
 

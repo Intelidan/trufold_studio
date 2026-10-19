@@ -553,11 +553,17 @@ class AssemblySelectedPartBoundingBoxPainter extends CustomPainter {
           break;
         case AssemblySnapPointType.sketchCenter:
         case AssemblySnapPointType.sketchEndpoint:
+          // Only render sketch center / endpoint snap dots when explicitly selected OR cursor is within 18px proximity (eliminates SS1 cyan dot clutter)
+          final bool isSketchSelected = selectedSnapPointIds.contains(pt.id);
+          final double sketchDist = cursorScreenPos != null ? (scr - cursorScreenPos!).distance : double.infinity;
+          if (!isSketchSelected && sketchDist > 18.0) {
+            continue;
+          }
           canvas.drawCircle(
             scr,
             midRadius,
             Paint()
-              ..color = const Color(0xFF00E5FF)
+              ..color = isSketchSelected ? const Color(0xFFFFAB00) : const Color(0xFF00E5FF)
               ..style = PaintingStyle.fill,
           );
           canvas.drawCircle(scr, midRadius, borderPaint);

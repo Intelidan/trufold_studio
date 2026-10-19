@@ -1,7 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_scene/scene.dart';
 import 'package:trufold_studio/sheet_metal_studio/viewmodels/sheet_metal_studio_viewmodel.dart';
 import 'package:trufold_studio/sheet_metal_studio/views/widgets/viewport_3d/flutter_scene_viewport_widget.dart';
 import 'package:vector_math/vector_math.dart' as vm;
@@ -124,10 +123,7 @@ void main() {
       try {
         final cadNode = FlutterSceneCadMeshBuilder.buildCadModel(
           foldedMesh,
-          preferences: const OnshapeGraphicsPreferences(
-            tangentEdgeMode: OnshapeTangentEdgeMode.phantom,
-            phantomTangentEdgeWidth: 2.4,
-          ),
+          preferences: const OnshapeGraphicsPreferences(tangentEdgeMode: OnshapeTangentEdgeMode.phantom, phantomTangentEdgeWidth: 2.4),
         );
         final edgeNode = cadNode.children.firstWhere((n) => n.name == 'CadBoundaryEdges');
         final tangentNode = cadNode.children.firstWhere((n) => n.name == 'CadPhantomTangentEdges');
@@ -222,21 +218,9 @@ void main() {
       final vmTabA = SheetMetalStudioViewModel();
       final vmTabB = SheetMetalStudioViewModel();
 
-      vmTabA.camera3dState = const Cad3dCameraState(
-        azimuthDeg: 30.0,
-        elevationDeg: 20.0,
-        zoom: 1.0,
-        orbitDistance: 300.0,
-        isInitialized: true,
-      );
+      vmTabA.camera3dState = const Cad3dCameraState(azimuthDeg: 30.0, elevationDeg: 20.0, zoom: 1.0, orbitDistance: 300.0, isInitialized: true);
 
-      vmTabB.camera3dState = const Cad3dCameraState(
-        azimuthDeg: 90.0,
-        elevationDeg: 60.0,
-        zoom: 2.0,
-        orbitDistance: 600.0,
-        isInitialized: true,
-      );
+      vmTabB.camera3dState = const Cad3dCameraState(azimuthDeg: 90.0, elevationDeg: 60.0, zoom: 2.0, orbitDistance: 600.0, isInitialized: true);
 
       // Mount Tab A
       await tester.pumpWidget(
@@ -276,13 +260,7 @@ void main() {
     });
 
     test('Cable ladder templates generate hole borders on rungs and side rails', () {
-      final assembly = LadderAssemblyGenerator.generateStraightLadder(
-        const LadderAssemblyParameters(
-          length: 1000,
-          width: 300,
-          intermediateTargetPitch: 250,
-        ),
-      );
+      final assembly = LadderAssemblyGenerator.generateStraightLadder(const LadderAssemblyParameters(length: 1000, width: 300, intermediateTargetPitch: 250));
       final ladderMesh = assembly.assembledMesh3D;
 
       expect(ladderMesh.polygons.isNotEmpty, isTrue);
@@ -291,16 +269,14 @@ void main() {
       final rungWebPolygons = ladderMesh.polygons.where((p) => p.faceId.contains('rung') && p.faceId.contains('top_web') && !p.faceId.contains('inner'));
       expect(rungWebPolygons.isNotEmpty, isTrue);
       for (final rungWeb in rungWebPolygons) {
-        expect(rungWeb.boundaryLines.length, greaterThanOrEqualTo(16),
-            reason: 'Rung web must have border lines for its obround holes');
+        expect(rungWeb.boundaryLines.length, greaterThanOrEqualTo(16), reason: 'Rung web must have border lines for its obround holes');
       }
 
       // Check outer side rail webs have boundaryLines for pass-through slot holes (4 edges for slot + perimeter)
       final railWebPolygons = ladderMesh.polygons.where((p) => p.faceId.contains('rail') && p.faceId.contains('web') && !p.faceId.contains('inner'));
       expect(railWebPolygons.isNotEmpty, isTrue);
       for (final railWeb in railWebPolygons) {
-        expect(railWeb.boundaryLines.length, greaterThanOrEqualTo(4),
-            reason: 'Side rail web must have border lines for slot holes');
+        expect(railWeb.boundaryLines.length, greaterThanOrEqualTo(4), reason: 'Side rail web must have border lines for slot holes');
       }
     });
 
@@ -317,8 +293,7 @@ void main() {
 
       // Base face should have hole boundary lines for punches
       final baseFace = mesh.polygons.firstWhere((p) => p.faceId.contains('rect_bottom') || p.faceId.contains('rect_top'));
-      expect(baseFace.boundaryLines.length, greaterThan(4),
-          reason: 'Base face must have boundary lines for punches as well as perimeter');
+      expect(baseFace.boundaryLines.length, greaterThan(4), reason: 'Base face must have boundary lines for punches as well as perimeter');
     });
 
     testWidgets('Vertical mouse navigation loops continuously past 90, 180, 270, and 360 degrees without clamping', (tester) async {
@@ -329,11 +304,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 800,
-              height: 600,
-              child: FlutterSceneViewportWidget(viewModel: vm),
-            ),
+            body: SizedBox(width: 800, height: 600, child: FlutterSceneViewportWidget(viewModel: vm)),
           ),
         ),
       );
@@ -350,14 +321,12 @@ void main() {
       // Drag 1: dy = -200 -> delta elevation = +100 degrees -> elevation > 90
       await gesture.moveTo(const Offset(400, 100));
       await tester.pump();
-      expect(vm.camera3dState!.elevationDeg, greaterThan(90.0),
-          reason: 'Vertical navigation must rotate past 90 degrees and not clamp');
+      expect(vm.camera3dState!.elevationDeg, greaterThan(90.0), reason: 'Vertical navigation must rotate past 90 degrees and not clamp');
 
       // Drag 2: further dy = -200 (location 400, -100) -> delta elevation = +100 degrees -> total ~ 235 degrees
       await gesture.moveTo(const Offset(400, -100));
       await tester.pump();
-      expect(vm.camera3dState!.elevationDeg, greaterThan(180.0),
-          reason: 'Vertical navigation must rotate past 180 degrees into upside-down views');
+      expect(vm.camera3dState!.elevationDeg, greaterThan(180.0), reason: 'Vertical navigation must rotate past 180 degrees into upside-down views');
 
       // Drag 3: further dy = -400 -> total delta elevation > 400 degrees -> full 360 loop
       await gesture.moveTo(const Offset(400, -500));
@@ -378,11 +347,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 800,
-              height: 600,
-              child: FlutterSceneViewportWidget(viewModel: vm),
-            ),
+            body: SizedBox(width: 800, height: 600, child: FlutterSceneViewportWidget(viewModel: vm)),
           ),
         ),
       );
@@ -406,11 +371,8 @@ void main() {
 
       // 3D orbit target must have translated in 3D world space
       final finalTarget = vm.camera3dState!.orbitTarget;
-      final distanceMoved = (finalTarget.x - initialTarget.x).abs() +
-          (finalTarget.y - initialTarget.y).abs() +
-          (finalTarget.z - initialTarget.z).abs();
-      expect(distanceMoved, greaterThan(1.0),
-          reason: 'Middle mouse pan must translate 3D camera target in world space');
+      final distanceMoved = (finalTarget.x - initialTarget.x).abs() + (finalTarget.y - initialTarget.y).abs() + (finalTarget.z - initialTarget.z).abs();
+      expect(distanceMoved, greaterThan(1.0), reason: 'Middle mouse pan must translate 3D camera target in world space');
     });
 
     test('CadMaterialSettings defines correct PBR, dielectric, and spangle properties for all presets', () {
@@ -476,15 +438,11 @@ void main() {
       expect(vm.graphicsPreferences.materialSettings.preset, equals(CadMaterialPresetType.silver));
 
       // Changing 3D graphics preferences to HDG preset updates Document Material coating finish to HDG
-      vm.graphicsPreferences = vm.graphicsPreferences.copyWith(
-        materialSettings: CadMaterialSettings.preset(CadMaterialPresetType.hdg),
-      );
+      vm.graphicsPreferences = vm.graphicsPreferences.copyWith(materialSettings: CadMaterialSettings.preset(CadMaterialPresetType.hdg));
       expect(vm.document.material.finish, equals(SurfaceFinish.hotDipGalvanized));
 
       // Changing 3D graphics preferences to Plastic updates Document Material
-      vm.graphicsPreferences = vm.graphicsPreferences.copyWith(
-        materialSettings: CadMaterialSettings.preset(CadMaterialPresetType.plastic),
-      );
+      vm.graphicsPreferences = vm.graphicsPreferences.copyWith(materialSettings: CadMaterialSettings.preset(CadMaterialPresetType.plastic));
       expect(vm.document.material.materialGrade, contains('Plastic'));
     });
 
@@ -499,10 +457,7 @@ void main() {
       expect(unpainted.isPainted, isFalse);
       expect(unpainted.displayLabel, equals('None (Unpainted Mill/Galv)'));
 
-      const powder = PaintCoatSpecification(
-        type: PaintCoatType.powderCoat,
-        ralColor: RalColor.ral7035,
-      );
+      const powder = PaintCoatSpecification(type: PaintCoatType.powderCoat, ralColor: RalColor.ral7035);
       expect(powder.isPainted, isTrue);
       expect(powder.displayLabel, contains('Powder Coated [RAL 7035 Light Grey]'));
 
@@ -513,11 +468,7 @@ void main() {
       expect(powderCadSettings.roughness, closeTo(0.30, 0.01));
       expect(powderCadSettings.baseColor, equals(RalColor.ral7035.color));
 
-      const epoxy = PaintCoatSpecification(
-        type: PaintCoatType.epoxy,
-        ralColor: RalColor.ral5012,
-        roughness: 0.20,
-      );
+      const epoxy = PaintCoatSpecification(type: PaintCoatType.epoxy, ralColor: RalColor.ral5012, roughness: 0.20);
       expect(epoxy.isPainted, isTrue);
       expect(epoxy.displayLabel, contains('Epoxy Painted [RAL 5012 Light Blue]'));
       final epoxyCadSettings = epoxy.toCadMaterialSettings();
@@ -584,11 +535,7 @@ void main() {
         materialGrade: 'Pre-Galvanized DX51D',
         materialType: SheetMaterialType.mildSteel,
         finish: SurfaceFinish.electroGalvanized,
-        paintCoat: PaintCoatSpecification(
-          type: PaintCoatType.powderCoat,
-          ralColor: RalColor.ral7035,
-          roughness: 0.30,
-        ),
+        paintCoat: PaintCoatSpecification(type: PaintCoatType.powderCoat, ralColor: RalColor.ral7035, roughness: 0.30),
       );
 
       final originalDoc = DsfDocument.sampleCableTray(material: paintedMaterial);
@@ -634,11 +581,7 @@ void main() {
       const ladderParams = LadderAssemblyParameters(
         materialName: 'HDG Hot Dip Galvanized',
         thickness: 2.0,
-        paintCoat: PaintCoatSpecification(
-          type: PaintCoatType.epoxy,
-          ralColor: RalColor.ral5012,
-          roughness: 0.20,
-        ),
+        paintCoat: PaintCoatSpecification(type: PaintCoatType.epoxy, ralColor: RalColor.ral5012, roughness: 0.20),
       );
 
       final ladderJson = ladderParams.toJson();
@@ -680,11 +623,7 @@ void main() {
         material: const SheetMetalMaterial(
           materialGrade: 'GI Galvanized Iron',
           thicknessMm: 2.0,
-          paintCoat: PaintCoatSpecification(
-            type: PaintCoatType.powderCoat,
-            ralColor: RalColor.ral7035,
-            roughness: 0.30,
-          ),
+          paintCoat: PaintCoatSpecification(type: PaintCoatType.powderCoat, ralColor: RalColor.ral7035, roughness: 0.30),
         ),
       );
 
@@ -719,11 +658,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 800,
-              height: 600,
-              child: FlutterSceneViewportWidget(viewModel: vm),
-            ),
+            body: SizedBox(width: 800, height: 600, child: FlutterSceneViewportWidget(viewModel: vm)),
           ),
         ),
       );
@@ -740,15 +675,17 @@ void main() {
       await gesture.moveTo(const Offset(500, 300));
       await tester.pump();
 
-      expect(vm.camera3dState!.azimuthDeg, isNot(equals(initialAzimuth)),
-          reason: 'Horizontal drag rotates model azimuth in the direction of dragging pointer');
+      expect(vm.camera3dState!.azimuthDeg, isNot(equals(initialAzimuth)), reason: 'Horizontal drag rotates model azimuth in the direction of dragging pointer');
 
       // Drag vertically: rotates model vertically following pointer
       await gesture.moveTo(const Offset(500, 200));
       await tester.pump();
 
-      expect(vm.camera3dState!.elevationDeg, isNot(equals(initialElevation)),
-          reason: 'Vertical drag rotates model elevation in the direction of dragging pointer');
+      expect(
+        vm.camera3dState!.elevationDeg,
+        isNot(equals(initialElevation)),
+        reason: 'Vertical drag rotates model elevation in the direction of dragging pointer',
+      );
 
       await gesture.up();
       await tester.pumpAndSettle();
@@ -762,11 +699,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: SizedBox(
-              width: 800,
-              height: 600,
-              child: FlutterSceneViewportWidget(viewModel: vm),
-            ),
+            body: SizedBox(width: 800, height: 600, child: FlutterSceneViewportWidget(viewModel: vm)),
           ),
         ),
       );

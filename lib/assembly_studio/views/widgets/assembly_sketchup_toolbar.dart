@@ -10,6 +10,8 @@ class AssemblySketchupToolbar extends StatelessWidget {
   final VoidCallback onZoomExtents;
   final VoidCallback? onOpenMaterials;
   final VoidCallback? onOpenDimensionMode;
+  final GestureDragUpdateCallback? onDragUpdate;
+  final ValueChanged<Offset>? onDragDelta;
 
   const AssemblySketchupToolbar({
     super.key,
@@ -17,6 +19,8 @@ class AssemblySketchupToolbar extends StatelessWidget {
     required this.onZoomExtents,
     this.onOpenMaterials,
     this.onOpenDimensionMode,
+    this.onDragUpdate,
+    this.onDragDelta,
   });
 
   @override
@@ -301,19 +305,32 @@ class AssemblySketchupToolbar extends StatelessWidget {
   }
 
   Widget _buildGripDots({bool isLight = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(
-          6,
-          (i) => Container(
-            width: 2.2,
-            height: 2.2,
-            margin: const EdgeInsets.symmetric(horizontal: 1),
-            decoration: BoxDecoration(
-              color: isLight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-              borderRadius: BorderRadius.circular(1),
+    return MouseRegion(
+      cursor: SystemMouseCursors.grab,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: (details) {
+          onDragUpdate?.call(details);
+          onDragDelta?.call(details.delta);
+        },
+        child: Tooltip(
+          message: 'Drag to move basic tool set bar',
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                6,
+                (i) => Container(
+                  width: 2.4,
+                  height: 2.4,
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                  decoration: BoxDecoration(
+                    color: isLight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    borderRadius: BorderRadius.circular(1.2),
+                  ),
+                ),
+              ),
             ),
           ),
         ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_scene/scene.dart';
+import '../../sheet_metal_studio/engine/cad_brep_flutter_gpu_scene.dart' hide Material;
 
 import '../cad_parameter_engine/cad_models.dart';
 import '../math_and_processing/cad_constraint_solvers.dart';

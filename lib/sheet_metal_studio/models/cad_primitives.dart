@@ -233,7 +233,7 @@ enum OnshapeTangentEdgeMode {
 enum Cad3dEngineMode {
   flutterGpu(
     'Flutter GPU (Scene)',
-    'Hardware-accelerated 120 FPS PBR renderer powered by flutter_scene and Impeller.',
+    'Hardware-accelerated 120 FPS B-Rep CustomPaint + flutter_gpu (Impeller) renderer.',
   );
 
   final String label;

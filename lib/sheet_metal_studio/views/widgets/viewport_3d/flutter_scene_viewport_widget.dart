@@ -19,7 +19,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_scene/scene.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 
 import '../../../engine/flutter_scene_cad_mesh_builder.dart';
@@ -83,10 +82,11 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
   bool _isRotatingModel = false;
 
   // --- Pinned Pivot Model Rotation State ---
-  bool _isPinnedPivotMode = true; // Rotates model with opposite side pinned/anchored
+  bool _isPinnedPivotMode = false; // Keep camera pivot centered on model center so ladder rotation never drifts (SS1)
   CadPoint3D? _pinnedPivotPoint;
   Offset? _pinnedScreenAnchor;
   Size? _lastKnownViewportSize;
+  String? _lastMeshBoundsKey;
 
   // --- Flutter Paint (1st Engine Software Fallback) Camera State ---
   double _paintAzimuthDeg = 45.0;
@@ -472,11 +472,19 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     );
     _scene!.add(_cadModelNode!);
 
-    // Frame camera on initial mesh load or bounds reset
-    if (!preserveCamera || _isFirstLoad) {
-      _zoomToFit();
+    // Frame camera on initial mesh load OR when switching to a model with significantly different bounds (Fix #1 / SS1)
+    final boundsKey = '${mesh.boundWidth.round()}_${mesh.boundLength.round()}_${mesh.boundHeight.round()}';
+    final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+    final bool boundsChangedSignificantly = _lastMeshBoundsKey != null &&
+        _lastMeshBoundsKey != boundsKey &&
+        (maxDim - _orbitDistance).abs() > _orbitDistance * 0.25;
+    _lastMeshBoundsKey = boundsKey;
+
+    if (!preserveCamera || _isFirstLoad || boundsChangedSignificantly) {
+      _zoomToFit(animate: false);
       _isFirstLoad = false;
     } else if (mounted) {
+      _updateGpuCamera();
       setState(() {});
     }
   }
@@ -496,17 +504,27 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     if (!_isCameraReady || _scene == null || !_isGpuAvailable) return;
 
     final m = _modelTransform.m;
-    // Map CAD world coordinates to FlutterScene coordinate frame:
-    // Row 2 is camera view direction in CAD (towards eye): (m[8], m[9], m[10])
-    // Row 1 is camera up direction in CAD: (m[4], m[5], m[6])
-    final d = vm.Vector3(-m[8], m[10], m[9]);
-    final up = vm.Vector3(-m[4], m[6], m[5]);
+    final d = vm.Vector3(m[8], m[9], m[10]);
+    final up = vm.Vector3(m[4], m[5], m[6]);
 
-    final pivot = widget.viewModel.currentMesh.center;
+    final mesh = widget.viewModel.currentMesh;
+    final pivot = mesh.center;
+    final maxDim = math.max(mesh.boundWidth, math.max(mesh.boundLength, mesh.boundHeight));
+    final fitDim = maxDim > 0 ? maxDim : 200.0;
     final target = vm.Vector3(_orbitTarget.x - pivot.x, _orbitTarget.y - pivot.y, _orbitTarget.z - pivot.z);
     final eye = target + d * _orbitDistance;
 
     _cameraNode.lookAtFrom(eye, target, up: up);
+    _scene!.syncCadCamera(
+      azimuthDeg: _paintAzimuthDeg,
+      elevationDeg: _paintElevationDeg,
+      zoom: _paintZoom,
+      pan: _paintPan,
+      fitDim: fitDim,
+      pivot: pivot,
+      isOrthoProjection: widget.viewModel.isOrthoProjection,
+      rotationMatrix: m,
+    );
   }
 
   static TransformMatrix4 _matrixFromAngles(double azDeg, double elDeg) {
@@ -651,8 +669,8 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
   }
 
   CadPoint3D _projectToSphere(Offset localPos, Size size) {
-    final cx = size.width / 2.0 + _paintPan.dx;
-    final cy = size.height / 2.0 + _paintPan.dy;
+    final cx = size.width / 2.0;
+    final cy = size.height / 2.0;
     final r = math.min(size.width, size.height) * 0.45;
     if (r <= 0) return const CadPoint3D(0.0, 0.0, 1.0);
 
@@ -1470,27 +1488,15 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
     if (!_isCameraReady || viewportSize.width <= 0 || viewportSize.height <= 0) {
       return projectPointToScreenPaint(p, viewportSize);
     }
-
-    final pivot = widget.viewModel.currentMesh.center;
-    final localPt = vm.Vector4(p.x - pivot.x, p.y - pivot.y, p.z - pivot.z, 1.0);
-
-    final camera = _cameraComponent.toCamera();
-    final viewMatrix = camera.getViewMatrix();
-    final aspect = viewportSize.width / viewportSize.height;
-    final projMatrix = _cameraComponent.projection.getProjectionMatrix(aspect);
-
-    final vpMatrix = projMatrix * viewMatrix;
-    final clip = vpMatrix.transform(localPt);
-
-    if (clip.w.abs() < 1e-6) return Offset.zero;
-
-    final ndcX = clip.x / clip.w;
-    final ndcY = clip.y / clip.w;
-
-    final sx = (ndcX + 1.0) * 0.5 * viewportSize.width;
-    final sy = (1.0 - ndcY) * 0.5 * viewportSize.height;
-
-    return Offset(sx, sy);
+    if (_scene != null) {
+      final pivot = widget.viewModel.currentMesh.center;
+      final pt = _scene!.projectRelativePointToScreen(
+        CadPoint3D(p.x - pivot.x, p.y - pivot.y, p.z - pivot.z),
+        viewportSize,
+      );
+      if (pt != null) return pt;
+    }
+    return projectPointToScreenPaint(p, viewportSize);
   }
 
   /// Projects a 3D CAD vertex into logical 2D viewport coordinates for dimensions, tags, & annotations.
