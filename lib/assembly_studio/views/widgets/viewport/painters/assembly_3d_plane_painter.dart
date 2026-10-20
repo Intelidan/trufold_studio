@@ -17,6 +17,55 @@ class Assembly3DPlanePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // 0. Draw hovered surface face in Onshape light yellow (#FEF08A) when selecting a plane for sketch
+    // 0. Draw hovered surface face in Onshape light yellow (#FEF08A) with crisp amber border (#EAB308)
+    if (viewModel.hoveredFacePolygon != null && viewModel.activeSketchPlane == null) {
+      final poly = viewModel.hoveredFacePolygon!;
+      if (poly.vertices.length >= 3) {
+        final screenPts = poly.vertices.map((v) => projectPoint(v)).toList();
+        if (screenPts.every((p) => p != Offset.zero)) {
+          final facePath = Path()..moveTo(screenPts[0].dx, screenPts[0].dy);
+          for (int i = 1; i < screenPts.length; i++) {
+            facePath.lineTo(screenPts[i].dx, screenPts[i].dy);
+          }
+          facePath.close();
+
+          for (final hole in poly.holes) {
+            if (hole.length >= 3) {
+              final holePts = hole.map((v) => projectPoint(v)).toList();
+              if (holePts.every((p) => p != Offset.zero)) {
+                final hPath = Path()..moveTo(holePts[0].dx, holePts[0].dy);
+                for (int i = 1; i < holePts.length; i++) {
+                  hPath.lineTo(holePts[i].dx, holePts[i].dy);
+                }
+                hPath.close();
+                facePath.addPath(hPath, Offset.zero);
+              }
+            }
+          }
+          facePath.fillType = PathFillType.evenOdd;
+
+          // Onshape Light Yellow fill (#FEF08A with 45% opacity)
+          canvas.drawPath(
+            facePath,
+            Paint()
+              ..color = const Color(0x73FEF08A)
+              ..style = PaintingStyle.fill,
+          );
+
+          // Onshape Amber/Yellow crisp border (#EAB308, 2.2px)
+          canvas.drawPath(
+            facePath,
+            Paint()
+              ..color = const Color(0xFFEAB308)
+              ..strokeWidth = 2.2
+              ..style = PaintingStyle.stroke
+              ..strokeJoin = StrokeJoin.round,
+          );
+        }
+      }
+    }
+
     final planes = <CADSketchPlane>[
       if (viewModel.showAllDatumPlanes && !viewModel.isSketchMode) ...viewModel.datumPlanes,
       ...viewModel.customPlanes,
@@ -76,23 +125,33 @@ class Assembly3DPlanePainter extends CustomPainter {
         ..lineTo(cTL.dx, cTL.dy)
         ..close();
 
+      final bool isHoveredInSelection = isHovered && viewModel.activeSketchPlane == null;
+
       final Color baseColor = isActiveSketch
           ? const Color(0xFF7DD3FC)
-          : (plane.customColor ?? const Color(0xFF38BDF8));
+          : isHoveredInSelection
+              ? const Color(0xFFEAB308)
+              : (plane.customColor ?? const Color(0xFF38BDF8));
 
       final double fillAlpha = isActiveSketch
           ? 0.0
           : isSelected
               ? 0.14
-              : isHovered
-                  ? 0.10
-                  : 0.04;
+              : isHoveredInSelection
+                  ? 0.45
+                  : isHovered
+                      ? 0.10
+                      : 0.04;
+
+      final Color fillColor = isHoveredInSelection
+          ? const Color(0x73FEF08A)
+          : baseColor.withValues(alpha: fillAlpha);
 
       if (fillAlpha > 0.0) {
         canvas.drawPath(
           path,
           Paint()
-            ..color = baseColor.withValues(alpha: fillAlpha)
+            ..color = fillColor
             ..style = PaintingStyle.fill,
         );
       }
@@ -102,10 +161,12 @@ class Assembly3DPlanePainter extends CustomPainter {
             ? const Color(0xFF7DD3FC)
             : isSelected
                 ? const Color(0xFFF59E0B)
-                : isHovered
-                    ? baseColor.withValues(alpha: 0.90)
-                    : baseColor.withValues(alpha: 0.45)
-        ..strokeWidth = isActiveSketch ? 1.15 : (isSelected ? 1.8 : 1.0)
+                : isHoveredInSelection
+                    ? const Color(0xFFEAB308)
+                    : isHovered
+                        ? baseColor.withValues(alpha: 0.90)
+                        : baseColor.withValues(alpha: 0.45)
+        ..strokeWidth = isActiveSketch ? 1.15 : (isHoveredInSelection || isSelected ? 2.2 : 1.0)
         ..style = PaintingStyle.stroke;
 
       canvas.drawPath(path, borderPaint);

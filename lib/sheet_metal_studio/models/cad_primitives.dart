@@ -119,6 +119,32 @@ class CadFoldedPolygon3D {
     this.boundaryLines = const [],
     this.tangentLines = const [],
   });
+
+  CadFoldedPolygon3D copyWith({
+    String? faceId,
+    List<CadPoint3D>? vertices,
+    CadPoint3D? normal,
+    Color? color,
+    bool? drawWireframe,
+    List<List<CadPoint3D>>? holes,
+    List<String>? holePunchIds,
+    List<List<CadPoint3D>>? cutSegments,
+    List<List<CadPoint3D>>? boundaryLines,
+    List<List<CadPoint3D>>? tangentLines,
+  }) {
+    return CadFoldedPolygon3D(
+      faceId: faceId ?? this.faceId,
+      vertices: vertices ?? this.vertices,
+      normal: normal ?? this.normal,
+      color: color ?? this.color,
+      drawWireframe: drawWireframe ?? this.drawWireframe,
+      holes: holes ?? this.holes,
+      holePunchIds: holePunchIds ?? this.holePunchIds,
+      cutSegments: cutSegments ?? this.cutSegments,
+      boundaryLines: boundaryLines ?? this.boundaryLines,
+      tangentLines: tangentLines ?? this.tangentLines,
+    );
+  }
 }
 
 /// 2D Line Segment (used for Laser Cut Lines, Slits, Partition Edges)

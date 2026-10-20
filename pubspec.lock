@@ -198,6 +198,38 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter3d:
+    dependency: "direct main"
+    description:
+      name: flutter3d
+      sha256: "565e748546ec75be56b5a80392666c18df03bc5ff7973b71114858809ec38b21"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.8.3+1"
+  flutter3d_core:
+    dependency: transitive
+    description:
+      name: flutter3d_core
+      sha256: adb0e3b7e16a4dbb2e48955f336592349b99f6478021a5c27903d24922e834ab
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.8.3+1"
+  flutter3d_hardware:
+    dependency: transitive
+    description:
+      name: flutter3d_hardware
+      sha256: ea9772c7aba1766fecbcf9d9b3fc4976c29d300b702464016cb71a4f88616645
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.8.0+1"
+  flutter3d_shaders:
+    dependency: transitive
+    description:
+      name: flutter3d_shaders
+      sha256: e9b648e40be55af7fc17028397c7057907a997502cb1c8f2bdd32dd6560f7b6f
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.8.2+1"
   flutter_angle:
     dependency: transitive
     description:

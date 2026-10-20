@@ -327,18 +327,22 @@ class _AssemblyOnshapeToolbarState extends State<AssemblyOnshapeToolbar> {
   }
 
   Widget _buildSketchButton({required AssemblyStudioViewModel vm}) {
-    final isSketch = vm.isSketchMode;
+    final isSketch = vm.isSketchMode || vm.isPlaneSelectionMode;
     return Tooltip(
-      message: isSketch
+      message: vm.isSketchMode
           ? 'Finish active sketch (Enter)'
-          : 'New Sketch (Shift+S)',
+          : vm.isPlaneSelectionMode
+              ? 'Cancel plane selection (Esc)'
+              : 'New Sketch (Shift+S)',
       waitDuration: const Duration(milliseconds: 300),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: () {
-            if (isSketch) {
+            if (vm.isSketchMode) {
               vm.finishSketch();
+            } else if (vm.isPlaneSelectionMode) {
+              vm.exitPlaneSelectionMode();
             } else {
               vm.enterSketchMode();
             }

@@ -8,6 +8,7 @@ import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmo
 import 'package:trufold_studio/assembly_studio/views/theme/assembly_studio_theme.dart';
 import 'toolbar/assembly_desktop_menu_bar.dart';
 import 'toolbar/assembly_onshape_toolbar.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/cad_brep_flutter_gpu_scene.dart' hide Material;
 
 class AssemblyOnshapeTopBar extends StatelessWidget {
   final AssemblyStudioViewModel viewModel;
@@ -141,6 +142,11 @@ class AssemblyOnshapeTopBar extends StatelessWidget {
               isBottomDrawerOpen: isBottomDrawerOpen,
               onResetPositions: onResetPositions,
             ),
+
+            const SizedBox(width: 10),
+
+            // 1-Click Live Layer 1 Engine Switcher (CustomPaint v9.3 | three_js | flutter3d)
+            const CadLayer1EngineSelectorPill(),
 
             const SizedBox(width: 16),
 

@@ -11,6 +11,7 @@ import 'package:trufold_studio/assembly_studio/models/assembly_document.dart';
 import 'package:trufold_studio/assembly_studio/models/assembly_part.dart';
 import 'package:trufold_studio/assembly_studio/models/assembly_timeline_item.dart';
 import 'package:trufold_studio/assembly_studio/engine/sketch/assembly_surface_sketch_engine.dart';
+import 'package:trufold_studio/assembly_studio/engine/sketch/cad_manifold_csg_engine.dart';
 
 /// Boolean operation type for 3D extrusion features.
 enum AssemblyExtrudeOperation {
@@ -578,7 +579,11 @@ class AssemblyExtrudeEngine {
             message: 'Join failed: No target part exists to join with.',
           );
         }
-        final localJoinPolys = _transformWorldPolysToPartLocal(solidMesh.polygons, target);
+        final localRawJoinPolys = _transformWorldPolysToPartLocal(solidMesh.polygons, target);
+        final localJoinPolys = CadManifoldCsgEngine.booleanUnion(
+          targetPolygons: const [],
+          toolPolygons: localRawJoinPolys,
+        );
         target.joinedExtrusionsByPlane[plane.id] = localJoinPolys;
         target.invalidateMeshCache();
 
@@ -650,7 +655,11 @@ class AssemblyExtrudeEngine {
             message: 'Intersect failed: No target part exists.',
           );
         }
-        target.customPolygons = _transformWorldPolysToPartLocal(solidMesh.polygons, target);
+        final localToolPolys = _transformWorldPolysToPartLocal(solidMesh.polygons, target);
+        target.customPolygons = CadManifoldCsgEngine.booleanIntersection(
+          targetPolygons: target.customPolygons ?? const <CadFoldedPolygon3D>[],
+          toolPolygons: localToolPolys,
+        );
         target.invalidateMeshCache();
 
         plane.dependentFeatures.removeWhere((d) => d.id == linkId);

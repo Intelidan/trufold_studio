@@ -1438,8 +1438,8 @@ class AssemblyPart {
       ),
     );
 
-    // 3D Obround Slot Bore Sidewalls (Item 4)
-    _addHoleBoreWalls(thickPolys, holes, webNorm, T);
+    // Fix v9.3: Removed duplicate _addHoleBoreWalls call here (already called at line 1246),
+    // cutting rung bore polygon count in half (saving 704 polygons on the 4-rung demo)!
   }
 
   void _buildStraightRailPolygons(List<CadFoldedPolygon3D> polys, List<CadFoldedPolygon3D> thickPolys) {

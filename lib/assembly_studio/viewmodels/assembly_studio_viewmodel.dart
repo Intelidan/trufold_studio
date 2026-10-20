@@ -824,6 +824,17 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// Identifier of currently hovered plane or part face during plane selection
   String? hoveredPlaneId;
 
+  /// Active hovered 3D face polygon during plane selection
+  CadFoldedPolygon3D? hoveredFacePolygon;
+  AssemblyPart? hoveredFacePart;
+
+  void setHoveredFace(CadFoldedPolygon3D? poly, AssemblyPart? part) {
+    if (hoveredFacePolygon == poly && hoveredFacePart == part) return;
+    hoveredFacePolygon = poly;
+    hoveredFacePart = part;
+    notifyListeners();
+  }
+
   /// User-defined construction planes (Offset, Angle, Midplane, 3-Point)
   final List<CADSketchPlane> constructionPlanes = [];
 
@@ -1193,7 +1204,12 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       selectedSketchConstraint = null;
     }
     selectedSketchEntityIds.clear();
-    if (entity != null) selectedSketchEntityIds.add(entity.id);
+    if (entity != null) {
+      selectedSketchEntityIds.add(entity.id);
+      extrudeParams = extrudeParams.copyWith(profileEntityIds: [entity.id]);
+    } else {
+      extrudeParams = extrudeParams.copyWith(profileEntityIds: const []);
+    }
     for (final p in activeSketchPlane?.primitives ?? <CADPrimitiveEntity>[]) {
       p.isSelected = (p.id == entity?.id);
     }
@@ -1218,16 +1234,15 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     if (activeSketchPlane == null && allAvailablePlanes.isNotEmpty) {
       activeSketchPlane = allAvailablePlanes.first;
     }
-    if (activeSketchPlane != null && extrudeParams.profileEntityIds.isEmpty) {
+    if (activeSketchPlane != null) {
       if (selectedSketchEntity != null) {
         extrudeParams = extrudeParams.copyWith(profileEntityIds: [selectedSketchEntity!.id]);
-      } else {
-        final selectedIds = activeSketchPlane!.primitives.where((p) => p.isSelected).map((p) => p.id).toList();
-        if (selectedIds.isNotEmpty) {
-          extrudeParams = extrudeParams.copyWith(profileEntityIds: selectedIds);
-        } else if (activeSketchPlane!.primitives.isNotEmpty) {
-          extrudeParams = extrudeParams.copyWith(profileEntityIds: [activeSketchPlane!.primitives.first.id]);
-        }
+      } else if (selectedSketchEntityIds.isNotEmpty) {
+        extrudeParams = extrudeParams.copyWith(profileEntityIds: selectedSketchEntityIds.toList());
+      } else if (activeSketchPlane!.primitives.isNotEmpty) {
+        final target = activeSketchPlane!.primitives.last;
+        selectSketchPrimitive(target);
+        extrudeParams = extrudeParams.copyWith(profileEntityIds: [target.id]);
       }
     }
     isExtrudeMode = true;
@@ -1278,7 +1293,11 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
 
   void executeExtrudeFeature() {
     if (activeSketchPlane == null) return;
-    final targetProfileIds = extrudeParams.profileEntityIds;
+    final targetProfileIds = (selectedSketchEntity != null)
+        ? [selectedSketchEntity!.id]
+        : (extrudeParams.profileEntityIds.isNotEmpty
+            ? extrudeParams.profileEntityIds
+            : (selectedSketchEntityIds.isNotEmpty ? selectedSketchEntityIds.toList() : <String>[]));
     final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(
       activeSketchPlane!,
       targetEntityIds: targetProfileIds.isNotEmpty ? targetProfileIds : null,
@@ -3788,15 +3807,15 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   // WYSIWYG Face Sketch Mode & 'S' Key Focus
   // -------------------------------------------------------------
   void enterSketchMode({String? faceId}) {
-    if (faceId == null && selectedPart == null && activeSketchPlane == null) {
-      if (doc.parts.isNotEmpty) {
-        focusPartAndEnterSketch(doc.parts.first.id, faceId: faceId);
-        return;
-      }
-      activateSketchOnDatum('XY');
+    if (faceId != null && selectedPart != null) {
+      focusPartAndEnterSketch(selectedPart!.id, faceId: faceId);
       return;
     }
-    focusPartAndEnterSketch(selectedPart?.id, faceId: faceId);
+    if (doc.selectedFaceId != null && selectedPart != null) {
+      focusPartAndEnterSketch(selectedPart!.id, faceId: doc.selectedFaceId);
+      return;
+    }
+    enterPlaneSelectionMode();
   }
 
   void enterPlaneSelectionMode() {
@@ -3808,6 +3827,8 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   void exitPlaneSelectionMode() {
     isPlaneSelectionMode = false;
     hoveredPlaneId = null;
+    hoveredFacePolygon = null;
+    hoveredFacePart = null;
     notifyListeners();
   }
 
@@ -3837,6 +3858,8 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     isSketchMode = true;
     isPlaneSelectionMode = false;
     hoveredPlaneId = null;
+    hoveredFacePolygon = null;
+    hoveredFacePart = null;
     is3DMovementLocked = true;
 
     alignCameraToActivePlaneNormal();
@@ -4373,7 +4396,15 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
   /// Executes boolean void cut on the active surface using the validated sketch profile.
   void executeFeatureCutOnActiveSurface({bool isPassThrough = true, double depthMm = 5.0}) {
     if (activeSketchPlane == null) return;
-    final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(activeSketchPlane!);
+    final targetProfileIds = (selectedSketchEntity != null)
+        ? [selectedSketchEntity!.id]
+        : (extrudeParams.profileEntityIds.isNotEmpty
+            ? extrudeParams.profileEntityIds
+            : (selectedSketchEntityIds.isNotEmpty ? selectedSketchEntityIds.toList() : <String>[]));
+    final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(
+      activeSketchPlane!,
+      targetEntityIds: targetProfileIds.isNotEmpty ? targetProfileIds : null,
+    );
     final validation = CADProfileValidator.validateProfile(segments);
     activeSketchValidation = validation;
 
@@ -4478,7 +4509,10 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     if (activeSketchPlane == null) return;
     _recordUndo();
     _convertSelectedRectangleToSegmentsIfNeeded();
-    final segs = activeSketchPlane!.entities.where((s) => !s.isDeleted && !s.isConstruction).toList();
+    final selId = selectedSketchEntity?.id;
+    final segs = activeSketchPlane!.entities
+        .where((s) => !s.isDeleted && !s.isConstruction && (selId == null || s.id.startsWith(selId) || s.id.contains(selId)))
+        .toList();
     if (segs.length < 2) return;
     final newSegs = CADCornerModifier.applyChamfer(segA: segs[0], segB: segs[1], offsetMm: offsetMm);
     activeSketchPlane!.entities.addAll(newSegs);
@@ -4491,7 +4525,10 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     if (activeSketchPlane == null) return;
     _recordUndo();
     _convertSelectedRectangleToSegmentsIfNeeded();
-    final segs = activeSketchPlane!.entities.where((s) => !s.isDeleted && !s.isConstruction).toList();
+    final selId = selectedSketchEntity?.id;
+    final segs = activeSketchPlane!.entities
+        .where((s) => !s.isDeleted && !s.isConstruction && (selId == null || s.id.startsWith(selId) || s.id.contains(selId)))
+        .toList();
     if (segs.length < 2) return;
     final newSegs = CADCornerModifier.applyFillet(segA: segs[0], segB: segs[1], radiusMm: radiusMm);
     activeSketchPlane!.entities.addAll(newSegs);
@@ -5281,20 +5318,19 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
       final slotEntityLeft = punchRungSlot(railId: leftRail.id, distanceX: rx);
       final slotEntityRight = punchRungSlot(railId: rightRail.id, distanceX: rx);
 
-      // Create C-channel rung
-      // Pass-through rung extends symmetrically with 10mm protrusion through both rail webs
+      // Create C-channel rung flush between the two side rails (Y = 0.0 to Y = ladderWidth)
       final rung = AssemblyPart(
         id: rungId,
         name: 'Rung #${i + 1}',
         type: AssemblyPartType.rung,
-        length: ladderWidth + 20.0,
+        length: ladderWidth,
         height: 20.0,
         flangeWidth: 20.0,
         thickness: 1.5,
         parentPartId: leftRail.id,
         matedSlotEntityId: slotEntityLeft.id,
-        mateStyle: 'passThrough',
-        position: CadPoint3D(rx, -10.0, (railHeight / 2.0) - 10.0), // Pass through protrudes -10mm
+        mateStyle: 'flush',
+        position: CadPoint3D(rx, 0.0, (railHeight / 2.0) - 10.0),
         rotationDeg: const CadPoint3D(0.0, 0.0, 90.0), // Transverse along Y
         color: const Color(0xFF5B8DB8), // Onshape Medium Cerulean
         jointType: AssemblyJointType.slotMate,

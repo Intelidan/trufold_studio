@@ -30,16 +30,204 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 
 import '../models/cad_primitives.dart';
 import '../viewmodels/sheet_metal_studio_viewmodel.dart';
 import 'kinematic_fold_engine.dart';
+import 'layer1_three_js_adapter.dart';
+import 'layer1_flutter3d_adapter.dart';
+
+vm.Vector3 builder_vec3(double x, double y, double z) => vm.Vector3(x, y, z);
+vm.Vector4 builder_vec4(double x, double y, double z, double w) => vm.Vector4(x, y, z, w);
+
+/// The 3 selectable Layer 1 3D Rendering Engines for side-by-side benchmarking.
+/// Once testing with interlinked Layer 2 (Manifold CSG) and Layer 3 (Simultaneous LM Solver)
+/// is complete, you can keep the winner and delete the other two!
+enum CadLayer1Engine {
+  customPaintV93(
+    id: 'custom_paint_v93',
+    shortLabel: 'CustomPaint (v9.3)',
+    menuLabel: 'Layer 1A: CustomPaint B-Rep + Newell 3D (Backup)',
+    badgeTag: 'CustomPaint',
+    accentColor: Color(0xFF0EA5E9),
+  ),
+  threeJsGpu(
+    id: 'three_js_gpu',
+    shortLabel: 'three_js (GPU)',
+    menuLabel: 'Layer 1B: three_js (WebGL2/ANGLE Hardware Z-Buffer)',
+    badgeTag: 'three_js',
+    accentColor: Color(0xFF10B981),
+  ),
+  flutter3dGpu(
+    id: 'flutter3d_gpu',
+    shortLabel: 'flutter3d (GPU)',
+    menuLabel: 'Layer 1C: flutter3d (Impeller PBR/Toon Z-Buffer)',
+    badgeTag: 'flutter3d',
+    accentColor: Color(0xFF8B5CF6),
+  );
+
+  final String id;
+  final String shortLabel;
+  final String menuLabel;
+  final String badgeTag;
+  final Color accentColor;
+
+  const CadLayer1Engine({required this.id, required this.shortLabel, required this.menuLabel, required this.badgeTag, required this.accentColor});
+}
+
+/// Guards against the Flutter Windows embedder `RawKeyboard` modifier desync bug
+/// (`raw_keyboard.dart:863`: `event is! RawKeyDownEvent || _keysPressed.isNotEmpty`)
+/// when Windows sends `Alt Left` (`keyCode: 164`, `scanCode: 56`) or other modifier
+/// keydown events with `modifiers: 0` (e.g. during Alt+Tab or system menu activation).
+class CadWindowsKeyboardGuard {
+  static bool _installed = false;
+
+  static void ensureInstalled() {
+    if (_installed) return;
+    _installed = true;
+    try {
+      final binding = WidgetsBinding.instance;
+      final keyEventManager = binding.keyEventManager;
+      SystemChannels.keyEvent.setMessageHandler((dynamic message) async {
+        if (message is Map<String, dynamic>) {
+          final keymap = message['keymap'];
+          final type = message['type'];
+          if (keymap == 'windows' && type == 'keydown') {
+            final modifiers = (message['modifiers'] as int?) ?? 0;
+            final keyCode = (message['keyCode'] as int?) ?? 0;
+            final scanCode = (message['scanCode'] as int?) ?? 0;
+            // Windows VK codes for modifiers:
+            // Shift: 16, 160, 161 (bit 1)
+            // Control: 17, 162, 163 (bit 8)
+            // Alt/Menu: 18, 164, 165, scanCode 56 (bit 64)
+            // Meta/Win: 91, 92 (bits 512 | 1024)
+            final isAltKey = keyCode == 18 || keyCode == 164 || keyCode == 165 || scanCode == 56;
+            final isShiftKey = keyCode == 16 || keyCode == 160 || keyCode == 161;
+            final isCtrlKey = keyCode == 17 || keyCode == 162 || keyCode == 163;
+            final isMetaKey = keyCode == 91 || keyCode == 92;
+
+            final missingAltBit = isAltKey && (modifiers & 64) == 0;
+            final missingShiftBit = isShiftKey && (modifiers & 1) == 0;
+            final missingCtrlBit = isCtrlKey && (modifiers & 8) == 0;
+            final missingMetaBit = isMetaKey && (modifiers & 1536) == 0;
+
+            if (missingAltBit || missingShiftBit || missingCtrlBit || missingMetaBit) {
+              return <String, dynamic>{'handled': false};
+            }
+          }
+        }
+        try {
+          return await keyEventManager.handleRawKeyMessage(message);
+        } catch (_) {
+          return <String, dynamic>{'handled': false};
+        }
+      });
+    } catch (_) {}
+  }
+}
 
 /// Global real-time FPS & Frame-Time telemetry published to the top toolbar (SS4).
 class CadFpsTelemetry {
-  static final ValueNotifier<String> notifier = ValueNotifier<String>('60 FPS · 1.5 ms · v9.1');
+  static final ValueNotifier<CadLayer1Engine> activeEngineNotifier = ValueNotifier<CadLayer1Engine>(CadLayer1Engine.customPaintV93);
+
+  static CadLayer1Engine get activeEngine => _pendingEngine ?? activeEngineNotifier.value;
+
+  static final ValueNotifier<String> notifier = ValueNotifier<String>('60 FPS · 1.2 ms · ${activeEngineNotifier.value.badgeTag}');
   static final ValueNotifier<double> fpsValueNotifier = ValueNotifier<double>(60.0);
+
+  static bool _postFrameScheduled = false;
+  static double _latestFps = 60.0;
+  static double _latestMs = 1.2;
+  static CadLayer1Engine? _pendingEngine;
+
+  /// Only `SchedulerPhase.persistentCallbacks` is inside Flutter's build/layout/paint pass.
+  /// Button taps (`idle` / `transientCallbacks` / `midFrameMicrotasks`) can safely update
+  /// ValueNotifiers immediately without waiting for the next frame!
+  static bool get _isInsidePersistentBuildOrPaint => SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks;
+
+  static void _flushPendingPostFrame(Duration _) {
+    _postFrameScheduled = false;
+    if (_pendingEngine != null) {
+      final targetEngine = _pendingEngine!;
+      _pendingEngine = null;
+      if (activeEngineNotifier.value != targetEngine) {
+        activeEngineNotifier.value = targetEngine;
+      }
+      Scene.notifyAllActiveScenes();
+    }
+    if ((fpsValueNotifier.value - _latestFps).abs() >= 0.5) {
+      fpsValueNotifier.value = _latestFps;
+    }
+    final currentTag = activeEngineNotifier.value.badgeTag;
+    final nextLabel = '${_latestFps.round()} FPS · ${_latestMs.toStringAsFixed(1)} ms · $currentTag';
+    if (notifier.value != nextLabel) {
+      notifier.value = nextLabel;
+    }
+  }
+
+  static void _scheduleFlushIfNeeded() {
+    if (!_postFrameScheduled) {
+      _postFrameScheduled = true;
+      SchedulerBinding.instance.addPostFrameCallback(_flushPendingPostFrame);
+    }
+  }
+
+  /// Safely publishes FPS telemetry from inside `CustomPainter.paint()` by deferring
+  /// `ValueNotifier` updates to a post-frame callback and dynamically reading
+  /// `activeEngineNotifier.value.badgeTag` at flush time so it NEVER overwrites an engine switch!
+  static void publishFromPaint({required double smoothedFps, required double smoothedMs, String? label}) {
+    CadWindowsKeyboardGuard.ensureInstalled();
+    _latestFps = smoothedFps;
+    _latestMs = smoothedMs;
+    final tag = (_pendingEngine ?? activeEngineNotifier.value).badgeTag;
+    final targetLabel = '${smoothedFps.round()} FPS · ${smoothedMs.toStringAsFixed(1)} ms · $tag';
+    if (notifier.value == targetLabel && _pendingEngine == null) return;
+
+    if (_isInsidePersistentBuildOrPaint) {
+      _scheduleFlushIfNeeded();
+    } else {
+      if (_pendingEngine != null) {
+        final targetEngine = _pendingEngine!;
+        _pendingEngine = null;
+        if (activeEngineNotifier.value != targetEngine) {
+          activeEngineNotifier.value = targetEngine;
+        }
+      }
+      fpsValueNotifier.value = smoothedFps;
+      notifier.value = targetLabel;
+    }
+  }
+
+  /// Immediately switches the active Layer-1 rendering engine (`CustomPaint v9.3`, `three_js`, or `flutter3d`)
+  /// and triggers a synchronous repaint across all active `Scene` viewports.
+  static void setEngine(CadLayer1Engine engine) {
+    CadWindowsKeyboardGuard.ensureInstalled();
+    _pendingEngine = engine;
+    final nextLabel = '${_latestFps.round()} FPS · ${_latestMs.toStringAsFixed(1)} ms · ${engine.badgeTag}';
+
+    if (_isInsidePersistentBuildOrPaint) {
+      _scheduleFlushIfNeeded();
+    } else {
+      _pendingEngine = null;
+      if (activeEngineNotifier.value != engine) {
+        activeEngineNotifier.value = engine;
+      }
+      if (notifier.value != nextLabel) {
+        notifier.value = nextLabel;
+      }
+      Scene.notifyAllActiveScenes();
+    }
+  }
+
+  static void cycleEngine() {
+    final values = CadLayer1Engine.values;
+    final current = _pendingEngine ?? activeEngineNotifier.value;
+    final nextIdx = (values.indexOf(current) + 1) % values.length;
+    setEngine(values[nextIdx]);
+  }
 }
 
 enum AlphaMode { opaque, mask, blend }
@@ -101,11 +289,8 @@ class DirectionalLight {
   double intensity;
   bool castsShadow;
 
-  DirectionalLight({
-    vm.Vector3? direction,
-    this.intensity = 1.0,
-    this.castsShadow = false,
-  }) : direction = (direction ?? vm.Vector3(-0.4, -0.6, 0.7)).normalized();
+  DirectionalLight({vm.Vector3? direction, this.intensity = 1.0, this.castsShadow = false})
+    : direction = (direction ?? vm.Vector3(-0.4, -0.6, 0.7)).normalized();
 }
 
 abstract class Material {
@@ -162,11 +347,7 @@ class LineSegmentsGeometry extends Geometry {
   final double width;
   final double normalOffset;
 
-  LineSegmentsGeometry(
-    this.data, {
-    this.width = 1.25,
-    this.normalOffset = 0.0,
-  });
+  LineSegmentsGeometry(this.data, {this.width = 1.25, this.normalOffset = 0.0});
 }
 
 class BuiltTriangleGeometry extends Geometry {
@@ -175,12 +356,7 @@ class BuiltTriangleGeometry extends Geometry {
   final Float32List colors;
   final Uint16List indices;
 
-  const BuiltTriangleGeometry({
-    required this.positions,
-    required this.normals,
-    required this.colors,
-    required this.indices,
-  });
+  const BuiltTriangleGeometry({required this.positions, required this.normals, required this.colors, required this.indices});
 }
 
 class GeometryBuilder {
@@ -311,6 +487,17 @@ class CompiledBRepFacet {
     required this.minZ,
     required this.maxZ,
   });
+
+  /// True for tiny 1.5mm–2.0mm internal hole bore walls, blind pocket floors,
+  /// and thin sheet-metal thickness rims/end-caps so the O(N^2) Newell topological
+  /// promoter only runs on major structural walls (~48 faces instead of 1,500+).
+  bool get isInternalRimOrBore =>
+      faceId.startsWith('BORE_') ||
+      faceId.contains('_BORE_') ||
+      faceId.contains('_bore_') ||
+      faceId.startsWith('RIM_') ||
+      faceId.contains('_rim_') ||
+      faceId.contains('_end_cap_');
 }
 
 class CadBRepModelData {
@@ -332,6 +519,9 @@ class CadBRepModelData {
 
   late final List<CompiledBRepFacet> compiledFacets;
   late final double maxModelDim;
+  ThreeJsRetainedBufferGeometry? _cachedGpuBuffers;
+
+  ThreeJsRetainedBufferGeometry get gpuBuffers => _cachedGpuBuffers ??= Layer1ThreeJsAdapter.compileBufferGeometry(this);
 
   List<CompiledBRepFacet> get compiledBuffers => compiledFacets;
 
@@ -352,10 +542,7 @@ class CadBRepModelData {
     this.precomputedFaceColors = const {},
     this.resolvedFaceColors = const {},
   }) {
-    maxModelDim = math.max(
-      meshResult.boundWidth,
-      math.max(meshResult.boundLength, meshResult.boundHeight),
-    ).clamp(100.0, 10000.0);
+    maxModelDim = math.max(meshResult.boundWidth, math.max(meshResult.boundLength, meshResult.boundHeight)).clamp(100.0, 10000.0);
     compiledFacets = _compileBRepFacets();
   }
 
@@ -367,7 +554,11 @@ class CadBRepModelData {
     if (lower.startsWith('weld_')) {
       return lower;
     }
+    if (fid.startsWith('rail_left')) return 'rail_left';
+    if (fid.startsWith('rail_right')) return 'rail_right';
     final raw = SheetMetalStudioViewModel.extractPartIdFromFaceId(fid);
+    if (raw == 'inner_rail') return 'rail_left';
+    if (raw == 'outer_rail') return 'rail_right';
     if (raw.startsWith('face_') ||
         raw == 'RIM' ||
         raw == 'FILLET' ||
@@ -385,9 +576,7 @@ class CadBRepModelData {
 
   List<CompiledBRepFacet> _compileBRepFacets() {
     final bool isGlobalTranslucent = renderMode == OnshapeRenderMode.translucent;
-    final bool shouldDrawWireframe = showWireframe &&
-        renderMode != OnshapeRenderMode.shadedWithoutEdges &&
-        preferences.lineWidth > 0.05;
+    final bool shouldDrawWireframe = showWireframe && renderMode != OnshapeRenderMode.shadedWithoutEdges && preferences.lineWidth > 0.05;
 
     // 1. Identify which parts form closed 3D shells (have thickness / inner walls / rims)
     final closedShellParts = <String>{};
@@ -426,9 +615,7 @@ class CadBRepModelData {
       if (hiddenPartIds.contains(rawPartId) || hiddenPartIds.contains(canonicalPartId)) {
         continue;
       }
-      if (isolatedPartIds.isNotEmpty &&
-          !isolatedPartIds.contains(rawPartId) &&
-          !isolatedPartIds.contains(canonicalPartId)) {
+      if (isolatedPartIds.isNotEmpty && !isolatedPartIds.contains(rawPartId) && !isolatedPartIds.contains(canonicalPartId)) {
         continue;
       }
 
@@ -445,9 +632,7 @@ class CadBRepModelData {
         final rz = v.z - pivot.z;
         if (relVerts.isNotEmpty) {
           final last = relVerts.last;
-          if ((rx - last.x).abs() < 1e-4 &&
-              (ry - last.y).abs() < 1e-4 &&
-              (rz - last.z).abs() < 1e-4) {
+          if ((rx - last.x).abs() < 1e-4 && (ry - last.y).abs() < 1e-4 && (rz - last.z).abs() < 1e-4) {
             continue;
           }
         }
@@ -479,18 +664,14 @@ class CadBRepModelData {
           SectionPlaneAxis.zx => centroid.y,
           SectionPlaneAxis.xy => centroid.z,
         };
-        final bool isClipped = sectionViewConfig.flipNormal
-            ? (planeVal < sectionViewConfig.distanceOffsetMm)
-            : (planeVal > sectionViewConfig.distanceOffsetMm);
+        final bool isClipped = sectionViewConfig.flipNormal ? (planeVal < sectionViewConfig.distanceOffsetMm) : (planeVal > sectionViewConfig.distanceOffsetMm);
         if (isClipped) continue;
       }
 
       // Normalize face normal
       final n = poly.normal;
       final lenN = math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
-      final unitNormal = lenN > 1e-6
-          ? CadPoint3D(n.x / lenN, n.y / lenN, n.z / lenN)
-          : const CadPoint3D(0.0, 0.0, 1.0);
+      final unitNormal = lenN > 1e-6 ? CadPoint3D(n.x / lenN, n.y / lenN, n.z / lenN) : const CadPoint3D(0.0, 0.0, 1.0);
 
       // Relative holes
       final relHoles = <List<CadPoint3D>>[];
@@ -517,7 +698,8 @@ class CadBRepModelData {
       }
 
       // Collect topological boundary segments (deduplicated across shared edges so each crease draws once)
-      final isInternalRimOrBore = fid.startsWith('BORE_') ||
+      final isInternalRimOrBore =
+          fid.startsWith('BORE_') ||
           fid.startsWith('RIM_') ||
           fid.startsWith('CHAMFER_') ||
           fid.contains('_rim_') ||
@@ -526,12 +708,13 @@ class CadBRepModelData {
 
       final bSegs = <(CadPoint3D, CadPoint3D)>[];
       if (shouldDrawWireframe && poly.drawWireframe && !isInternalRimOrBore) {
+        final facetSeenEdges = <String>{};
         if (poly.boundaryLines.isNotEmpty) {
           for (final seg in poly.boundaryLines) {
             for (int i = 0; i < seg.length - 1; i++) {
               final p0 = CadPoint3D(seg[i].x - pivot.x, seg[i].y - pivot.y, seg[i].z - pivot.z);
               final p1 = CadPoint3D(seg[i + 1].x - pivot.x, seg[i + 1].y - pivot.y, seg[i + 1].z - pivot.z);
-              if (seenEdges.add(edgeKey3D(p0, p1))) {
+              if (facetSeenEdges.add(edgeKey3D(p0, p1))) {
                 bSegs.add((p0, p1));
               }
             }
@@ -540,7 +723,7 @@ class CadBRepModelData {
           for (int i = 0; i < relVerts.length; i++) {
             final p0 = relVerts[i];
             final p1 = relVerts[(i + 1) % relVerts.length];
-            if (seenEdges.add(edgeKey3D(p0, p1))) {
+            if (facetSeenEdges.add(edgeKey3D(p0, p1))) {
               bSegs.add((p0, p1));
             }
           }
@@ -550,9 +733,7 @@ class CadBRepModelData {
       final isWeld = fid.startsWith('WELD_') || fid.startsWith('weld_');
       final isHovered = (fid == hoveredFaceId);
       final isSelected = (fid == selectedFaceId);
-      final isTranslucent = isGlobalTranslucent ||
-          transparentPartIds.contains(rawPartId) ||
-          transparentPartIds.contains(canonicalPartId);
+      final isTranslucent = isGlobalTranslucent || transparentPartIds.contains(rawPartId) || transparentPartIds.contains(canonicalPartId);
 
       Color baseSrgb = const Color(0xFF6C9DC6);
       if (isWeld) {
@@ -568,9 +749,7 @@ class CadBRepModelData {
       }
 
       final studioSrgb = precomputedFaceColors[fid] ?? baseSrgb;
-      final bool cullBackface = !isTranslucent &&
-          closedShellParts.contains(canonicalPartId) &&
-          !isWeld;
+      final bool cullBackface = !isTranslucent && closedShellParts.contains(canonicalPartId) && !isWeld;
 
       final facet = CompiledBRepFacet(
         faceId: fid,
@@ -598,37 +777,36 @@ class CadBRepModelData {
 
       // Register major structural rail/channel planes (webs & flanges with span >= 90mm)
       // so piercing rungs and welds are split cleanly along rail walls!
-      if (!isWeld &&
-          !isInternalRimOrBore &&
-          canonicalPartId != 'sheet_metal_body' &&
-          !canonicalPartId.startsWith('rung_')) {
+      if (!isWeld && !isInternalRimOrBore && canonicalPartId != 'sheet_metal_body' && !canonicalPartId.startsWith('rung_')) {
         final spanX = maxX - minX;
         final spanY = maxY - minY;
         final spanZ = maxZ - minZ;
         final maxSpan = math.max(spanX, math.max(spanY, spanZ));
         if (maxSpan >= 90.0) {
-          final dPlane = unitNormal.x * relVerts[0].x +
-              unitNormal.y * relVerts[0].y +
-              unitNormal.z * relVerts[0].z;
+          final dPlane = unitNormal.x * relVerts[0].x + unitNormal.y * relVerts[0].y + unitNormal.z * relVerts[0].z;
           // Deduplicate coplanar structural planes
-          final alreadyExists = structuralPlanes.any((sp) =>
-              sp.partId == canonicalPartId &&
-              (sp.nx * unitNormal.x + sp.ny * unitNormal.y + sp.nz * unitNormal.z - 1.0).abs() < 1e-3 &&
-              (sp.d - dPlane).abs() < 0.25);
+          final alreadyExists = structuralPlanes.any(
+            (sp) =>
+                sp.partId == canonicalPartId &&
+                (sp.nx * unitNormal.x + sp.ny * unitNormal.y + sp.nz * unitNormal.z - 1.0).abs() < 1e-3 &&
+                (sp.d - dPlane).abs() < 0.25,
+          );
           if (!alreadyExists) {
-            structuralPlanes.add(_StructuralPartPlane(
-              partId: canonicalPartId,
-              nx: unitNormal.x,
-              ny: unitNormal.y,
-              nz: unitNormal.z,
-              d: dPlane,
-              minX: minX,
-              maxX: maxX,
-              minY: minY,
-              maxY: maxY,
-              minZ: minZ,
-              maxZ: maxZ,
-            ));
+            structuralPlanes.add(
+              _StructuralPartPlane(
+                partId: canonicalPartId,
+                nx: unitNormal.x,
+                ny: unitNormal.y,
+                nz: unitNormal.z,
+                d: dPlane,
+                minX: minX,
+                maxX: maxX,
+                minY: minY,
+                maxY: maxY,
+                minZ: minZ,
+                maxZ: maxZ,
+              ),
+            );
           }
         }
       }
@@ -643,9 +821,10 @@ class CadBRepModelData {
     //    and never split a facet that has interior holes (like rail webs themselves).
     var workFacets = <CompiledBRepFacet>[];
     for (final facet in rawFacets) {
-      if (facet.partId == 'sheet_metal_body' ||
-          facet.holes.isNotEmpty ||
-          (!facet.partId.startsWith('rung_') && !facet.isWeld)) {
+      // CRITICAL FIX (v9.2): Rung top webs (`rung_1_top_web`) have obround grip holes (`holes.isNotEmpty`),
+      // so skipping `holes.isNotEmpty` left `rung_1_top_web` unsplit when straddling `rail_right`!
+      // Always split `rung_*` and `weld_*` facets across structural rail planes (clipping any holes cleanly).
+      if (facet.partId == 'sheet_metal_body' || (!facet.partId.startsWith('rung_') && !facet.isWeld)) {
         workFacets.add(facet);
         continue;
       }
@@ -692,10 +871,7 @@ class CadBRepModelData {
   /// Splits a convex/planar [facet] across [plane] (`nx*x + ny*y + nz*z - d = 0`)
   /// if and only if its vertices strictly straddle both sides of the plane (`minDist < -eps` and `maxDist > +eps`).
   /// Crucially, clips existing `boundarySegments` without adding any stroke along the cut line!
-  static List<CompiledBRepFacet>? _splitFacetByPlane(
-    CompiledBRepFacet facet,
-    _StructuralPartPlane plane,
-  ) {
+  static List<CompiledBRepFacet>? _splitFacetByPlane(CompiledBRepFacet facet, _StructuralPartPlane plane) {
     const double eps = 0.15; // 0.15 mm straddle threshold
     final verts = facet.vertices;
     final dists = List<double>.filled(verts.length, 0.0);
@@ -758,11 +934,7 @@ class CadBRepModelData {
         backSegs.add(seg);
       } else {
         final t = d0 / (d0 - d1);
-        final mid = CadPoint3D(
-          p0.x + (p1.x - p0.x) * t,
-          p0.y + (p1.y - p0.y) * t,
-          p0.z + (p1.z - p0.z) * t,
-        );
+        final mid = CadPoint3D(p0.x + (p1.x - p0.x) * t, p0.y + (p1.y - p0.y) * t, p0.z + (p1.z - p0.z) * t);
         if (d0 > 0) {
           frontSegs.add((p0, mid));
           backSegs.add((mid, p1));
@@ -773,10 +945,23 @@ class CadBRepModelData {
       }
     }
 
-    CompiledBRepFacet buildSubFacet(
-      List<CadPoint3D> subVerts,
-      List<(CadPoint3D, CadPoint3D)> subSegs,
-    ) {
+    // Partition/clip any interior hole loops to the front (`d >= 0`) or back (`d <= 0`) sub-facet
+    final frontHoles = <List<CadPoint3D>>[];
+    final backHoles = <List<CadPoint3D>>[];
+    for (final hLoop in facet.holes) {
+      double hSumD = 0.0;
+      for (final hv in hLoop) {
+        hSumD += plane.nx * hv.x + plane.ny * hv.y + plane.nz * hv.z - plane.d;
+      }
+      final hAvgD = hLoop.isNotEmpty ? (hSumD / hLoop.length) : 0.0;
+      if (hAvgD >= 0.0) {
+        frontHoles.add(hLoop);
+      } else {
+        backHoles.add(hLoop);
+      }
+    }
+
+    CompiledBRepFacet buildSubFacet(List<CadPoint3D> subVerts, List<(CadPoint3D, CadPoint3D)> subSegs, List<List<CadPoint3D>> subHoles) {
       double sMinX = double.infinity, sMaxX = -double.infinity;
       double sMinY = double.infinity, sMaxY = -double.infinity;
       double sMinZ = double.infinity, sMaxZ = -double.infinity;
@@ -797,7 +982,7 @@ class CadBRepModelData {
         faceId: facet.faceId,
         partId: facet.partId,
         vertices: subVerts,
-        holes: const [],
+        holes: subHoles,
         boundarySegments: subSegs,
         normal: facet.normal,
         baseSrgbColor: facet.baseSrgbColor,
@@ -817,10 +1002,7 @@ class CadBRepModelData {
       );
     }
 
-    return [
-      buildSubFacet(frontVerts, frontSegs),
-      buildSubFacet(backVerts, backSegs),
-    ];
+    return [buildSubFacet(frontVerts, frontSegs, frontHoles), buildSubFacet(backVerts, backSegs, backHoles)];
   }
 }
 
@@ -892,20 +1074,12 @@ abstract class Projection {
 
 class PerspectiveProjection extends Projection {
   double fovRadiansY;
-  PerspectiveProjection({
-    this.fovRadiansY = 0.78539816339,
-    super.near = 0.5,
-    super.far = 50000.0,
-  });
+  PerspectiveProjection({this.fovRadiansY = 0.78539816339, super.near = 0.5, super.far = 50000.0});
 }
 
 class OrthographicProjection extends Projection {
   double zoom;
-  OrthographicProjection({
-    this.zoom = 1.0,
-    super.near = 0.5,
-    super.far = 50000.0,
-  });
+  OrthographicProjection({this.zoom = 1.0, super.near = 0.5, super.far = 50000.0});
 }
 
 class Ray3D {
@@ -923,10 +1097,7 @@ class Camera {
 
   Offset? worldToScreen(vm.Vector3 relativeWorldPt, Size viewportSize) {
     if (_scene.hasSyncedCadCamera) {
-      return _scene.projectRelativePointToScreen(
-        CadPoint3D(relativeWorldPt.x, relativeWorldPt.y, relativeWorldPt.z),
-        viewportSize,
-      );
+      return _scene.projectRelativePointToScreen(CadPoint3D(relativeWorldPt.x, relativeWorldPt.y, relativeWorldPt.z), viewportSize);
     }
     if (viewportSize.width <= 0 || viewportSize.height <= 0) return null;
     final camNode = _cameraNode;
@@ -937,10 +1108,7 @@ class Camera {
       final ortho = projection as OrthographicProjection;
       final minScreen = math.min(viewportSize.width, viewportSize.height);
       final scale = minScreen * 0.72 * ortho.zoom;
-      return Offset(
-        viewportSize.width * 0.5 + v.x * scale,
-        viewportSize.height * 0.5 - v.y * scale,
-      );
+      return Offset(viewportSize.width * 0.5 + v.x * scale, viewportSize.height * 0.5 - v.y * scale);
     } else {
       final persp = projection as PerspectiveProjection;
       if (v.z >= -persp.near) return null;
@@ -948,10 +1116,7 @@ class Camera {
       final aspect = viewportSize.width / viewportSize.height;
       final ndcX = (v.x * (f / aspect)) / (-v.z);
       final ndcY = (v.y * f) / (-v.z);
-      return Offset(
-        (ndcX + 1.0) * 0.5 * viewportSize.width,
-        (1.0 - ndcY) * 0.5 * viewportSize.height,
-      );
+      return Offset((ndcX + 1.0) * 0.5 * viewportSize.width, (1.0 - ndcY) * 0.5 * viewportSize.height);
     }
   }
 
@@ -959,10 +1124,7 @@ class Camera {
     if (_scene.hasSyncedCadCamera) {
       return _scene.screenPointToRelativeRay(screenPos, viewportSize);
     }
-    return Ray3D(
-      origin: vm.Vector3(0.0, 0.0, 1000.0),
-      direction: vm.Vector3(0.0, 0.0, -1.0),
-    );
+    return Ray3D(origin: vm.Vector3(0.0, 0.0, 1000.0), direction: vm.Vector3(0.0, 0.0, -1.0));
   }
 }
 
@@ -971,10 +1133,7 @@ class CameraComponent extends Component {
   bool activateOnMount;
   Scene? _scene;
 
-  CameraComponent({
-    Projection? projection,
-    this.activateOnMount = true,
-  }) : projection = projection ?? PerspectiveProjection();
+  CameraComponent({Projection? projection, this.activateOnMount = true}) : projection = projection ?? PerspectiveProjection();
 
   void attachScene(Scene scene) {
     _scene = scene;
@@ -988,8 +1147,52 @@ class CameraComponent extends Component {
 
 class Scene extends ChangeNotifier {
   static Scene? lastActiveInstance;
+  static final Set<Scene> _activeInstances = <Scene>{};
 
   final Node root = Node(name: 'SceneRoot');
+  Scene() {
+    lastActiveInstance = this;
+    _activeInstances.add(this);
+    CadWindowsKeyboardGuard.ensureInstalled();
+  }
+
+  static void drawEngineHudWatermark(Canvas canvas, Size size, String text, Color accent) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(color: Color(0xFFF8FAFC), fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 0.2),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final rect = RRect.fromRectAndRadius(Rect.fromLTWH(12, size.height - 34, tp.width + 24, 22), const Radius.circular(5));
+    canvas.drawRRect(rect, Paint()..color = const Color(0xD80F172A));
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = accent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+    canvas.drawCircle(Offset(20, size.height - 23), 3.5, Paint()..color = accent);
+    tp.paint(canvas, Offset(28, size.height - 23 - tp.height / 2));
+  }
+
+  static void notifyAllActiveScenes() {
+    lastActiveInstance?.notifyListeners();
+    for (final s in _activeInstances.toList()) {
+      s.notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _activeInstances.remove(this);
+    if (lastActiveInstance == this) {
+      lastActiveInstance = _activeInstances.isNotEmpty ? _activeInstances.last : null;
+    }
+    super.dispose();
+  }
+
   EnvironmentSettings environmentSettings = const EnvironmentSettings();
   DirectionalLight directionalLight = DirectionalLight();
   bool fitNearPlane = false;
@@ -999,12 +1202,7 @@ class Scene extends ChangeNotifier {
   bool _hasSyncedCadCamera = false;
   bool get hasSyncedCadCamera => _hasSyncedCadCamera;
 
-  List<double> _rotMatrix = const [
-    1, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 1, 0,
-    0, 0, 0, 1,
-  ];
+  List<double> _rotMatrix = const [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
   double _azimuthDeg = -45.0;
   double get azimuthDeg => _azimuthDeg;
   double _elevationDeg = 30.0;
@@ -1021,12 +1219,12 @@ class Scene extends ChangeNotifier {
   bool get isOrtho => _isOrtho;
   double _fovDeg = 42.0;
   double get fovDeg => _fovDeg;
+  List<double> get rotationMatrix => _rotMatrix;
+  double get effectiveFitDim => _resolveEffectiveFitDim();
 
-  Scene() {
-    lastActiveInstance = this;
+  static Future<void> initializeStaticResources() async {
+    CadWindowsKeyboardGuard.ensureInstalled();
   }
-
-  static Future<void> initializeStaticResources() async {}
 
   /// Recursively binds any `CameraComponent` on [node] or its children to this `Scene`.
   void _bindCameraComponentsRecursive(Node node) {
@@ -1045,6 +1243,7 @@ class Scene extends ChangeNotifier {
     root.add(child);
     _bindCameraComponentsRecursive(child);
     lastActiveInstance = this;
+    _activeInstances.add(this);
     notifyListeners();
   }
 
@@ -1084,6 +1283,7 @@ class Scene extends ChangeNotifier {
     _rotMatrix = rotationMatrix ?? customRotationMatrix ?? _computeZUpRotationMatrix(azimuthDeg, elevationDeg);
     _hasSyncedCadCamera = true;
     lastActiveInstance = this;
+    _activeInstances.add(this);
     notifyListeners();
   }
 
@@ -1095,12 +1295,7 @@ class Scene extends ChangeNotifier {
     final cosEl = math.cos(elRad);
     final sinEl = math.sin(elRad);
 
-    return [
-      cosAz, sinAz, 0.0, 0.0,
-      -sinEl * sinAz, sinEl * cosAz, cosEl, 0.0,
-      cosEl * sinAz, -cosEl * cosAz, sinEl, 0.0,
-      0.0, 0.0, 0.0, 1.0,
-    ];
+    return [cosAz, sinAz, 0.0, 0.0, -sinEl * sinAz, sinEl * cosAz, cosEl, 0.0, cosEl * sinAz, -cosEl * cosAz, sinEl, 0.0, 0.0, 0.0, 0.0, 1.0];
   }
 
   /// Returns the active B-Rep model's max dimension so `cameraDist` is never smaller than the model!
@@ -1114,6 +1309,7 @@ class Scene extends ChangeNotifier {
         checkNode(c);
       }
     }
+
     checkNode(root);
     return maxDim > 1.0 ? maxDim : 600.0;
   }
@@ -1145,10 +1341,7 @@ class Scene extends ChangeNotifier {
 
     final cx = size.width * 0.5 + _pan.dx;
     final cy = size.height * 0.5 + _pan.dy;
-    return Offset(
-      cx + (x2 * persp) * scale,
-      cy - (y2 * persp) * scale,
-    );
+    return Offset(cx + (x2 * persp) * scale, cy - (y2 * persp) * scale);
   }
 
   /// Exact algebraic inverse of [projectRelativePointToScreen]: unprojects a 2D viewport pixel
@@ -1182,10 +1375,7 @@ class Scene extends ChangeNotifier {
       final dx = (relScreenX * m[0] + relScreenY * m[4]) - ox;
       final dy = (relScreenX * m[1] + relScreenY * m[5]) - oy;
       final dz = (relScreenX * m[2] + relScreenY * m[6]) - oz;
-      return Ray3D(
-        origin: vm.Vector3(ox, oy, oz),
-        direction: vm.Vector3(dx, dy, dz).normalized(),
-      );
+      return Ray3D(origin: vm.Vector3(ox, oy, oz), direction: vm.Vector3(dx, dy, dz).normalized());
     }
   }
 }
@@ -1205,32 +1395,51 @@ class SceneView extends StatefulWidget {
 class _SceneViewState extends State<SceneView> {
   static final Stopwatch _fpsClock = Stopwatch()..start();
   static int _lastFrameMicros = 0;
+  static int _lastUiPublishMicros = 0;
   static double _smoothedFps = 60.0;
   static double _smoothedFrameMs = 1.5;
 
   @override
+  void initState() {
+    super.initState();
+    CadWindowsKeyboardGuard.ensureInstalled();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _CadBRepFlutterGpuScenePainter(
-        scene: widget.scene,
-        onRecordFrameTiming: _recordFrameTiming,
-      ),
-      size: Size.infinite,
+    return ValueListenableBuilder<CadLayer1Engine>(
+      valueListenable: CadFpsTelemetry.activeEngineNotifier,
+      builder: (context, activeEngine, _) {
+        return CustomPaint(
+          painter: _CadBRepFlutterGpuScenePainter(
+            scene: widget.scene,
+            activeEngine: activeEngine,
+            onRecordFrameTiming: (paintMs) => _recordFrameTiming(paintMs),
+          ),
+          size: Size.infinite,
+        );
+      },
     );
   }
 
-  static void _recordFrameTiming() {
+  static void _recordFrameTiming(double paintMs) {
     final nowMicros = _fpsClock.elapsedMicroseconds;
     if (_lastFrameMicros > 0) {
       final dtMicros = (nowMicros - _lastFrameMicros).clamp(500, 250000);
-      final instFps = (1000000.0 / dtMicros).clamp(1.0, 240.0);
-      final instMs = (dtMicros / 1000.0).clamp(0.1, 250.0);
-      _smoothedFps = _smoothedFps * 0.88 + instFps * 0.12;
-      _smoothedFrameMs = _smoothedFrameMs * 0.88 + instMs * 0.12;
-      final label = '${_smoothedFps.round()} FPS · ${_smoothedFrameMs.toStringAsFixed(1)} ms · v9.1';
-      if (CadFpsTelemetry.notifier.value != label) {
-        CadFpsTelemetry.fpsValueNotifier.value = _smoothedFps;
-        CadFpsTelemetry.notifier.value = label;
+      double instFps;
+      if (dtMicros < 45000) {
+        instFps = (1000000.0 / dtMicros).clamp(1.0, 120.0);
+      } else {
+        instFps = paintMs > 0.05 ? (1000.0 / paintMs).clamp(24.0, 120.0) : 60.0;
+      }
+      _smoothedFps = _smoothedFps * 0.85 + instFps * 0.15;
+      _smoothedFrameMs = _smoothedFrameMs * 0.85 + paintMs * 0.15;
+      final tag = CadFpsTelemetry.activeEngine.badgeTag;
+      final currentLabel = CadFpsTelemetry.notifier.value;
+      final engineTagChanged = !currentLabel.endsWith(tag);
+      if (engineTagChanged || (nowMicros - _lastUiPublishMicros) >= 150000) {
+        _lastUiPublishMicros = nowMicros;
+        CadFpsTelemetry.publishFromPaint(smoothedFps: _smoothedFps, smoothedMs: _smoothedFrameMs);
       }
     }
     _lastFrameMicros = nowMicros;
@@ -1283,17 +1492,16 @@ class _ProjectedBRepFacet {
 
 class _CadBRepFlutterGpuScenePainter extends CustomPainter {
   final Scene scene;
-  final VoidCallback onRecordFrameTiming;
+  final CadLayer1Engine activeEngine;
+  final void Function(double paintMs) onRecordFrameTiming;
 
-  _CadBRepFlutterGpuScenePainter({
-    required this.scene,
-    required this.onRecordFrameTiming,
-  }) : super(repaint: scene);
+  _CadBRepFlutterGpuScenePainter({required this.scene, required this.activeEngine, required this.onRecordFrameTiming})
+    : super(repaint: Listenable.merge([scene, CadFpsTelemetry.activeEngineNotifier]));
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
-    onRecordFrameTiming();
+    final paintStart = _SceneViewState._fpsClock.elapsedMicroseconds;
 
     final nodes = <Node>[];
     void collectNodes(Node n) {
@@ -1302,6 +1510,7 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
         collectNodes(c);
       }
     }
+
     collectNodes(scene.root);
 
     // 1. Render background studio grid lines first
@@ -1311,11 +1520,22 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
       }
     }
 
-    // 2. Render B-Rep CAD Models with v9.1 Newell 3D Half-Space + Ray-Plane Occlusion Engine
+    // 2. Dispatch to the active Layer 1 Rendering Engine (CustomPaint v9.3, three_js, or flutter3d)
     bool renderedBRep = false;
     for (final node in nodes) {
       if (node.brepModelData != null) {
-        _paintBRepModelV9(canvas, size, node.brepModelData!);
+        final model = node.brepModelData!;
+        switch (activeEngine) {
+          case CadLayer1Engine.customPaintV93:
+            _paintBRepModelV9(canvas, size, model);
+            break;
+          case CadLayer1Engine.threeJsGpu:
+            Layer1ThreeJsAdapter.renderThreeJsPass(canvas: canvas, size: size, scene: scene, model: model, buffers: model.gpuBuffers);
+            break;
+          case CadLayer1Engine.flutter3dGpu:
+            Layer1Flutter3dAdapter.renderFlutter3dPass(canvas: canvas, size: size, scene: scene, model: model, buffers: model.gpuBuffers);
+            break;
+        }
         renderedBRep = true;
       }
     }
@@ -1328,21 +1548,126 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
         }
       }
     }
+
+    final paintEnd = _SceneViewState._fpsClock.elapsedMicroseconds;
+    final paintMs = (paintEnd - paintStart) / 1000.0;
+    onRecordFrameTiming(paintMs);
   }
 
   void _paintBRepModelV9(Canvas canvas, Size size, CadBRepModelData model) {
+    scene.renderOcclusionSortedBRepPass(canvas: canvas, size: size, model: model);
+    Scene.drawEngineHudWatermark(canvas, size, 'Layer 1A: CustomPaint B-Rep + Newell 3D (v9.3)', const Color(0xFF0EA5E9));
+  }
+
+  static void _drawEngineHudWatermark(Canvas canvas, Size size, String text, Color accent) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(color: Color(0xFFF8FAFC), fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 0.2),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final rect = RRect.fromRectAndRadius(Rect.fromLTWH(12, size.height - 34, tp.width + 24, 22), const Radius.circular(5));
+    canvas.drawRRect(rect, Paint()..color = const Color(0xD80F172A));
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = accent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+    canvas.drawCircle(Offset(20, size.height - 23), 3.5, Paint()..color = accent);
+    tp.paint(canvas, Offset(28, size.height - 23 - tp.height / 2));
+  }
+
+  void _paintStandaloneMeshNode(Canvas canvas, Size size, Node node) {
+    final mesh = node.mesh;
+    if (mesh == null) return;
+    final geom = mesh.geometry;
+    final mat = mesh.material;
+
+    if (geom is LineSegmentsGeometry) {
+      final pos = geom.data.positions;
+      if (pos.length < 6) return;
+      final path = Path();
+      for (int i = 0; i <= pos.length - 6; i += 6) {
+        final p0 = scene.projectRelativePointToScreen(CadPoint3D(pos[i], pos[i + 1], pos[i + 2]), size);
+        final p1 = scene.projectRelativePointToScreen(CadPoint3D(pos[i + 3], pos[i + 4], pos[i + 5]), size);
+        if (p0 != null && p1 != null) {
+          path.moveTo(p0.dx, p0.dy);
+          path.lineTo(p1.dx, p1.dy);
+        }
+      }
+      final c = mat.baseColorFactor;
+      final strokePaint = Paint()
+        ..color = Color.from(alpha: c.w.clamp(0.0, 1.0), red: c.x.clamp(0.0, 1.0), green: c.y.clamp(0.0, 1.0), blue: c.z.clamp(0.0, 1.0))
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = geom.width.clamp(0.5, 3.0)
+        ..isAntiAlias = true;
+      canvas.drawPath(path, strokePaint);
+    } else if (geom is BuiltTriangleGeometry) {
+      final pos = geom.positions;
+      final cols = geom.colors;
+      final idx = geom.indices;
+      if (pos.isEmpty || idx.isEmpty) return;
+
+      final vCount = pos.length ~/ 3;
+      final screenPositions = Float32List(vCount * 2);
+      final intColors = Int32List(vCount);
+
+      for (int i = 0; i < vCount; i++) {
+        final p = scene.projectRelativePointToScreen(CadPoint3D(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]), size);
+        if (p != null) {
+          screenPositions[i * 2] = p.dx;
+          screenPositions[i * 2 + 1] = p.dy;
+        }
+        final r = (cols[i * 4].clamp(0.0, 1.0) * 255).round();
+        final g = (cols[i * 4 + 1].clamp(0.0, 1.0) * 255).round();
+        final b = (cols[i * 4 + 2].clamp(0.0, 1.0) * 255).round();
+        final a = (cols[i * 4 + 3].clamp(0.0, 1.0) * 255).round();
+        intColors[i] = (a << 24) | (r << 16) | (g << 8) | b;
+      }
+
+      final vertices = ui.Vertices.raw(ui.VertexMode.triangles, screenPositions, colors: intColors, indices: idx);
+      canvas.drawVertices(vertices, BlendMode.dst, Paint());
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CadBRepFlutterGpuScenePainter oldDelegate) => true;
+}
+
+/// Custom per-facet shader signature used by Layer 1 engines (`CustomPaint v9.3`, `three_js`, `flutter3d`).
+typedef CadEngineFacetShader = Color Function({
+  required CompiledBRepFacet facet,
+  required double vnx,
+  required double vny,
+  required double vnz,
+  required double viewDot,
+  required OnshapeGraphicsPreferences preferences,
+  required OnshapeRenderMode renderMode,
+});
+
+extension CadSceneOcclusionSortedPass on Scene {
+  /// Shared, watertight B-Rep + Hardware Path/Vertex Occlusion Pass for all 3 Layer 1 engines.
+  /// Guarantees:
+  /// 1. Strict 3D back-face culling (`cullBackface && viewDot <= -1e-4`) on closed shells.
+  /// 2. 100% opaque surface fills (`alpha = 1.0`) in `shadedWithEdges` / `shadedWithoutEdges` modes.
+  /// 3. Newell 3D half-space + part-bound bore/rim ordering so foreground rails completely occlude
+  ///    background rungs and hidden wireframe edges (zero X-ray / translucent bleed-through).
+  void renderOcclusionSortedBRepPass({required Canvas canvas, required Size size, required CadBRepModelData model, CadEngineFacetShader? customShader}) {
     final facets = model.compiledFacets;
     if (facets.isEmpty) return;
 
-    final m = scene._rotMatrix;
-    final effectiveFitDim = scene._resolveEffectiveFitDim();
+    final m = _rotMatrix;
+    final effectiveFitDim = _resolveEffectiveFitDim();
     final minScreen = math.min(size.width, size.height);
     final baseScale = (minScreen * 0.72) / effectiveFitDim;
-    final scale = (baseScale * scene._zoom) > 1e-6 ? (baseScale * scene._zoom) : 1.0;
+    final scale = (baseScale * _zoom) > 1e-6 ? (baseScale * _zoom) : 1.0;
     final cameraDist = math.max(effectiveFitDim * 3.0, 1200.0);
-    final isOrtho = scene._isOrtho;
-    final cx = size.width * 0.5 + scene._pan.dx;
-    final cy = size.height * 0.5 + scene._pan.dy;
+    final isOrtho = _isOrtho;
+    final cx = size.width * 0.5 + _pan.dx;
+    final cy = size.height * 0.5 + _pan.dy;
 
     // Camera eye position in pivot-relative 3D world space
     final eyeX = m[8] * cameraDist;
@@ -1352,9 +1677,7 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
     final prefs = model.preferences;
     final renderMode = model.renderMode;
     final bool isWireframeOnly = renderMode == OnshapeRenderMode.unshaded;
-    final bool shouldDrawEdges = model.showWireframe &&
-        renderMode != OnshapeRenderMode.shadedWithoutEdges &&
-        prefs.lineWidth > 0.05;
+    final bool shouldDrawEdges = model.showWireframe && renderMode != OnshapeRenderMode.shadedWithoutEdges && prefs.lineWidth > 0.05;
 
     final shininess = (prefs.shininess / 100.0).clamp(0.0, 1.0);
     final specPower = (16.0 + shininess * 72.0);
@@ -1507,6 +1830,8 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
       final vny = (fn.x * m[4] + fn.y * m[5] + fn.z * m[6]) * sign;
       final vnz = (fn.x * m[8] + fn.y * m[9] + fn.z * m[10]) * sign;
 
+      final bool effectiveTranslucent = (renderMode == OnshapeRenderMode.translucent) || f.isTranslucent;
+
       Color shadedColor;
       if (f.isSelected) {
         shadedColor = const Color(0xFFF59E0B);
@@ -1514,6 +1839,9 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
         shadedColor = const Color(0xFFBAE6FD);
       } else if (isWireframeOnly) {
         shadedColor = const Color(0xFFF8FAFC);
+      } else if (customShader != null) {
+        final rawCol = customShader(facet: f, vnx: vnx, vny: vny, vnz: vnz, viewDot: viewDot, preferences: prefs, renderMode: renderMode);
+        shadedColor = effectiveTranslucent ? rawCol.withValues(alpha: 0.38) : rawCol.withValues(alpha: 1.0);
       } else {
         // View-space key light (-0.34, 0.45, 0.82) + fill light (0.48, -0.30, 0.82)
         final ndotlKey = (vnx * -0.34 + vny * 0.45 + vnz * 0.82).clamp(0.0, 1.0);
@@ -1522,16 +1850,14 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
 
         // Half-vector between eye (0,0,1) and key light (-0.34, 0.45, 0.82) -> normalized (-0.19, 0.25, 0.95)
         final ndoth = (vnx * -0.19 + vny * 0.25 + vnz * 0.95).clamp(0.0, 1.0);
-        final spec = f.isWeld
-            ? 0.04
-            : math.pow(ndoth, specPower).toDouble() * (0.10 + shininess * 0.18) * ndotlKey;
+        final spec = f.isWeld ? 0.04 : math.pow(ndoth, specPower).toDouble() * (0.10 + shininess * 0.18) * ndotlKey;
 
         final viewShade = (0.76 + ndotlKey * 0.22 + ndotlFill * 0.08 + hemi * 0.05).clamp(0.68, 1.08);
         final c = f.studioSrgbColor;
         final r = (c.r * viewShade + spec).clamp(0.0, 1.0);
         final g = (c.g * viewShade + spec).clamp(0.0, 1.0);
         final b = (c.b * viewShade + spec).clamp(0.0, 1.0);
-        final alpha = f.isTranslucent ? 0.38 : 1.0;
+        final alpha = effectiveTranslucent ? 0.38 : 1.0;
         shadedColor = Color.from(alpha: alpha, red: r, green: g, blue: b);
       }
 
@@ -1548,28 +1874,30 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
       final pCamY = f.centroid.x * m[4] + f.centroid.y * m[5] + f.centroid.z * m[6];
       final pCamZ = f.centroid.x * m[8] + f.centroid.y * m[9] + f.centroid.z * m[10];
 
-      projected.add(_ProjectedBRepFacet(
-        facet: f,
-        fillPath: fillPath,
-        strokePath: strokePath,
-        holesStrokePath: holesStrokePath,
-        outerScreenPts: outerPts,
-        screenBounds: Rect.fromLTRB(minSx - 1.0, minSy - 1.0, maxSx + 1.0, maxSy + 1.0),
-        shadedColor: shadedColor,
-        avgCamZ: sumCamZ / f.vertices.length,
-        minCamZ: minCamZ,
-        maxCamZ: maxCamZ,
-        camSideNx: cNx,
-        camSideNy: cNy,
-        camSideNz: cNz,
-        camSidePlaneD: cPlaneD,
-        pCamX: pCamX,
-        pCamY: pCamY,
-        pCamZ: pCamZ,
-        nCamX: vnx,
-        nCamY: vny,
-        nCamZ: vnz,
-      ));
+      projected.add(
+        _ProjectedBRepFacet(
+          facet: f,
+          fillPath: fillPath,
+          strokePath: strokePath,
+          holesStrokePath: holesStrokePath,
+          outerScreenPts: outerPts,
+          screenBounds: Rect.fromLTRB(minSx - 1.0, minSy - 1.0, maxSx + 1.0, maxSy + 1.0),
+          shadedColor: shadedColor,
+          avgCamZ: sumCamZ / f.vertices.length,
+          minCamZ: minCamZ,
+          maxCamZ: maxCamZ,
+          camSideNx: cNx,
+          camSideNy: cNy,
+          camSideNz: cNz,
+          camSidePlaneD: cPlaneD,
+          pCamX: pCamX,
+          pCamY: pCamY,
+          pCamZ: pCamZ,
+          nCamX: vnx,
+          nCamY: vny,
+          nCamZ: vnz,
+        ),
+      );
     }
 
     if (projected.isEmpty) return;
@@ -1585,28 +1913,12 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
       }
     }
 
-    _sortFacetsNewell3D(
-      opaqueFacets,
-      cx: cx,
-      cy: cy,
-      scale: scale,
-      cameraDist: cameraDist,
-      isOrtho: isOrtho,
-    );
+    _sortFacetsNewell3D(opaqueFacets, cx: cx, cy: cy, scale: scale, cameraDist: cameraDist, isOrtho: isOrtho);
     if (translucentFacets.length > 1) {
-      _sortFacetsNewell3D(
-        translucentFacets,
-        cx: cx,
-        cy: cy,
-        scale: scale,
-        cameraDist: cameraDist,
-        isOrtho: isOrtho,
-      );
+      _sortFacetsNewell3D(translucentFacets, cx: cx, cy: cy, scale: scale, cameraDist: cameraDist, isOrtho: isOrtho);
     }
 
-    final edgeColor = prefs.highlightBoundaryEdges
-        ? prefs.boundaryEdgeColor
-        : const Color(0xFF1B242D);
+    final edgeColor = prefs.highlightBoundaryEdges ? prefs.boundaryEdgeColor : const Color(0xFF1B242D);
     final edgePaint = Paint()
       ..color = edgeColor
       ..style = PaintingStyle.stroke
@@ -1665,57 +1977,110 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
     final n = list.length;
     if (n <= 1) return;
 
-    // 1. Initial back-to-front sort by average camera-space Z (tie-break by minCamZ)
+    // 1. Fast O(N log N) back-to-front sort by average camera-space Z across all facets.
     list.sort((a, b) {
       final cmp = a.avgCamZ.compareTo(b.avgCamZ);
       if (cmp != 0) return cmp;
       return a.minCamZ.compareTo(b.minCamZ);
     });
 
-    // 2. Textbook Newell topological promotion pass:
-    //    For each position `i` from 0 to n - 1, verify that `P = list[i]` does NOT obscure
-    //    any polygon `Q = list[j]` (j > i) scheduled to be drawn after `P`.
-    //    If `P` obscures `Q`, `Q` is behind `P` and MUST be drawn before `P`, so we move `Q` to index `i`.
-    final movedAtStep = <int>{};
-    int i = 0;
-    while (i < n - 1) {
-      movedAtStep.clear();
-      bool promotedAny = true;
-      int guard = 0;
+    // 2. Partition into major structural walls vs. part-local internal bore/rim facets (`BORE_*`, `RIM_*`).
+    //    Crucially, internal bore/rim facets are bucketed by their parent `partId` so that:
+    //    (a) A background rung's bore/end-cap can NEVER sort in front of a foreground rail that occludes that rung, and
+    //    (b) Within each part, internal hole bore walls (`BORE_*`) always draw BEFORE that part's front-facing
+    //        outer wall (which has the hole subtracted via `PathFillType.evenOdd`), masking the back half of the bore!
+    final majorFacets = <_ProjectedBRepFacet>[];
+    final minorByPart = <String, List<_ProjectedBRepFacet>>{};
 
-      while (promotedAny && guard < n * 2) {
-        promotedAny = false;
-        guard++;
-        final p = list[i];
+    for (int idx = 0; idx < n; idx++) {
+      final f = list[idx];
+      if (!f.facet.isInternalRimOrBore) {
+        majorFacets.add(f);
+      } else {
+        minorByPart.putIfAbsent(f.facet.partId, () => <_ProjectedBRepFacet>[]).add(f);
+      }
+    }
 
-        for (int j = i + 1; j < n; j++) {
-          final q = list[j];
+    final mCount = majorFacets.length;
+    if (mCount > 1) {
+      final movedAtStep = <int>{};
+      int i = 0;
+      while (i < mCount - 1) {
+        movedAtStep.clear();
+        bool promotedAny = true;
+        int guard = 0;
 
-          // Fast depth-range & 2D screen bounding-box rejection
-          if (p.maxCamZ < q.minCamZ - 0.5) continue;
-          if (!p.screenBounds.overlaps(q.screenBounds)) continue;
-          if (movedAtStep.contains(identityHashCode(q))) continue;
+        while (promotedAny && guard < mCount) {
+          promotedAny = false;
+          guard++;
+          final p = majorFacets[i];
 
-          if (_doesPObscureQ(
-            p,
-            q,
-            cx: cx,
-            cy: cy,
-            scale: scale,
-            cameraDist: cameraDist,
-            isOrtho: isOrtho,
-          )) {
-            // Q is behind P! Move Q before P (to index i) and restart scan from new list[i].
-            list.removeAt(j);
-            list.insert(i, q);
-            movedAtStep.add(identityHashCode(q));
-            promotedAny = true;
-            break;
+          for (int j = i + 1; j < mCount; j++) {
+            final q = majorFacets[j];
+
+            // Fast depth-range & 2D screen bounding-box rejection
+            if (p.maxCamZ < q.minCamZ - 0.5) continue;
+            if (!p.screenBounds.overlaps(q.screenBounds)) continue;
+            if (movedAtStep.contains(identityHashCode(q))) continue;
+
+            if (_doesPObscureQ(p, q, cx: cx, cy: cy, scale: scale, cameraDist: cameraDist, isOrtho: isOrtho)) {
+              majorFacets.removeAt(j);
+              majorFacets.insert(i, q);
+              movedAtStep.add(identityHashCode(q));
+              promotedAny = true;
+              break;
+            }
           }
         }
+        i++;
       }
-      i++;
     }
+
+    if (minorByPart.isEmpty) {
+      list
+        ..clear()
+        ..addAll(majorFacets);
+      return;
+    }
+
+    // 3. Re-merge each part's internal bore/rim facets immediately before the front-most outer wall(s)
+    //    of that same `partId` so hole bores are visible through the `PathFillType.evenOdd` hole window
+    //    without ever bleeding on top of the outer surface or on top of foreground parts!
+    final lastMajorIdxForPart = <String, int>{};
+    for (int k = 0; k < majorFacets.length; k++) {
+      lastMajorIdxForPart[majorFacets[k].facet.partId] = k;
+    }
+
+    final merged = <_ProjectedBRepFacet>[];
+    final insertedParts = <String>{};
+
+    for (int k = 0; k < majorFacets.length; k++) {
+      final mf = majorFacets[k];
+      final pid = mf.facet.partId;
+
+      // Before drawing the front-most major facet(s) of `pid` (or any major facet of `pid` that has holes),
+      // emit `pid`'s internal bore/rim facets so the outer perforated wall masks their exterior!
+      if (!insertedParts.contains(pid) && minorByPart.containsKey(pid)) {
+        final isLastMajorOfPart = (lastMajorIdxForPart[pid] == k);
+        final hasHolesOnThisWall = mf.facet.holes.isNotEmpty && !mf.facet.faceId.contains('_inner');
+        if (hasHolesOnThisWall || isLastMajorOfPart) {
+          merged.addAll(minorByPart[pid]!);
+          insertedParts.add(pid);
+        }
+      }
+      merged.add(mf);
+    }
+
+    // Append any remaining minor facets whose part had no major facets
+    for (final entry in minorByPart.entries) {
+      if (!insertedParts.contains(entry.key)) {
+        merged.addAll(entry.value);
+      }
+    }
+
+    list
+      ..clear()
+      ..addAll(merged);
   }
 
   /// Returns `true` if facet [p] is in front of (obscures) facet [q], meaning [q] must be drawn BEFORE [p].
@@ -1728,104 +2093,102 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
     required double cameraDist,
     required bool isOrtho,
   }) {
-    // Coplanar faces on the exact same plane do not obscure one another
-    final dotNormals = (p.facet.normal.x * q.facet.normal.x +
-            p.facet.normal.y * q.facet.normal.y +
-            p.facet.normal.z * q.facet.normal.z)
-        .abs();
+    // 1. Coplanar faces on the exact same plane do not obscure one another
+    final dotNormals = (p.facet.normal.x * q.facet.normal.x + p.facet.normal.y * q.facet.normal.y + p.facet.normal.z * q.facet.normal.z).abs();
     if (dotNormals > 0.999) {
-      final planeDiff = (p.camSideNx * (q.facet.centroid.x - p.facet.centroid.x) +
-              p.camSideNy * (q.facet.centroid.y - p.facet.centroid.y) +
-              p.camSideNz * (q.facet.centroid.z - p.facet.centroid.z))
-          .abs();
+      final planeDiff =
+          (p.camSideNx * (q.facet.centroid.x - p.facet.centroid.x) +
+                  p.camSideNy * (q.facet.centroid.y - p.facet.centroid.y) +
+                  p.camSideNz * (q.facet.centroid.z - p.facet.centroid.z))
+              .abs();
       if (planeDiff < 0.08) return false;
     }
 
-    const double eps = 0.12; // 0.12 mm tolerance
+    // 2. Find a strict 2D interior screen overlap point between P and Q.
+    // Two polygons whose 2D projections (`outerScreenPts`) do NOT overlap in their interior
+    // can NEVER obscure each other on screen!
+    final overlapPt = _find2DPolygonOverlapPoint(p.outerScreenPts, q.outerScreenPts);
+    if (overlapPt == null) {
+      return false;
+    }
 
-    // 1. Half-space test of Q's vertices against P's camera-oriented plane:
-    //    d > 0 means vertex is on the camera (near) side of P; d < 0 means vertex is on the far side of P.
-    double qMinInP = double.infinity;
+    // 3. PRIMARY EXACT 3D RAY-PLANE DEPTH TEST AT `overlapPt`:
+    // Cast the exact 3D camera ray through the 2D interior overlap point `overlapPt`
+    // and evaluate the exact camera-space depth `zP` vs `zQ` on both facets' 3D planes.
+    // Evaluating exact ray depth FIRST prevents infinite horizontal plane extensions
+    // (e.g. `rung_1_top_web` at Z=60 vs `rail_left_flange_bottom` at Z=0) from ever
+    // tricking the half-space test and making the foreground rail look see-through!
+    final zP = _evalRayPlaneCamZ(pf: p, screenPt: overlapPt, cx: cx, cy: cy, scale: scale, cameraDist: cameraDist, isOrtho: isOrtho);
+    final zQ = _evalRayPlaneCamZ(pf: q, screenPt: overlapPt, cx: cx, cy: cy, scale: scale, cameraDist: cameraDist, isOrtho: isOrtho);
+
+    if (zP != null && zQ != null && (zP - zQ).abs() > 0.12) {
+      return zP > zQ; // Larger camZ is closer to the camera -> P obscures Q
+    }
+
+    // 4. Structural Rail vs. Rung/Weld Centroid Half-Space Guard (for grazing intersections):
+    final pIsRail = p.facet.partId.startsWith('rail_');
+    final qIsRail = q.facet.partId.startsWith('rail_');
+    final pIsRungOrWeld = p.facet.partId.startsWith('rung_') || p.facet.isWeld;
+    final qIsRungOrWeld = q.facet.partId.startsWith('rung_') || q.facet.isWeld;
+    if (pIsRail && qIsRungOrWeld) {
+      final qCentroidDistInP = p.camSideNx * q.facet.centroid.x + p.camSideNy * q.facet.centroid.y + p.camSideNz * q.facet.centroid.z - p.camSidePlaneD;
+      if (qCentroidDistInP > 0.5) return false;
+      if (qCentroidDistInP < -0.5) return true;
+    } else if (qIsRail && pIsRungOrWeld) {
+      final pCentroidDistInQ = q.camSideNx * p.facet.centroid.x + q.camSideNy * p.facet.centroid.y + q.camSideNz * p.facet.centroid.z - q.camSidePlaneD;
+      if (pCentroidDistInQ > 0.5) return true;
+      if (pCentroidDistInQ < -0.5) return false;
+    }
+
+    // 5. Fallback Newell 3D half-space test for nearly coplanar / grazing facets
+    const double eps = 0.20;
     double qMaxInP = -double.infinity;
+    double qMinInP = double.infinity;
     for (final v in q.facet.vertices) {
       final d = p.camSideNx * v.x + p.camSideNy * v.y + p.camSideNz * v.z - p.camSidePlaneD;
       if (d < qMinInP) qMinInP = d;
       if (d > qMaxInP) qMaxInP = d;
     }
+    if (qMaxInP <= eps && qMinInP < -eps) return true;
 
-    // 2. Half-space test of P's vertices against Q's camera-oriented plane:
-    double pMinInQ = double.infinity;
-    double pMaxInQ = -double.infinity;
-    for (final v in p.facet.vertices) {
-      final d = q.camSideNx * v.x + q.camSideNy * v.y + q.camSideNz * v.z - q.camSidePlaneD;
-      if (d < pMinInQ) pMinInQ = d;
-      if (d > pMaxInQ) pMaxInQ = d;
-    }
-
-    final bool qCompletelyBehindP = (qMaxInP <= eps && qMinInP < -eps);
-    final bool pCompletelyInFrontOfQ = (pMinInQ >= -eps && pMaxInQ > eps);
-    final bool pCompletelyBehindQ = (pMaxInQ <= eps && pMinInQ < -eps);
-    final bool qCompletelyInFrontOfP = (qMinInP >= -eps && qMaxInP > eps);
-
-    // Unambiguous 3D half-space dominance:
-    if ((qCompletelyBehindP || pCompletelyInFrontOfQ) &&
-        !pCompletelyBehindQ &&
-        !qCompletelyInFrontOfP) {
-      return true;
-    }
-    if ((pCompletelyBehindQ || qCompletelyInFrontOfP) &&
-        !qCompletelyBehindP &&
-        !pCompletelyInFrontOfQ) {
-      return false;
-    }
-
-    // 3. If both infinite planes claim dominance (or one straddles), check if their 2D screen projections
-    //    actually overlap, and if so, evaluate exact 3D ray-plane depth at a shared 2D overlap point!
-    final overlapPt = _find2DPolygonOverlapPoint(p.outerScreenPts, q.outerScreenPts);
-    if (overlapPt == null) {
-      // Polygons do not overlap in 2D screen space at all!
-      return false;
-    }
-
-    final zP = _evalRayPlaneCamZ(
-      pf: p,
-      screenPt: overlapPt,
-      cx: cx,
-      cy: cy,
-      scale: scale,
-      cameraDist: cameraDist,
-      isOrtho: isOrtho,
-    );
-    final zQ = _evalRayPlaneCamZ(
-      pf: q,
-      screenPt: overlapPt,
-      cx: cx,
-      cy: cy,
-      scale: scale,
-      cameraDist: cameraDist,
-      isOrtho: isOrtho,
-    );
-
-    if (zP != null && zQ != null && (zP - zQ).abs() > 0.15) {
-      return zP > zQ; // Larger camZ is closer to camera -> P obscures Q
-    }
-
-    return false;
+    return p.avgCamZ > q.avgCamZ + 0.25;
   }
 
-  /// Clips 2D screen polygon [polyA] against the convex/planar edges of [polyB] (and vice versa)
-  /// to find the interior centroid of their 2D screen overlap region, or returns `null` if disjoint.
+  /// Finds a strictly interior 2D screen point inside the intersection `polyA ∩ polyB`,
+  /// or returns `null` if the two polygons are disjoint or only touch along a shared edge/vertex.
   static Offset? _find2DPolygonOverlapPoint(List<Offset> polyA, List<Offset> polyB) {
+    if (polyA.length < 3 || polyB.length < 3) return null;
+
+    double cxA = 0.0, cyA = 0.0;
+    for (final p in polyA) {
+      cxA += p.dx;
+      cyA += p.dy;
+    }
+    final centroidA = Offset(cxA / polyA.length, cyA / polyA.length);
+    if (_isStrictlyInsidePolygon2D(centroidA, polyB)) return centroidA;
+
+    double cxB = 0.0, cyB = 0.0;
+    for (final p in polyB) {
+      cxB += p.dx;
+      cyB += p.dy;
+    }
+    final centroidB = Offset(cxB / polyB.length, cyB / polyB.length);
+    if (_isStrictlyInsidePolygon2D(centroidB, polyA)) return centroidB;
+
     final pts = <Offset>[];
 
+    // Pull vertices 2% toward their polygon centroid so shared boundary edges/corners
+    // between adjacent faces of the same rail are never mistaken for interior overlaps!
     for (final a in polyA) {
-      if (_pointInPolygon2D(a, polyB)) pts.add(a);
+      final insetA = Offset(a.dx + (centroidA.dx - a.dx) * 0.02, a.dy + (centroidA.dy - a.dy) * 0.02);
+      if (_isStrictlyInsidePolygon2D(insetA, polyB)) pts.add(insetA);
     }
     for (final b in polyB) {
-      if (_pointInPolygon2D(b, polyA)) pts.add(b);
+      final insetB = Offset(b.dx + (centroidB.dx - b.dx) * 0.02, b.dy + (centroidB.dy - b.dy) * 0.02);
+      if (_isStrictlyInsidePolygon2D(insetB, polyA)) pts.add(insetB);
     }
 
-    // Also collect 2D edge-edge intersections
+    // Also collect strict interior 2D edge-edge crossings (excluding shared endpoints)
     for (int i = 0; i < polyA.length; i++) {
       final a0 = polyA[i];
       final a1 = polyA[(i + 1) % polyA.length];
@@ -1846,13 +2209,30 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
     return Offset(sx / pts.length, sy / pts.length);
   }
 
+  static bool _isStrictlyInsidePolygon2D(Offset pt, List<Offset> poly) {
+    // Reject points within 0.20px of any polygon edge so touching edges don't trigger false overlaps
+    for (int i = 0; i < poly.length; i++) {
+      final a = poly[i];
+      final b = poly[(i + 1) % poly.length];
+      final abx = b.dx - a.dx;
+      final aby = b.dy - a.dy;
+      final lenSq = abx * abx + aby * aby;
+      if (lenSq > 1e-6) {
+        final t = (((pt.dx - a.dx) * abx + (pt.dy - a.dy) * aby) / lenSq).clamp(0.0, 1.0);
+        final dx = a.dx + abx * t - pt.dx;
+        final dy = a.dy + aby * t - pt.dy;
+        if (dx * dx + dy * dy < 0.04) return false;
+      }
+    }
+    return _pointInPolygon2D(pt, poly);
+  }
+
   static bool _pointInPolygon2D(Offset pt, List<Offset> poly) {
     bool inside = false;
     for (int i = 0, j = poly.length - 1; i < poly.length; j = i++) {
       final pi = poly[i];
       final pj = poly[j];
-      if (((pi.dy > pt.dy) != (pj.dy > pt.dy)) &&
-          (pt.dx < (pj.dx - pi.dx) * (pt.dy - pi.dy) / (pj.dy - pi.dy) + pi.dx)) {
+      if (((pi.dy > pt.dy) != (pj.dy > pt.dy)) && (pt.dx < (pj.dx - pi.dx) * (pt.dy - pi.dy) / (pj.dy - pi.dy) + pi.dx)) {
         inside = !inside;
       }
     }
@@ -1865,10 +2245,10 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
     final s2x = p4.dx - p3.dx;
     final s2y = p4.dy - p3.dy;
     final denom = -s2x * s1y + s1x * s2y;
-    if (denom.abs() < 1e-6) return null;
+    if (denom.abs() < 1e-5) return null;
     final s = (-s1y * (p1.dx - p3.dx) + s1x * (p1.dy - p3.dy)) / denom;
     final t = (s2x * (p1.dy - p3.dy) - s2y * (p1.dx - p3.dx)) / denom;
-    if (s >= 0.0 && s <= 1.0 && t >= 0.0 && t <= 1.0) {
+    if (s > 0.005 && s < 0.995 && t > 0.005 && t < 0.995) {
       return Offset(p1.dx + t * s1x, p1.dy + t * s1y);
     }
     return null;
@@ -1901,83 +2281,7 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
       return cameraDist * (1.0 - t);
     }
   }
-
-  void _paintStandaloneMeshNode(Canvas canvas, Size size, Node node) {
-    final mesh = node.mesh;
-    if (mesh == null) return;
-    final geom = mesh.geometry;
-    final mat = mesh.material;
-
-    if (geom is LineSegmentsGeometry) {
-      final pos = geom.data.positions;
-      if (pos.length < 6) return;
-      final path = Path();
-      for (int i = 0; i <= pos.length - 6; i += 6) {
-        final p0 = scene.projectRelativePointToScreen(
-          CadPoint3D(pos[i], pos[i + 1], pos[i + 2]),
-          size,
-        );
-        final p1 = scene.projectRelativePointToScreen(
-          CadPoint3D(pos[i + 3], pos[i + 4], pos[i + 5]),
-          size,
-        );
-        if (p0 != null && p1 != null) {
-          path.moveTo(p0.dx, p0.dy);
-          path.lineTo(p1.dx, p1.dy);
-        }
-      }
-      final c = mat.baseColorFactor;
-      final strokePaint = Paint()
-        ..color = Color.from(
-          alpha: c.w.clamp(0.0, 1.0),
-          red: c.x.clamp(0.0, 1.0),
-          green: c.y.clamp(0.0, 1.0),
-          blue: c.z.clamp(0.0, 1.0),
-        )
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = geom.width.clamp(0.5, 3.0)
-        ..isAntiAlias = true;
-      canvas.drawPath(path, strokePaint);
-    } else if (geom is BuiltTriangleGeometry) {
-      final pos = geom.positions;
-      final cols = geom.colors;
-      final idx = geom.indices;
-      if (pos.isEmpty || idx.isEmpty) return;
-
-      final vCount = pos.length ~/ 3;
-      final screenPositions = Float32List(vCount * 2);
-      final intColors = Int32List(vCount);
-
-      for (int i = 0; i < vCount; i++) {
-        final p = scene.projectRelativePointToScreen(
-          CadPoint3D(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]),
-          size,
-        );
-        if (p != null) {
-          screenPositions[i * 2] = p.dx;
-          screenPositions[i * 2 + 1] = p.dy;
-        }
-        final r = (cols[i * 4].clamp(0.0, 1.0) * 255).round();
-        final g = (cols[i * 4 + 1].clamp(0.0, 1.0) * 255).round();
-        final b = (cols[i * 4 + 2].clamp(0.0, 1.0) * 255).round();
-        final a = (cols[i * 4 + 3].clamp(0.0, 1.0) * 255).round();
-        intColors[i] = (a << 24) | (r << 16) | (g << 8) | b;
-      }
-
-      final vertices = ui.Vertices.raw(
-        ui.VertexMode.triangles,
-        screenPositions,
-        colors: intColors,
-        indices: idx,
-      );
-      canvas.drawVertices(vertices, BlendMode.dst, Paint());
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _CadBRepFlutterGpuScenePainter oldDelegate) => true;
 }
-
 
 /// Compact real-time FPS & Frame-Time badge designed to sit cleanly inside the top
 /// studio toolbar (`AssemblyOnshapeToolbar` & `StudioRibbonToolbar`) so it is never
@@ -1987,43 +2291,114 @@ class CadToolbarFpsBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<String>(
-      valueListenable: CadFpsTelemetry.notifier,
-      builder: (context, fpsText, _) {
-        final fpsVal = CadFpsTelemetry.fpsValueNotifier.value;
-        final Color dotColor = fpsVal >= 50.0
-            ? const Color(0xFF10B981)
-            : (fpsVal >= 28.0 ? const Color(0xFFF59E0B) : const Color(0xFFEF4444));
+    return ValueListenableBuilder<CadLayer1Engine>(
+      valueListenable: CadFpsTelemetry.activeEngineNotifier,
+      builder: (context, activeEng, _) {
+        return ValueListenableBuilder<String>(
+          valueListenable: CadFpsTelemetry.notifier,
+          builder: (context, fpsText, _) {
+            final fpsVal = CadFpsTelemetry.fpsValueNotifier.value;
+            final Color dotColor = fpsVal >= 50.0 ? const Color(0xFF10B981) : (fpsVal >= 28.0 ? const Color(0xFFF59E0B) : const Color(0xFFEF4444));
 
+            return PopupMenuButton<CadLayer1Engine>(
+              tooltip: 'Click to switch Layer 1 3D Rendering Engine (CustomPaint v9.3 / three_js / flutter3d)',
+              onSelected: CadFpsTelemetry.setEngine,
+              offset: const Offset(0, 28),
+              itemBuilder: (ctx) => [
+                for (final eng in CadLayer1Engine.values)
+                  PopupMenuItem<CadLayer1Engine>(
+                    value: eng,
+                    height: 34,
+                    child: Row(
+                      children: [
+                        Icon(activeEng == eng ? Icons.radio_button_checked : Icons.radio_button_off, size: 15, color: eng.accentColor),
+                        const SizedBox(width: 8),
+                        Text(
+                          eng.menuLabel,
+                          style: TextStyle(fontSize: 11.5, fontWeight: activeEng == eng ? FontWeight.w700 : FontWeight.w500, color: const Color(0xFF0F172A)),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+              child: Container(
+                height: 24,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: activeEng.accentColor.withValues(alpha: 0.8), width: 1.1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      fpsText,
+                      style: const TextStyle(color: Color(0xFFF8FAFC), fontSize: 11.0, fontWeight: FontWeight.w700, letterSpacing: 0.2),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.arrow_drop_down, size: 14, color: activeEng.accentColor),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Interactive 3-Engine Segmented Selector Pill for the Menu Bar / Top Header
+/// allowing instant 1-click live comparison between CustomPaint (v9.3), three_js, and flutter3d.
+class CadLayer1EngineSelectorPill extends StatelessWidget {
+  const CadLayer1EngineSelectorPill({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<CadLayer1Engine>(
+      valueListenable: CadFpsTelemetry.activeEngineNotifier,
+      builder: (context, activeEngine, _) {
         return Container(
           height: 24,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.all(2),
           decoration: BoxDecoration(
-            color: const Color(0xFF0F172A),
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: const Color(0xFF334155), width: 1.0),
+            color: const Color(0xFFE2E8F0),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFCBD5E1), width: 1.0),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  color: dotColor,
-                  shape: BoxShape.circle,
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 5),
+                child: Text(
+                  'Layer 1:',
+                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF475569)),
                 ),
               ),
-              const SizedBox(width: 6),
-              Text(
-                fpsText,
-                style: const TextStyle(
-                  color: Color(0xFFF8FAFC),
-                  fontSize: 11.0,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
+              for (final eng in CadLayer1Engine.values)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: InkWell(
+                    onTap: () => CadFpsTelemetry.setEngine(eng),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: activeEngine == eng ? eng.accentColor : Colors.transparent, borderRadius: BorderRadius.circular(4)),
+                      child: Text(
+                        eng.badgeTag,
+                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: activeEngine == eng ? Colors.white : const Color(0xFF334155)),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
             ],
           ),
         );

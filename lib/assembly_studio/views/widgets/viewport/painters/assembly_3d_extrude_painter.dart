@@ -25,8 +25,16 @@ class Assembly3DExtrudePainter extends CustomPainter {
     final plane = viewModel.activeSketchPlane;
     if (plane == null) return;
 
-    // 1. Compile 2D segments and extract closed profile loop
-    final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(plane);
+    // 1. Compile 2D segments and extract closed profile loop (filtering strictly by selected primitive!)
+    final targetProfileIds = (viewModel.selectedSketchEntity != null)
+        ? [viewModel.selectedSketchEntity!.id]
+        : (viewModel.extrudeParams.profileEntityIds.isNotEmpty
+            ? viewModel.extrudeParams.profileEntityIds
+            : (viewModel.selectedSketchEntityIds.isNotEmpty ? viewModel.selectedSketchEntityIds.toList() : <String>[]));
+    final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(
+      plane,
+      targetEntityIds: targetProfileIds.isNotEmpty ? targetProfileIds : null,
+    );
     final validation = CADProfileValidator.validateProfile(segments);
     if (!validation.isValidClosedLoop || validation.orderedPathVertices.length < 3) return;
 

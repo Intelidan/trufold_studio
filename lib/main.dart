@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'assembly_studio/views/assembly_studio_screen.dart';
+import 'sheet_metal_studio/engine/cad_brep_flutter_gpu_scene.dart';
 import 'sheet_metal_studio/engine/trufold_3d_engine_preloader.dart';
 import 'sheet_metal_studio/theme/studio_theme.dart';
 import 'sheet_metal_studio/views/sheet_metal_studio_screen.dart';
@@ -9,6 +10,7 @@ import 'sheet_metal_studio/views/widgets/dds/dds_workspace_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  CadWindowsKeyboardGuard.ensureInstalled();
   // Early prewarm of flutter_scene Impeller GPU engine and PBR shaders
   TruFold3dEnginePreloader.instance.preload();
   runApp(const TruFoldStudioApp());

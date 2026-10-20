@@ -3,6 +3,7 @@
 // High contrast, crisp light aesthetic, instant zero-lag response.
 
 import 'package:flutter/material.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/cad_brep_flutter_gpu_scene.dart' hide Material;
 import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmodel.dart';
 import 'package:trufold_studio/assembly_studio/views/widgets/viewport/overlays/assembly_viewport_dialogs.dart';
 import 'package:trufold_studio/assembly_studio/views/widgets/viewport/overlays/assembly_dsf_anatomy_dialog.dart';
@@ -189,9 +190,19 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
         _buildCheckboxItem(value: 'clean_canvas', label: 'Clean Canvas Mode', isChecked: vm.isCleanCanvasMode),
         const PopupMenuDivider(),
         _buildCheckboxItem(
-          value: 'engine_gpu',
-          label: '3D Engine: Flutter GPU (Impeller 120 FPS)',
-          isChecked: true,
+          value: 'engine_custom_paint',
+          label: 'Layer 1A: CustomPaint B-Rep + Newell 3D (v9.3 Backup)',
+          isChecked: CadFpsTelemetry.activeEngine == CadLayer1Engine.customPaintV93,
+        ),
+        _buildCheckboxItem(
+          value: 'engine_three_js',
+          label: 'Layer 1B: three_js (WebGL2/ANGLE Hardware Z-Buffer)',
+          isChecked: CadFpsTelemetry.activeEngine == CadLayer1Engine.threeJsGpu,
+        ),
+        _buildCheckboxItem(
+          value: 'engine_flutter3d',
+          label: 'Layer 1C: flutter3d (Impeller PBR/Toon Z-Buffer)',
+          isChecked: CadFpsTelemetry.activeEngine == CadLayer1Engine.flutter3dGpu,
         ),
       ],
       onSelected: (val) {
@@ -233,7 +244,17 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
           case 'clean_canvas':
             vm.toggleCleanCanvasMode();
             break;
-          case 'engine_gpu':
+          case 'engine_custom_paint':
+            CadFpsTelemetry.setEngine(CadLayer1Engine.customPaintV93);
+            vm.notifyDocChanged();
+            break;
+          case 'engine_three_js':
+            CadFpsTelemetry.setEngine(CadLayer1Engine.threeJsGpu);
+            vm.notifyDocChanged();
+            break;
+          case 'engine_flutter3d':
+            CadFpsTelemetry.setEngine(CadLayer1Engine.flutter3dGpu);
+            vm.notifyDocChanged();
             break;
         }
       },

@@ -68,7 +68,9 @@ class _AssemblyExtrudeDialogState extends State<AssemblyExtrudeDialog> {
     final segments = plane != null
         ? AssemblySurfaceSketchEngine.compilePlaneSegments(
             plane,
-            targetEntityIds: params.profileEntityIds.isNotEmpty ? params.profileEntityIds : null,
+            targetEntityIds: params.profileEntityIds.isNotEmpty
+                ? params.profileEntityIds
+                : (vm.selectedSketchEntity != null ? [vm.selectedSketchEntity!.id] : null),
           )
         : <CADLineSegment>[];
     final validation = segments.isNotEmpty ? CADProfileValidator.validateProfile(segments) : null;

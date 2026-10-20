@@ -10,6 +10,7 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
+import '../../../engine/cad_brep_flutter_gpu_scene.dart' hide Material;
 import '../../../models/cad_primitives.dart';
 import '../../../viewmodels/sheet_metal_studio_viewmodel.dart';
 import '../../../services/studio_clipboard_service.dart';
@@ -844,6 +845,35 @@ class StudioMenuBar extends StatelessWidget {
     const col = Color(0xFF06B6D4);
     final vm = viewModel;
     return [
+      _buildMenuHeader('Layer 1 3D Rendering Engine (Live Benchmark)', col),
+      _buildItem(
+        icon: Icons.brush_outlined,
+        title: 'Layer 1A: CustomPaint B-Rep (v9.3 Backup)',
+        subtitle: CadFpsTelemetry.activeEngine == CadLayer1Engine.customPaintV93
+            ? '✓ Active — Analytic Even-Odd Paths + Newell 3D Sorter'
+            : 'Switch to CustomPaint B-Rep (v9.3)',
+        themeColor: col,
+        onTap: () => CadFpsTelemetry.setEngine(CadLayer1Engine.customPaintV93),
+      ),
+      _buildItem(
+        icon: Icons.hardware,
+        title: 'Layer 1B: three_js (WebGL2/ANGLE Hardware Z-Buffer)',
+        subtitle: CadFpsTelemetry.activeEngine == CadLayer1Engine.threeJsGpu
+            ? '✓ Active — Retained BufferGeometry + Hardware Depth Buffer'
+            : 'Switch to three_js Hardware Z-Buffer',
+        themeColor: col,
+        onTap: () => CadFpsTelemetry.setEngine(CadLayer1Engine.threeJsGpu),
+      ),
+      _buildItem(
+        icon: Icons.auto_awesome_motion,
+        title: 'Layer 1C: flutter3d (Impeller PBR/Toon Z-Buffer)',
+        subtitle: CadFpsTelemetry.activeEngine == CadLayer1Engine.flutter3dGpu
+            ? '✓ Active — Cook-Torrance GGX PBR + 4x MSAA Z-Buffer'
+            : 'Switch to flutter3d PBR/Toon Engine',
+        themeColor: col,
+        onTap: () => CadFpsTelemetry.setEngine(CadLayer1Engine.flutter3dGpu),
+      ),
+      const PopupMenuDivider(),
       _buildMenuHeader('Workspace & Inspectors', col),
       _buildItem(
         icon: Icons.tune,

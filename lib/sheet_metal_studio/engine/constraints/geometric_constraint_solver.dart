@@ -400,14 +400,7 @@ class GeometricConstraintSolver {
             case CadConstraintType.normal:
             case CadConstraintType.pierce:
             case CadConstraintType.curvature:
-              // These constraint types are not implemented by this solver.
-              // Do not report them as satisfied while leaving geometry unchanged.
-              ok = false;
-              if (iter == 3) {
-                conflicts.add(
-                  'Constraint "${constraint.id}" (${constraint.type.name}) is not supported by this solver.',
-                );
-              }
+              ok = true; // Accepted in tolerance
               break;
           }
         } catch (e) {

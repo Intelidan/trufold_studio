@@ -18,6 +18,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:trufold_studio/sketch_draft_files/cad_parameter_engine/cad_models.dart';
+import 'cad_simultaneous_lm_solver.dart';
 
 class SketchConstraintSolverResult {
   final bool isSuccess;
@@ -149,7 +150,16 @@ class AssemblySketchConstraintSolver {
       }
     }
 
-    // 4. Process geometric & dimensional constraints iteratively (relaxation)
+    // 4A. LAYER 3 UPGRADE: Run Simultaneous Levenberg-Marquardt Jacobian Solver first
+    //     so coupled constraints (e.g., 27° angle + horizontal + bonded polygon loop)
+    //     converge simultaneously without breaking earlier constraints!
+    final lmOutcome = CadSimultaneousLmSolver.solveSimultaneous(plane);
+    for (final cid in lmOutcome.conflictingConstraintIds) {
+      final conflictObj = constraints.where((c) => c.id == cid).firstOrNull;
+      if (conflictObj != null) conflictingSet.add(conflictObj);
+    }
+
+    // 4B. Process geometric & dimensional constraints iteratively (exact snap pass)
     final geometricConstraints = constraints.where((c) => c.type != CadConstraintType.fixed).toList();
     const int maxIterations = 5;
     for (int iter = 0; iter < maxIterations; iter++) {

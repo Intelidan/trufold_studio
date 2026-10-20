@@ -1282,20 +1282,24 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                           _handleMagneticSnapHover(event.localPosition, size, mesh, vm);
                         }
 
-                        if (vm.isPlaneSelectionMode && !_isOrbitingWithMouse && !_isPanningWithMouse) {
+                        if (vm.activeSketchPlane == null && !_isOrbitingWithMouse && !_isPanningWithMouse && !_isMovingEntity && !isSnapTool) {
                           final hitPlane = _findPlaneUnderScreenCursor(event.localPosition, size, mesh, vm);
                           if (hitPlane != null) {
                             vm.setHoveredPlane(hitPlane.id);
+                            vm.setHoveredFace(null, null);
                           } else {
                             final hitPoly = _findFrontmostPolygonUnderCursor(event.localPosition, size, mesh);
-                            if (hitPoly != null) {
+                            if (hitPoly != null && !hitPoly.faceId.startsWith('weld_') && !hitPoly.faceId.startsWith('WELD_')) {
                               final hitPart = vm.findPartForFaceId(hitPoly.faceId);
                               if (hitPart != null) {
+                                vm.setHoveredFace(hitPoly, hitPart);
                                 vm.setHoveredPlane('face:${hitPart.id}:${hitPoly.faceId}');
                               } else {
+                                vm.setHoveredFace(null, null);
                                 vm.setHoveredPlane(null);
                               }
                             } else {
+                              vm.setHoveredFace(null, null);
                               vm.setHoveredPlane(null);
                             }
                           }
@@ -1377,6 +1381,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                           if (hitPoly != null && !hitPoly.faceId.startsWith('weld_') && !hitPoly.faceId.startsWith('WELD_')) {
                             final hitPart = vm.findPartForFaceId(hitPoly.faceId);
                             if (hitPart != null) {
+                              vm.setHoveredFace(null, null);
+                              vm.setHoveredPlane(null);
                               vm.activateSketchOnFacePolygon(hitPoly, partId: hitPart.id);
                               vm.exitPlaneSelectionMode();
                               _rebuildGpuCadModel(force: true);
@@ -1387,6 +1393,8 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                           }
                           final hitPlane = _findPlaneUnderScreenCursor(event.localPosition, size, mesh, vm);
                           if (hitPlane != null) {
+                            vm.setHoveredFace(null, null);
+                            vm.setHoveredPlane(null);
                             vm.selectPlaneForSketch(hitPlane);
                             _rebuildGpuCadModel(force: true);
                             _updateGpuCamera(size);
@@ -1398,7 +1406,15 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                         // 1b-3. Extrude 3D Arrow Manipulator Drag Start (Phase 5)
                         if (vm.isExtrudeMode && vm.activeSketchPlane != null && (event.buttons & kPrimaryMouseButton) != 0) {
                           final plane = vm.activeSketchPlane!;
-                          final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(plane);
+                          final targetProfileIds = (vm.selectedSketchEntity != null)
+                              ? [vm.selectedSketchEntity!.id]
+                              : (vm.extrudeParams.profileEntityIds.isNotEmpty
+                                  ? vm.extrudeParams.profileEntityIds
+                                  : (vm.selectedSketchEntityIds.isNotEmpty ? vm.selectedSketchEntityIds.toList() : <String>[]));
+                          final segments = AssemblySurfaceSketchEngine.compilePlaneSegments(
+                            plane,
+                            targetEntityIds: targetProfileIds.isNotEmpty ? targetProfileIds : null,
+                          );
                           final val = CADProfileValidator.validateProfile(segments);
                           if (val.isValidClosedLoop && val.orderedPathVertices.length >= 3) {
                             final pts = val.orderedPathVertices;
@@ -2899,7 +2915,7 @@ class Assembly3DViewportState extends State<Assembly3DViewport> with TickerProvi
                   // =================================================================
                   // 1b-0b. 3D DATUM & CONSTRUCTION PLANES LAYER (Phase 1)
                   // =================================================================
-                  if (vm.isPlaneSelectionMode || vm.isSketchMode || vm.showDatumPlanes || vm.showConstructionPlanes || vm.showOriginTriad)
+                  if (vm.hoveredFacePolygon != null || vm.hoveredPlaneId != null || vm.isPlaneSelectionMode || vm.isSketchMode || vm.showDatumPlanes || vm.showConstructionPlanes || vm.showOriginTriad)
                     Positioned.fill(
                       child: IgnorePointer(
                         child: CustomPaint(

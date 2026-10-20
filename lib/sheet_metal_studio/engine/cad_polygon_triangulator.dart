@@ -82,7 +82,7 @@ class CadPolygonTriangulator {
         final cornerIndices = <int>[];
         for (int i = 0; i < 4; i++) {
           final pt = outerVertices[i];
-          emitVertexColor(pt, isHoleRim: false, isCreaseCorner: i == 0 || i == 1);
+          emitVertexColor(pt, isHoleRim: false, isCreaseCorner: false);
           builder.texCoord(_computeUv(pt, nz));
           cornerIndices.add(builder.addVertex(vm.Vector3(
             pt.x - pivot.x,
@@ -105,7 +105,7 @@ class CadPolygonTriangulator {
       // Standard 2-triangle quad
       final indices = <int>[];
       for (int i = 0; i < 4; i++) {
-        emitVertexColor(outerVertices[i], isHoleRim: false, isCreaseCorner: i == 0 || i == 1);
+        emitVertexColor(outerVertices[i], isHoleRim: false, isCreaseCorner: false);
         builder.texCoord(_computeUv(outerVertices[i], nz));
         indices.add(builder.addVertex(vm.Vector3(
           outerVertices[i].x - pivot.x,
@@ -147,7 +147,7 @@ class CadPolygonTriangulator {
 
       final indices = <int>[];
       for (int i = 0; i < 3; i++) {
-        emitVertexColor(outerVertices[i], isHoleRim: false, isCreaseCorner: i == 0 || i == 1);
+        emitVertexColor(outerVertices[i], isHoleRim: false, isCreaseCorner: false);
         builder.texCoord(_computeUv(outerVertices[i], nz));
         indices.add(builder.addVertex(vm.Vector3(
           outerVertices[i].x - pivot.x,
@@ -222,7 +222,7 @@ class CadPolygonTriangulator {
     for (int i = 0; i < allPts3D.length; i++) {
       final pt = allPts3D[i];
       final bool isHole = (i >= outerVertices.length);
-      final bool isCrease = (!isHole && (i == 0 || i == 1));
+      final bool isCrease = false;
       emitVertexColor(pt, isHoleRim: isHole, isCreaseCorner: isCrease);
 
       final uCoord = (i * 2 < coords.length) ? coords[i * 2] * 0.01 : pt.x * 0.01;
