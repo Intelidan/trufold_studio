@@ -1818,29 +1818,8 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                             Container(width: 1, height: 14, color: const Color(0xFFCBD5E1)),
                             const SizedBox(width: 8),
 
-                            // Engine Mode Indicator (Flutter GPU Impeller 120 FPS)
-                            Tooltip(
-                              message: '3D CAD Engine: Flutter GPU (Impeller)\nHardware-accelerated 120 FPS PBR rendering active.',
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: const Color(0xFF10B981)),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.speed, size: 12, color: Color(0xFF10B981)),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Engine: GPU (120 FPS)',
-                                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                            // Interactive 3-Engine Layer 1 Switcher (CustomPaint v9.3 | three_js | flutter3d)
+                            const CadLayer1EngineSelectorPill(),
 
                             const SizedBox(width: 8),
                             Container(width: 1, height: 14, color: const Color(0xFFCBD5E1)),

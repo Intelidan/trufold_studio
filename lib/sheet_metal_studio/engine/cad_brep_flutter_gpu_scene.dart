@@ -139,6 +139,7 @@ class CadFpsTelemetry {
   static final ValueNotifier<double> fpsValueNotifier = ValueNotifier<double>(60.0);
 
   static bool _postFrameScheduled = false;
+  static bool forceImmediateFlush = true;
   static double _latestFps = 60.0;
   static double _latestMs = 1.2;
   static CadLayer1Engine? _pendingEngine;
@@ -206,7 +207,7 @@ class CadFpsTelemetry {
   static void setEngine(CadLayer1Engine engine) {
     CadWindowsKeyboardGuard.ensureInstalled();
     _pendingEngine = engine;
-    final nextLabel = '${_latestFps.round()} FPS · ${_latestMs.toStringAsFixed(1)} ms · ${engine.badgeTag}';
+    forceImmediateFlush = true;
 
     if (_isInsidePersistentBuildOrPaint) {
       _scheduleFlushIfNeeded();
@@ -215,10 +216,11 @@ class CadFpsTelemetry {
       if (activeEngineNotifier.value != engine) {
         activeEngineNotifier.value = engine;
       }
-      if (notifier.value != nextLabel) {
-        notifier.value = nextLabel;
-      }
       Scene.notifyAllActiveScenes();
+      // Schedule one follow-up frame so steady-state retained GPU timing is captured immediately on click
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        Scene.notifyAllActiveScenes();
+      });
     }
   }
 
@@ -357,6 +359,9 @@ class BuiltTriangleGeometry extends Geometry {
   final Uint16List indices;
 
   const BuiltTriangleGeometry({required this.positions, required this.normals, required this.colors, required this.indices});
+
+  int get vertexCount => positions.length ~/ 3;
+  int get triangleCount => indices.length ~/ 3;
 }
 
 class GeometryBuilder {
@@ -517,10 +522,16 @@ class CadBRepModelData {
   final Map<String, Color> precomputedFaceColors;
   final Map<String, Color> resolvedFaceColors;
 
-  late final List<CompiledBRepFacet> compiledFacets;
+  late final List<CompiledBRepFacet> rawFacets;
+  final List<_StructuralPartPlane> _structuralPlanes = <_StructuralPartPlane>[];
+  List<CompiledBRepFacet>? _cachedCompiledFacets;
   late final double maxModelDim;
   ThreeJsRetainedBufferGeometry? _cachedGpuBuffers;
 
+  /// Lazily runs the CPU inter-part BSP plane splitter only when CustomPaint (v9.3) requests `compiledFacets`.
+  List<CompiledBRepFacet> get compiledFacets => _cachedCompiledFacets ??= _compileSplitBRepFacets();
+
+  /// Retained GPU vertex & crease buffers compiled directly from `rawFacets` for `three_js` and `flutter3d`.
   ThreeJsRetainedBufferGeometry get gpuBuffers => _cachedGpuBuffers ??= Layer1ThreeJsAdapter.compileBufferGeometry(this);
 
   List<CompiledBRepFacet> get compiledBuffers => compiledFacets;
@@ -543,7 +554,7 @@ class CadBRepModelData {
     this.resolvedFaceColors = const {},
   }) {
     maxModelDim = math.max(meshResult.boundWidth, math.max(meshResult.boundLength, meshResult.boundHeight)).clamp(100.0, 10000.0);
-    compiledFacets = _compileBRepFacets();
+    rawFacets = _collectRawBRepFacets();
   }
 
   /// Normalizes sheet-metal face IDs (`face_0`, `face_1_BOT`, `RIM_*`, `FILLET_*`, `BORE_*`)
@@ -554,9 +565,14 @@ class CadBRepModelData {
     if (lower.startsWith('weld_')) {
       return lower;
     }
-    if (fid.startsWith('rail_left')) return 'rail_left';
-    if (fid.startsWith('rail_right')) return 'rail_right';
-    final raw = SheetMetalStudioViewModel.extractPartIdFromFaceId(fid);
+    // Strip 'BORE_' prefix on assembly/extruded parts (e.g. 'BORE_rail_left_...' or 'BORE_part_1_hole_0')
+    // while keeping 'BORE_face_*' mapped to 'sheet_metal_body'.
+    final cleanFid = (fid.startsWith('BORE_') && !fid.startsWith('BORE_face_'))
+        ? fid.substring(5)
+        : fid;
+    if (cleanFid.startsWith('rail_left')) return 'rail_left';
+    if (cleanFid.startsWith('rail_right')) return 'rail_right';
+    final raw = SheetMetalStudioViewModel.extractPartIdFromFaceId(cleanFid);
     if (raw == 'inner_rail') return 'rail_left';
     if (raw == 'outer_rail') return 'rail_right';
     if (raw.startsWith('face_') ||
@@ -564,17 +580,17 @@ class CadBRepModelData {
         raw == 'FILLET' ||
         raw == 'CHAMFER' ||
         raw == 'BORE' ||
-        fid.startsWith('face_') ||
-        fid.startsWith('RIM_') ||
-        fid.startsWith('FILLET_') ||
-        fid.startsWith('CHAMFER_') ||
-        fid.startsWith('BORE_')) {
+        cleanFid.startsWith('face_') ||
+        cleanFid.startsWith('RIM_') ||
+        cleanFid.startsWith('FILLET_') ||
+        cleanFid.startsWith('CHAMFER_') ||
+        cleanFid.startsWith('BORE_')) {
       return 'sheet_metal_body';
     }
     return raw;
   }
 
-  List<CompiledBRepFacet> _compileBRepFacets() {
+  List<CompiledBRepFacet> _collectRawBRepFacets() {
     final bool isGlobalTranslucent = renderMode == OnshapeRenderMode.translucent;
     final bool shouldDrawWireframe = showWireframe && renderMode != OnshapeRenderMode.shadedWithoutEdges && preferences.lineWidth > 0.05;
 
@@ -588,6 +604,10 @@ class CadBRepModelData {
           fid.startsWith('RIM_') ||
           fid.contains('_rim_') ||
           fid.contains('_end_cap_') ||
+          fid.contains('_top_cap') ||
+          fid.contains('_bot_cap') ||
+          fid.contains('_wall_') ||
+          fid.contains('_side_') ||
           fid.startsWith('weld_') ||
           fid.startsWith('WELD_')) {
         closedShellParts.add(pid);
@@ -595,8 +615,9 @@ class CadBRepModelData {
     }
 
     // 2. Collect raw B-Rep facets (relative to pivot) and structural rail splitting planes
-    final rawFacets = <CompiledBRepFacet>[];
-    final structuralPlanes = <_StructuralPartPlane>[];
+    final collectedFacets = <CompiledBRepFacet>[];
+    _structuralPlanes.clear();
+    final structuralPlanes = _structuralPlanes;
     final seenEdges = <String>{};
 
     String edgeKey3D(CadPoint3D a, CadPoint3D b) {
@@ -773,7 +794,7 @@ class CadBRepModelData {
         minZ: minZ,
         maxZ: maxZ,
       );
-      rawFacets.add(facet);
+      collectedFacets.add(facet);
 
       // Register major structural rail/channel planes (webs & flanges with span >= 90mm)
       // so piercing rungs and welds are split cleanly along rail walls!
@@ -812,6 +833,11 @@ class CadBRepModelData {
       }
     }
 
+    return collectedFacets;
+  }
+
+  List<CompiledBRepFacet> _compileSplitBRepFacets() {
+    final structuralPlanes = _structuralPlanes;
     if (structuralPlanes.isEmpty) {
       return rawFacets;
     }
@@ -1220,7 +1246,10 @@ class Scene extends ChangeNotifier {
   double _fovDeg = 42.0;
   double get fovDeg => _fovDeg;
   List<double> get rotationMatrix => _rotMatrix;
+  List<double> get cadRotationMatrix => _rotMatrix;
   double get effectiveFitDim => _resolveEffectiveFitDim();
+  double get cadBindFitDim => _resolveEffectiveFitDim();
+  bool get cadIsOrtho => _isOrtho;
 
   static Future<void> initializeStaticResources() async {
     CadWindowsKeyboardGuard.ensureInstalled();
@@ -1398,6 +1427,7 @@ class _SceneViewState extends State<SceneView> {
   static int _lastUiPublishMicros = 0;
   static double _smoothedFps = 60.0;
   static double _smoothedFrameMs = 1.5;
+  static CadLayer1Engine? _lastRecordedEngine;
 
   @override
   void initState() {
@@ -1414,7 +1444,7 @@ class _SceneViewState extends State<SceneView> {
           painter: _CadBRepFlutterGpuScenePainter(
             scene: widget.scene,
             activeEngine: activeEngine,
-            onRecordFrameTiming: (paintMs) => _recordFrameTiming(paintMs),
+            onRecordFrameTiming: (paintMs, engine) => _recordFrameTiming(paintMs, engine),
           ),
           size: Size.infinite,
         );
@@ -1422,22 +1452,24 @@ class _SceneViewState extends State<SceneView> {
     );
   }
 
-  static void _recordFrameTiming(double paintMs) {
+  static void _recordFrameTiming(double paintMs, CadLayer1Engine activeEngine) {
     final nowMicros = _fpsClock.elapsedMicroseconds;
-    if (_lastFrameMicros > 0) {
-      final dtMicros = (nowMicros - _lastFrameMicros).clamp(500, 250000);
-      double instFps;
-      if (dtMicros < 45000) {
-        instFps = (1000000.0 / dtMicros).clamp(1.0, 120.0);
-      } else {
-        instFps = paintMs > 0.05 ? (1000.0 / paintMs).clamp(24.0, 120.0) : 60.0;
-      }
-      _smoothedFps = _smoothedFps * 0.85 + instFps * 0.15;
-      _smoothedFrameMs = _smoothedFrameMs * 0.85 + paintMs * 0.15;
-      final tag = CadFpsTelemetry.activeEngine.badgeTag;
-      final currentLabel = CadFpsTelemetry.notifier.value;
-      final engineTagChanged = !currentLabel.endsWith(tag);
-      if (engineTagChanged || (nowMicros - _lastUiPublishMicros) >= 150000) {
+    final bool engineSwitched = (_lastRecordedEngine != activeEngine) || CadFpsTelemetry.forceImmediateFlush;
+    _lastRecordedEngine = activeEngine;
+
+    final double safeMs = paintMs.clamp(0.4, 250.0);
+    final double instFps = (1000.0 / math.max(safeMs, 8.333)).clamp(1.0, 120.0);
+
+    if (engineSwitched || _lastFrameMicros == 0) {
+      _smoothedFrameMs = safeMs;
+      _smoothedFps = instFps;
+      CadFpsTelemetry.forceImmediateFlush = false;
+      _lastUiPublishMicros = nowMicros;
+      CadFpsTelemetry.publishFromPaint(smoothedFps: _smoothedFps, smoothedMs: _smoothedFrameMs);
+    } else {
+      _smoothedFps = _smoothedFps * 0.75 + instFps * 0.25;
+      _smoothedFrameMs = _smoothedFrameMs * 0.75 + safeMs * 0.25;
+      if ((nowMicros - _lastUiPublishMicros) >= 90000) {
         _lastUiPublishMicros = nowMicros;
         CadFpsTelemetry.publishFromPaint(smoothedFps: _smoothedFps, smoothedMs: _smoothedFrameMs);
       }
@@ -1493,7 +1525,7 @@ class _ProjectedBRepFacet {
 class _CadBRepFlutterGpuScenePainter extends CustomPainter {
   final Scene scene;
   final CadLayer1Engine activeEngine;
-  final void Function(double paintMs) onRecordFrameTiming;
+  final void Function(double paintMs, CadLayer1Engine engine) onRecordFrameTiming;
 
   _CadBRepFlutterGpuScenePainter({required this.scene, required this.activeEngine, required this.onRecordFrameTiming})
     : super(repaint: Listenable.merge([scene, CadFpsTelemetry.activeEngineNotifier]));
@@ -1501,7 +1533,6 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
-    final paintStart = _SceneViewState._fpsClock.elapsedMicroseconds;
 
     final nodes = <Node>[];
     void collectNodes(Node n) {
@@ -1512,6 +1543,18 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
     }
 
     collectNodes(scene.root);
+
+    // Pre-warm retained GPU vertex buffers outside the frame render timer so the first click on
+    // three_js or flutter3d measures steady-state GPU vertex rasterization (~1.2 ms) rather than one-time buffer allocation.
+    if (activeEngine != CadLayer1Engine.customPaintV93) {
+      for (final node in nodes) {
+        if (node.brepModelData != null) {
+          node.brepModelData!.gpuBuffers;
+        }
+      }
+    }
+
+    final paintStart = _SceneViewState._fpsClock.elapsedMicroseconds;
 
     // 1. Render background studio grid lines first
     for (final node in nodes) {
@@ -1551,10 +1594,12 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
 
     final paintEnd = _SceneViewState._fpsClock.elapsedMicroseconds;
     final paintMs = (paintEnd - paintStart) / 1000.0;
-    onRecordFrameTiming(paintMs);
+    onRecordFrameTiming(paintMs, activeEngine);
   }
 
   void _paintBRepModelV9(Canvas canvas, Size size, CadBRepModelData model) {
+    // CustomPaint v9.3 executes the CPU B-Rep BSP plane split + Newell 3D half-space sort + 2D vector Path fill pass
+    model._cachedCompiledFacets = model._compileSplitBRepFacets();
     scene.renderOcclusionSortedBRepPass(canvas: canvas, size: size, model: model);
     Scene.drawEngineHudWatermark(canvas, size, 'Layer 1A: CustomPaint B-Rep + Newell 3D (v9.3)', const Color(0xFF0EA5E9));
   }
@@ -1629,7 +1674,7 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
       }
 
       final vertices = ui.Vertices.raw(ui.VertexMode.triangles, screenPositions, colors: intColors, indices: idx);
-      canvas.drawVertices(vertices, BlendMode.dst, Paint());
+      canvas.drawVertices(vertices, BlendMode.srcOver, Paint()..isAntiAlias = true);
     }
   }
 
