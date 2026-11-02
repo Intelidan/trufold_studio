@@ -9,8 +9,7 @@
 // Interlinked Architecture:
 // - Takes solved 2D closed loops from Layer 3 (`CadSimultaneousLmSolver`).
 // - Outputs watertight `List<CadFoldedPolygon3D>` + sharp crease segments
-//   consumed identically by all 3 Layer 1 rendering engines (`CustomPaint v9.3`,
-//   `three_js`, and `flutter3d`).
+//   consumed by the dedicated Layer 1 `flutter3d` rendering engine.
 // - Also includes a ready-to-bind FFI bridge for `elalish/manifold` (`manifoldc`).
 // =============================================================================
 

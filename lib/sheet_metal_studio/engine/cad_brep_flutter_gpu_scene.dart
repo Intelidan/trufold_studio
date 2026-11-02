@@ -37,34 +37,18 @@ import 'package:vector_math/vector_math.dart' as vm;
 import '../models/cad_primitives.dart';
 import '../viewmodels/sheet_metal_studio_viewmodel.dart';
 import 'kinematic_fold_engine.dart';
-import 'layer1_three_js_adapter.dart';
 import 'layer1_flutter3d_adapter.dart';
+import 'cad_crease_edge_extractor.dart';
 
 vm.Vector3 builder_vec3(double x, double y, double z) => vm.Vector3(x, y, z);
 vm.Vector4 builder_vec4(double x, double y, double z, double w) => vm.Vector4(x, y, z, w);
 
-/// The 3 selectable Layer 1 3D Rendering Engines for side-by-side benchmarking.
-/// Once testing with interlinked Layer 2 (Manifold CSG) and Layer 3 (Simultaneous LM Solver)
-/// is complete, you can keep the winner and delete the other two!
+/// The dedicated Layer 1 3D Rendering Engine: flutter3d (GPU).
 enum CadLayer1Engine {
-  customPaintV93(
-    id: 'custom_paint_v93',
-    shortLabel: 'CustomPaint (v9.3)',
-    menuLabel: 'Layer 1A: CustomPaint B-Rep + Newell 3D (Backup)',
-    badgeTag: 'CustomPaint',
-    accentColor: Color(0xFF0EA5E9),
-  ),
-  threeJsGpu(
-    id: 'three_js_gpu',
-    shortLabel: 'three_js (GPU)',
-    menuLabel: 'Layer 1B: three_js (WebGL2/ANGLE Hardware Z-Buffer)',
-    badgeTag: 'three_js',
-    accentColor: Color(0xFF10B981),
-  ),
   flutter3dGpu(
     id: 'flutter3d_gpu',
     shortLabel: 'flutter3d (GPU)',
-    menuLabel: 'Layer 1C: flutter3d (Impeller PBR/Toon Z-Buffer)',
+    menuLabel: 'Layer 1: flutter3d (Impeller PBR/Toon Z-Buffer)',
     badgeTag: 'flutter3d',
     accentColor: Color(0xFF8B5CF6),
   );
@@ -131,9 +115,9 @@ class CadWindowsKeyboardGuard {
 
 /// Global real-time FPS & Frame-Time telemetry published to the top toolbar (SS4).
 class CadFpsTelemetry {
-  static final ValueNotifier<CadLayer1Engine> activeEngineNotifier = ValueNotifier<CadLayer1Engine>(CadLayer1Engine.customPaintV93);
+  static final ValueNotifier<CadLayer1Engine> activeEngineNotifier = ValueNotifier<CadLayer1Engine>(CadLayer1Engine.flutter3dGpu);
 
-  static CadLayer1Engine get activeEngine => _pendingEngine ?? activeEngineNotifier.value;
+  static CadLayer1Engine get activeEngine => CadLayer1Engine.flutter3dGpu;
 
   static final ValueNotifier<String> notifier = ValueNotifier<String>('60 FPS · 1.2 ms · ${activeEngineNotifier.value.badgeTag}');
   static final ValueNotifier<double> fpsValueNotifier = ValueNotifier<double>(60.0);
@@ -202,22 +186,21 @@ class CadFpsTelemetry {
     }
   }
 
-  /// Immediately switches the active Layer-1 rendering engine (`CustomPaint v9.3`, `three_js`, or `flutter3d`)
-  /// and triggers a synchronous repaint across all active `Scene` viewports.
+  /// Exclusively dedicated to flutter3d (GPU) rendering engine.
+  /// CustomPaint is reserved strictly for 2D unfolded flat drawings and canvas overlays.
   static void setEngine(CadLayer1Engine engine) {
     CadWindowsKeyboardGuard.ensureInstalled();
-    _pendingEngine = engine;
+    _pendingEngine = CadLayer1Engine.flutter3dGpu;
     forceImmediateFlush = true;
 
     if (_isInsidePersistentBuildOrPaint) {
       _scheduleFlushIfNeeded();
     } else {
       _pendingEngine = null;
-      if (activeEngineNotifier.value != engine) {
-        activeEngineNotifier.value = engine;
+      if (activeEngineNotifier.value != CadLayer1Engine.flutter3dGpu) {
+        activeEngineNotifier.value = CadLayer1Engine.flutter3dGpu;
       }
       Scene.notifyAllActiveScenes();
-      // Schedule one follow-up frame so steady-state retained GPU timing is captured immediately on click
       SchedulerBinding.instance.addPostFrameCallback((_) {
         Scene.notifyAllActiveScenes();
       });
@@ -225,10 +208,7 @@ class CadFpsTelemetry {
   }
 
   static void cycleEngine() {
-    final values = CadLayer1Engine.values;
-    final current = _pendingEngine ?? activeEngineNotifier.value;
-    final nextIdx = (values.indexOf(current) + 1) % values.length;
-    setEngine(values[nextIdx]);
+    setEngine(CadLayer1Engine.flutter3dGpu);
   }
 }
 
@@ -526,13 +506,13 @@ class CadBRepModelData {
   final List<_StructuralPartPlane> _structuralPlanes = <_StructuralPartPlane>[];
   List<CompiledBRepFacet>? _cachedCompiledFacets;
   late final double maxModelDim;
-  ThreeJsRetainedBufferGeometry? _cachedGpuBuffers;
+  Flutter3dRetainedBufferGeometry? _cachedGpuBuffers;
 
   /// Lazily runs the CPU inter-part BSP plane splitter only when CustomPaint (v9.3) requests `compiledFacets`.
   List<CompiledBRepFacet> get compiledFacets => _cachedCompiledFacets ??= _compileSplitBRepFacets();
 
-  /// Retained GPU vertex & crease buffers compiled directly from `rawFacets` for `three_js` and `flutter3d`.
-  ThreeJsRetainedBufferGeometry get gpuBuffers => _cachedGpuBuffers ??= Layer1ThreeJsAdapter.compileBufferGeometry(this);
+  /// Retained GPU vertex & crease buffers compiled directly from `rawFacets` for `flutter3d`.
+  Flutter3dRetainedBufferGeometry get gpuBuffers => _cachedGpuBuffers ??= Layer1Flutter3dAdapter.compileBufferGeometry(this);
 
   List<CompiledBRepFacet> get compiledBuffers => compiledFacets;
 
@@ -567,9 +547,7 @@ class CadBRepModelData {
     }
     // Strip 'BORE_' prefix on assembly/extruded parts (e.g. 'BORE_rail_left_...' or 'BORE_part_1_hole_0')
     // while keeping 'BORE_face_*' mapped to 'sheet_metal_body'.
-    final cleanFid = (fid.startsWith('BORE_') && !fid.startsWith('BORE_face_'))
-        ? fid.substring(5)
-        : fid;
+    final cleanFid = (fid.startsWith('BORE_') && !fid.startsWith('BORE_face_')) ? fid.substring(5) : fid;
     if (cleanFid.startsWith('rail_left')) return 'rail_left';
     if (cleanFid.startsWith('rail_right')) return 'rail_right';
     final raw = SheetMetalStudioViewModel.extractPartIdFromFaceId(cleanFid);
@@ -618,13 +596,16 @@ class CadBRepModelData {
     final collectedFacets = <CompiledBRepFacet>[];
     _structuralPlanes.clear();
     final structuralPlanes = _structuralPlanes;
-    final seenEdges = <String>{};
 
     String edgeKey3D(CadPoint3D a, CadPoint3D b) {
       final kA = '${(a.x * 50).round()}_${(a.y * 50).round()}_${(a.z * 50).round()}';
       final kB = '${(b.x * 50).round()}_${(b.y * 50).round()}_${(b.z * 50).round()}';
       return kA.compareTo(kB) <= 0 ? '$kA|$kB' : '$kB|$kA';
     }
+
+    // Clean CAD feature edge extraction: eliminates triangulation diagonals on flat faces
+    // and parallel facet stripes on rounded bends!
+    final survivingCreaseKeys = CadCreaseEdgeExtractor.computeSurvivingCreaseKeys(meshResult.allPolygons, pivot: pivot, creaseAngleThresholdDeg: 24.0);
 
     for (final poly in meshResult.allPolygons) {
       if (poly.vertices.length < 3) continue;
@@ -719,34 +700,34 @@ class CadBRepModelData {
       }
 
       // Collect topological boundary segments (deduplicated across shared edges so each crease draws once)
-      final isInternalRimOrBore =
-          fid.startsWith('BORE_') ||
-          fid.startsWith('RIM_') ||
-          fid.startsWith('CHAMFER_') ||
-          fid.contains('_rim_') ||
-          fid.contains('_end_cap_') ||
-          fid.contains('_bore_');
+      final bool isInternalBore = fid.startsWith('BORE_') || fid.contains('_bore_');
 
       final bSegs = <(CadPoint3D, CadPoint3D)>[];
-      if (shouldDrawWireframe && poly.drawWireframe && !isInternalRimOrBore) {
-        final facetSeenEdges = <String>{};
+      final addedEdgeKeys = <String>{};
+
+      void addSegment(CadPoint3D p0, CadPoint3D p1) {
+        final key = edgeKey3D(p0, p1);
+        if (addedEdgeKeys.add(key)) {
+          bSegs.add((p0, p1));
+        }
+      }
+
+      if (shouldDrawWireframe && poly.drawWireframe && !isInternalBore) {
         if (poly.boundaryLines.isNotEmpty) {
           for (final seg in poly.boundaryLines) {
             for (int i = 0; i < seg.length - 1; i++) {
               final p0 = CadPoint3D(seg[i].x - pivot.x, seg[i].y - pivot.y, seg[i].z - pivot.z);
               final p1 = CadPoint3D(seg[i + 1].x - pivot.x, seg[i + 1].y - pivot.y, seg[i + 1].z - pivot.z);
-              if (facetSeenEdges.add(edgeKey3D(p0, p1))) {
-                bSegs.add((p0, p1));
-              }
+              addSegment(p0, p1);
             }
           }
-        } else {
-          for (int i = 0; i < relVerts.length; i++) {
-            final p0 = relVerts[i];
-            final p1 = relVerts[(i + 1) % relVerts.length];
-            if (facetSeenEdges.add(edgeKey3D(p0, p1))) {
-              bSegs.add((p0, p1));
-            }
+        }
+        for (int i = 0; i < relVerts.length; i++) {
+          final p0 = relVerts[i];
+          final p1 = relVerts[(i + 1) % relVerts.length];
+          final key = edgeKey3D(p0, p1);
+          if (survivingCreaseKeys.contains(key)) {
+            addSegment(p0, p1);
           }
         }
       }
@@ -770,7 +751,12 @@ class CadBRepModelData {
       }
 
       final studioSrgb = precomputedFaceColors[fid] ?? baseSrgb;
-      final bool cullBackface = !isTranslucent && closedShellParts.contains(canonicalPartId) && !isWeld;
+      // Closed 3D solids (including sheet metal bodies with thickness & rims) strictly cull true backfaces
+      final bool cullBackface =
+          !isTranslucent &&
+          !fid.startsWith('FILLET_CAP') &&
+          (closedShellParts.contains(canonicalPartId) || canonicalPartId == 'sheet_metal_body' || meshResult.polygons.any((p) => p.faceId.endsWith('_BOT'))) &&
+          !isWeld;
 
       final facet = CompiledBRepFacet(
         faceId: fid,
@@ -798,7 +784,7 @@ class CadBRepModelData {
 
       // Register major structural rail/channel planes (webs & flanges with span >= 90mm)
       // so piercing rungs and welds are split cleanly along rail walls!
-      if (!isWeld && !isInternalRimOrBore && canonicalPartId != 'sheet_metal_body' && !canonicalPartId.startsWith('rung_')) {
+      if (!isWeld && !isInternalBore && !fid.startsWith('RIM_') && canonicalPartId != 'sheet_metal_body' && !canonicalPartId.startsWith('rung_')) {
         final spanX = maxX - minX;
         final spanY = maxY - minY;
         final spanZ = maxZ - minZ;
@@ -1544,13 +1530,10 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
 
     collectNodes(scene.root);
 
-    // Pre-warm retained GPU vertex buffers outside the frame render timer so the first click on
-    // three_js or flutter3d measures steady-state GPU vertex rasterization (~1.2 ms) rather than one-time buffer allocation.
-    if (activeEngine != CadLayer1Engine.customPaintV93) {
-      for (final node in nodes) {
-        if (node.brepModelData != null) {
-          node.brepModelData!.gpuBuffers;
-        }
+    // Pre-warm retained GPU vertex buffers outside the frame render timer
+    for (final node in nodes) {
+      if (node.brepModelData != null) {
+        node.brepModelData!.gpuBuffers;
       }
     }
 
@@ -1563,22 +1546,12 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
       }
     }
 
-    // 2. Dispatch to the active Layer 1 Rendering Engine (CustomPaint v9.3, three_js, or flutter3d)
+    // 2. Dispatch exclusively to the unified 3D Rendering Engine: flutter3d (GPU)
     bool renderedBRep = false;
     for (final node in nodes) {
       if (node.brepModelData != null) {
         final model = node.brepModelData!;
-        switch (activeEngine) {
-          case CadLayer1Engine.customPaintV93:
-            _paintBRepModelV9(canvas, size, model);
-            break;
-          case CadLayer1Engine.threeJsGpu:
-            Layer1ThreeJsAdapter.renderThreeJsPass(canvas: canvas, size: size, scene: scene, model: model, buffers: model.gpuBuffers);
-            break;
-          case CadLayer1Engine.flutter3dGpu:
-            Layer1Flutter3dAdapter.renderFlutter3dPass(canvas: canvas, size: size, scene: scene, model: model, buffers: model.gpuBuffers);
-            break;
-        }
+        Layer1Flutter3dAdapter.renderFlutter3dPass(canvas: canvas, size: size, scene: scene, model: model, buffers: model.gpuBuffers);
         renderedBRep = true;
       }
     }
@@ -1595,34 +1568,6 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
     final paintEnd = _SceneViewState._fpsClock.elapsedMicroseconds;
     final paintMs = (paintEnd - paintStart) / 1000.0;
     onRecordFrameTiming(paintMs, activeEngine);
-  }
-
-  void _paintBRepModelV9(Canvas canvas, Size size, CadBRepModelData model) {
-    // CustomPaint v9.3 executes the CPU B-Rep BSP plane split + Newell 3D half-space sort + 2D vector Path fill pass
-    model._cachedCompiledFacets = model._compileSplitBRepFacets();
-    scene.renderOcclusionSortedBRepPass(canvas: canvas, size: size, model: model);
-    Scene.drawEngineHudWatermark(canvas, size, 'Layer 1A: CustomPaint B-Rep + Newell 3D (v9.3)', const Color(0xFF0EA5E9));
-  }
-
-  static void _drawEngineHudWatermark(Canvas canvas, Size size, String text, Color accent) {
-    final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: const TextStyle(color: Color(0xFFF8FAFC), fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 0.2),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final rect = RRect.fromRectAndRadius(Rect.fromLTWH(12, size.height - 34, tp.width + 24, 22), const Radius.circular(5));
-    canvas.drawRRect(rect, Paint()..color = const Color(0xD80F172A));
-    canvas.drawRRect(
-      rect,
-      Paint()
-        ..color = accent
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2,
-    );
-    canvas.drawCircle(Offset(20, size.height - 23), 3.5, Paint()..color = accent);
-    tp.paint(canvas, Offset(28, size.height - 23 - tp.height / 2));
   }
 
   void _paintStandaloneMeshNode(Canvas canvas, Size size, Node node) {
@@ -1682,7 +1627,7 @@ class _CadBRepFlutterGpuScenePainter extends CustomPainter {
   bool shouldRepaint(covariant _CadBRepFlutterGpuScenePainter oldDelegate) => true;
 }
 
-/// Custom per-facet shader signature used by Layer 1 engines (`CustomPaint v9.3`, `three_js`, `flutter3d`).
+/// Custom per-facet shader signature used by Layer 1 flutter3d engine.
 typedef CadEngineFacetShader = Color Function({
   required CompiledBRepFacet facet,
   required double vnx,
@@ -2345,27 +2290,8 @@ class CadToolbarFpsBadge extends StatelessWidget {
             final fpsVal = CadFpsTelemetry.fpsValueNotifier.value;
             final Color dotColor = fpsVal >= 50.0 ? const Color(0xFF10B981) : (fpsVal >= 28.0 ? const Color(0xFFF59E0B) : const Color(0xFFEF4444));
 
-            return PopupMenuButton<CadLayer1Engine>(
-              tooltip: 'Click to switch Layer 1 3D Rendering Engine (CustomPaint v9.3 / three_js / flutter3d)',
-              onSelected: CadFpsTelemetry.setEngine,
-              offset: const Offset(0, 28),
-              itemBuilder: (ctx) => [
-                for (final eng in CadLayer1Engine.values)
-                  PopupMenuItem<CadLayer1Engine>(
-                    value: eng,
-                    height: 34,
-                    child: Row(
-                      children: [
-                        Icon(activeEng == eng ? Icons.radio_button_checked : Icons.radio_button_off, size: 15, color: eng.accentColor),
-                        const SizedBox(width: 8),
-                        Text(
-                          eng.menuLabel,
-                          style: TextStyle(fontSize: 11.5, fontWeight: activeEng == eng ? FontWeight.w700 : FontWeight.w500, color: const Color(0xFF0F172A)),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
+            return Tooltip(
+              message: '3D Rendering Engine: flutter3d (GPU)\nCustomPaint reserved for 2D flat drawings',
               child: Container(
                 height: 24,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -2387,8 +2313,6 @@ class CadToolbarFpsBadge extends StatelessWidget {
                       fpsText,
                       style: const TextStyle(color: Color(0xFFF8FAFC), fontSize: 11.0, fontWeight: FontWeight.w700, letterSpacing: 0.2),
                     ),
-                    const SizedBox(width: 4),
-                    Icon(Icons.arrow_drop_down, size: 14, color: activeEng.accentColor),
                   ],
                 ),
               ),
@@ -2400,54 +2324,45 @@ class CadToolbarFpsBadge extends StatelessWidget {
   }
 }
 
-/// Interactive 3-Engine Segmented Selector Pill for the Menu Bar / Top Header
-/// allowing instant 1-click live comparison between CustomPaint (v9.3), three_js, and flutter3d.
+/// Dedicated 3D Engine Status Badge for the Menu Bar / Top Header
+/// confirming flutter3d (GPU) as the sole active 3D rendering engine.
 class CadLayer1EngineSelectorPill extends StatelessWidget {
   const CadLayer1EngineSelectorPill({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<CadLayer1Engine>(
-      valueListenable: CadFpsTelemetry.activeEngineNotifier,
-      builder: (context, activeEngine, _) {
-        return Container(
-          height: 24,
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: const Color(0xFFE2E8F0),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFFCBD5E1), width: 1.0),
+    return Container(
+      height: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEDE9FE),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFC4B5FD), width: 1.0),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(color: Color(0xFF8B5CF6), shape: BoxShape.circle),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 5),
-                child: Text(
-                  'Layer 1:',
-                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF475569)),
-                ),
-              ),
-              for (final eng in CadLayer1Engine.values)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 1),
-                  child: InkWell(
-                    onTap: () => CadFpsTelemetry.setEngine(eng),
-                    borderRadius: BorderRadius.circular(4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: activeEngine == eng ? eng.accentColor : Colors.transparent, borderRadius: BorderRadius.circular(4)),
-                      child: Text(
-                        eng.badgeTag,
-                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: activeEngine == eng ? Colors.white : const Color(0xFF334155)),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+          const SizedBox(width: 5),
+          const Text(
+            '3D Engine:',
+            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF4C1D95)),
           ),
-        );
-      },
+          const SizedBox(width: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+            decoration: BoxDecoration(color: const Color(0xFF8B5CF6), borderRadius: BorderRadius.circular(4)),
+            child: const Text(
+              'flutter3d (GPU)',
+              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

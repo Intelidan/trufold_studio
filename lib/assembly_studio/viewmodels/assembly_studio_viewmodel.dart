@@ -5626,6 +5626,12 @@ class AssemblyStudioViewModel extends ChangeNotifier implements FinalCADViewMode
     return await DamFileService.saveDamFile(context: context, vm: this, customFileName: customFileName);
   }
 
+  /// Exports the active assembly to an ISO 10303 STEP AP214 file.
+  Future<String?> exportStepAssembly({BuildContext? context}) async {
+    if (context == null) return null;
+    return await DamFileService.exportAssemblyStep(context: context, vm: this);
+  }
+
   /// Opens an assembly from a .dam file.
   Future<bool> openDamDocument({BuildContext? context}) async {
     if (context == null) return false;

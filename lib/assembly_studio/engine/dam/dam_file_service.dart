@@ -14,6 +14,7 @@ import '../../../sheet_metal_studio/models/dsf_document.dart';
 import '../../../sheet_metal_studio/engine/kinematic_fold_engine.dart';
 import '../../../sheet_metal_studio/models/ladder/ladder_assembly_models.dart';
 import '../../../sheet_metal_studio/services/studio_file_service.dart';
+import '../../../sheet_metal_studio/engine/step_interchange_bridge.dart';
 import '../../../sketch_draft_files/cad_parameter_engine/cad_models.dart';
 import '../../models/assembly_part.dart';
 import '../../models/assembly_timeline_item.dart';
@@ -539,6 +540,45 @@ class DamFileService {
       return savedPath;
     } catch (e) {
       debugPrint('Error saving DAM file: $e');
+      return null;
+    }
+  }
+
+  /// Exports the active assembly model to an ISO 10303 STEP AP214 file.
+  static Future<String?> exportAssemblyStep({
+    required BuildContext context,
+    required AssemblyStudioViewModel vm,
+  }) async {
+    try {
+      final stepBytes = StepInterchangeBridge.exportAssemblyDocumentToStep(vm.doc);
+      final stepString = utf8.decode(stepBytes);
+      final defaultName = '${vm.doc.title.replaceAll(' ', '_')}.step';
+
+      final savedPath = await StudioFileService.saveFileAs(
+        fileName: defaultName,
+        content: stepString,
+        dialogTitle: 'Export Assembly to STEP (.step)',
+      );
+
+      if (savedPath != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exported ${vm.doc.parts.length} parts to STEP ($defaultName)'),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+      }
+      return savedPath;
+    } catch (e) {
+      debugPrint('Error exporting STEP file: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('STEP export error: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
       return null;
     }
   }

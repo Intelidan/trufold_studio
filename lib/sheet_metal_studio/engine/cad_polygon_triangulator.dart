@@ -22,17 +22,22 @@ class CadPolygonTriangulator {
   }) {
     if (outerVertices.length < 3) return;
 
+    final effectiveAoStrength = creviceAoStrength > 1.0
+        ? (creviceAoStrength / 100.0).clamp(0.0, 1.0)
+        : creviceAoStrength.clamp(0.0, 1.0);
+
     // Helper that applies subtle vertex-level crevice darkening at 90° bend roots & hole rims
     void emitVertexColor(CadPoint3D pt, {required bool isHoleRim, required bool isCreaseCorner}) {
       if (baseLinearColor == null) return;
       double vAo = 1.0;
       if (isHoleRim) {
         // Subtle rim shadow around punched holes and slots (like Onshape SS3)
-        vAo = 1.0 - (0.16 * creviceAoStrength);
+        vAo = 1.0 - (0.16 * effectiveAoStrength);
       } else if (isInnerOrWebFace && isCreaseCorner) {
         // Soft crevice shadow along the 90° bend line where web and flange meet!
-        vAo = 1.0 - (0.20 * creviceAoStrength);
+        vAo = 1.0 - (0.20 * effectiveAoStrength);
       }
+      vAo = vAo.clamp(0.0, 1.0);
       builder.color(vm.Vector4(
         baseLinearColor.x * vAo,
         baseLinearColor.y * vAo,

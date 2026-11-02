@@ -63,6 +63,7 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
         _buildItem(value: 'new', label: 'New Blank Assembly', shortcut: 'Ctrl+N', icon: Icons.create_new_folder_outlined),
         _buildItem(value: 'open', label: 'Open Assembly (.dam)...', shortcut: 'Ctrl+O', icon: Icons.folder_open_outlined),
         _buildItem(value: 'save', label: 'Save Assembly (.dam)', shortcut: 'Ctrl+S', icon: Icons.save_outlined),
+        _buildItem(value: 'export_step', label: 'Export Assembly to STEP (.step)...', shortcut: 'Ctrl+E', icon: Icons.output_rounded),
         _buildItem(value: 'import_dsf', label: 'Import DSF Part(s)...', shortcut: 'Ctrl+I', icon: Icons.file_download_outlined),
         const PopupMenuDivider(),
         _buildItem(value: 'cad_anatomy', label: 'View Part CAD Anatomy...', icon: Icons.architecture_rounded, enabled: vm.selectedPart != null),
@@ -85,6 +86,9 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
             break;
           case 'save':
             vm.saveDamDocument(context: context);
+            break;
+          case 'export_step':
+            vm.exportStepAssembly(context: context);
             break;
           case 'import_dsf':
             vm.importDsfFiles(context: context);
@@ -189,21 +193,7 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
         _buildCheckboxItem(value: 'wireframe', label: 'Feature Wireframe Edges', isChecked: vm.showWireframe),
         _buildCheckboxItem(value: 'clean_canvas', label: 'Clean Canvas Mode', isChecked: vm.isCleanCanvasMode),
         const PopupMenuDivider(),
-        _buildCheckboxItem(
-          value: 'engine_custom_paint',
-          label: 'Layer 1A: CustomPaint B-Rep + Newell 3D (v9.3 Backup)',
-          isChecked: CadFpsTelemetry.activeEngine == CadLayer1Engine.customPaintV93,
-        ),
-        _buildCheckboxItem(
-          value: 'engine_three_js',
-          label: 'Layer 1B: three_js (WebGL2/ANGLE Hardware Z-Buffer)',
-          isChecked: CadFpsTelemetry.activeEngine == CadLayer1Engine.threeJsGpu,
-        ),
-        _buildCheckboxItem(
-          value: 'engine_flutter3d',
-          label: 'Layer 1C: flutter3d (Impeller PBR/Toon Z-Buffer)',
-          isChecked: CadFpsTelemetry.activeEngine == CadLayer1Engine.flutter3dGpu,
-        ),
+        _buildCheckboxItem(value: 'engine_flutter3d', label: '3D Engine: flutter3d (GPU) (Active)', isChecked: true),
       ],
       onSelected: (val) {
         switch (val) {
@@ -243,14 +233,6 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
             break;
           case 'clean_canvas':
             vm.toggleCleanCanvasMode();
-            break;
-          case 'engine_custom_paint':
-            CadFpsTelemetry.setEngine(CadLayer1Engine.customPaintV93);
-            vm.notifyDocChanged();
-            break;
-          case 'engine_three_js':
-            CadFpsTelemetry.setEngine(CadLayer1Engine.threeJsGpu);
-            vm.notifyDocChanged();
             break;
           case 'engine_flutter3d':
             CadFpsTelemetry.setEngine(CadLayer1Engine.flutter3dGpu);
@@ -379,7 +361,10 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
                 children: [
                   Icon(Icons.layers_rounded, color: Color(0xFF0076CE)),
                   SizedBox(width: 8),
-                  Text('TruFold Assembly Studio CAD', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                  Text(
+                    'TruFold Assembly Studio CAD',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                  ),
                 ],
               ),
               content: const Column(
@@ -399,7 +384,10 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Close', style: TextStyle(color: Color(0xFF0076CE), fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Close',
+                    style: TextStyle(color: Color(0xFF0076CE), fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -412,11 +400,7 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
   // ---------------------------------------------------------------------------
   // MENU BUILDER HELPERS
   // ---------------------------------------------------------------------------
-  Widget _buildMenuDropdown({
-    required String title,
-    required List<PopupMenuEntry<String>> items,
-    required ValueChanged<String> onSelected,
-  }) {
+  Widget _buildMenuDropdown({required String title, required List<PopupMenuEntry<String>> items, required ValueChanged<String> onSelected}) {
     return PopupMenuButton<String>(
       tooltip: '$title Menu',
       position: PopupMenuPosition.under,
@@ -434,24 +418,13 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
         alignment: Alignment.center,
         child: Text(
           title,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF334155),
-          ),
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
         ),
       ),
     );
   }
 
-  PopupMenuItem<String> _buildItem({
-    required String value,
-    required String label,
-    IconData? icon,
-    String? shortcut,
-    bool enabled = true,
-    Color? color,
-  }) {
+  PopupMenuItem<String> _buildItem({required String value, required String label, IconData? icon, String? shortcut, bool enabled = true, Color? color}) {
     final itemColor = color ?? const Color(0xFF0F172A);
 
     return PopupMenuItem<String>(
@@ -460,18 +433,11 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
       height: 30,
       child: Row(
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 14, color: enabled ? itemColor : const Color(0xFF94A3B8)),
-            const SizedBox(width: 8),
-          ],
+          if (icon != null) ...[Icon(icon, size: 14, color: enabled ? itemColor : const Color(0xFF94A3B8)), const SizedBox(width: 8)],
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
-                fontSize: 11,
-                color: enabled ? itemColor : const Color(0xFF94A3B8),
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(fontSize: 11, color: enabled ? itemColor : const Color(0xFF94A3B8), fontWeight: FontWeight.w500),
             ),
           ),
           if (shortcut != null) ...[
@@ -486,12 +452,7 @@ class AssemblyDesktopMenuBar extends StatelessWidget {
     );
   }
 
-  PopupMenuItem<String> _buildCheckboxItem({
-    required String value,
-    required String label,
-    required bool isChecked,
-    String? shortcut,
-  }) {
+  PopupMenuItem<String> _buildCheckboxItem({required String value, required String label, required bool isChecked, String? shortcut}) {
     return PopupMenuItem<String>(
       value: value,
       height: 30,

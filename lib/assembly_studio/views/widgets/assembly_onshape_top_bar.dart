@@ -6,8 +6,10 @@
 import 'package:flutter/material.dart';
 import 'package:trufold_studio/assembly_studio/viewmodels/assembly_studio_viewmodel.dart';
 import 'package:trufold_studio/assembly_studio/views/theme/assembly_studio_theme.dart';
+
 import 'toolbar/assembly_desktop_menu_bar.dart';
 import 'toolbar/assembly_onshape_toolbar.dart';
+
 import 'package:trufold_studio/sheet_metal_studio/engine/cad_brep_flutter_gpu_scene.dart' hide Material;
 
 class AssemblyOnshapeTopBar extends StatelessWidget {
@@ -145,7 +147,7 @@ class AssemblyOnshapeTopBar extends StatelessWidget {
 
             const SizedBox(width: 10),
 
-            // 1-Click Live Layer 1 Engine Switcher (CustomPaint v9.3 | three_js | flutter3d)
+            // Dedicated 3D Engine Status Pill (flutter3d GPU)
             const CadLayer1EngineSelectorPill(),
 
             const SizedBox(width: 16),
@@ -239,11 +241,7 @@ class AssemblyOnshapeTopBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
                 child: Padding(
                   padding: const EdgeInsets.all(4.0),
-                  child: Icon(
-                    vm.isLightBackground ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                    size: 15,
-                    color: const Color(0xFF64748B),
-                  ),
+                  child: Icon(vm.isLightBackground ? Icons.light_mode_rounded : Icons.dark_mode_rounded, size: 15, color: const Color(0xFF64748B)),
                 ),
               ),
             ),

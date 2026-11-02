@@ -39,8 +39,9 @@ dependencies:
   excel_plus: ^2.27.1
   vector_math: ^2.1.4
   hooks: ^2.2.0
-  three_js: ^0.3.0
   flutter3d: ^0.8.3+1
+  pali_ijo:
+    path: references/PaliCAD-main/packages/pali_ijo
 
 dependency_overrides:
   archive: ^4.3.0

@@ -12,6 +12,7 @@ import 'package:trufold_studio/assembly_studio/models/assembly_part.dart';
 import 'package:trufold_studio/assembly_studio/models/assembly_timeline_item.dart';
 import 'package:trufold_studio/assembly_studio/engine/sketch/assembly_surface_sketch_engine.dart';
 import 'package:trufold_studio/assembly_studio/engine/sketch/cad_manifold_csg_engine.dart';
+import 'package:trufold_studio/sheet_metal_studio/engine/step_interchange_bridge.dart';
 
 /// Boolean operation type for 3D extrusion features.
 enum AssemblyExtrudeOperation {
@@ -624,6 +625,20 @@ class AssemblyExtrudeEngine {
           cutDepth: cutDepth,
           featureId: 'cut_${plane.id}_${DateTime.now().microsecondsSinceEpoch}',
         );
+
+        // Direct 3D solid B-Rep/CSG boolean cut subtraction across 3D solids & custom bodies:
+        final localCutterPolys = _transformWorldPolysToPartLocal(solidMesh.polygons, target);
+        final basePolys = target.customPolygons ?? target.build3DMesh().allPolygons;
+        if (basePolys.isNotEmpty) {
+          final cutPolys = StepInterchangeBridge.booleanSubtract(
+            targetPolygons: basePolys,
+            cutterPolygons: localCutterPolys,
+          );
+          if (cutPolys.isNotEmpty) {
+            target.customPolygons = cutPolys;
+            target.invalidateMeshCache();
+          }
+        }
 
         plane.dependentFeatures.removeWhere((d) => d.id == linkId || (d.operationType == 'cut' && d.targetPartId == target.id));
         plane.dependentFeatures.add(CADDependentFeatureLink(

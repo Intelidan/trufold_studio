@@ -9,6 +9,7 @@ import '../models/cad_primitives.dart';
 import '../viewmodels/sheet_metal_studio_viewmodel.dart';
 import 'cad_polygon_triangulator.dart';
 import 'kinematic_fold_engine.dart';
+import 'cad_crease_edge_extractor.dart';
 
 /// Hardware-accelerated Flutter GPU / Impeller CAD Mesh Builder for TruFold Studio.
 /// Translates [FoldedMeshResult] into native [Node]s, [MeshGeometry] via [GeometryBuilder]
@@ -125,7 +126,6 @@ class FlutterSceneCadMeshBuilder {
     final resolvedFaceColors = <String, Color>{};
 
     // Collect outer boundary lines for wireframe (single border line per segment)
-    final List<(CadPoint3D, CadPoint3D)> rawBoundarySegs = [];
     final List<double> edgePositions = [];
 
     final bool shouldDrawWireframe = showWireframe &&
@@ -235,109 +235,40 @@ class FlutterSceneCadMeshBuilder {
         creviceAoStrength: (preferences.ambientOcclusion / 100.0).clamp(0.0, 1.0),
         isInnerOrWebFace: poly.faceId.contains('_inner') || poly.faceId.contains('_web') || poly.faceId.contains('flange'),
       );
+    }
 
-      // Filter only strictly internal tessellation/bore/inner faces; external end caps, rims, and slots emit boundary edges
-      final isInternalFace = poly.faceId.contains('_inner') ||
-          poly.faceId.contains('_bore') ||
-          poly.faceId.startsWith('BORE_') ||
-          poly.faceId.startsWith('CHAMFER_') ||
-          poly.faceId.startsWith('FILLET_CAP') ||
-          poly.faceId.startsWith('weld_');
-
-      if (shouldDrawWireframe && poly.drawWireframe && !isInternalFace) {
-        // 1. Boundary lines from SheetMetal unfold if available, otherwise from polygon vertices
-        if (poly.boundaryLines.isNotEmpty) {
-          for (final seg in poly.boundaryLines) {
-            if (seg.length >= 2) {
-              for (int i = 0; i < seg.length - 1; i++) {
-                rawBoundarySegs.add((seg[i], seg[i + 1]));
-              }
-            }
-          }
-        } else if (poly.vertices.length >= 3) {
-          for (int i = 0; i < poly.vertices.length; i++) {
-            final v1 = poly.vertices[i];
-            final v2 = poly.vertices[(i + 1) % poly.vertices.length];
-            rawBoundarySegs.add((v1, v2));
-          }
-        }
-
-        // 2. Cutout holes and voids outline loops (punch holes, slots, coupler cuts)
-        for (final hole in poly.holes) {
-          if (hole.length >= 3) {
-            // Sanitize hole loop: strip consecutive duplicate points
-            final sanitizedHole = <CadPoint3D>[];
-            for (final pt in hole) {
-              if (sanitizedHole.isEmpty ||
-                  (pt.x - sanitizedHole.last.x).abs() > 1e-4 ||
-                  (pt.y - sanitizedHole.last.y).abs() > 1e-4 ||
-                  (pt.z - sanitizedHole.last.z).abs() > 1e-4) {
-                sanitizedHole.add(pt);
-              }
-            }
-            if (sanitizedHole.length > 2 &&
-                (sanitizedHole.first.x - sanitizedHole.last.x).abs() <= 1e-4 &&
-                (sanitizedHole.first.y - sanitizedHole.last.y).abs() <= 1e-4 &&
-                (sanitizedHole.first.z - sanitizedHole.last.z).abs() <= 1e-4) {
-              sanitizedHole.removeLast();
-            }
-
-            for (int i = 0; i < sanitizedHole.length; i++) {
-              final h1 = sanitizedHole[i];
-              final h2 = sanitizedHole[(i + 1) % sanitizedHole.length];
-              rawBoundarySegs.add((h1, h2));
-            }
-          }
-        }
-      }
-
-      // Requirement 3: Collect tangent edges (phantom or visible fillet transitions)
-      if (shouldDrawTangents && poly.tangentLines.isNotEmpty) {
-        for (final seg in poly.tangentLines) {
-          if (seg.length >= 2) {
-            for (int i = 0; i < seg.length - 1; i++) {
-              final p1 = seg[i];
-              final p2 = seg[i + 1];
-              if (preferences.tangentEdgeMode == OnshapeTangentEdgeMode.phantom) {
-                _appendPhantomDashes(p1, p2, pivot, poly.normal, tangentPositions);
-              } else {
-                // Visible solid tangent line (with subtle normal nudge to prevent z-fighting)
-                final lenN = math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
-                final nx = lenN > 1e-4 ? (n.x / lenN) * 0.04 : 0.0;
-                final ny = lenN > 1e-4 ? (n.y / lenN) * 0.04 : 0.0;
-                final nz = lenN > 1e-4 ? (n.z / lenN) * 0.04 : 0.0;
-                tangentPositions.addAll([
-                  p1.x + nx - pivot.x, p1.y + ny - pivot.y, p1.z + nz - pivot.z,
-                  p2.x + nx - pivot.x, p2.y + ny - pivot.y, p2.z + nz - pivot.z,
-                ]);
-              }
-            }
-          }
-        }
+    // Canonical crease edge extraction via CadCreaseEdgeExtractor:
+    // Eliminates triangle diagonals across flat quads and facet strip lines on bends!
+    if (shouldDrawWireframe) {
+      final cleanCreases = CadCreaseEdgeExtractor.extractCreaseSegments(
+        meshResult.allPolygons,
+        pivot: pivot,
+        creaseAngleThresholdDeg: 24.0,
+      );
+      for (final seg in cleanCreases) {
+        edgePositions.addAll([
+          seg.$1.x, seg.$1.y, seg.$1.z,
+          seg.$2.x, seg.$2.y, seg.$2.z,
+        ]);
       }
     }
 
-    // Canonical segment deduplication (_dedupedSegments): each 3D crease edge emitted exactly once!
-    if (shouldDrawWireframe && rawBoundarySegs.isNotEmpty) {
-      final addedEdgeKeys = <String>{};
-
-      for (final seg in rawBoundarySegs) {
-        final a = seg.$1;
-        final b = seg.$2;
-        final dx = b.x - a.x;
-        final dy = b.y - a.y;
-        final dz = b.z - a.z;
-        if (dx * dx + dy * dy + dz * dz > 1e-6) {
-          final kA = '${(a.x * 1000).round()}_${(a.y * 1000).round()}_${(a.z * 1000).round()}';
-          final kB = '${(b.x * 1000).round()}_${(b.y * 1000).round()}_${(b.z * 1000).round()}';
-          if (kA == kB) continue;
-
-          final edgeKey = kA.compareTo(kB) <= 0 ? '$kA|$kB' : '$kB|$kA';
-          if (!addedEdgeKeys.add(edgeKey)) continue;
-
-          edgePositions.addAll([
-            a.x - pivot.x, a.y - pivot.y, a.z - pivot.z,
-            b.x - pivot.x, b.y - pivot.y, b.z - pivot.z,
+    // Tangent edge extraction (smooth fillet transitions)
+    if (shouldDrawTangents) {
+      final tangentSegs = CadCreaseEdgeExtractor.extractTangentSegments(
+        meshResult.allPolygons,
+        pivot: pivot,
+        creaseAngleThresholdDeg: 24.0,
+      );
+      if (preferences.tangentEdgeMode == OnshapeTangentEdgeMode.phantom) {
+        for (final t in tangentSegs) {
+          _appendPhantomDashes(t.$1, t.$2, const CadPoint3D(0.0, 0.0, 0.0), t.$3, tangentPositions);
+        }
+      } else {
+        for (final t in tangentSegs) {
+          tangentPositions.addAll([
+            t.$1.x, t.$1.y, t.$1.z,
+            t.$2.x, t.$2.y, t.$2.z,
           ]);
         }
       }

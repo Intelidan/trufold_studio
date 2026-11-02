@@ -1818,7 +1818,7 @@ class _FlutterSceneViewportWidgetState extends State<FlutterSceneViewportWidget>
                             Container(width: 1, height: 14, color: const Color(0xFFCBD5E1)),
                             const SizedBox(width: 8),
 
-                            // Interactive 3-Engine Layer 1 Switcher (CustomPaint v9.3 | three_js | flutter3d)
+                            // Dedicated 3D Engine Status Pill (flutter3d GPU)
                             const CadLayer1EngineSelectorPill(),
 
                             const SizedBox(width: 8),

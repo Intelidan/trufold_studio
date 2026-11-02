@@ -441,6 +441,9 @@ class KinematicFoldEngine {
         final p1Bot = parentTransform.transformPoint(CadPoint3D(p1_2d.x, p1_2d.y, -thicknessMm));
         final p2Bot = parentTransform.transformPoint(CadPoint3D(p2_2d.x, p2_2d.y, -thicknessMm));
 
+        final cap1OutwardNormal = (p1Top - p2Top).normalized();
+        final cap2OutwardNormal = (p2Top - p1Top).normalized();
+
         var axisVec = (p2Top - p1Top).normalized();
 
         // Check rotation orientation so UP always tilts towards +Z
@@ -601,14 +604,24 @@ class KinematicFoldEngine {
                   if (lStep == 0) {
                     final arcA = outA1;
                     final arcB = outB1;
+                    var cap1Verts = [inA1, inB1, outB1, outA1];
+                    final c1e1 = CadPoint3D(cap1Verts[1].x - cap1Verts[0].x, cap1Verts[1].y - cap1Verts[0].y, cap1Verts[1].z - cap1Verts[0].z);
+                    final c1e2 = CadPoint3D(cap1Verts[3].x - cap1Verts[0].x, cap1Verts[3].y - cap1Verts[0].y, cap1Verts[3].z - cap1Verts[0].z);
+                    final c1CrossX = c1e1.y * c1e2.z - c1e1.z * c1e2.y;
+                    final c1CrossY = c1e1.z * c1e2.x - c1e1.x * c1e2.z;
+                    final c1CrossZ = c1e1.x * c1e2.y - c1e1.y * c1e2.x;
+                    if (c1CrossX * cap1OutwardNormal.x + c1CrossY * cap1OutwardNormal.y + c1CrossZ * cap1OutwardNormal.z < 0) {
+                      cap1Verts = [inA1, outA1, outB1, inB1];
+                    }
                     filletPolygons.add(
                       CadFoldedPolygon3D(
                         faceId: 'FILLET_CAP1_${bend.id}_${intIdx}_$step',
-                        vertices: [inA1, inB1, outB1, outA1],
-                        normal: axisVec * -1.0,
+                        vertices: cap1Verts,
+                        normal: cap1OutwardNormal,
                         color: const Color(0xFF78909C),
                         boundaryLines: [
                           [arcA, arcB],
+                          [inA1, inB1],
                         ],
                       ),
                     );
@@ -619,14 +632,24 @@ class KinematicFoldEngine {
                   if (lStep == nLenSteps - 1) {
                     final arcA = outA2;
                     final arcB = outB2;
+                    var cap2Verts = [outA2, outB2, inB2, inA2];
+                    final c2e1 = CadPoint3D(cap2Verts[1].x - cap2Verts[0].x, cap2Verts[1].y - cap2Verts[0].y, cap2Verts[1].z - cap2Verts[0].z);
+                    final c2e2 = CadPoint3D(cap2Verts[3].x - cap2Verts[0].x, cap2Verts[3].y - cap2Verts[0].y, cap2Verts[3].z - cap2Verts[0].z);
+                    final c2CrossX = c2e1.y * c2e2.z - c2e1.z * c2e2.y;
+                    final c2CrossY = c2e1.z * c2e2.x - c2e1.x * c2e2.z;
+                    final c2CrossZ = c2e1.x * c2e2.y - c2e1.y * c2e2.x;
+                    if (c2CrossX * cap2OutwardNormal.x + c2CrossY * cap2OutwardNormal.y + c2CrossZ * cap2OutwardNormal.z < 0) {
+                      cap2Verts = [outA2, inA2, inB2, outB2];
+                    }
                     filletPolygons.add(
                       CadFoldedPolygon3D(
                         faceId: 'FILLET_CAP2_${bend.id}_${intIdx}_$step',
-                        vertices: [outA2, outB2, inB2, inA2],
-                        normal: axisVec,
+                        vertices: cap2Verts,
+                        normal: cap2OutwardNormal,
                         color: const Color(0xFF78909C),
                         boundaryLines: [
                           [arcB, arcA],
+                          [inB2, inA2],
                         ],
                       ),
                     );
